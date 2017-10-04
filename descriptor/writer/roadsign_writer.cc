@@ -27,8 +27,14 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 		(obj.get_int("no_foreground",      0) > 0 ? roadsign_desc_t::ONLY_BACKIMAGE        : roadsign_desc_t::NONE) |
 		(obj.get_int("is_longblocksignal", 0) > 0 ? roadsign_desc_t::SIGN_LONGBLOCK_SIGNAL : roadsign_desc_t::NONE) |
 		(obj.get_int("end_of_choose",      0) > 0 ? roadsign_desc_t::END_OF_CHOOSE_AREA    : roadsign_desc_t::NONE);
-	uint8                  const use_frontImage = obj.get_int("use_frontimage",0);
 
+	string str = obj.get("frontimage[0]");
+	uint8 use_frontImage;
+	if(str.empty()  &&  (flags&roadsign_desc_t::ONLY_BACKIMAGE)==0) {
+		use_frontImage = 0;
+	} else {
+		use_frontImage = 1;
+	}
 	// Hajo: write version data
 	node.write_uint16(fp, 0x8005,         0); // version 5
 	node.write_uint16(fp, min_speed,      2);
@@ -50,7 +56,6 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 
 	// add the images
 	slist_tpl<string> keys, front_keys;
-	string str;
 
 	for (int i = 0; i < 24; i++) {
 		char buf[40];
