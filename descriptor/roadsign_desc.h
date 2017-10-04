@@ -40,6 +40,8 @@ private:
 
 	uint16 min_speed;	// 0 = no min speed
 
+	bool support_frontimage;
+
 public:
 	enum types {
 		NONE                  = 0,
@@ -56,14 +58,19 @@ public:
 	image_id get_image_id(ribi_t::dir dir, bool front = false) const
 	{
 		image_t const* image;
-		if(  !front  ) image = get_child<image_list_t>(2)->get_image(dir);
-		if(  front  )  image = get_child<image_list_t>(3)->get_image(dir);
+		if(  !front  ) {
+			image = get_child<image_list_t>(2)->get_image(dir);
+		} else if(  support_frontimage  ) {
+			image = get_child<image_list_t>(3)->get_image(dir);
+		} else {
+			image = NULL;
+		}
 		return image != NULL ? image->get_id() : IMG_EMPTY;
 	}
 
 	uint16 get_count() const { return get_child<image_list_t>(2)->get_count(); }
 
-	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(4); }
+	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(support_frontimage?4:3); }
 
 	uint16 get_min_speed() const { return min_speed; }
 

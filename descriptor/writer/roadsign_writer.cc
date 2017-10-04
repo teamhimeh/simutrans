@@ -29,7 +29,7 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 		(obj.get_int("end_of_choose",      0) > 0 ? roadsign_desc_t::END_OF_CHOOSE_AREA    : roadsign_desc_t::NONE);
 
 	// Hajo: write version data
-	node.write_uint16(fp, 0x8004,      0); // version 4
+	node.write_uint16(fp, 0x8005,      0); // version 5
 	node.write_uint16(fp, min_speed,   2);
 	node.write_uint32(fp, price,       4);
 	node.write_uint8 (fp, flags,       8);
@@ -69,9 +69,7 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 		}
 	}
 	imagelist_writer_t::instance()->write_obj(fp, node, keys);
-	if(  front_image_exists  ) {
-		imagelist_writer_t::instance()->write_obj(fp, node, front_keys);
-	}
+	imagelist_writer_t::instance()->write_obj(fp, node, front_keys);
 
 	// probably add some icons, if defined
 	slist_tpl<string> cursorkeys;
