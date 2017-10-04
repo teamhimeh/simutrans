@@ -531,7 +531,7 @@ void roadsign_t::rotate90()
 
 void roadsign_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 {
-	if(  image!=IMG_EMPTY  ) {
+	if(  image!=IMG_EMPTY  ||  image2!=IMG_EMPTY  ) {
 		const int raster_width = get_current_tile_raster_width();
 
 		const int x1 = xpos + tile_raster_scale_x(get_xoff(), raster_width);
@@ -563,7 +563,7 @@ void roadsign_t::display_after(int xpos, int ypos, const sint8 clip_num ) const
 void roadsign_t::display_after(int xpos, int ypos, bool ) const
 #endif
 {
-	if(  foreground_image != IMG_EMPTY  ) {
+	if(  foreground_image != IMG_EMPTY  ||  foreground_image2 != IMG_EMPTY  ) {
 		const int raster_width = get_current_tile_raster_width();
 		const int x1 = xpos + tile_raster_scale_x(get_xoff(), raster_width);
 		const int y1 = ypos + tile_raster_scale_y(get_yoff(), raster_width);
