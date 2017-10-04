@@ -47,8 +47,9 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 	write_head(fp, node, obj);
 
 	// add the images
-	slist_tpl<string> keys;
-	string str;
+	slist_tpl<string> keys, front_keys;
+	string str = obj.get("frontimage[0]");
+	bool front_image_exists = !(str.empty());
 
 	for (int i = 0; i < 24; i++) {
 		char buf[40];
@@ -60,8 +61,17 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 			break;
 		}
 		keys.append(str);
+
+		if(  front_image_exists  ) {
+			sprintf(buf, "frontimage[%i]", i);
+			str = obj.get(buf);
+			front_keys.append(str);
+		}
 	}
 	imagelist_writer_t::instance()->write_obj(fp, node, keys);
+	if(  front_image_exists  ) {
+		imagelist_writer_t::instance()->write_obj(fp, node, front_keys);
+	}
 
 	// probably add some icons, if defined
 	slist_tpl<string> cursorkeys;

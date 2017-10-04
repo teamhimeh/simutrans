@@ -53,15 +53,17 @@ public:
 		END_OF_CHOOSE_AREA    = 1U << 7
 	};
 
-	image_id get_image_id(ribi_t::dir dir) const
+	image_id get_image_id(ribi_t::dir dir, bool front = false) const
 	{
-		image_t const* const image = get_child<image_list_t>(2)->get_image(dir);
+		image_t const* image;
+		if(  !front  ) image = get_child<image_list_t>(2)->get_image(dir);
+		if(  front  )  image = get_child<image_list_t>(3)->get_image(dir);
 		return image != NULL ? image->get_id() : IMG_EMPTY;
 	}
 
 	uint16 get_count() const { return get_child<image_list_t>(2)->get_count(); }
 
-	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(3); }
+	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(4); }
 
 	uint16 get_min_speed() const { return min_speed; }
 
