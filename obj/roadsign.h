@@ -25,7 +25,9 @@ class roadsign_t : public obj_t, public sync_steppable
 {
 protected:
 	image_id image;
+	image_id image2;
 	image_id foreground_image;
+	image_id foreground_image2;
 
 	enum { SHOW_FONT=1, SHOW_BACK=2, SWITCH_AUTOMATIC=16 };
 

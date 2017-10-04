@@ -223,6 +223,8 @@ void roadsign_t::calc_image()
 	after_xoffset = 0;
 	after_yoffset = 0;
 	sint8 xoff = 0, yoff = 0;
+	image2 = IMG_EMPTY;
+	foreground_image2 = IMG_EMPTY;
 	// left offsets defined, and image-on-the-left activated
 	const bool left_offsets = desc->get_offset_left()  &&
 	    (     (desc->get_wtyp()==road_wt  &&  welt->get_settings().is_drive_left()  )
@@ -241,6 +243,7 @@ void roadsign_t::calc_image()
 			image += 2;
 		}
 		set_image( desc->get_image_id(image) );
+		foreground_image = desc->get_image_id(image,true);
 		set_yoff( 0 );
 		if(  hang_diff  ) {
 				set_yoff( -(TILE_HEIGHT_STEP*hang_diff)/2 );
@@ -248,7 +251,6 @@ void roadsign_t::calc_image()
 		else {
 			set_yoff( -gr->get_weg_yoff() );
 		}
-		foreground_image = IMG_EMPTY;
 		return;
 	}
 
@@ -295,37 +297,43 @@ void roadsign_t::calc_image()
 
 			if(temp_dir&ribi_t::east) {
 				tmp_image = desc->get_image_id(3);
+				foreground_image = desc->get_image_id(3,true);
 				xoff += XOFF;
 				yoff += -YOFF;
 			}
 
 			if(temp_dir&ribi_t::north) {
 				if(tmp_image!=IMG_EMPTY) {
-					foreground_image = desc->get_image_id(0);
+					image2 = desc->does_support_frontimage() ? desc->get_image_id(0) : IMG_EMPTY;
+					foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(0,true) : desc->get_image_id(0);
 					after_xoffset += -XOFF;
 					after_yoffset += -YOFF;
 				}
 				else {
 					tmp_image = desc->get_image_id(0);
+					foreground_image = desc->get_image_id(0,true);
 					xoff += -XOFF;
 					yoff += -YOFF;
 				}
 			}
 
 			if(temp_dir&ribi_t::west) {
-				foreground_image = desc->get_image_id(2);
+				image2 = desc->does_support_frontimage() ? desc->get_image_id(2) : IMG_EMPTY;
+				foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(2,true) : desc->get_image_id(2);
 				after_xoffset += -XOFF;
 				after_yoffset += YOFF;
 			}
 
 			if(temp_dir&ribi_t::south) {
-				if(foreground_image!=IMG_EMPTY) {
+				if(foreground_image2!=IMG_EMPTY) {
 					tmp_image = desc->get_image_id(1);
+					foreground_image = desc->get_image_id(1,true);
 					xoff += XOFF;
 					yoff += YOFF;
 				}
 				else {
-					foreground_image = desc->get_image_id(1);
+					image2 = desc->does_support_frontimage() ? desc->get_image_id(1) : IMG_EMPTY;
+					foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(1,true) : desc->get_image_id(1);
 					after_xoffset += XOFF;
 					after_yoffset += YOFF;
 				}
@@ -334,38 +342,48 @@ void roadsign_t::calc_image()
 		else {
 
 			if(temp_dir&ribi_t::east) {
-				foreground_image = desc->get_image_id(3);
+				image2 = desc->does_support_frontimage() ? desc->get_image_id(3) : IMG_EMPTY;
+				foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(3,true) : desc->get_image_id(3);
 			}
 
 			if(temp_dir&ribi_t::north) {
-				if(foreground_image!=IMG_EMPTY) {
+				if(foreground_image2!=IMG_EMPTY) {
 					tmp_image = desc->get_image_id(0);
+					foreground_image = desc->get_image_id(0,true);
 				}
 				else {
-					foreground_image = desc->get_image_id(0);
+					image2 = desc->does_support_frontimage() ? desc->get_image_id(0) : IMG_EMPTY;
+					foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(0,true) : desc->get_image_id(0);
 				}
 			}
 
 			if(temp_dir&ribi_t::west) {
 				tmp_image = desc->get_image_id(2);
+				foreground_image = desc->get_image_id(2,true);
 			}
 
 			if(temp_dir&ribi_t::south) {
 				if(tmp_image!=IMG_EMPTY) {
-					foreground_image = desc->get_image_id(1);
+					image2 = desc->does_support_frontimage() ? desc->get_image_id(1) : IMG_EMPTY;
+					foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(1,true) : desc->get_image_id(1);
 				}
 				else {
 					tmp_image = desc->get_image_id(1);
+					foreground_image = desc->get_image_id(1,true);
 				}
 			}
 		}
 
 		// some signs on roads must not have a background (but then they have only two rotations)
 		if(  desc->get_flags()&roadsign_desc_t::ONLY_BACKIMAGE  ) {
-			if(foreground_image!=IMG_EMPTY) {
-				tmp_image = foreground_image;
+			if(desc->does_support_frontimage()) {
+				if(foreground_image2!=IMG_EMPTY) {
+					tmp_image = foreground_image2;
+				}
+				foreground_image2 = IMG_EMPTY;
+			} else {
+				// do nothing.
 			}
-			foreground_image = IMG_EMPTY;
 		}
 	}
 	else {

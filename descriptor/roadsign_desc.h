@@ -103,6 +103,8 @@ public:
 
 	sint8 get_offset_left() const { return offset_left; }
 
+	bool does_support_frontimage() const { return support_frontimage; }
+
 	void calc_checksum(checksum_t *chk) const
 	{
 		obj_desc_transport_infrastructure_t::calc_checksum(chk);
