@@ -40,7 +40,7 @@ private:
 
 	uint16 min_speed;	// 0 = no min speed
 
-	bool support_frontimage;
+	bool use_frontImage;
 
 public:
 	enum types {
@@ -60,7 +60,7 @@ public:
 		image_t const* image;
 		if(  !front  ) {
 			image = get_child<image_list_t>(2)->get_image(dir);
-		} else if(  support_frontimage  ) {
+		} else if(  use_frontImage  ) {
 			image = get_child<image_list_t>(3)->get_image(dir);
 		} else {
 			image = NULL;
@@ -70,7 +70,7 @@ public:
 
 	uint16 get_count() const { return get_child<image_list_t>(2)->get_count(); }
 
-	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(support_frontimage?4:3); }
+	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(use_frontImage?4:3); }
 
 	uint16 get_min_speed() const { return min_speed; }
 
@@ -103,7 +103,7 @@ public:
 
 	sint8 get_offset_left() const { return offset_left; }
 
-	bool does_support_frontimage() const { return support_frontimage; }
+	bool does_use_frontImage() const { return use_frontImage; }
 
 	void calc_checksum(checksum_t *chk) const
 	{

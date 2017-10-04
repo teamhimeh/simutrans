@@ -43,7 +43,18 @@ obj_desc_t * roadsign_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 	const uint16 v = decode_uint16(p);
 	const int version = v & 0x8000 ? v & 0x7FFF : 0;
 
-	if(version>=4) {
+  if(version==5) {
+    // Versioned node, version 5
+		desc->min_speed = kmh_to_speed(decode_uint16(p));
+		desc->price = decode_uint32(p);
+		desc->flags = decode_uint8(p);
+		desc->offset_left = decode_sint8(p);
+		desc->wtyp = decode_uint8(p);
+    desc->use_frontImage = decode_uint8(p);
+		desc->intro_date = decode_uint16(p);
+		desc->retire_date = decode_uint16(p);
+  }
+	else if(version==4) {
 		// Versioned node, version 4
 		desc->min_speed = kmh_to_speed(decode_uint16(p));
 		desc->price = decode_uint32(p);
@@ -87,7 +98,9 @@ obj_desc_t * roadsign_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		dbg->fatal("roadsign_reader_t::read_node()","version 0 not supported. File corrupt?");
 	}
 
-  desc->support_frontimage = version>=5 ? true : false;
+  if(  version<=4  ) {
+    desc->use_frontImage = false;
+  }
 
 	if(  version<=3  &&  (  desc->is_choose_sign() ||  desc->is_private_way()  )  &&  desc->get_waytype() == road_wt  ) {
 		// do not shift these signs to the left for compatibility
