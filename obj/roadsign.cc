@@ -400,18 +400,21 @@ void roadsign_t::calc_image()
 
 				if(weg_dir&ribi_t::north) {
 					if(weg_dir&ribi_t::east) {
-						foreground_image = desc->get_image_id(6+direction*8);
+						image2 = desc->does_support_frontimage() ? desc->get_image_id(6+direction*8) : IMG_EMPTY;
+						foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(6+direction*8,true) : desc->get_image_id(6+direction*8);
 						after_xoffset += 0;
 						after_yoffset += 0;
 					}
 					else {
-						foreground_image = desc->get_image_id(1+direction*8);
+						image2 = desc->does_support_frontimage() ? desc->get_image_id(1+direction*8) : IMG_EMPTY;
+						foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(1+direction*8,true) : desc->get_image_id(1+direction*8);
 						after_xoffset += XOFF;
 						after_yoffset += YOFF;
 					}
 				}
 				else if(weg_dir&ribi_t::east) {
-					foreground_image = desc->get_image_id(2+direction*8);
+					image2 = desc->does_support_frontimage() ? desc->get_image_id(2+direction*8) : IMG_EMPTY;
+					foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(2+direction*8,true) : desc->get_image_id(2+direction*8);
 					after_xoffset += -XOFF;
 					after_yoffset += YOFF;
 				}
@@ -419,17 +422,20 @@ void roadsign_t::calc_image()
 				if(weg_dir&ribi_t::west) {
 					if(weg_dir&ribi_t::south) {
 						tmp_image = desc->get_image_id(7+direction*8);
+						foreground_image = desc->get_image_id(7+direction*8,true);
 						xoff += 0;
 						yoff += 0;
 					}
 					else {
 						tmp_image = desc->get_image_id(3+direction*8);
+						foreground_image = desc->get_image_id(3+direction*8,true);
 						xoff += XOFF;
 						yoff += -YOFF;
 					}
 				}
 				else if(weg_dir&ribi_t::south) {
 					tmp_image = desc->get_image_id(0+direction*8);
+					foreground_image = desc->get_image_id(0+direction*8,true);
 					xoff += -XOFF;
 					yoff += -YOFF;
 				}
@@ -438,26 +444,32 @@ void roadsign_t::calc_image()
 				// drive right ...
 				if(weg_dir&ribi_t::south) {
 					if(weg_dir&ribi_t::east) {
-						foreground_image = desc->get_image_id(4+direction*8);
+						image2 = desc->does_support_frontimage() ? desc->get_image_id(4+direction*8) : IMG_EMPTY;
+						foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(4+direction*8,true) : desc->get_image_id(4+direction*8);
 					}
 					else {
-						foreground_image = desc->get_image_id(0+direction*8);
+						image2 = desc->does_support_frontimage() ? desc->get_image_id(0+direction*8) : IMG_EMPTY;
+						foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(0+direction*8,true) : desc->get_image_id(0+direction*8);
 					}
 				}
 				else if(weg_dir&ribi_t::east) {
-					foreground_image = desc->get_image_id(2+direction*8);
+					image2 = desc->does_support_frontimage() ? desc->get_image_id(2+direction*8) : IMG_EMPTY;
+					foreground_image2 = desc->does_support_frontimage() ? desc->get_image_id(2+direction*8,true) : desc->get_image_id(2+direction*8);
 				}
 
 				if(weg_dir&ribi_t::west) {
 					if(weg_dir&ribi_t::north) {
 						tmp_image = desc->get_image_id(5+direction*8);
+						foreground_image = desc->get_image_id(5+direction*8,true);
 					}
 					else {
 						tmp_image = desc->get_image_id(3+direction*8);
+						foreground_image = desc->get_image_id(3+direction*8,true);
 					}
 				}
 				else if(weg_dir&ribi_t::north) {
 					tmp_image = desc->get_image_id(1+direction*8);
+					foreground_image = desc->get_image_id(1+direction*8,true);
 				}
 			}
 
