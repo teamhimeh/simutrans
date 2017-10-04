@@ -124,6 +124,11 @@ public:
 	image_id get_front_image() const { return foreground_image; }
 
 	/**
+	 * Draw background image of object
+	 */
+	void display(int xpos, int ypos  CLIP_NUM_DEF) const;
+
+	/**
 	* draw the part overlapping the vehicles
 	* (needed to get the right offset even on hills)
 	* @author V. Meyer
