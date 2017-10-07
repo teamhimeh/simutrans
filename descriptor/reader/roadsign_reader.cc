@@ -50,7 +50,7 @@ obj_desc_t * roadsign_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->flags = decode_uint8(p);
 		desc->offset_left = decode_sint8(p);
 		desc->wtyp = decode_uint8(p);
-    desc->use_frontImage = decode_uint8(p);
+    desc->image_type= decode_uint8(p);
 		desc->intro_date = decode_uint16(p);
 		desc->retire_date = decode_uint16(p);
   }
@@ -99,7 +99,7 @@ obj_desc_t * roadsign_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 	}
 
   if(  version<=4  ) {
-    desc->use_frontImage = false;
+    desc->image_type = roadsign_desc_t::SET_LAYER_AUTOMATIC;
   }
 
 	if(  version<=3  &&  (  desc->is_choose_sign() ||  desc->is_private_way()  )  &&  desc->get_waytype() == road_wt  ) {

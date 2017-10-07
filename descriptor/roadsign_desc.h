@@ -40,7 +40,7 @@ private:
 
 	uint16 min_speed;	// 0 = no min speed
 
-	bool use_frontImage;
+	uint8 image_type;
 
 public:
 	enum types {
@@ -54,13 +54,18 @@ public:
 		SIGN_LONGBLOCK_SIGNAL = 1U << 6,
 		END_OF_CHOOSE_AREA    = 1U << 7
 	};
+	enum image_types {
+		SET_LAYER_AUTOMATIC = 1U,
+		USE_FRONTIMAGE      = 2U,
+		USE_DIAGONAL        = 3U
+	};
 
 	image_id get_image_id(ribi_t::dir dir, bool front = false) const
 	{
 		image_t const* image;
 		if(  !front  ) {
 			image = get_child<image_list_t>(2)->get_image(dir);
-		} else if(  use_frontImage  ) {
+		} else if(  image_type>=USE_FRONTIMAGE  ) {
 			image = get_child<image_list_t>(3)->get_image(dir);
 		} else {
 			image = NULL;
@@ -70,7 +75,7 @@ public:
 
 	uint16 get_count() const { return get_child<image_list_t>(2)->get_count(); }
 
-	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(use_frontImage?4:3); }
+	skin_desc_t const* get_cursor() const { return get_child<skin_desc_t>(image_type>=USE_FRONTIMAGE?4:3); }
 
 	uint16 get_min_speed() const { return min_speed; }
 
@@ -103,7 +108,8 @@ public:
 
 	sint8 get_offset_left() const { return offset_left; }
 
-	bool does_use_frontImage() const { return use_frontImage; }
+	bool does_use_frontImage() const { return image_type>=USE_FRONTIMAGE; }
+	bool does_use_diagonal() const { return image_type==USE_DIAGONAL; }
 
 	void calc_checksum(checksum_t *chk) const
 	{
