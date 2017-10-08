@@ -301,7 +301,6 @@ void roadsign_t::calc_image()
 	const slope_t::type full_hang = gr->get_weg_hang();
 	const sint8 hang_diff = slope_t::max_diff(full_hang);
 	const ribi_t::ribi hang_dir = ribi_t::backward( ribi_type(full_hang) );
-	printf("pos:%s, diff:%d, dir:%d\n", get_pos().get_str(), hang_diff, hang_dir);
 
 	// private way have also closed/open states
 	if(  desc->is_private_way()  ) {
