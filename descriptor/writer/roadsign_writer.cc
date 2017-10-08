@@ -79,7 +79,7 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 		}
 		const char* const normal_ribi_codes[4] = {"n", "e",  "s",  "w"};
 		const char* const slope_ribi_codes[4] = {"3", "6", "9", "12"};
-		const char* const slope_head[4] = {"up","up2","down","down2"};
+		const char* const slope_head[4] = {"up","down","up2","down2"};
 		const char* const diagonal_ribi_codes[8] = {"sw", "ws", "nw", "wn", "ne", "en", "se", "es"};
 		char buf[40];
 		for(uint8 season=0; season<num_of_seasons; season++) {

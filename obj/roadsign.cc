@@ -209,6 +209,73 @@ void roadsign_t::info(cbuffer_t & buf) const
 }
 
 
+void roadsign_t::set_images(uint8 num) {
+	if(image2!=IMG_EMPTY  ||  foreground_image2!=IMG_EMPTY) {
+		dbg->warning( "roadsign_t::set_images", "both image1 and image2 is already set!");
+	}
+	if(get_image()!=IMG_EMPTY  ||  foreground_image!=IMG_EMPTY) {
+		// set image using image2 and foreground_image2
+		image2 = desc->get_image_id(num);
+		foreground_image2 = desc->get_image_id(num,true);
+	} else {
+		set_image(desc->get_image_id(num));
+		foreground_image = desc->get_image_id(num,true);
+	}
+}
+
+
+void roadsign_t::solve_image_id(image_type typ, uint8 ribi, bool snow, uint8 status) {
+	uint8 num_of_status = 1;
+	if(  desc->get_flags()&roadsign_desc_t::SIGN_PRE_SIGNAL  ) {
+		num_of_status = 3;
+	} else if(  desc->get_flags()&roadsign_desc_t::SIGN_SIGNAL  ) {
+		num_of_status = 2;
+	}
+	uint8 img_number = 0;
+	if(  snow  ) img_number += 28*num_of_status;
+	img_number += 28*status;
+	switch (typ) {
+		case image_flat:
+			// ribi is direction of this sign.
+			if(ribi&ribi_t::north) {
+				set_images(img_number+2);
+			}
+			if(ribi&ribi_t::east) {
+				set_images(img_number+3);
+			}
+			if(ribi&ribi_t::south) {
+				set_images(img_number+0);
+			}
+			if(ribi&ribi_t::west) {
+				set_images(img_number+1);
+			}
+		break;
+		case image_slope2:
+			img_number += 8;
+		case image_slope:
+			img_number += 4;
+			// top 4 bits -> slope. tail 4 bits -> direction.
+			if(((ribi&0xf0)>>4)==ribi_t::north) img_number += 0;
+			if(((ribi&0xf0)>>4)==ribi_t::west) img_number += 1;
+			if(((ribi&0xf0)>>4)==ribi_t::east) img_number += 2;
+			if(((ribi&0xf0)>>4)==ribi_t::south) img_number += 3;
+			if((ribi&0x0f)&((ribi&0xf0)>>4)) set_images(img_number); // image_up
+			if((ribi&0x0f)&ribi_t::reverse_single((ribi&0xf0)>>4)) set_images(img_number+4); // image_down
+		break;
+		case image_diagonal:
+		// diagonal codes. sw, ws, nw, wn, ne, en, se, es
+		uint8 diagonal_codes[8] = {0x4c, 0x8c, 0x19, 0x89, 0x13, 0x23, 0x46, 0x26};
+		img_number += 20;
+			for(uint8 i=0; i<8; i++) {
+				if((ribi&diagonal_codes[i])==diagonal_codes[i]) {
+					set_images(img_number+i);
+				}
+			}
+		break;
+	}
+}
+
+
 // could be still better aligned for drive_left settings ...
 void roadsign_t::calc_image()
 {
@@ -234,6 +301,7 @@ void roadsign_t::calc_image()
 	const slope_t::type full_hang = gr->get_weg_hang();
 	const sint8 hang_diff = slope_t::max_diff(full_hang);
 	const ribi_t::ribi hang_dir = ribi_t::backward( ribi_type(full_hang) );
+	printf("pos:%s, diff:%d, dir:%d\n", get_pos().get_str(), hang_diff, hang_dir);
 
 	// private way have also closed/open states
 	if(  desc->is_private_way()  ) {

@@ -117,6 +117,8 @@ public:
 	inline void set_image( image_id b ) { image = b; }
 	image_id get_image() const { return image; }
 
+	enum image_type { image_flat, image_slope, image_slope2, image_diagonal };
+
 	/**
 	* For the front image hiding vehicles
 	* @author prissi
@@ -155,6 +157,8 @@ private:
 
 protected:
 	static const roadsign_desc_t *default_signal;
+	void solve_image_id(image_type typ, uint8 ribi, bool snow, uint8 status);
+	void set_images(uint8 num);
 
 public:
 	static bool register_desc(roadsign_desc_t *desc);
