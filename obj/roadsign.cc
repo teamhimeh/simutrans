@@ -208,6 +208,19 @@ void roadsign_t::info(cbuffer_t & buf) const
 	}
 }
 
+void roadsign_t::hide_ribi_at_tunnel_entrance(const grund_t* gr, uint8 &temp_dir) {
+	if(  gr->get_typ()==grund_t::tunnelboden  &&  gr->ist_karten_boden()  &&
+		(grund_t::underground_mode==grund_t::ugm_none  ||  (grund_t::underground_mode==grund_t::ugm_level  &&  gr->get_hoehe()<grund_t::underground_level))   ) {
+		// entering tunnel here: hide the image further in if not undergroud/sliced
+		const ribi_t::ribi tunnel_hang_dir = ribi_t::backward( ribi_type(gr->get_grund_hang()) );
+		if(  tunnel_hang_dir==ribi_t::east ||  tunnel_hang_dir==ribi_t::north  ) {
+			temp_dir &= ~ribi_t::southwest;
+		}
+		else {
+			temp_dir &= ~ribi_t::northeast;
+		}
+	}
+}
 
 void roadsign_t::set_images(uint8 num) {
 	if(image2!=IMG_EMPTY  ||  foreground_image2!=IMG_EMPTY) {
@@ -224,7 +237,7 @@ void roadsign_t::set_images(uint8 num) {
 }
 
 
-void roadsign_t::solve_image_id(image_type typ, uint8 ribi, bool snow, uint8 status) {
+void roadsign_t::solve_image_id_then_set(image_type typ, uint8 ribi, bool snow, uint8 status) {
 	uint8 num_of_status = 1;
 	if(  desc->get_flags()&roadsign_desc_t::SIGN_PRE_SIGNAL  ) {
 		num_of_status = 3;
@@ -264,6 +277,7 @@ void roadsign_t::solve_image_id(image_type typ, uint8 ribi, bool snow, uint8 sta
 		break;
 		case image_diagonal:
 		// diagonal codes. sw, ws, nw, wn, ne, en, se, es
+		// top 4 bits -> direction of the sign. tail 4 bits -> connection of the way.
 		uint8 diagonal_codes[8] = {0x4c, 0x8c, 0x19, 0x89, 0x13, 0x23, 0x46, 0x26};
 		img_number += 20;
 			for(uint8 i=0; i<8; i++) {
@@ -291,6 +305,7 @@ void roadsign_t::calc_image()
 	after_yoffset = 0;
 	sint8 xoff = 0, yoff = 0;
 	image2 = IMG_EMPTY;
+	foreground_image = IMG_EMPTY;
 	foreground_image2 = IMG_EMPTY;
 	// left offsets defined, and image-on-the-left activated
 	const bool left_offsets = desc->get_offset_left()  &&
@@ -321,6 +336,30 @@ void roadsign_t::calc_image()
 		return;
 	}
 
+	if(  desc->does_use_diagonal()  ) {
+		// a roadsign with diagonal and slope images is processed here.
+		bool snow = (gr->ist_karten_boden()  ||  !gr->ist_tunnel())  &&  (get_pos().z + gr->get_weg_yoff()/TILE_HEIGHT_STEP >= welt->get_snowline() || welt->get_climate( get_pos().get_2d() ) == arctic_climate  );
+		ribi_t::ribi temp_dir = dir;
+		hide_ribi_at_tunnel_entrance(gr,temp_dir);
+		if(  hang_diff==0  ) {
+			// normal? diagonal?
+			weg_t *weg = welt->lookup(get_pos())->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
+			if(  weg  &&  weg->is_diagonal()  ) {
+				// Use diagonal image.
+				uint8 diagonal_ribi = (temp_dir<<4)|weg->get_ribi_unmasked();
+				solve_image_id_then_set(image_diagonal, diagonal_ribi, snow, state);
+			} else {
+				// Use normal image.
+				solve_image_id_then_set(image_flat, temp_dir, snow, state);
+			}
+		} else {
+			// Use slope image.
+			uint8 slope_ribi = (hang_dir<<4)|temp_dir;
+			solve_image_id_then_set(hang_diff==2?image_slope2:image_slope, slope_ribi, snow, state);
+		}
+		return;
+	}
+
 	if(  hang_diff == 0  ) {
 		yoff = -gr->get_weg_yoff();
 		after_yoffset = yoff;
@@ -345,17 +384,7 @@ void roadsign_t::calc_image()
 		foreground_image = IMG_EMPTY;
 		ribi_t::ribi temp_dir = dir;
 
-		if(  gr->get_typ()==grund_t::tunnelboden  &&  gr->ist_karten_boden()  &&
-			(grund_t::underground_mode==grund_t::ugm_none  ||  (grund_t::underground_mode==grund_t::ugm_level  &&  gr->get_hoehe()<grund_t::underground_level))   ) {
-			// entering tunnel here: hide the image further in if not undergroud/sliced
-			const ribi_t::ribi tunnel_hang_dir = ribi_t::backward( ribi_type(gr->get_grund_hang()) );
-			if(  tunnel_hang_dir==ribi_t::east ||  tunnel_hang_dir==ribi_t::north  ) {
-				temp_dir &= ~ribi_t::southwest;
-			}
-			else {
-				temp_dir &= ~ribi_t::northeast;
-			}
-		}
+		hide_ribi_at_tunnel_entrance(gr,temp_dir);
 
 		// signs for left side need other offsets and other front/back order
 		if(  left_offsets  ) {

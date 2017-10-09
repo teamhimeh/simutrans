@@ -16,6 +16,7 @@
 
 template<class T> class vector_tpl;
 class tool_selector_t;
+class grund_t;
 
 /**
  * road sign for traffic (one way minimum speed, traffic lights)
@@ -157,8 +158,10 @@ private:
 
 protected:
 	static const roadsign_desc_t *default_signal;
-	void solve_image_id(image_type typ, uint8 ribi, bool snow, uint8 status);
+	// helper methods...
+	void solve_image_id_then_set(image_type typ, uint8 ribi, bool snow, uint8 status);
 	void set_images(uint8 num);
+	void hide_ribi_at_tunnel_entrance(const grund_t* gr, uint8 &temp_dir);
 
 public:
 	static bool register_desc(roadsign_desc_t *desc);
