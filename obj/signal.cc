@@ -68,6 +68,30 @@ void signal_t::calc_image()
 		set_flag(obj_t::dirty);
 
 		weg_t *sch = gr->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
+
+		if(  desc->does_use_diagonal()  ) {
+			// a signal with diagonal and slope images is processed here.
+			bool snow = (gr->ist_karten_boden()  ||  !gr->ist_tunnel())  &&  (get_pos().z + gr->get_weg_yoff()/TILE_HEIGHT_STEP >= welt->get_snowline() || welt->get_climate( get_pos().get_2d() ) == arctic_climate  );
+			ribi_t::ribi temp_dir = dir;
+			hide_ribi_at_tunnel_entrance(gr,temp_dir);
+			if(  hang_diff==0  ) {
+				// normal? diagonal?
+				if(  sch  &&  sch->is_diagonal()  ) {
+					// Use diagonal image.
+					uint8 diagonal_ribi = (temp_dir<<4)|sch->get_ribi_unmasked();
+					solve_image_id_then_set(image_diagonal, diagonal_ribi, snow, state);
+				} else {
+					// Use normal image.
+					solve_image_id_then_set(image_flat, temp_dir, snow, state);
+				}
+			} else {
+				// Use slope image.
+				uint8 slope_ribi = (hang_dir<<4)|temp_dir;
+				solve_image_id_then_set(hang_diff==2?image_slope2:image_slope, slope_ribi, snow, state);
+			}
+			return;
+		}
+
 		if(sch) {
 			uint16 offset=0;
 			ribi_t::ribi dir = sch->get_ribi_unmasked() & (~calc_mask());
@@ -95,17 +119,7 @@ void signal_t::calc_image()
 			// and now calculate the images:
 			// we need to hide the "second" image on tunnel entries
 			ribi_t::ribi temp_dir = dir;
-			if(  gr->get_typ()==grund_t::tunnelboden  &&  gr->ist_karten_boden()  &&
-				(grund_t::underground_mode==grund_t::ugm_none  ||  (grund_t::underground_mode==grund_t::ugm_level  &&  gr->get_hoehe()<grund_t::underground_level))   ) {
-				// entering tunnel here: hide the image further in if not undergroud/sliced
-				const ribi_t::ribi tunnel_hang_dir = ribi_t::backward( ribi_type(gr->get_grund_hang()) );
-				if(  tunnel_hang_dir==ribi_t::east ||  tunnel_hang_dir==ribi_t::north  ) {
-					temp_dir &= ~ribi_t::southwest;
-				}
-				else {
-					temp_dir &= ~ribi_t::northeast;
-				}
-			}
+			hide_ribi_at_tunnel_entrance(gr,temp_dir);
 
 			// signs for left side need other offsets and other front/back order
 			if(  left_swap  ) {
