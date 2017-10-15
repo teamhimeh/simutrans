@@ -28,9 +28,11 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 		(obj.get_int("is_longblocksignal", 0) > 0 ? roadsign_desc_t::SIGN_LONGBLOCK_SIGNAL : roadsign_desc_t::NONE) |
 		(obj.get_int("end_of_choose",      0) > 0 ? roadsign_desc_t::END_OF_CHOOSE_AREA    : roadsign_desc_t::NONE);
 
+	// determine the type of the image set.
 	string str = obj.get("image[0][n][0]");
+	string str2 = obj.get("frontimage[0][n][0]");
 	uint8 image_type;
-	if(  !str.empty()  ) {
+	if(  !str.empty()  ||  !str2.empty()  ) {
 		image_type = roadsign_desc_t::USE_DIAGONAL;
 	} else {
 		str = obj.get("frontimage[0]");
@@ -40,6 +42,30 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 			image_type = roadsign_desc_t::USE_FRONTIMAGE;
 		}
 	}
+
+	uint8 num_of_seasons = 1;
+	uint8 num_of_status = 1;
+	if(image_type==roadsign_desc_t::USE_DIAGONAL) {
+		// examine whether there are images for winter.
+		str = obj.get("image[0][n][1]");
+		str2 = obj.get("frontimage[0][n][1]");
+		if(  !str.empty()  ||  !str2.empty()  ) {
+			num_of_seasons = 2;
+			image_type |= roadsign_desc_t::HAS_SNOW_IMAGE;
+		}
+		// examine whether there are images for electrified truck.
+		str = obj.get("image[3][n][0]");
+		str2 = obj.get("frontimage[3][n][0]");
+		if(  !str.empty()  ||  !str2.empty()  ) {
+			image_type |= roadsign_desc_t::HAS_ELECTRIFIED;
+		}
+		if(  flags&roadsign_desc_t::SIGN_PRE_SIGNAL  ) {
+			num_of_status = image_type&roadsign_desc_t::HAS_ELECTRIFIED ? 6 : 3;
+		} else if(  flags&roadsign_desc_t::SIGN_SIGNAL  ) {
+			num_of_status = image_type&roadsign_desc_t::HAS_ELECTRIFIED ? 4 : 2;
+		}
+	}
+
 	// Hajo: write version data
 	node.write_uint16(fp, 0x8005,         0); // version 5
 	node.write_uint16(fp, min_speed,      2);
@@ -66,16 +92,6 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 		// private sign and traffic signal cannot use this mode.
 		if(  flags&roadsign_desc_t::PRIVATE_ROAD  ||  (flags&roadsign_desc_t::SIGN_SIGNAL  &&  wtyp==get_waytype("road"))  ) {
 			dbg->fatal("roadsign_writer_t::write_obj", "private sign and traffic signal cannot use diagonal images.");
-		}
-		// examine whether there are images for winter.
-		uint8 num_of_seasons = 1;
-		str = obj.get("image[0][n][1]");
-		if(  !str.empty()  ) num_of_seasons = 2;
-		uint8 num_of_status = 1;
-		if(  flags&roadsign_desc_t::SIGN_PRE_SIGNAL  ) {
-			num_of_status = 3;
-		} else if(  flags&roadsign_desc_t::SIGN_SIGNAL  ) {
-			num_of_status = 2;
 		}
 		const char* const normal_ribi_codes[4] = {"n", "e",  "s",  "w"};
 		const char* const slope_ribi_codes[4] = {"3", "6", "9", "12"};

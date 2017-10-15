@@ -55,9 +55,11 @@ public:
 		END_OF_CHOOSE_AREA    = 1U << 7
 	};
 	enum image_types {
-		SET_LAYER_AUTOMATIC = 1U,
-		USE_FRONTIMAGE      = 2U,
-		USE_DIAGONAL        = 3U
+		SET_LAYER_AUTOMATIC = 1U << 0,
+		USE_FRONTIMAGE      = 1U << 1,
+		USE_DIAGONAL        = 1U << 2,
+		HAS_SNOW_IMAGE      = 1U << 4,
+		HAS_ELECTRIFIED     = 1U << 5
 	};
 
 	image_id get_image_id(ribi_t::dir dir, bool front = false) const
@@ -110,6 +112,8 @@ public:
 
 	bool does_use_frontImage() const { return image_type>=USE_FRONTIMAGE; }
 	bool does_use_diagonal() const { return image_type==USE_DIAGONAL; }
+	bool has_electrified_images() const { return image_type&HAS_ELECTRIFIED; }
+	bool has_snow_images() const { return image_type&HAS_SNOW_IMAGE; }
 
 	void calc_checksum(checksum_t *chk) const
 	{

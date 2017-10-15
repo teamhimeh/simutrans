@@ -240,12 +240,14 @@ void roadsign_t::set_images(uint8 num) {
 void roadsign_t::solve_image_id_then_set(image_type typ, uint8 ribi, bool snow, uint8 status) {
 	uint8 num_of_status = 1;
 	if(  desc->get_flags()&roadsign_desc_t::SIGN_PRE_SIGNAL  ) {
-		num_of_status = 3;
+		num_of_status = desc->has_electrified_images() ? 6 : 3;
+		if(!desc->has_electrified_images()) status %= 3;
 	} else if(  desc->get_flags()&roadsign_desc_t::SIGN_SIGNAL  ) {
-		num_of_status = 2;
+		num_of_status = desc->has_electrified_images() ? 4 : 2;
+		if(!desc->has_electrified_images()) status %= 2;
 	}
 	uint8 img_number = 0;
-	if(  snow  ) img_number += 28*num_of_status;
+	if(  snow  &&  desc->has_snow_images()  ) img_number += 28*num_of_status;
 	img_number += 28*status;
 	switch (typ) {
 		case image_flat:
