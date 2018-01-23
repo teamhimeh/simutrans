@@ -298,7 +298,7 @@ void hausbauer_t::new_world()
 }
 
 
-void hausbauer_t::remove( player_t *player, gebaeude_t *gb )
+void hausbauer_t::remove( player_t *player, const gebaeude_t *gb )
 {
 	const building_tile_desc_t *tile  = gb->get_tile();
 	const building_desc_t *bdsc = tile->get_desc();
@@ -807,6 +807,15 @@ const building_desc_t* hausbauer_t::get_special(uint32 bev, building_desc_t::bty
 	return pick_any_weighted(auswahl);
 }
 
+const bool is_allowed_size(const building_desc_t* bldg, koord size) {
+	if(size.x==-1  ||  bldg->get_size()==size) {
+		return true;
+	} else if(bldg->get_size().x==size.y  &&  bldg->get_size().y==size.x) {
+		return true;
+	} else {
+		return false;
+	}
+}
 
 /**
  * Tries to find a matching house desc from @p list.
@@ -814,14 +823,14 @@ const building_desc_t* hausbauer_t::get_special(uint32 bev, building_desc_t::bty
  * @param level the minimum level of the house/station
  * @param cl allowed climates
  */
-static const building_desc_t* get_city_building_from_list(const vector_tpl<const building_desc_t*>& list, int level, uint16 time, climate cl, uint32 clusters )
+const building_desc_t* hausbauer_t::get_city_building_from_list(const vector_tpl<const building_desc_t*>& list, int level, koord size, uint16 time, climate cl, uint32 clusters )
 {
 	weighted_vector_tpl<const building_desc_t *> selections(16);
 
 //	DBG_MESSAGE("hausbauer_t::get_aus_liste()","target level %i", level );
 	const building_desc_t *desc_at_least=NULL;
 	FOR(vector_tpl<building_desc_t const*>, const desc, list) {
-		if(  desc->is_allowed_climate(cl)  &&  desc->get_distribution_weight()>0  &&  desc->is_available(time)  ) {
+		if(  desc->is_allowed_climate(cl)  &&  desc->get_distribution_weight()>0  &&  desc->is_available(time)  &&  is_allowed_size(desc, size)  ) {
 				desc_at_least = desc;
 		}
 
@@ -837,7 +846,7 @@ static const building_desc_t* get_city_building_from_list(const vector_tpl<const
 			}
 		}
 
-		if(  thislevel == level  &&  desc->get_distribution_weight() > 0  ) {
+		if(  thislevel == level  &&  is_allowed_size(desc,size)  &&  desc->get_distribution_weight() > 0  ) {
 			if(  cl==MAX_CLIMATES  ||  desc->is_allowed_climate(cl)  ) {
 				if(  desc->is_available(time)  ) {
 //					DBG_MESSAGE("hausbauer_t::get_city_building_from_list()","appended %s at %i", desc->get_name(), thislevel );
@@ -872,22 +881,131 @@ static const building_desc_t* get_city_building_from_list(const vector_tpl<const
 	return pick_any_weighted(selections);
 }
 
-
-const building_desc_t* hausbauer_t::get_commercial(int level, uint16 time, climate cl, uint32 clusters)
+/**
+ * Tries to find a matching house desc from @p list.
+ * This method can return NULL when there is no suitable building.
+ */
+const building_desc_t* hausbauer_t::get_city_building_from_list(const vector_tpl<const building_desc_t*>& list, koord pos_origin, koord size, uint16 time, climate cl, uint32 clusters )
 {
-	return get_city_building_from_list(city_commercial, level, time, cl, clusters);
+	weighted_vector_tpl<const building_desc_t *> selections(16);
+	// calculate sum of level of replaced buildings.
+	uint16 sum_level = 0;
+	bool checked[64][64];
+	// initialize check flag.
+	for(uint8 i=0; i<size.x; i++) {
+		for(uint8 k=0; k<size.y; k++) {
+			checked[i][k] = false;
+		}
+	}
+	// now calculate the sum of level.
+	for(uint8 x=0; x<size.x; x++) {
+		for(uint8 y=0; y<size.y; y++) {
+			if(checked[x][y]) {
+				// this position is already added to the sum.
+				continue;
+			}
+			const grund_t* gr = welt->lookup_kartenboden(pos_origin+koord(x,y));
+			if(  !gr  ||  gr->ist_natur()  ) {
+				continue;
+			}
+			const gebaeude_t* gb = obj_cast<gebaeude_t>(gr->first_obj());;
+			if(!(gb  &&  gb->is_city_building())) {
+				continue;
+			}
+			sum_level += gb->get_tile()->get_desc()->get_level();
+			const uint8 gb_layout = gb->get_tile()->get_layout();
+			const koord gb_size = gb->get_tile()->get_desc()->get_size(gb_layout);
+			for(uint8 gx=0; gx<gb_size.x; gx++) {
+				for(uint8 gy=0; gy<gb_size.y; gy++) {
+					// mark as checked tile.
+					if(x+gx<size.x  &&  y+gy<size.y) checked[x+gx][y+gy] = true;
+				}
+			}
+		}
+	}
+	sum_level += 1;
+	const uint16 level_replaced = sum_level;
+	const uint16 area_of_building = size.x*size.y;
+
+	// try to find a suitable building.
+	FOR(vector_tpl<building_desc_t const*>, const desc, list) {
+		// only allow buildings of the designated size.
+		if(!is_allowed_size(desc, size)) {
+			continue;
+		}
+
+		const int thislevel = desc->get_level();
+		if(thislevel>sum_level) {
+			if (selections.empty()  &&  thislevel-level_replaced<=2*area_of_building) {
+				// Nothing of the correct level. Continue with search on a higher level.
+				sum_level = thislevel;
+			}
+			else {
+				// We already found something of the correct level; stop.
+				break;
+			}
+		}
+
+		if(  thislevel == sum_level  &&  desc->get_distribution_weight() > 0  ) {
+			if(  cl==MAX_CLIMATES  ||  desc->is_allowed_climate(cl)  ) {
+				if(  desc->is_available(time)  ) {
+					/* Level, time period, and climate are all OK.
+					 * Now modify the chance rating by a factor based on the clusters.
+					 */
+					// FIXME: the factor should be configurable by the pakset/
+					int chance = desc->get_distribution_weight();
+					if(  clusters  ) {
+						uint32 my_clusters = desc->get_clusters();
+						if(  my_clusters & clusters  ) {
+							chance *= stadt_t::get_cluster_factor();
+						}
+						else {
+							chance /= stadt_t::get_cluster_factor();
+						}
+					}
+					selections.append(desc, chance);
+				}
+			}
+		}
+	}
+
+	if(selections.get_sum_weight()==0) {
+		return NULL;
+	}
+	if(selections.get_count()==1) {
+		return selections.front();
+	}
+	// now there is something to choose
+	return pick_any_weighted(selections);
 }
 
 
-const building_desc_t* hausbauer_t::get_industrial(int level, uint16 time, climate cl, uint32 clusters)
+const building_desc_t* hausbauer_t::get_commercial(int level, koord size, uint16 time, climate cl, uint32 clusters)
 {
-	return get_city_building_from_list(city_industry, level, time, cl, clusters);
+	return get_city_building_from_list(city_commercial, level, size, time, cl, clusters);
+}
+const building_desc_t* hausbauer_t::get_commercial(koord pos, koord size, uint16 time, climate cl, uint32 clusters)
+{
+	return get_city_building_from_list(city_commercial, pos, size, time, cl, clusters);
 }
 
 
-const building_desc_t* hausbauer_t::get_residential(int level, uint16 time, climate cl, uint32 clusters)
+const building_desc_t* hausbauer_t::get_industrial(int level, koord size, uint16 time, climate cl, uint32 clusters)
 {
-	return get_city_building_from_list(city_residential, level, time, cl, clusters);
+	return get_city_building_from_list(city_industry, level, size, time, cl, clusters);
+}
+const building_desc_t* hausbauer_t::get_industrial(koord pos, koord size, uint16 time, climate cl, uint32 clusters)
+{
+	return get_city_building_from_list(city_industry, pos, size, time, cl, clusters);
+}
+
+const building_desc_t* hausbauer_t::get_residential(int level, koord size, uint16 time, climate cl, uint32 clusters)
+{
+	return get_city_building_from_list(city_residential, level, size, time, cl, clusters);
+}
+const building_desc_t* hausbauer_t::get_residential(koord pos, koord size, uint16 time, climate cl, uint32 clusters)
+{
+	return get_city_building_from_list(city_residential, pos, size, time, cl, clusters);
 }
 
 

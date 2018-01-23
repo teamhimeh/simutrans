@@ -613,11 +613,18 @@ void stadt_t::add_gebaeude_to_stadt(const gebaeude_t* gb, bool ordered)
 						buildings.remove(add_gb);
 					}
 					else {
+						uint16 level;
+						if(  gb->is_city_building()  ) {
+							const uint16 area = size.x*size.y;
+							level = tile->get_desc()->get_level()/area + 1;
+						} else {
+							level = tile->get_desc()->get_level() + 1;
+						}
 						if(  ordered  ) {
-							buildings.insert_ordered(add_gb, tile->get_desc()->get_level() + 1, compare_gebaeude_pos);
+							buildings.insert_ordered(add_gb, level, compare_gebaeude_pos);
 						}
 						else {
-							buildings.append(add_gb, tile->get_desc()->get_level() + 1);
+							buildings.append(add_gb, level);
 						}
 					}
 					add_gb->set_stadt(this);
@@ -2870,7 +2877,71 @@ int stadt_t::orient_city_building(const koord k, const building_desc_t *h )
 	return -1;
 }
 
-
+/*
+ * get available building sizes to renovate
+ *
+ * Tiles must be nature or a city building.
+ * Tile height must be same. If it is slope, it is treated as it is raised.
+ */
+void stadt_t::get_available_building_size(const koord k, vector_tpl<koord> &sizes) const {
+	sizes.clear();
+	const uint8 LEN_LIM = building_desc_t::get_city_building_max_size();
+	const grund_t* gr_origin = welt->lookup_kartenboden(k);
+	assert(gr_origin);
+	const gebaeude_t* gb_origin = gr_origin->find<gebaeude_t>();
+	assert(gb_origin);
+	const koord dim_origin = gb_origin->get_tile()->get_desc()->get_size();
+	const uint8 layout_origin = gb_origin->get_tile()->get_layout();
+	for(uint8 w=(layout_origin&1)?dim_origin.y:dim_origin.x; w<=LEN_LIM; w++) {
+		for(uint8 h=(layout_origin&1)?dim_origin.x:dim_origin.y; h<=LEN_LIM; h++) {
+			bool check_continue = true;
+			sint8 height = -100;
+			for(uint8 x=0; x<w; x++) {
+				if(!check_continue) {
+					break;
+				}
+				for(uint8 y=0; y<h; y++) {
+					const koord p = k + koord(x,y);
+					grund_t* gr = welt->lookup_kartenboden(p);
+					// the tile must be nature or a city building.
+					if(  !gr  ||  !(gr->ist_natur()  ||  (gr->find<gebaeude_t>()  &&  gr->find<gebaeude_t>()->is_city_building()))) {
+						check_continue = false;
+						break;
+					}
+					// the tile must be in the same height as others.
+					sint8 tile_height;
+					const slope_t::type hang = welt->recalc_natural_slope(p, tile_height);
+					if(hang!=slope_t::flat) {
+						tile_height ++;
+					}
+					if(height!=-100  &&  height!=tile_height) {
+						check_continue = false;
+						break;
+					}
+					height = tile_height;
+					// buildings in the area must not be in the outside of the area.
+					const sint8 x_off = x==0 ? -1 : (x==w-1 ? 1 : 0);
+					const sint8 y_off = y==0 ? -1 : (y==h-1 ? 1 : 0);
+					const gebaeude_t* gb = gr->find<gebaeude_t>();
+					if(gb  &&  (x==0  ||  y==0  ||  x==w-1  ||  y==h-1)) {
+						const grund_t* neighbor_gr = welt->lookup_kartenboden(k+koord(x_off,y_off));
+						if(neighbor_gr) {
+							const gebaeude_t* neighbor_gb = neighbor_gr->find<gebaeude_t>();
+							if(gb==neighbor_gb) {
+								check_continue = false;
+								break;
+							}
+						}
+					}
+				}
+			}
+			if(check_continue) {
+				koord s(w,h);
+				sizes.append(s);
+			}
+		}
+	}
+}
 
 void stadt_t::build_city_building(const koord k)
 {
@@ -2927,23 +2998,24 @@ void stadt_t::build_city_building(const koord k)
 
 	// Find a house to build
 	const building_desc_t* h = NULL;
+	const koord size_single(1,1);
 
 	if (sum_commercial > sum_industrial  &&  sum_commercial > sum_residential) {
-		h = hausbauer_t::get_commercial(0, current_month, cl, neighbor_building_clusters);
+		h = hausbauer_t::get_commercial(0, size_single, current_month, cl, neighbor_building_clusters);
 		if (h != NULL) {
 			arb += (h->get_level()+1) * 20;
 		}
 	}
 
 	if (h == NULL  &&  sum_industrial > sum_residential  &&  sum_industrial > sum_commercial) {
-		h = hausbauer_t::get_industrial(0, current_month, cl, neighbor_building_clusters);
+		h = hausbauer_t::get_industrial(0, size_single, current_month, cl, neighbor_building_clusters);
 		if (h != NULL) {
 			arb += (h->get_level()+1) * 20;
 		}
 	}
 
 	if (h == NULL  &&  sum_residential > sum_industrial  &&  sum_residential > sum_commercial) {
-		h = hausbauer_t::get_residential(0, current_month, cl, neighbor_building_clusters);
+		h = hausbauer_t::get_residential(0, size_single, current_month, cl, neighbor_building_clusters);
 		if (h != NULL) {
 			// will be aligned next to a street
 			won += (h->get_level()+1) * 10;
@@ -2960,17 +3032,11 @@ void stadt_t::build_city_building(const koord k)
 
 void stadt_t::renovate_city_building(gebaeude_t *gb)
 {
-	const building_desc_t::btype alt_typ = gb->get_tile()->get_desc()->get_type();
 	if(  !gb->is_city_building()  ) {
 		return; // only renovate res, com, ind
 	}
 
-	if(  gb->get_tile()->get_desc()->get_x()*gb->get_tile()->get_desc()->get_y() != 1  ) {
-		return; // too big ...
-	}
-
 	// Now we are sure that this is a city building
-	const int level = gb->get_tile()->get_desc()->get_level();
 	const koord k = gb->get_pos().get_2d();
 
 	// Divide unemployed by 4, because it counts towards commercial and industrial,
@@ -2991,9 +3057,19 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 
 	// Run through orthogonal neighbors (only) looking for which cluster to build
 	// This is a bitmap -- up to 32 clustering types are allowed.
+	vector_tpl<koord> orthogonal_neighbors;
+	const building_desc_t* gb_desc = gb->get_tile()->get_desc();
+	for(sint8 x=0; x<gb_desc->get_size().x; x++) {
+		orthogonal_neighbors.append(k+koord(x,-1));
+		orthogonal_neighbors.append(k+koord(x,gb_desc->get_size().y));
+	}
+	for(sint8 y=0; y<gb_desc->get_size().y; y++) {
+		orthogonal_neighbors.append(k+koord(-1,y));
+		orthogonal_neighbors.append(k+koord(gb_desc->get_size().x,y));
+	}
 	uint32 neighbor_building_clusters = 0;
-	for (int i = 0; i < 4; i++) {
-		grund_t* gr = welt->lookup_kartenboden(k + neighbors[i]);
+	for (uint16 i=0; i<orthogonal_neighbors.get_count(); i++) {
+		grund_t* gr = welt->lookup_kartenboden(orthogonal_neighbors[i]);
 		if (gr  &&  gr->get_typ() == grund_t::fundament  &&  gr->obj_bei(0)->get_typ() == obj_t::gebaeude) {
 			// We have a building as a neighbor...
 			gebaeude_t const* const gb = obj_cast<gebaeude_t>(gr->first_obj());
@@ -3008,32 +3084,48 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	building_desc_t::btype want_to_have = building_desc_t::unknown;
 	int sum = 0;
 
+	// get available building sizes.
+	vector_tpl<koord> available_sizes;
+	get_available_building_size(k, available_sizes);
+	const uint8 size_offset = simrand(available_sizes.get_count());
+
 	// try to build
 	const building_desc_t* h = NULL;
+	koord selected_dim;
 	if (sum_commercial > sum_industrial && sum_commercial > sum_residential) {
 		// we must check, if we can really update to higher level ...
-		const int try_level = (alt_typ == building_desc_t::city_com ? level + 1 : level);
-		h = hausbauer_t::get_commercial(try_level, current_month, cl, neighbor_building_clusters);
-		if(  h != NULL  &&  h->get_level() >= try_level  ) {
-			want_to_have = building_desc_t::city_com;
-			sum = sum_commercial;
+		for(uint8 i=0; i<available_sizes.get_count(); i++) {
+			const koord dimension = available_sizes[(i+size_offset)%available_sizes.get_count()];
+			h = hausbauer_t::get_commercial(k, dimension, current_month, cl, neighbor_building_clusters);
+			if(  h != NULL  ) {
+				want_to_have = building_desc_t::city_com;
+				sum = sum_commercial;
+				selected_dim = dimension;
+				break;
+			}
 		}
 	}
 	// check for industry, also if we wanted com, but there was no com good enough ...
 	if(    (sum_industrial > sum_commercial  &&  sum_industrial > sum_residential)
       || (sum_commercial > sum_residential  &&  want_to_have == building_desc_t::unknown)  ) {
 		// we must check, if we can really update to higher level ...
-		const int try_level = (alt_typ == building_desc_t::city_ind ? level + 1 : level);
-		h = hausbauer_t::get_industrial(try_level , current_month, cl, neighbor_building_clusters);
-		if(  h != NULL  &&  h->get_level() >= try_level  ) {
-			want_to_have = building_desc_t::city_ind;
-			sum = sum_industrial;
+		for(uint8 i=0; i<available_sizes.get_count(); i++) {
+			const koord dimension = available_sizes[(i+size_offset)%available_sizes.get_count()];
+			h = hausbauer_t::get_industrial(k, dimension, current_month, cl, neighbor_building_clusters);
+			if(  h != NULL  ) {
+				want_to_have = building_desc_t::city_ind;
+				sum = sum_industrial;
+				selected_dim = dimension;
+				break;
+			}
 		}
 	}
 	// check for residence
 	// (sum_wohnung>sum_industrie  &&  sum_wohnung>sum_gewerbe
 	if(  want_to_have == building_desc_t::unknown  ) {
 		// we must check, if we can really update to higher level ...
+		bool found = false;
+		/*
 		const int try_level = (alt_typ == building_desc_t::city_res ? level + 1 : level);
 		h = hausbauer_t::get_residential(try_level, current_month, cl, neighbor_building_clusters);
 		if(  h != NULL  &&  h->get_level() >= try_level  ) {
@@ -3043,18 +3135,34 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 		else {
 			h = NULL;
 		}
+		*/
+		for(uint8 i=0; i<available_sizes.get_count(); i++) {
+			const koord dimension = available_sizes[(i+size_offset)%available_sizes.get_count()];
+			h = hausbauer_t::get_residential(k, dimension, current_month, cl, neighbor_building_clusters);
+			if(  h != NULL  ) {
+				want_to_have = building_desc_t::city_res;
+				sum = sum_residential;
+				selected_dim = dimension;
+				found = true;
+				break;
+			}
+		}
+		if(  !found  ) {
+			h = NULL;
+		}
 	}
 
-	if (alt_typ != want_to_have) {
-		sum -= level * 10;
+	if(  h==NULL  ) {
+		// Found no suitable building.  Return!
+		return;
 	}
 
 	// good enough to renovate, and we found a building?
 	if(  sum > 0  &&  h != NULL  ) {
 //		DBG_MESSAGE("stadt_t::renovate_city_building()", "renovation at %i,%i (%i level) of typ %i to typ %i with desire %i", k.x, k.y, alt_typ, want_to_have, sum);
 
-		int rotation = 0;
-		if(  h->get_all_layouts()>1  ) {
+		int rotation = h->get_size().x==selected_dim.x ? 0 : 1;
+		if(  h->get_all_layouts()>1  &&  h->get_size()==koord(1,1)  ) {
 			// check for pavement
 			int streetdir = 0;
 			for(  int i = 0;  i < 4;  i++  ) {
@@ -3098,17 +3206,57 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 			}
 		}
 
-		switch(alt_typ) {
-			case building_desc_t::city_res: won -= level * 10; break;
-			case building_desc_t::city_com: arb -= level * 20; break;
-			case building_desc_t::city_ind: arb -= level * 20; break;
-			default: break;
+		// we stock the removed buildings.
+		class removed_building {
+		public:
+			const building_desc_t* desc;
+			koord3d pos;
+			int rotation;
+		};
+		vector_tpl<removed_building> removed_buildings;
+		for(uint8 x=0; x<(rotation&1?h->get_size().y:h->get_size().x); x++) {
+			for(uint8 y=0; y<(rotation&1?h->get_size().x:h->get_size().y); y++) {
+				const grund_t* gr = welt->lookup_kartenboden(k+koord(x,y));
+				assert(gr);
+				const gebaeude_t* bldg = gr->find<gebaeude_t>();
+				if(bldg) {
+					const building_desc_t* desc = bldg->get_tile()->get_desc();
+					removed_building rb;
+					rb.desc = desc;
+					rb.pos = bldg->get_pos();
+					rb.rotation = bldg->get_tile()->get_layout();
+					removed_buildings.append(rb);
+					hausbauer_t::remove(NULL, bldg);
+				}
+			}
 		}
-		// exchange building; try to face it to street in front
-		gb->mark_images_dirty();
-		gb->set_tile( h->get_tile(rotation, 0, 0), true );
-		welt->lookup_kartenboden(k)->calc_image();
-		update_gebaeude_from_stadt(gb);
+
+		const koord3d pos = welt->lookup_kartenboden(k)->get_pos();
+		gebaeude_t* new_gb = hausbauer_t::build(NULL, pos, rotation, h);
+		// Check that all tiles are same height. If it is different, we remove that.
+		gebaeude_t* checked_gb = check_tiles_height(new_gb, k, rotation);
+		if(!checked_gb) {
+			// height was different. Let's recover.
+			for(uint8 j=0; j<removed_buildings.get_count(); j++) {
+				const removed_building rb = removed_buildings[j];
+				gebaeude_t* g = hausbauer_t::build(NULL, rb.pos, rb.rotation, rb.desc);
+				add_gebaeude_to_stadt(g);
+			}
+			return;
+		}
+
+		add_gebaeude_to_stadt(checked_gb);
+
+		// culculation of population
+		for(uint8 j=0; j<removed_buildings.get_count(); j++) {
+			const uint8 level = removed_buildings[j].desc->get_level();
+			switch(removed_buildings[j].desc->get_type()) {
+				case building_desc_t::city_res: won -= level * 10; break;
+				case building_desc_t::city_com: arb -= level * 20; break;
+				case building_desc_t::city_ind: arb -= level * 20; break;
+				default: break;
+			}
+		}
 
 		switch(want_to_have) {
 			case building_desc_t::city_res: won += h->get_level() * 10; break;
@@ -3119,6 +3267,54 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	}
 }
 
+/*
+ * a subroutine of renovate_city_buiding
+ * If successfully built, return the pointer of building.
+ * If failed, return NULL.
+ */
+gebaeude_t* stadt_t::check_tiles_height(gebaeude_t* building, koord pos, uint8 layout) {
+	// We check whether all tiles are same height because we sometimes fail to estimate the height.
+	const building_desc_t* desc = building->get_tile()->get_desc();
+	bool height_check_approved = true;
+	sint8 tile_height = -100;
+	for(uint8 x=0; x<(layout&1?desc->get_size().y:desc->get_size().x); x++) {
+		for(uint8 y=0; y<(layout&1?desc->get_size().x:desc->get_size().y); y++) {
+			const grund_t* gr = welt->lookup_kartenboden(pos+koord(x,y));
+			if(!gr) {
+				dbg->error("stadt_t::check_height_and_rebuild()", "ground not found! pos:%s", (pos+koord(x,y)).get_str());
+			}
+			if(tile_height!=-100  &&  tile_height!=gr->get_pos().z) {
+				// height is different!
+				height_check_approved = false;
+				break;
+			}
+			tile_height = gr->get_pos().z;
+		}
+	}
+	if(height_check_approved) {
+		// all tiles are same height.
+		return building;
+	}
+	dbg->message("stadt_t::check_tiles_height()", "height is different. we remove building at pos:%s", pos.get_str());
+	// height is different.
+	// remove all buildings in the area.
+	for(uint8 x=0; x<(layout&1?desc->get_size().y:desc->get_size().x); x++) {
+		for(uint8 y=0; y<(layout&1?desc->get_size().x:desc->get_size().y); y++) {
+			const grund_t* gr = welt->lookup_kartenboden(pos+koord(x,y));
+			if(!gr) {
+				dbg->error("stadt_t::check_height_and_rebuild()", "ground not found! pos:%s", (pos+koord(x,y)).get_str());
+			}
+			const gebaeude_t* bldg = gr->find<gebaeude_t>();
+			if(bldg) {
+				if(!bldg->is_city_building()) {
+					dbg->error("stadt_t::check_height_and_rebuild()", "building is not a city building! pos:%s", (pos+koord(x,y)).get_str());
+				}
+				hausbauer_t::remove(NULL, bldg);
+			}
+		}
+	}
+	return NULL;
+}
 
 #ifdef DESTINATION_CITYCARS
 void stadt_t::generate_private_cars(koord pos, koord target)

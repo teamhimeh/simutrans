@@ -766,12 +766,14 @@ void gebaeude_t::rdwr(loadsave_t *file)
 				}
 				// we try to replace citybuildings with their matching counterparts
 				// if none are matching, we try again without climates and timeline!
+				// only 1x1 buildings can fill the empty tile to avoid overlap.
+				const koord single(1,1);
 				switch(type) {
 					case building_desc_t::city_res:
 						{
-							const building_desc_t *bdsc = hausbauer_t::get_residential( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ) );
+							const building_desc_t *bdsc = hausbauer_t::get_residential( level, single,  welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ) );
 							if(bdsc==NULL) {
-								bdsc = hausbauer_t::get_residential(level,0, MAX_CLIMATES );
+								bdsc = hausbauer_t::get_residential(level, single, 0, MAX_CLIMATES );
 							}
 							if( bdsc) {
 								dbg->message("gebaeude_t::rwdr", "replace unknown building %s with residence level %i by %s",buf,level,bdsc->get_name());
@@ -782,9 +784,9 @@ void gebaeude_t::rdwr(loadsave_t *file)
 
 					case building_desc_t::city_com:
 						{
-							const building_desc_t *bdsc = hausbauer_t::get_commercial( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ) );
+							const building_desc_t *bdsc = hausbauer_t::get_commercial( level, single,  welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ) );
 							if(bdsc==NULL) {
-								bdsc = hausbauer_t::get_commercial(level,0, MAX_CLIMATES );
+								bdsc = hausbauer_t::get_commercial(level, single, 0, MAX_CLIMATES );
 							}
 							if(bdsc) {
 								dbg->message("gebaeude_t::rwdr", "replace unknown building %s with commercial level %i by %s",buf,level,bdsc->get_name());
@@ -795,11 +797,11 @@ void gebaeude_t::rdwr(loadsave_t *file)
 
 					case building_desc_t::city_ind:
 						{
-							const building_desc_t *bdsc = hausbauer_t::get_industrial( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ) );
+							const building_desc_t *bdsc = hausbauer_t::get_industrial( level, single,  welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ) );
 							if(bdsc==NULL) {
-								bdsc = hausbauer_t::get_industrial(level,0, MAX_CLIMATES );
+								bdsc = hausbauer_t::get_industrial(level, single, 0, MAX_CLIMATES );
 								if(bdsc==NULL) {
-									bdsc = hausbauer_t::get_residential(level,0, MAX_CLIMATES );
+									bdsc = hausbauer_t::get_residential(level, single, 0, MAX_CLIMATES );
 								}
 							}
 							if (bdsc) {

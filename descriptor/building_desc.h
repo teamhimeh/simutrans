@@ -221,6 +221,8 @@ private:
 
 	tool_t *builder;
 
+	static uint8 city_building_max_size;
+
 public:
 
 	koord get_size(uint8 layout = 0) const {
@@ -363,6 +365,8 @@ public:
 		// Only meaningful for res, com, ind
 		return is_city_building() ? extra_data : 0;
 	}
+
+	static uint8 get_city_building_max_size() { return city_building_max_size; }
 };
 
 ENUM_BITSET(building_desc_t::flag_t)

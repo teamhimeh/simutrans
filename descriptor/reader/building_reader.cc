@@ -374,6 +374,14 @@ obj_desc_t * building_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->flags |= building_desc_t::FLAG_HAS_CURSOR;
 	}
 
+	// calculate max size of city buildings.
+	if(  desc->is_city_building()  &&  desc->city_building_max_size<desc->size.x  ) {
+		desc->city_building_max_size = desc->size.x;
+	}
+	if(  desc->is_city_building()  &&  desc->city_building_max_size<desc->size.y  ) {
+		desc->city_building_max_size = desc->size.y;
+	}
+
 	// correct old station buildings ...
 	if(  version<=3  &&  ((uint8)desc->type >= building_desc_t::bahnhof  ||  desc->type == building_desc_t::factory  ||  desc->type == building_desc_t::depot)  &&  desc->level==0  ) {
 		DBG_DEBUG("building_reader_t::read_node()","old station building -> set level to 4");

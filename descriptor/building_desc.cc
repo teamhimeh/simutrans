@@ -240,3 +240,5 @@ sint32 building_desc_t::get_price(karte_t *world) const
 	}
 	return 0;
 }
+
+uint8 building_desc_t::city_building_max_size = 1;
