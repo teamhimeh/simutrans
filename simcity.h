@@ -383,6 +383,13 @@ private:
 	void build_city_building(koord pos);
 	void renovate_city_building(gebaeude_t *gb);
 
+	class removed_building {
+	public:
+		const building_desc_t* desc;
+		koord3d pos;
+		int rotation;
+	};
+
 	// sub-routines of renovate_city_building
 	void get_available_building_size(const koord k, vector_tpl<koord> &sizes) const;
 	gebaeude_t* check_tiles_height(gebaeude_t* building, koord pos, uint8 layout);

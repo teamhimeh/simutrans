@@ -1858,10 +1858,12 @@ void stadt_t::step_passagiere()
 	const gebaeude_t* gb = buildings[step_count];
 
 	// prissi: since now backtravels occur, we damp the numbers a little
+	const koord gb_size = gb->get_tile()->get_desc()->get_size();
+	const uint16 area_factor = gb->is_city_building() ? gb_size.x*gb_size.y : 1;
 	const uint32 num_pax =
 		(ispass) ?
-			(gb->get_tile()->get_desc()->get_level()      + 6) >> 2 :
-			(gb->get_tile()->get_desc()->get_mail_level() + 8) >> 3 ;
+			(gb->get_tile()->get_desc()->get_level() / area_factor      + 6) >> 2 :
+			(gb->get_tile()->get_desc()->get_mail_level() / area_factor + 8) >> 3 ;
 
 	// create pedestrians in the near area?
 	if (welt->get_settings().get_random_pedestrians()  &&  ispass) {
@@ -3207,12 +3209,7 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 		}
 
 		// we stock the removed buildings.
-		class removed_building {
-		public:
-			const building_desc_t* desc;
-			koord3d pos;
-			int rotation;
-		};
+		
 		vector_tpl<removed_building> removed_buildings;
 		for(uint8 x=0; x<(rotation&1?h->get_size().y:h->get_size().x); x++) {
 			for(uint8 y=0; y<(rotation&1?h->get_size().x:h->get_size().y); y++) {
@@ -3610,9 +3607,11 @@ void stadt_t::build()
 	if(  !buildings.empty()  &&  simrand(100) <= renovation_percentage  ) {
 		// try to find a public owned building
 		for(  uint8 i=0;  i<4;  i++  ) {
+			// we must give gebaeude of the original position.
 			gebaeude_t* const gb = pick_any(buildings);
 			if(  player_t::check_owner(gb->get_owner(),NULL)  ) {
-				renovate_city_building(gb);
+				// we must give gebaeude of the original position.
+				renovate_city_building(gb->get_first_tile());
 				break;
 			}
 		}
