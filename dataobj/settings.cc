@@ -154,6 +154,8 @@ settings_t::settings_t() :
 	crossconnect_factor=33;
 #endif
 
+	max_level_leap_per_a_tile = 10;
+
 	/* minimum spacing between two factories */
 	min_factory_spacing = 6;
 	max_factory_spacing = 40;
@@ -1300,6 +1302,8 @@ void settings_t::parse_simuconf(tabfile_t& simuconf, sint16& disp_width, sint16&
 	crossconnect_factories = contents.get_int("crossconnect_factories", crossconnect_factories ) != 0;
 	crossconnect_factor = contents.get_int("crossconnect_factories_percentage", crossconnect_factor );
 	electric_promille = contents.get_int("electric_promille", electric_promille );
+
+	max_level_leap_per_a_tile = contents.get_int("max_level_leap_per_a_tile", max_level_leap_per_a_tile);
 
 	env_t::just_in_time = (uint8)contents.get_int("just_in_time", env_t::just_in_time);
 	if( env_t::just_in_time > 2 ) {
