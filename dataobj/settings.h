@@ -176,9 +176,6 @@ private:
 	/* prissi: crossconnect all factories (like OTTD and similar games) */
 	sint16 crossconnect_factor;
 
-	/* THLeaderH: a parameter for the city building renovation. */
-	uint8 max_level_leap_per_a_tile;
-
 	/**
 	* Generate random pedestrians in the cities?
 	*
@@ -459,8 +456,6 @@ public:
 	sint16 get_max_factory_spacing_percent() const { return max_factory_spacing_percentage; }
 	sint16 get_crossconnect_factor() const { return crossconnect_factor; }
 	bool is_crossconnect_factories() const { return crossconnect_factories; }
-
-	uint8 get_max_level_leap_per_a_tile() const { return max_level_leap_per_a_tile; }
 
 	bool get_numbered_stations() const { return numbered_stations; }
 

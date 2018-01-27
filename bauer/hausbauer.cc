@@ -926,7 +926,6 @@ const building_desc_t* hausbauer_t::get_city_building_from_list(const vector_tpl
 	sum_level += 1;
 	const uint16 level_replaced = sum_level;
 	const uint16 area_of_building = size.x*size.y;
-	const uint8 level_leap_limit = welt->get_settings().get_max_level_leap_per_a_tile();
 
 	// try to find a suitable building.
 	FOR(vector_tpl<building_desc_t const*>, const desc, list) {
@@ -937,7 +936,7 @@ const building_desc_t* hausbauer_t::get_city_building_from_list(const vector_tpl
 
 		const int thislevel = desc->get_level();
 		if(thislevel>sum_level) {
-			if (selections.empty()  &&  thislevel-level_replaced<=level_leap_limit*area_of_building) {
+			if (selections.empty()  &&  thislevel-level_replaced<=2*area_of_building) {
 				// Nothing of the correct level. Continue with search on a higher level.
 				sum_level = thislevel;
 			}
