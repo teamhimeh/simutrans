@@ -905,7 +905,6 @@ const hausbauer_t::selected_building hausbauer_t::get_city_building_from_list(co
 	}
 
 	double minimum_level_leap_per_a_tile = 1000;
-	printf("get_city_building_from_list pos:%s\n", pos_origin.get_str());
 
 	// try to find a suitable building.
 	FOR(vector_tpl<building_desc_t const*>, const desc, list) {
@@ -917,7 +916,6 @@ const hausbauer_t::selected_building hausbauer_t::get_city_building_from_list(co
 		}
 		const double area_of_building = desc->get_size().x * desc->get_size().y;
 		const double level_leap = desc->get_level()/area_of_building - replaced_level_per_a_tile[size_index];
-		printf("level:%d, leap:%f\n", desc->get_level(), level_leap);
 
 		if(  level_leap<1.0  ) {
 			// this building does not increase the building level.
@@ -925,7 +923,6 @@ const hausbauer_t::selected_building hausbauer_t::get_city_building_from_list(co
 		} else if(  minimum_level_leap_per_a_tile-level_leap>1.0  ) {
 			// clear what we've selected.
 			minimum_level_leap_per_a_tile = level_leap;
-			printf("minimum_level_leap_per_a_tile:%f\n", minimum_level_leap_per_a_tile);
 			selections.clear();
 		}
 
