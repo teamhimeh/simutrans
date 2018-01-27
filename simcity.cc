@@ -3096,30 +3096,22 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	koord selected_dim;
 	if (sum_commercial > sum_industrial && sum_commercial > sum_residential) {
 		// we must check, if we can really update to higher level ...
-		for(uint8 i=0; i<available_sizes.get_count(); i++) {
-			const koord dimension = available_sizes[(i+size_offset)%available_sizes.get_count()];
-			h = hausbauer_t::get_commercial(k, dimension, current_month, cl, neighbor_building_clusters);
-			if(  h != NULL  ) {
-				want_to_have = building_desc_t::city_com;
-				sum = sum_commercial;
-				selected_dim = dimension;
-				break;
-			}
+		hausbauer_t::selected_building cand = hausbauer_t::get_commercial(k, available_sizes, current_month, cl, neighbor_building_clusters);
+		if(  (h=cand.desc)!=NULL  ) {
+			want_to_have = building_desc_t::city_com;
+			sum = sum_commercial;
+			selected_dim = cand.size;
 		}
 	}
 	// check for industry, also if we wanted com, but there was no com good enough ...
 	if(    (sum_industrial > sum_commercial  &&  sum_industrial > sum_residential)
       || (sum_commercial > sum_residential  &&  want_to_have == building_desc_t::unknown)  ) {
 		// we must check, if we can really update to higher level ...
-		for(uint8 i=0; i<available_sizes.get_count(); i++) {
-			const koord dimension = available_sizes[(i+size_offset)%available_sizes.get_count()];
-			h = hausbauer_t::get_industrial(k, dimension, current_month, cl, neighbor_building_clusters);
-			if(  h != NULL  ) {
-				want_to_have = building_desc_t::city_ind;
-				sum = sum_industrial;
-				selected_dim = dimension;
-				break;
-			}
+		hausbauer_t::selected_building cand = hausbauer_t::get_industrial(k, available_sizes, current_month, cl, neighbor_building_clusters);
+		if(  (h=cand.desc)!=NULL  ) {
+			want_to_have = building_desc_t::city_ind;
+			sum = sum_industrial;
+			selected_dim = cand.size;
 		}
 	}
 	// check for residence
@@ -3127,27 +3119,12 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	if(  want_to_have == building_desc_t::unknown  ) {
 		// we must check, if we can really update to higher level ...
 		bool found = false;
-		/*
-		const int try_level = (alt_typ == building_desc_t::city_res ? level + 1 : level);
-		h = hausbauer_t::get_residential(try_level, current_month, cl, neighbor_building_clusters);
-		if(  h != NULL  &&  h->get_level() >= try_level  ) {
+		hausbauer_t::selected_building cand = hausbauer_t::get_residential(k, available_sizes, current_month, cl, neighbor_building_clusters);
+		if(  (h=cand.desc)!=NULL  ) {
 			want_to_have = building_desc_t::city_res;
 			sum = sum_residential;
-		}
-		else {
-			h = NULL;
-		}
-		*/
-		for(uint8 i=0; i<available_sizes.get_count(); i++) {
-			const koord dimension = available_sizes[(i+size_offset)%available_sizes.get_count()];
-			h = hausbauer_t::get_residential(k, dimension, current_month, cl, neighbor_building_clusters);
-			if(  h != NULL  ) {
-				want_to_have = building_desc_t::city_res;
-				sum = sum_residential;
-				selected_dim = dimension;
-				found = true;
-				break;
-			}
+			selected_dim = cand.size;
+			found = true;
 		}
 		if(  !found  ) {
 			h = NULL;
@@ -3209,7 +3186,7 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 		}
 
 		// we stock the removed buildings.
-		
+
 		vector_tpl<removed_building> removed_buildings;
 		for(uint8 x=0; x<(rotation&1?h->get_size().y:h->get_size().x); x++) {
 			for(uint8 y=0; y<(rotation&1?h->get_size().x:h->get_size().y); y++) {

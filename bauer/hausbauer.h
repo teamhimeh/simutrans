@@ -29,6 +29,13 @@ class tool_selector_t;
  */
 class hausbauer_t
 {
+public:
+	class selected_building {
+	public:
+		const building_desc_t* desc;
+		koord size;
+	};
+
 private:
 	static vector_tpl<const building_desc_t*> attractions_land;  ///< Sights outside of cities
 	static vector_tpl<const building_desc_t*> attractions_city;  ///< Sights within cities
@@ -41,8 +48,10 @@ private:
 	/// @returns a random entry from @p list
 	static const building_desc_t* get_random_desc(vector_tpl<const building_desc_t*>& list, uint16 time, bool ignore_retire, climate cl);
 
-	static const building_desc_t* get_city_building_from_list(const vector_tpl<const building_desc_t*> &building_list, koord pos_origin, koord size, uint16 time, climate cl,  uint32 clusters);
+	static const selected_building get_city_building_from_list(const vector_tpl<const building_desc_t*> &building_list, koord pos_origin, vector_tpl<koord> &sizes, uint16 time, climate cl,  uint32 clusters);
 	static const building_desc_t* get_city_building_from_list(const vector_tpl<const building_desc_t*> &building_list, int level, koord size, uint16 time, climate cl,  uint32 clusters);
+
+	static uint16 calc_replaced_level(koord pos, koord dim);
 
 	/// our game world
 	static karte_ptr_t welt;
@@ -81,16 +90,16 @@ public:
 	static void fill_menu(tool_selector_t* tool_selector, building_desc_t::btype, waytype_t wt, sint16 sound_ok);
 
 	/// @returns a random commercial building matching the requirements.
-	static const building_desc_t* get_commercial(koord pos_origin, koord size, uint16 time, climate c, uint32 clusters = 0l);
+	static const selected_building get_commercial(koord pos_origin, vector_tpl<koord>sizes, uint16 time, climate c, uint32 clusters = 0l);
 	static const building_desc_t* get_commercial(int level, koord size, uint16 time, climate c, uint32 clusters = 0l);
 
 	/// @returns a random industrial building matching the requirements.
-	static const building_desc_t* get_industrial(koord pos_origin, koord size, uint16 time, climate cl, uint32 clusters = 0);
+	static const selected_building get_industrial(koord pos_origin, vector_tpl<koord>sizes, uint16 time, climate cl, uint32 clusters = 0);
 	static const building_desc_t* get_industrial(int level, koord size, uint16 time, climate cl, uint32 clusters = 0);
 
 	/// @returns a random residential building matching the requirements.
-	static const building_desc_t* get_residential(koord pos_origin,  koord size,uint16 time, climate cl, uint32 clusters = 0);
-	static const building_desc_t* get_residential(int level,  koord size,uint16 time, climate cl, uint32 clusters = 0);
+	static const selected_building get_residential(koord pos_origin, vector_tpl<koord>sizes, uint16 time, climate cl, uint32 clusters = 0);
+	static const building_desc_t* get_residential(int level, koord size, uint16 time, climate cl, uint32 clusters = 0);
 
 	/// @returns headquarters with level @p level (takes the first matching one)
 	static const building_desc_t* get_headquarters(int level, uint16 time);
