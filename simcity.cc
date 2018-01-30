@@ -3096,11 +3096,11 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	// This is a bitmap -- up to 32 clustering types are allowed.
 	vector_tpl<koord> orthogonal_neighbors;
 	const building_desc_t* gb_desc = gb->get_tile()->get_desc();
-	for(sint8 x=0; x<gb_desc->get_size().x; x++) {
+	for(sint8 x=0; x<gb_desc->get_size(gb->get_tile()->get_layout()).x; x++) {
 		orthogonal_neighbors.append(k+koord(x,-1));
 		orthogonal_neighbors.append(k+koord(x,gb_desc->get_size().y));
 	}
-	for(sint8 y=0; y<gb_desc->get_size().y; y++) {
+	for(sint8 y=0; y<gb_desc->get_size(gb->get_tile()->get_layout()).y; y++) {
 		orthogonal_neighbors.append(k+koord(-1,y));
 		orthogonal_neighbors.append(k+koord(gb_desc->get_size().x,y));
 	}
