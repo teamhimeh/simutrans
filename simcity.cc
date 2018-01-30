@@ -2927,12 +2927,12 @@ void stadt_t::get_available_building_size(const koord k, vector_tpl<koord> &size
 					// buildings in the area must not be in the outside of the area.
 					const sint8 x_off = x==0 ? -1 : (x==w-1 ? 1 : 0);
 					const sint8 y_off = y==0 ? -1 : (y==h-1 ? 1 : 0);
-					const gebaeude_t* gb = gr->find<gebaeude_t>();
+					gebaeude_t* gb = gr->find<gebaeude_t>();
 					if(gb  &&  (x==0  ||  y==0  ||  x==w-1  ||  y==h-1)) {
-						const grund_t* neighbor_gr = welt->lookup_kartenboden(k+koord(x_off,y_off));
+						const grund_t* neighbor_gr = welt->lookup_kartenboden(p+koord(x_off,y_off));
 						if(neighbor_gr) {
-							const gebaeude_t* neighbor_gb = neighbor_gr->find<gebaeude_t>();
-							if(gb==neighbor_gb) {
+							gebaeude_t* neighbor_gb = neighbor_gr->find<gebaeude_t>();
+							if(gb->is_same_building(neighbor_gb)) {
 								check_continue = false;
 								break;
 							}
