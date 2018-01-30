@@ -1104,3 +1104,35 @@ const vector_tpl<const building_desc_t*>* hausbauer_t::get_citybuilding_list(con
 		default:                      return NULL;
 	}
 }
+
+/*
+ * return true only when there is a building of higher level than the given for all city building types.
+ */
+bool hausbauer_t::has_city_building(uint16 level) {
+	bool res = false;
+	bool com = false;
+	bool ind = false;
+	FOR(vector_tpl<building_desc_t const*>, const desc, city_residential) {
+		if(desc->get_level()>=level) {
+			res = true;
+			break;
+		}
+	}
+	FOR(vector_tpl<building_desc_t const*>, const desc, city_commercial) {
+		if(desc->get_level()>=level) {
+			com = true;
+			break;
+		}
+	}
+	FOR(vector_tpl<building_desc_t const*>, const desc, city_industry) {
+		if(desc->get_level()>=level) {
+			ind = true;
+			break;
+		}
+	}
+	if(  res  &&  com  &&  ind  ) {
+		return true;
+	} else {
+		return false;
+	}
+}

@@ -380,7 +380,7 @@ private:
 	/**
 	 * Build/renovates a city building at Planquadrat (tile) x,y
 	 */
-	void build_city_building(koord pos);
+	void build_city_building(koord pos, uint16 level = 0);
 	void renovate_city_building(gebaeude_t *gb);
 
 	class removed_building {

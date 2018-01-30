@@ -105,6 +105,9 @@ static sint16 ind_neighbour_score[] = { -8, 0,  8 };
 static sint16 com_neighbour_score[] = {  1, 8,  1 };
 static sint16 res_neighbour_score[] = {  8, 0, -8 };
 
+// chance to split a multi-tile building into single-tile buildings. (in percent)
+static uint8 split_building_percentage = 25;
+
 /**
  * Rule data structure
  * maximum 7x7 rules
@@ -2945,7 +2948,7 @@ void stadt_t::get_available_building_size(const koord k, vector_tpl<koord> &size
 	}
 }
 
-void stadt_t::build_city_building(const koord k)
+void stadt_t::build_city_building(const koord k, const uint16 level)
 {
 	grund_t* gr = welt->lookup_kartenboden(k);
 	const koord3d pos(gr->get_pos());
@@ -3003,21 +3006,21 @@ void stadt_t::build_city_building(const koord k)
 	const koord size_single(1,1);
 
 	if (sum_commercial > sum_industrial  &&  sum_commercial > sum_residential) {
-		h = hausbauer_t::get_commercial(0, size_single, current_month, cl, neighbor_building_clusters);
+		h = hausbauer_t::get_commercial(level, size_single, current_month, cl, neighbor_building_clusters);
 		if (h != NULL) {
 			arb += (h->get_level()+1) * 20;
 		}
 	}
 
 	if (h == NULL  &&  sum_industrial > sum_residential  &&  sum_industrial > sum_commercial) {
-		h = hausbauer_t::get_industrial(0, size_single, current_month, cl, neighbor_building_clusters);
+		h = hausbauer_t::get_industrial(level, size_single, current_month, cl, neighbor_building_clusters);
 		if (h != NULL) {
 			arb += (h->get_level()+1) * 20;
 		}
 	}
 
 	if (h == NULL  &&  sum_residential > sum_industrial  &&  sum_residential > sum_commercial) {
-		h = hausbauer_t::get_residential(0, size_single, current_month, cl, neighbor_building_clusters);
+		h = hausbauer_t::get_residential(level, size_single, current_month, cl, neighbor_building_clusters);
 		if (h != NULL) {
 			// will be aligned next to a street
 			won += (h->get_level()+1) * 10;
@@ -3040,6 +3043,38 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 
 	// Now we are sure that this is a city building
 	const koord k = gb->get_pos().get_2d();
+
+	if(  simrand(100) <= split_building_percentage  ) {
+		// In this case, we split the given building into single-tile buildings.
+		const uint8 layout = gb->get_tile()->get_layout();
+		const koord dim = gb->get_tile()->get_desc()->get_size(layout);
+		const uint16 area = dim.x*dim.y;
+		const uint16 whole_level = gb->get_tile()->get_desc()->get_level();
+		const uint16 level_per_a_tile = whole_level%area==0 ? whole_level/area : whole_level/area + 1;
+		if(  area>1  &&  hausbauer_t::has_city_building(level_per_a_tile)  ) {
+			// we have city buildings of higher level. So let's split.
+			uint16 level_left = whole_level;
+			uint16 left_area = area;
+			switch(gb->get_tile()->get_desc()->get_type()) {
+				case building_desc_t::city_res: won -= whole_level * 10; break;
+				case building_desc_t::city_com: arb -= whole_level * 20; break;
+				case building_desc_t::city_ind: arb -= whole_level * 20; break;
+				default: break;
+			}
+			hausbauer_t::remove(NULL, gb);
+			for(uint8 x=0; x<dim.x; x++) {
+				for(uint8 y=0; y<dim.y; y++) {
+					build_city_building(k+koord(x,y), level_left/left_area);
+					gebaeude_t const* const gb = obj_cast<gebaeude_t>(welt->lookup_kartenboden(k+koord(x,y))->first_obj());
+					if(  gb  ) {
+						level_left -= gb->get_tile()->get_desc()->get_level();
+					}
+					left_area -= 1;
+				}
+			}
+			return;
+		}
+	}
 
 	// Divide unemployed by 4, because it counts towards commercial and industrial,
 	// and both of those count 'double' for population relative to residential.
@@ -3089,7 +3124,6 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	// get available building sizes.
 	vector_tpl<koord> available_sizes;
 	get_available_building_size(k, available_sizes);
-	const uint8 size_offset = simrand(available_sizes.get_count());
 
 	// try to build
 	const building_desc_t* h = NULL;

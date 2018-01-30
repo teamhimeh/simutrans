@@ -101,6 +101,8 @@ public:
 	static const selected_building get_residential(koord pos_origin, vector_tpl<koord>sizes, uint16 time, climate cl, uint32 clusters = 0);
 	static const building_desc_t* get_residential(int level, koord size, uint16 time, climate cl, uint32 clusters = 0);
 
+	static bool has_city_building(uint16 level);
+
 	/// @returns headquarters with level @p level (takes the first matching one)
 	static const building_desc_t* get_headquarters(int level, uint16 time);
 
