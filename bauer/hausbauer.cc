@@ -391,8 +391,9 @@ void hausbauer_t::remove( player_t *player, const gebaeude_t *gb )
 	}
 
 	// delete our house only
-	for(k.y = 0; k.y < size.y; k.y ++) {
-		for(k.x = 0; k.x < size.x; k.x ++) {
+	// delete in this order to preserve the first tile of the building.
+	for(k.y = size.y-1; 0 <= k.y; k.y --) {
+		for(k.x = size.x-1; 0 <= k.x; k.x --) {
 			grund_t *gr = welt->lookup(koord3d(k,0)+pos);
 			if(gr) {
 				gebaeude_t *gb_part = gr->find<gebaeude_t>();

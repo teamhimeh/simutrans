@@ -902,7 +902,10 @@ void gebaeude_t::cleanup(player_t *player)
 		cost *= tile->get_desc()->get_level() + 1;
 	}
 
-	player_t::book_construction_costs(player, cost, get_pos().get_2d(), tile->get_desc()->get_finance_waytype());
+	// in case of a city building, construction cost must be added only for the first tile.
+	if(!is_city_building()  ||  this==get_first_tile()) {
+		player_t::book_construction_costs(player, cost, get_pos().get_2d(), tile->get_desc()->get_finance_waytype());
+	}
 
 	// may need to update next buildings, in the case of start, middle, end buildings
 	if(tile->get_desc()->get_all_layouts()>1  &&  !is_city_building()) {
