@@ -2895,11 +2895,11 @@ void stadt_t::get_available_building_size(const koord k, vector_tpl<koord> &size
 	assert(gr_origin);
 	const gebaeude_t* gb_origin = gr_origin->find<gebaeude_t>();
 	assert(gb_origin);
-	const koord dim_origin = gb_origin->get_tile()->get_desc()->get_size();
 	const uint8 layout_origin = gb_origin->get_tile()->get_layout();
+	const koord dim_origin = gb_origin->get_tile()->get_desc()->get_size(layout_origin);
 	const sint8 height = gr_origin->get_pos().z;
-	for(uint8 w=(layout_origin&1)?dim_origin.y:dim_origin.x; w<=LEN_LIM; w++) {
-		for(uint8 h=(layout_origin&1)?dim_origin.x:dim_origin.y; h<=LEN_LIM; h++) {
+	for(uint8 w=dim_origin.x; w<=LEN_LIM; w++) {
+		for(uint8 h=dim_origin.y; h<=LEN_LIM; h++) {
 			bool check_continue = true;
 			for(uint8 x=0; x<w; x++) {
 				if(!check_continue) {
@@ -3217,8 +3217,8 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 
 		// we stock the removed buildings.
 		vector_tpl<removed_building> removed_buildings;
-		for(uint8 x=0; x<(rotation&1?h->get_size().y:h->get_size().x); x++) {
-			for(uint8 y=0; y<(rotation&1?h->get_size().x:h->get_size().y); y++) {
+		for(uint8 x=0; x<h->get_x(rotation); x++) {
+			for(uint8 y=0; y<h->get_y(rotation); y++) {
 				const grund_t* gr = welt->lookup_kartenboden(k+koord(x,y));
 				assert(gr);
 				const gebaeude_t* bldg = gr->find<gebaeude_t>();
