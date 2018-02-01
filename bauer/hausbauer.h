@@ -139,7 +139,7 @@ public:
 	 * It will also take care of factories and foundations.
 	 * @param sp the player wanting to remove the building.
 	 */
-	static void remove(player_t *player, const gebaeude_t *gb);
+	static void remove(player_t *player, const gebaeude_t *gb, bool restore_slope = true);
 
 	/**
 	 * Main function to build all non-traffic buildings, including factories.

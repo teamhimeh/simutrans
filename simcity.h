@@ -392,7 +392,6 @@ private:
 
 	// sub-routines of renovate_city_building
 	void get_available_building_size(const koord k, vector_tpl<koord> &sizes) const;
-	gebaeude_t* check_tiles_height(gebaeude_t* building, koord pos, uint8 layout);
 
 #ifdef DESTINATION_CITYCARS
 	sint16	number_of_cars; // allowed number of cars to spawn per month

@@ -2897,10 +2897,10 @@ void stadt_t::get_available_building_size(const koord k, vector_tpl<koord> &size
 	assert(gb_origin);
 	const koord dim_origin = gb_origin->get_tile()->get_desc()->get_size();
 	const uint8 layout_origin = gb_origin->get_tile()->get_layout();
+	const sint8 height = gr_origin->get_pos().z;
 	for(uint8 w=(layout_origin&1)?dim_origin.y:dim_origin.x; w<=LEN_LIM; w++) {
 		for(uint8 h=(layout_origin&1)?dim_origin.x:dim_origin.y; h<=LEN_LIM; h++) {
 			bool check_continue = true;
-			sint8 height = -100;
 			for(uint8 x=0; x<w; x++) {
 				if(!check_continue) {
 					break;
@@ -2914,16 +2914,12 @@ void stadt_t::get_available_building_size(const koord k, vector_tpl<koord> &size
 						break;
 					}
 					// the tile must be in the same height as others.
-					sint8 tile_height;
-					const slope_t::type hang = welt->recalc_natural_slope(p, tile_height);
-					if(hang!=slope_t::flat) {
-						tile_height ++;
-					}
-					if(height!=-100  &&  height!=tile_height) {
+					const slope_t::type hang = gr->get_grund_hang();
+					const sint8 tile_height = gr->get_pos().z + slope_t::max_diff(hang);
+					if(tile_height!=height) {
 						check_continue = false;
 						break;
 					}
-					height = tile_height;
 					// buildings in the area must not be in the outside of the area.
 					const sint8 x_off = x==0 ? -1 : (x==w-1 ? 1 : 0);
 					const sint8 y_off = y==0 ? -1 : (y==h-1 ? 1 : 0);
@@ -3220,7 +3216,6 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 		}
 
 		// we stock the removed buildings.
-
 		vector_tpl<removed_building> removed_buildings;
 		for(uint8 x=0; x<(rotation&1?h->get_size().y:h->get_size().x); x++) {
 			for(uint8 y=0; y<(rotation&1?h->get_size().x:h->get_size().y); y++) {
@@ -3234,26 +3229,15 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 					rb.pos = bldg->get_pos();
 					rb.rotation = bldg->get_tile()->get_layout();
 					removed_buildings.append(rb);
-					hausbauer_t::remove(NULL, bldg);
+					hausbauer_t::remove(NULL, bldg, false);
 				}
 			}
 		}
 
 		const koord3d pos = welt->lookup_kartenboden(k)->get_pos();
 		gebaeude_t* new_gb = hausbauer_t::build(NULL, pos, rotation, h);
-		// Check that all tiles are same height. If it is different, we remove that.
-		gebaeude_t* checked_gb = check_tiles_height(new_gb, k, rotation);
-		if(!checked_gb) {
-			// height was different. Let's recover.
-			for(uint8 j=0; j<removed_buildings.get_count(); j++) {
-				const removed_building rb = removed_buildings[j];
-				gebaeude_t* g = hausbauer_t::build(NULL, rb.pos, rb.rotation, rb.desc);
-				add_gebaeude_to_stadt(g);
-			}
-			return;
-		}
 
-		add_gebaeude_to_stadt(checked_gb);
+		add_gebaeude_to_stadt(new_gb);
 
 		// culculation of population
 		for(uint8 j=0; j<removed_buildings.get_count(); j++) {
@@ -3275,54 +3259,6 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	}
 }
 
-/*
- * a subroutine of renovate_city_buiding
- * If successfully built, return the pointer of building.
- * If failed, return NULL.
- */
-gebaeude_t* stadt_t::check_tiles_height(gebaeude_t* building, koord pos, uint8 layout) {
-	// We check whether all tiles are same height because we sometimes fail to estimate the height.
-	const building_desc_t* desc = building->get_tile()->get_desc();
-	bool height_check_approved = true;
-	sint8 tile_height = -100;
-	for(uint8 x=0; x<(layout&1?desc->get_size().y:desc->get_size().x); x++) {
-		for(uint8 y=0; y<(layout&1?desc->get_size().x:desc->get_size().y); y++) {
-			const grund_t* gr = welt->lookup_kartenboden(pos+koord(x,y));
-			if(!gr) {
-				dbg->error("stadt_t::check_height_and_rebuild()", "ground not found! pos:%s", (pos+koord(x,y)).get_str());
-			}
-			if(tile_height!=-100  &&  tile_height!=gr->get_pos().z) {
-				// height is different!
-				height_check_approved = false;
-				break;
-			}
-			tile_height = gr->get_pos().z;
-		}
-	}
-	if(height_check_approved) {
-		// all tiles are same height.
-		return building;
-	}
-	dbg->message("stadt_t::check_tiles_height()", "height is different. we remove building at pos:%s", pos.get_str());
-	// height is different.
-	// remove all buildings in the area.
-	for(uint8 x=0; x<(layout&1?desc->get_size().y:desc->get_size().x); x++) {
-		for(uint8 y=0; y<(layout&1?desc->get_size().x:desc->get_size().y); y++) {
-			const grund_t* gr = welt->lookup_kartenboden(pos+koord(x,y));
-			if(!gr) {
-				dbg->error("stadt_t::check_height_and_rebuild()", "ground not found! pos:%s", (pos+koord(x,y)).get_str());
-			}
-			const gebaeude_t* bldg = gr->find<gebaeude_t>();
-			if(bldg) {
-				if(!bldg->is_city_building()) {
-					dbg->error("stadt_t::check_height_and_rebuild()", "building is not a city building! pos:%s", (pos+koord(x,y)).get_str());
-				}
-				hausbauer_t::remove(NULL, bldg);
-			}
-		}
-	}
-	return NULL;
-}
 
 #ifdef DESTINATION_CITYCARS
 void stadt_t::generate_private_cars(koord pos, koord target)

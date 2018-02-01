@@ -298,7 +298,7 @@ void hausbauer_t::new_world()
 }
 
 
-void hausbauer_t::remove( player_t *player, const gebaeude_t *gb )
+void hausbauer_t::remove( player_t *player, const gebaeude_t *gb, bool restore_slope )
 {
 	const building_tile_desc_t *tile  = gb->get_tile();
 	const building_desc_t *bdsc = tile->get_desc();
@@ -409,8 +409,8 @@ void hausbauer_t::remove( player_t *player, const gebaeude_t *gb )
 					// and maybe restore land below
 					if(gr->get_typ()==grund_t::fundament) {
 						const koord newk = k+pos.get_2d();
-						sint8 new_hgt;
-						const uint8 new_slope = welt->recalc_natural_slope(newk,new_hgt);
+						sint8 new_hgt = pos.z;
+						const uint8 new_slope = restore_slope ? welt->recalc_natural_slope(newk,new_hgt) : slope_t::flat;
 						// test for ground at new height
 						const grund_t *gr2 = welt->lookup(koord3d(newk,new_hgt));
 						if(  (gr2==NULL  ||  gr2==gr) &&  new_slope!=slope_t::flat  ) {
