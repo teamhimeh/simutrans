@@ -919,7 +919,7 @@ const hausbauer_t::selected_building hausbauer_t::get_city_building_from_list(co
 		const sint16 area_of_building = desc->get_size().x * desc->get_size().y;
 		const sint16 level_leap = desc->get_level()/area_of_building - replaced_level_per_a_tile[size_index];
 
-		if(  level_leap<1  ) {
+		if(  desc->get_level() < replaced_level_per_a_tile[size_index] * area_of_building  ) {
 			// this building does not increase the building level.
 			continue;
 		} else if(  minimum_level_leap_per_a_tile-level_leap>1  ) {
