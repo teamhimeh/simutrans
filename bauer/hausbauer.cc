@@ -898,14 +898,15 @@ const building_desc_t* hausbauer_t::get_city_building_from_list(const vector_tpl
 const hausbauer_t::selected_building hausbauer_t::get_city_building_from_list(const vector_tpl<const building_desc_t*>& list, koord pos_origin, vector_tpl<koord> &sizes, uint16 time, climate cl, uint32 clusters )
 {
 	weighted_vector_tpl<hausbauer_t::selected_building> selections(16);
-	vector_tpl<double> replaced_level_per_a_tile;
+	// To be honest, replaced_level_per_a_tile should be stored as decimal number, but we have to rely on an approximation because simutrans does not allow to use decimal number.
+	vector_tpl<sint16> replaced_level_per_a_tile;
 	replaced_level_per_a_tile.clear();
 	for(uint16 i=0; i<sizes.get_count(); i++) {
-		double area = sizes[i].x * sizes[i].y;
+		sint16 area = sizes[i].x * sizes[i].y;
 		replaced_level_per_a_tile.append(calc_replaced_level(pos_origin, sizes[i])/area);
 	}
 
-	double minimum_level_leap_per_a_tile = 1000;
+	sint16 minimum_level_leap_per_a_tile = 10000;
 
 	// try to find a suitable building.
 	FOR(vector_tpl<building_desc_t const*>, const desc, list) {
@@ -915,19 +916,19 @@ const hausbauer_t::selected_building hausbauer_t::get_city_building_from_list(co
 			// this size is not allowed.
 			continue;
 		}
-		const double area_of_building = desc->get_size().x * desc->get_size().y;
-		const double level_leap = desc->get_level()/area_of_building - replaced_level_per_a_tile[size_index];
+		const sint16 area_of_building = desc->get_size().x * desc->get_size().y;
+		const sint16 level_leap = desc->get_level()/area_of_building - replaced_level_per_a_tile[size_index];
 
-		if(  level_leap<1.0  ) {
+		if(  level_leap<1  ) {
 			// this building does not increase the building level.
 			continue;
-		} else if(  minimum_level_leap_per_a_tile-level_leap>1.0  ) {
+		} else if(  minimum_level_leap_per_a_tile-level_leap>1  ) {
 			// clear what we've selected.
 			minimum_level_leap_per_a_tile = level_leap;
 			selections.clear();
 		}
 
-		if(  level_leap-minimum_level_leap_per_a_tile<1.0  &&  desc->get_distribution_weight() > 0  ) {
+		if(  level_leap==minimum_level_leap_per_a_tile  &&  desc->get_distribution_weight() > 0  ) {
 			if(  cl==MAX_CLIMATES  ||  desc->is_allowed_climate(cl)  ) {
 				if(  desc->is_available(time)  ) {
 					/* Level, time period, and climate are all OK.
