@@ -90,6 +90,9 @@ private:
 	gui_combobox_t line_selector;
 	gui_label_t lb_line;
 
+	// only active in line management
+	button_t bt_merge, bt_split; // merger, split operation
+
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
 	button_t bt_bidirectional, bt_mirror, bt_wait_for_time, bt_same_spacing_shift;

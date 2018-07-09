@@ -546,6 +546,23 @@ schedule_gui_t::schedule_gui_t(schedule_t* sch_, player_t* player_, convoihandle
 	bt_remove.pressed = false;
 	add_component(&bt_remove);
 
+	if(  !cnv.is_bound()  ) {
+		ypos += D_BUTTON_HEIGHT;
+		ypos += D_V_SPACE;
+
+		bt_merge.init(button_t::roundbox_state, "Merge", scr_coord(BUTTON1_X, ypos ), scr_size(D_BUTTON_WIDTH,D_BUTTON_HEIGHT) );
+		bt_merge.set_tooltip("Wait for a vehicle of the paired line and merge.");
+		bt_merge.add_listener(this);
+		bt_merge.pressed = false;
+		add_component(&bt_merge);
+
+		bt_split.init(button_t::roundbox_state, "Split", scr_coord(BUTTON2_X, ypos ), scr_size(D_BUTTON_WIDTH,D_BUTTON_HEIGHT) );
+		bt_split.set_tooltip("Split the convoy into two convoys.");
+		bt_split.add_listener(this);
+		bt_split.pressed = false;
+		add_component(&bt_split);
+	}
+
 	ypos += D_BUTTON_HEIGHT;
 
 	scrolly.set_pos( scr_coord( 0, ypos ) );
