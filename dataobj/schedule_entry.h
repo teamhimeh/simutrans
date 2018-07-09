@@ -2,6 +2,7 @@
 #define schedule_entry_h
 
 #include "koord3d.h"
+#include "../linehandle_t.h"
 
 /**
  * A schedule entry.
@@ -9,16 +10,19 @@
  */
 struct schedule_entry_t
 {
+	enum operation_type{ normal, merge, split };
+
 public:
 	schedule_entry_t() {}
 
-	schedule_entry_t(koord3d const& pos, uint16 const minimum_loading, sint8 const waiting_time_shift, sint16 spacing_shift, sint8 reverse, bool wait_for_time) :
+	schedule_entry_t(koord3d const& pos, uint16 const minimum_loading, sint8 const waiting_time_shift, sint16 spacing_shift, sint8 reverse, bool wait_for_time, operation_type operation = normal) :
 		pos(pos),
 		minimum_loading(minimum_loading),
-		waiting_time_shift(waiting_time_shift),
 		spacing_shift(spacing_shift),
+		waiting_time_shift(waiting_time_shift),
 		reverse(reverse),
-		wait_for_time(wait_for_time)
+		wait_for_time(wait_for_time),
+		operation(operation)
 	{}
 
 	/**
@@ -53,13 +57,22 @@ public:
 	 * @author: jamespetts
 	 */
 	sint8 reverse;
-	
+
 	/**
-	 * Whether a convoy must wait for a 
+	 * Whether a convoy must wait for a
 	 * time slot at this entry.
 	 * @author: jamespetts
 	 */
 	bool wait_for_time;
+
+	/*
+	 * Following parameters are used for coupling and release of convoy.
+	 * @author THLeaderH
+	 */
+	operation_type operation; // normal stop? merger? split?
+	linehandle_t destination_line[2];
+	uint8 schedule_index[2];
+
 };
 
 #endif
