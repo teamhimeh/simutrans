@@ -10,7 +10,15 @@
  */
 struct schedule_entry_t
 {
-	enum operation_type{ normal, merge, split };
+	/**
+	* Operation types
+	* normal: normal stop on a halt or passing a waypoint.
+	* merge: a slave convoy merges to the master convoy.
+	* couple: a master convoy waits for the slave convoy.
+	* release: a coupled convoy releases the slave convoy.
+	* @author THLeaderH
+	*/
+	enum operation_type{ normal, merge, couple, release };
 
 public:
 	schedule_entry_t() {}
@@ -23,7 +31,10 @@ public:
 		reverse(reverse),
 		wait_for_time(wait_for_time),
 		operation(operation)
-	{}
+	{
+		destination_line = linehandle_t(NULL);
+		destination_index = -1;
+	}
 
 	/**
 	 * target position
@@ -69,9 +80,9 @@ public:
 	 * Following parameters are used for coupling and release of convoy.
 	 * @author THLeaderH
 	 */
-	operation_type operation; // normal stop? merger? split?
-	linehandle_t destination_line[2];
-	uint8 schedule_index[2];
+	operation_type operation;
+	linehandle_t destination_line;
+	sint16 destination_index;
 
 };
 

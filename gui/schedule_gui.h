@@ -24,10 +24,10 @@
 #include "../linehandle_t.h"
 #include "../gui/simwin.h"
 #include "../tpl/vector_tpl.h"
+#include "../dataobj/schedule.h"
 
 
 class zeiger_t;
-class schedule_t;
 struct schedule_entry_t;
 class player_t;
 class cbuffer_t;
@@ -81,7 +81,7 @@ class schedule_gui_t :	public gui_frame_t,
 	static void gimme_short_stop_name(cbuffer_t& buf, player_t const* player, const schedule_t *schedule, int i, int max_chars);
 
 private:
-	enum mode_t {adding, inserting, removing, undefined_mode};
+	enum mode_t {adding, inserting, removing, merging, undefined_mode};
 
 	mode_t mode;
 
@@ -91,7 +91,7 @@ private:
 	gui_label_t lb_line;
 
 	// only active in line management
-	button_t bt_merge, bt_split; // merger, split operation
+	button_t bt_merge;
 
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
@@ -184,6 +184,49 @@ public:
 	virtual void rdwr( loadsave_t *file );
 
 	uint32 get_rdwr_id() { return magic_schedule_rdwr_dummy; }
+};
+
+class merge_split_t :	public gui_frame_t,
+						public action_listener_t
+{
+private:
+	
+	schedule_t::schedule_type type;
+	player_t *player;
+	sint16 schedule_index;
+	schedule_t* schedule;
+	linehandle_t this_line;
+	gui_combobox_t line_selector;
+	schedule_gui_stats_t stats;
+	gui_scrollpane_t scrolly;
+	button_t bt_start, bt_end;
+	
+	schedule_t* showing_schedule;
+	
+	// temporal stored values
+	linehandle_t merger_line;
+	sint16 merger_index;
+	sint16 split_index;
+	
+public:
+	
+	merge_split_t(player_t* player, sint16 schedule_index, schedule_t* schedule, linehandle_t this_line, schedule_t::schedule_type type);
+	
+	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
+	
+	const char *get_help_filename() const override {return "merge_and_split.txt";}
+	
+	void draw(scr_coord pos, scr_size size) override;
+	
+	void set_windowsize(scr_size size) override;
+	
+	bool infowin_event(event_t const*) override;
+	
+private:
+	
+	void init_line_selector();
+	
+	bool register_entry();
 };
 
 #endif

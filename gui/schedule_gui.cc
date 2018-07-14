@@ -23,7 +23,6 @@
 
 #include "../obj/zeiger.h"
 
-#include "../dataobj/schedule.h"
 #include "../dataobj/loadsave.h"
 #include "../dataobj/translator.h"
 #include "../dataobj/environment.h"
@@ -555,12 +554,6 @@ schedule_gui_t::schedule_gui_t(schedule_t* sch_, player_t* player_, convoihandle
 		bt_merge.add_listener(this);
 		bt_merge.pressed = false;
 		add_component(&bt_merge);
-
-		bt_split.init(button_t::roundbox_state, "Split", scr_coord(BUTTON2_X, ypos ), scr_size(D_BUTTON_WIDTH,D_BUTTON_HEIGHT) );
-		bt_split.set_tooltip("Split the convoy into two convoys.");
-		bt_split.add_listener(this);
-		bt_split.pressed = false;
-		add_component(&bt_split);
 	}
 
 	ypos += D_BUTTON_HEIGHT;
@@ -706,6 +699,11 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 						schedule->remove();
 						action_triggered( &bt_add, value_t() );
 					}
+					else if(  mode == merging  ) {
+						stats.highlight_schedule( schedule, false );
+						create_win(new merge_split_t(player, line, schedule, new_line, schedule->get_type()), w_info, (ptrdiff_t)this);
+						action_triggered( &bt_add, value_t() );
+					}
 					update_selection();
 				}
 			}
@@ -779,6 +777,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 		bt_add.pressed = true;
 		bt_insert.pressed = false;
 		bt_remove.pressed = false;
+		bt_merge.pressed = false;
 		update_tool( true );
 	}
 	else if(comp == &bt_insert) {
@@ -786,6 +785,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 		bt_add.pressed = false;
 		bt_insert.pressed = true;
 		bt_remove.pressed = false;
+		bt_merge.pressed = false;
 		update_tool( true );
 	}
 	else if(comp == &bt_remove) {
@@ -793,6 +793,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 		bt_add.pressed = false;
 		bt_insert.pressed = false;
 		bt_remove.pressed = true;
+		bt_merge.pressed = false;
 		update_tool( false );
 	}
 	else if(comp == &numimp_load) {
@@ -894,6 +895,14 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 		welt->set_tool( tool, player );
 		// since init always returns false, it is safe to delete immediately
 		delete tool;
+	}
+	else if(comp == &bt_merge) {
+		mode = merging;
+		bt_add.pressed = false;
+		bt_insert.pressed = false;
+		bt_remove.pressed = false;
+		bt_merge.pressed = true;
+		update_tool( false );
 	}
 	// recheck lines
 	if(  cnv.is_bound()  ) {
@@ -1075,4 +1084,189 @@ void schedule_gui_t::rdwr(loadsave_t *file)
 		cnv = convoihandle_t();
 		destroy_win( this );
 	}
+}
+
+merge_split_t::merge_split_t(player_t* player, sint16 schedule_index, schedule_t* schedule, linehandle_t this_line, schedule_t::schedule_type type) :
+gui_frame_t( translator::translate("Merge to other line"), player),
+type(type),
+player(player),
+schedule_index(schedule_index),
+schedule(schedule),
+this_line(this_line),
+stats(player),
+scrolly(&stats)
+{
+	schedule_entry_t* entry = &(schedule->entries[schedule_index]);
+	if(  entry->operation==schedule_entry_t::operation_type::merge  ) {
+		merger_line = entry->destination_line;
+		merger_index = entry->destination_index;
+		// find split_index!
+	} else {
+		merger_line = linehandle_t(NULL);
+		merger_index = split_index = -1;
+	}
+	
+	scr_coord_val ypos = D_MARGIN_TOP;
+	
+	bt_start.init(button_t::roundbox_state, "Start", scr_coord(BUTTON1_X, ypos ), scr_size(D_BUTTON_WIDTH,D_BUTTON_HEIGHT) );
+	bt_start.add_listener(this);
+	bt_start.pressed = true;
+	add_component(&bt_start);
+	bt_end.init(button_t::roundbox_state, "End", scr_coord(BUTTON2_X, ypos ), scr_size(D_BUTTON_WIDTH,D_BUTTON_HEIGHT) );
+	bt_end.add_listener(this);
+	bt_end.pressed = false;
+	add_component(&bt_end);
+	ypos += D_BUTTON_HEIGHT + D_V_SPACE;
+	
+	line_selector.set_pos(scr_coord(D_MARGIN_LEFT, ypos));
+	line_selector.set_size(scr_size(BUTTON4_X-D_MARGIN_LEFT, D_BUTTON_HEIGHT));
+	line_selector.set_max_size(scr_size(BUTTON4_X-D_MARGIN_LEFT, 13*LINESPACE+D_TITLEBAR_HEIGHT-1));
+	line_selector.set_highlight_color(player->get_player_color1() + 1);
+	line_selector.clear_elements();
+
+	init_line_selector();
+	line_selector.add_listener(this);
+	add_component(&line_selector);
+	ypos += D_BUTTON_HEIGHT + D_V_SPACE;
+	
+	scrolly.set_pos( scr_coord( 0, ypos ) );
+	scrolly.set_show_scroll_x(true);
+	scrolly.set_scroll_amount_y(LINESPACE+1);
+	add_component(&scrolly);
+
+	ypos += D_BUTTON_HEIGHT + D_V_SPACE;
+	
+	set_windowsize( scr_size(BUTTON4_X + 35, ypos+D_BUTTON_HEIGHT+15*(LINESPACE+1)+D_TITLEBAR_HEIGHT) );
+	set_min_windowsize( scr_size(BUTTON4_X + 35, ypos+D_BUTTON_HEIGHT+3*(LINESPACE+1)+D_TITLEBAR_HEIGHT) );
+
+	set_resizemode(diagonal_resize);
+	resize( scr_coord(0,0) );
+}
+
+void merge_split_t::draw(scr_coord pos, scr_size size) {
+	set_dirty();
+	gui_frame_t::draw(pos,size);
+}
+
+bool merge_split_t::action_triggered( gui_action_creator_t *comp, value_t p)
+{
+	if(  comp == &line_selector  ) {
+		uint32 selection = p.i;
+		if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(line_selector.get_element(selection))  ) {
+			showing_schedule = li->get_line()->get_schedule()->copy();
+			stats.set_schedule(showing_schedule);
+			merger_line = li->get_line();
+			merger_index = split_index = -1;
+		}
+		set_dirty();
+	}
+	else if(  comp == &bt_start  ) {
+		bt_start.pressed = true;
+		bt_end.pressed = false;
+		showing_schedule->set_current_stop(merger_index);
+	}
+	else if(  comp == &bt_end  ) {
+		bt_start.pressed = false;
+		bt_end.pressed = true;
+		showing_schedule->set_current_stop(split_index);
+	}
+	return true;
+}
+
+void merge_split_t::set_windowsize(scr_size size)
+{
+	gui_frame_t::set_windowsize(size);
+
+	size = get_windowsize()-scr_size(0,16+1);
+	scrolly.set_size(size-scr_size(0,scrolly.get_pos().y));
+
+	line_selector.set_max_size(scr_size(BUTTON4_X-D_MARGIN_LEFT, size.h-line_selector.get_pos().y -16-1));
+}
+
+void merge_split_t::init_line_selector()
+{
+	line_selector.clear_elements();
+	int selection = 0;
+	int offset = 0;
+	vector_tpl<linehandle_t> lines;
+
+	player->simlinemgmt.get_lines(type, &lines);
+
+	FOR(  vector_tpl<linehandle_t>,  line,  lines  ) {
+		line_selector.append_element( new line_scrollitem_t(line) );
+		if(  merger_line == line  ) {
+			selection = line_selector.count_elements()-1;
+		}
+	}
+
+	//line_selector.set_selection( selection );
+	line_scrollitem_t::sort_mode = line_scrollitem_t::SORT_BY_NAME;
+	line_selector.sort( offset, NULL );
+	
+}
+
+/**
+ * Mouse clicks are hereby reported to its GUI-Components
+ */
+bool merge_split_t::infowin_event(const event_t *ev)
+{
+	if( (ev)->ev_class == EVENT_CLICK  &&  !((ev)->ev_code==MOUSE_WHEELUP  ||  (ev)->ev_code==MOUSE_WHEELDOWN)  &&  !line_selector.getroffen(ev->cx, ev->cy-D_TITLEBAR_HEIGHT)  )  {
+
+		// close combo box; we must do it ourselves, since the box does not receive outside events ...
+		line_selector.close_box();
+
+		if(  ev->my>=scrolly.get_pos().y+16  ) {
+			// we are now in the multiline region ...
+			const int line = ( ev->my - scrolly.get_pos().y + scrolly.get_scroll_y() - 16)/(LINESPACE+1);
+
+			if(  line >= 0 && line < showing_schedule->get_count()  ) {
+				if(  IS_RIGHTCLICK(ev)  ||  ev->mx<16  ) {
+					// just center on it
+					welt->get_viewport()->change_world_position( showing_schedule->entries[line].pos );
+				}
+				else if(  ev->mx<scrolly.get_size().w-11  &&  merger_line!=linehandle_t(NULL)  ) {
+					if(  merger_line->get_schedule()->entries[line].operation!=schedule_entry_t::operation_type::normal  ) {
+						// this entry cannot be couple or release entry!
+					}
+					if(  bt_start.pressed  ) {
+						merger_index = line;
+					} else {
+						split_index = line;
+					}
+					showing_schedule->set_current_stop( line );
+				}
+			}
+		}
+	}
+	else if(  ev->ev_class == INFOWIN  &&  ev->ev_code == WIN_CLOSE  ) {
+		register_entry();
+	}
+
+	return gui_frame_t::infowin_event(ev);
+}
+
+bool merge_split_t::register_entry() {
+	if(  merger_line==linehandle_t(NULL)  ||  merger_index==-1  ||  split_index==-1  ) {
+		// merger point or split point is not set.
+		return false;
+	}
+	// check whether the specified entries are normal operation.
+	const schedule_t* sch = merger_line->get_schedule();
+	if(  sch->entries[merger_index].operation!=schedule_entry_t::operation_type::normal  ||  sch->entries[split_index].operation!=schedule_entry_t::operation_type::normal  ) {
+		// specified entries are not normal operation.
+		return false;
+	}
+	// register merge entry
+	schedule->entries[schedule_index].operation = schedule_entry_t::operation_type::merge;
+	schedule->entries[schedule_index].destination_line = merger_line;
+	schedule->entries[schedule_index].destination_index = merger_index;
+	// register couple entry
+	merger_line->get_schedule()->entries[merger_index].operation = schedule_entry_t::operation_type::couple;
+	merger_line->get_schedule()->entries[merger_index].destination_line = this_line;
+	merger_line->get_schedule()->entries[merger_index].destination_index = schedule_index;
+	// register release entry
+	merger_line->get_schedule()->entries[split_index].operation = schedule_entry_t::operation_type::release;
+	merger_line->get_schedule()->entries[merger_index].destination_line = this_line;
+	merger_line->get_schedule()->entries[merger_index].destination_index = schedule_index < schedule->entries.get_size()-1 ? schedule_index : 0;
+	return true;
 }
