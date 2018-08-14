@@ -282,6 +282,7 @@ public:
 	uint8 get_street_flag() const { return street_flag; }
 	bool is_selected() const OVERRIDE;
 	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
 	bool is_init_network_save() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
 	// remove preview necessary while building elevated ways

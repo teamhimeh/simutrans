@@ -57,6 +57,7 @@
 #include "gui/trafficlight_info.h"
 #include "gui/privatesign_info.h"
 #include "gui/messagebox.h"
+#include "gui/road_config.h"
 
 #include "obj/zeiger.h"
 #include "obj/bruecke.h"
@@ -2291,6 +2292,10 @@ bool tool_build_way_t::is_selected() const
 bool tool_build_way_t::init( player_t *player )
 {
 	two_click_tool_t::init( player );
+	if(is_ctrl_pressed()  &&  can_use_gui()) {
+		create_win(new road_config_frame_t(player, this), w_info, (ptrdiff_t)this);
+	}
+	
 	if( ok_sound == NO_SOUND ) {
 		ok_sound = SFX_CASH;
 	}
@@ -2305,6 +2310,11 @@ bool tool_build_way_t::init( player_t *player )
 		return false;
 	}
 	return desc!=NULL;
+}
+
+bool tool_build_way_t::exit(player_t* player) {
+	destroy_win((ptrdiff_t) this);
+	return two_click_tool_t::exit(player);
 }
 
 waytype_t tool_build_way_t::get_waytype() const
