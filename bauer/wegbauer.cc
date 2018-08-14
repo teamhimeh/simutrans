@@ -2589,14 +2589,19 @@ void way_builder_t::build_road()
 
 		// bridges/tunnels have their own track type and must not upgrade
 		if(gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden) {
+			strasse_t* str = (strasse_t*)gr->get_weg(road_wt);
+			str->set_street_flag(street_flag);
 			continue;
 		}
 
 		if(extend) {
-			weg_t * weg = gr->get_weg(road_wt);
+			strasse_t * weg = (strasse_t*)gr->get_weg(road_wt);
 
 			// keep faster ways or if it is the same way ... (@author prissi)
-			if(weg->get_desc()==desc  ||  keep_existing_ways  ||  (keep_existing_city_roads  &&  weg->hat_gehweg())  ||  (keep_existing_faster_ways  &&  weg->get_desc()->get_topspeed()>desc->get_topspeed())  ||  (player_builder!=NULL  &&  weg->is_deletable(player_builder)!=NULL) || (gr->get_typ()==grund_t::monorailboden && (bautyp&elevated_flag)==0)) {
+			if(gr->get_typ()==grund_t::monorailboden && (bautyp&elevated_flag)==0) {
+				weg->set_street_flag(street_flag);
+			}
+			else if(weg->get_desc()==desc  ||  keep_existing_ways  ||  (keep_existing_city_roads  &&  weg->hat_gehweg())  ||  (keep_existing_faster_ways  &&  weg->get_desc()->get_topspeed()>desc->get_topspeed())  ||  (player_builder!=NULL  &&  weg->is_deletable(player_builder)!=NULL)) {
 				//nothing to be done
 //DBG_MESSAGE("way_builder_t::build_road()","nothing to do at (%i,%i)",k.x,k.y);
 			}
@@ -2606,6 +2611,7 @@ void way_builder_t::build_road()
 				player_t::add_maintenance(s, -weg->get_desc()->get_maintenance(), weg->get_desc()->get_finance_waytype());
 				// cost is the more expensive one, so downgrading is between removing and new building
 				cost -= max( weg->get_desc()->get_price(), desc->get_price() );
+				weg->set_street_flag(street_flag);
 				weg->set_desc(desc);
 				// respect max speed of catenary
 				wayobj_t const* const wo = gr->get_wayobj(desc->get_wtyp());
@@ -2622,6 +2628,7 @@ void way_builder_t::build_road()
 		else {
 			// make new way
 			strasse_t * str = new strasse_t();
+			str->set_street_flag(street_flag);
 
 			str->set_desc(desc);
 			str->set_gehweg(add_sidewalk);

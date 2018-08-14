@@ -24,6 +24,7 @@ void strasse_t::set_gehweg(bool janein)
 	if(janein  &&  get_desc()  &&  get_desc()->get_topspeed()>50) {
 		set_max_speed(50);
 	}
+	street_flags = 0;
 }
 
 
@@ -47,6 +48,12 @@ void strasse_t::rdwr(loadsave_t *file)
 	xml_tag_t s( file, "strasse_t" );
 
 	weg_t::rdwr(file);
+	
+	if(file->get_version()>=120007) {
+		file->rdwr_byte(street_flags);
+	}else {
+		street_flags = 0;
+	}
 
 	if(file->get_version()<89000) {
 		bool gehweg;

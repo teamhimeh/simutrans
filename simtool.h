@@ -267,6 +267,7 @@ private:
 
 protected:
 	const way_desc_t *desc;
+	uint8 street_flag = 0;
 
 	virtual way_desc_t const* get_desc(uint16, bool) const;
 	void calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
@@ -277,6 +278,8 @@ public:
 	image_id get_icon(player_t*) const OVERRIDE;
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* get_default_param(player_t*) const OVERRIDE;
+	void set_street_flag(uint8 a) { street_flag = a; }
+	uint8 get_street_flag() const { return street_flag; }
 	bool is_selected() const OVERRIDE;
 	bool init(player_t*) OVERRIDE;
 	bool is_init_network_save() const OVERRIDE { return true; }

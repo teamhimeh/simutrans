@@ -2425,6 +2425,7 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 {
 	way_builder_t bauigel(player);
 	calc_route( bauigel, start, end );
+	bauigel.set_street_flag(street_flag);
 	if(  bauigel.get_route().get_count()>1  ) {
 		welt->mute_sound(true);
 		bauigel.build();

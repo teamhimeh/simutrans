@@ -2761,9 +2761,9 @@ bool update_city_street(koord pos)
 	const way_desc_t* cr = world()->get_city_road();
 	for(  int i=0;  i<8;  i++  ) {
 		if(  grund_t *gr = world()->lookup_kartenboden(pos+neighbors[i])  ) {
-			if(  weg_t* const weg = gr->get_weg(road_wt)  ) {
+			if(  strasse_t* const weg = (strasse_t*)(gr->get_weg(road_wt))  ) {
 				// Check if any changes are needed.
-				if(  !weg->hat_gehweg()  ||  weg->get_desc() != cr  ) {
+				if(  (!weg->hat_gehweg()  ||  weg->get_desc() != cr)  &&  !weg->get_avoid_cityroad()  ) {
 					player_t *sp = weg->get_owner();
 					if(  sp  ){
 						player_t::add_maintenance(sp, -weg->get_desc()->get_maintenance(), road_wt);

@@ -124,6 +124,8 @@ private:
 	 * @author Hj. Malthaner
 	 */
 	const tunnel_desc_t * tunnel_desc;
+	
+	uint8 street_flag;
 
 	/**
 	 * If a way is built on top of another way, should the type
@@ -203,6 +205,8 @@ public:
 	void set_keep_city_roads(bool yesno) { keep_existing_city_roads = yesno; }
 
 	void set_build_sidewalk(bool yesno) { build_sidewalk = yesno; }
+	
+	void set_street_flag(uint8 a) { street_flag = a; }
 
 	void init_builder(bautyp_t wt, const way_desc_t * desc, const tunnel_desc_t *tunnel_desc=NULL, const bridge_desc_t *bridge_desc=NULL);
 
