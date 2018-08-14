@@ -24,7 +24,6 @@ void strasse_t::set_gehweg(bool janein)
 	if(janein  &&  get_desc()  &&  get_desc()->get_topspeed()>50) {
 		set_max_speed(50);
 	}
-	street_flags = 0;
 }
 
 
@@ -39,6 +38,7 @@ strasse_t::strasse_t() : weg_t()
 {
 	set_gehweg(false);
 	set_desc(default_strasse);
+	street_flags = 0;
 }
 
 

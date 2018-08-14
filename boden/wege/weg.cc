@@ -246,6 +246,11 @@ void weg_t::info(cbuffer_t & buf) const
 	else {
 		buf.append(translator::translate("\nnot elektrified"));
 	}
+	
+	if(get_waytype()==road_wt) {
+		strasse_t* str = (strasse_t*) this;
+		buf.printf("\nflag: %d", str->get_street_flag());
+	}
 
 #if 1
 	buf.printf(translator::translate("convoi passed last\nmonth %i\n"), statistics[1][1]);

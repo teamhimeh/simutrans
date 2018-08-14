@@ -30,7 +30,8 @@ private:
 public:
 	uint8 get_street_flag() const { return street_flags; }
 	void set_street_flag(uint8 s) { street_flags = s; }
-  bool get_avoid_cityroad() const { return street_flags&AVOID_CITYROAD; } void set_avoid_cityroad(bool s) { s ? street_flags |= AVOID_CITYROAD : street_flags &= ~AVOID_CITYROAD; }
+  bool get_avoid_cityroad() const { return street_flags&AVOID_CITYROAD; } 
+	void set_avoid_cityroad(bool s) { s ? street_flags |= AVOID_CITYROAD : street_flags &= ~AVOID_CITYROAD; }
 };
 
 #endif
