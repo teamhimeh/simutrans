@@ -2338,6 +2338,14 @@ void tool_build_way_t::start_at( koord3d &new_start )
 	two_click_tool_t::start_at( new_start );
 }
 
+void tool_build_way_t::rdwr_custom_data(memory_rw_t *packet)
+{
+	two_click_tool_t::rdwr_custom_data(packet);
+	uint8 i = street_flag;
+	packet->rdwr_byte(i);
+	street_flag = i;
+}
+
 uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, const char *&error, const koord3d & )
 {
 	error = NULL;
