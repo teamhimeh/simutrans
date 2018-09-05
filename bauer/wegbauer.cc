@@ -121,11 +121,8 @@ bool way_builder_t::successfully_loaded()
 
 bool way_builder_t::register_desc(way_desc_t *desc)
 {
-	DBG_DEBUG("way_builder_t::register_desc()", desc->get_name());
-	const way_desc_t *old_desc = desc_table.get(desc->get_name());
-	if(  old_desc  ) {
-		desc_table.remove(desc->get_name());
-		dbg->warning( "way_builder_t::register_desc()", "Object %s was overlaid by addon!", desc->get_name() );
+	if(  const way_desc_t *old_desc = desc_table.remove(desc->get_name())  ) {
+		dbg->doubled( "way", desc->get_name() );
 		tool_t::general_tool.remove( old_desc->get_builder() );
 		delete old_desc->get_builder();
 		delete old_desc;
@@ -1170,6 +1167,7 @@ way_builder_t::way_builder_t(player_t* player_) : next_gr(32)
 	maximum = 2000;// CA $ PER TILE
 	overtaking_mode = twoway_mode;
 	street_flag = 0;
+	height_offset = 0;
 	route_reversed = false;
 
 	keep_existing_ways = false;
@@ -1554,7 +1552,7 @@ DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, ope
 void way_builder_t::intern_calc_straight_route(const koord3d start, const koord3d ziel)
 {
 	bool ok = true;
-	const koord3d koordup(0, 0, welt->get_settings().get_way_height_clearance());
+	const koord3d koordup(0, 0, welt->get_settings().get_way_height_clearance() + height_offset);
 
 	sint32 dummy_cost;
 	const grund_t *test_bd = welt->lookup(start);
@@ -1740,7 +1738,7 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 	route.clear();
 	terraform_index.clear();
 
-	const koord3d koordup(0, 0, welt->get_settings().get_way_height_clearance());
+	const koord3d koordup(0, 0, welt->get_settings().get_way_height_clearance() + height_offset);
 
 	// check for existing koordinates
 	bool has_target_ground = welt->lookup(ziel) || welt->lookup(ziel + koordup);
@@ -2571,7 +2569,7 @@ void way_builder_t::build_elevated()
 		planquadrat_t* const plan = welt->access(i.get_2d());
 
 		grund_t* const gr0 = plan->get_boden_in_hoehe(i.z);
-		i.z += welt->get_settings().get_way_height_clearance();
+		i.z += welt->get_settings().get_way_height_clearance() + height_offset;
 		grund_t* const gr  = plan->get_boden_in_hoehe(i.z);
 
 		if(gr==NULL) {
