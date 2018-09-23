@@ -1380,6 +1380,7 @@ void convoi_t::step()
 		// just waiting for action here
 		case INITIAL:
 			welt->sync.remove(this);
+			/* FALLTHROUGH */
 		case EDIT_SCHEDULE:
 		case NO_ROUTE:
 			wait_lock = max( wait_lock, 25000 );
@@ -2591,6 +2592,12 @@ void convoi_t::rdwr(loadsave_t *file)
 	if(  file->get_version()>=111003  ) {
 		file->rdwr_short( next_stop_index );
 		file->rdwr_short( next_reservation_index );
+	}
+	
+	// preparation for new reservation system without next_reservation_index
+	if(  file->get_OTRP_version()>=18  ) {
+		uint32 dummy = 0;
+		file->rdwr_long(dummy);
 	}
 
 	if(  (env_t::previous_OTRP_data  &&  file->get_version() >= 120006)  ||  file->get_OTRP_version() >= 14  ) {
