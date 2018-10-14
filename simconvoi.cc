@@ -65,6 +65,12 @@
 
 
 karte_ptr_t convoi_t::welt;
+std::queue<convoi_t::route_calc_entry_t> convoi_t::route_calc_queue;
+pthread_mutex_t convoi_t::queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t convoi_t::cond_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t convoi_t::queue_cond = PTHREAD_COND_INITIALIZER;
+pthread_t convoi_t::thread[NUM_CALC_THREAD];
+bool convoi_t::thread_activated = false;
 
 /*
  * Debugging helper - translate state value to human readable name
@@ -88,7 +94,9 @@ static const char * state_names[convoi_t::MAX_STATES] =
 	"WAITING_FOR_CLEARANCE_TWO_MONTHS",
 	"CAN_START_TWO_MONTHS",
 	"LEAVING_DEPOT",
-	"ENTERING_DEPOT"
+	"ENTERING_DEPOT",
+	"ROUTING_2",
+	"ROUTE_JUST_FOUND"
 };
 
 
@@ -173,6 +181,8 @@ void convoi_t::init(player_t *player)
 
 	next_cross_lane = false;
 	prev_tiles_overtaking = 0;
+	
+	activate_calc_thread();
 }
 
 
@@ -936,6 +946,8 @@ sync_result convoi_t::sync_step(uint32 delta_t)
 		case CAN_START:
 		case CAN_START_ONE_MONTH:
 		case CAN_START_TWO_MONTHS:
+		case ROUTING_2:
+		case ROUTE_JUST_FOUND:
 			// Hajo: this is an async task, see step()
 			break;
 
@@ -1086,112 +1098,10 @@ bool convoi_t::drive_to()
 			}
 		}
 
-		if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route )  ) {
-			if(  state != NO_ROUTE  ) {
-				state = NO_ROUTE;
-				get_owner()->report_vehicle_problem( self, ziel );
-			}
-			// wait 25s before next attempt
-			wait_lock = 25000;
-		}
-		else {
-			bool route_ok = true;
-			const uint8 current_stop = schedule->get_current_stop();
-			if(  fahr[0]->get_waytype() != water_wt  ) {
-				air_vehicle_t *const plane = dynamic_cast<air_vehicle_t *>(fahr[0]);
-				uint32 takeoff = 0, search = 0, landing = 0;
-				air_vehicle_t::flight_state plane_state = air_vehicle_t::taxiing;
-				if(  plane  ) {
-					// due to the complex state system of aircrafts, we have to save index and state
-					plane->get_event_index( plane_state, takeoff, search, landing );
-				}
-
-				// set next schedule target position if next is a waypoint
-				if(  is_waypoint(ziel)  ) {
-					schedule_target = ziel;
-				}
-
-				// continue route search until the destination is a station
-				while(  is_waypoint(ziel)  ) {
-					start = ziel;
-					schedule->advance();
-					ziel = schedule->get_current_entry().pos;
-
-					if(  schedule->get_current_stop() == current_stop  ) {
-						// looped around without finding a halt => entire schedule is waypoints.
-						break;
-					}
-
-					route_t next_segment;
-					if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment )  ) {
-						// do we still have a valid route to proceed => then go until there
-						if(  route.get_count()>1  ) {
-							break;
-						}
-						// we are stuck on our first routing attempt => give up
-						if(  state != NO_ROUTE  ) {
-							state = NO_ROUTE;
-							get_owner()->report_vehicle_problem( self, ziel );
-						}
-						// wait 25s before next attempt
-						wait_lock = 25000;
-						route_ok = false;
-						break;
-					}
-					else {
-						bool looped = false;
-						if(  fahr[0]->get_waytype() != air_wt  ) {
-							 // check if the route circles back on itself (only check the first tile, should be enough)
-							looped = route.is_contained(next_segment.at(1));
-#if 0
-							// this will forbid an eight figure, which might be clever to avoid a problem of reserving one own track
-							for(  unsigned i = 1;  i<next_segment.get_count();  i++  ) {
-								if(  route.is_contained(next_segment.at(i))  ) {
-									looped = true;
-									break;
-								}
-							}
-#endif
-						}
-
-						if(  looped  ) {
-							// proceed upto the waypoint before the loop. Will pause there for a new route search.
-							break;
-						}
-						else {
-							uint32 count_offset = route.get_count()-1;
-							route.append( &next_segment);
-							if(  plane  ) {
-								// maybe we need to restore index
-								air_vehicle_t::flight_state dummy1;
-								uint32 new_takeoff, new_search, new_landing;
-								plane->get_event_index( dummy1, new_takeoff, new_search, new_landing );
-								if(  takeoff == 0x7FFFFFFF  &&  new_takeoff != 0x7FFFFFFF  ) {
-									takeoff = new_takeoff + count_offset;
-								}
-								if(  landing == 0x7FFFFFFF  &&  new_landing != 0x7FFFFFFF  ) {
-									landing = new_landing + count_offset;
-								}
-								if(  search == 0x7FFFFFFF  &&  new_search != 0x7FFFFFFF ) {
-									search = new_search + count_offset;
-								}
-							}
-						}
-					}
-				}
-
-				if(  plane  ) {
-					// due to the complex state system of aircrafts, we have to restore index and state
-					plane->set_event_index( plane_state, takeoff, search, landing );
-				}
-			}
-
-			schedule->set_current_stop(current_stop);
-			if(  route_ok  ) {
-				vorfahren();
-				return true;
-			}
-		}
+		state=ROUTING_2;
+		// push route calculation request to the queue
+		route_calc_entry_t entry = {this, start, ziel};
+		push_calc_entry(entry);
 	}
 	return false;
 }
@@ -1267,10 +1177,13 @@ void convoi_t::step()
 							}
 						}
 						else {
+							/*
 							if(  drive_to()  ) {
 								state = DRIVING;
 								break;
 							}
+							*/
+							state = ROUTING_1;
 						}
 					}
 
@@ -1325,6 +1238,14 @@ void convoi_t::step()
 				// Hajo: now calculate a new route
 				drive_to();
 			}
+			break;
+			
+		case ROUTING_2:
+			// routing is being calculated. nothing to do.
+			break;
+			
+		case ROUTE_JUST_FOUND:
+			vorfahren();
 			break;
 
 		case CAN_START:
@@ -1404,6 +1325,7 @@ void convoi_t::step()
 		case DRIVING:
 		case DUMMY4:
 		case DUMMY5:
+		case ROUTE_JUST_FOUND:
 			wait_lock = 0;
 			break;
 
@@ -1418,6 +1340,7 @@ void convoi_t::step()
 
 		// action soon needed
 		case ROUTING_1:
+		case ROUTING_2:
 		case CAN_START:
 		case WAITING_FOR_CLEARANCE:
 			wait_lock = max( wait_lock, 500 );
@@ -4113,4 +4036,162 @@ void convoi_t::refresh(sint8 prev_tiles_overtaking, sint8 current_tiles_overtaki
 			}
 		}
 	}
+}
+
+/**
+ * actual threaded route calculation process
+ * @author THLeaderH
+ */
+void convoi_t::calc_route_intern(koord3d start, koord3d ziel) {
+	assert(state==ROUTING_2);
+	if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route )  ) {
+		if(  state != NO_ROUTE  ) {
+			state = NO_ROUTE;
+			get_owner()->report_vehicle_problem( self, ziel );
+		}
+		// wait 25s before next attempt
+		wait_lock = 25000;
+	}
+	else {
+		bool route_ok = true;
+		const uint8 current_stop = schedule->get_current_stop();
+		if(  fahr[0]->get_waytype() != water_wt  ) {
+			air_vehicle_t *const plane = dynamic_cast<air_vehicle_t *>(fahr[0]);
+			uint32 takeoff = 0, search = 0, landing = 0;
+			air_vehicle_t::flight_state plane_state = air_vehicle_t::taxiing;
+			if(  plane  ) {
+				// due to the complex state system of aircrafts, we have to save index and state
+				plane->get_event_index( plane_state, takeoff, search, landing );
+			}
+
+			// set next schedule target position if next is a waypoint
+			if(  is_waypoint(ziel)  ) {
+				schedule_target = ziel;
+			}
+
+			// continue route search until the destination is a station
+			while(  is_waypoint(ziel)  ) {
+				start = ziel;
+				schedule->advance();
+				ziel = schedule->get_current_entry().pos;
+
+				if(  schedule->get_current_stop() == current_stop  ) {
+					// looped around without finding a halt => entire schedule is waypoints.
+					break;
+				}
+
+				route_t next_segment;
+				if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment )  ) {
+					// do we still have a valid route to proceed => then go until there
+					if(  route.get_count()>1  ) {
+						break;
+					}
+					// we are stuck on our first routing attempt => give up
+					if(  state != NO_ROUTE  ) {
+						state = NO_ROUTE;
+						get_owner()->report_vehicle_problem( self, ziel );
+					}
+					// wait 25s before next attempt
+					wait_lock = 25000;
+					route_ok = false;
+					break;
+				}
+				else {
+					bool looped = false;
+					if(  fahr[0]->get_waytype() != air_wt  ) {
+						 // check if the route circles back on itself (only check the first tile, should be enough)
+						looped = route.is_contained(next_segment.at(1));
+					}
+
+					if(  looped  ) {
+						// proceed upto the waypoint before the loop. Will pause there for a new route search.
+						break;
+					}
+					else {
+						uint32 count_offset = route.get_count()-1;
+						route.append( &next_segment);
+						if(  plane  ) {
+							// maybe we need to restore index
+							air_vehicle_t::flight_state dummy1;
+							uint32 new_takeoff, new_search, new_landing;
+							plane->get_event_index( dummy1, new_takeoff, new_search, new_landing );
+							if(  takeoff == 0x7FFFFFFF  &&  new_takeoff != 0x7FFFFFFF  ) {
+								takeoff = new_takeoff + count_offset;
+							}
+							if(  landing == 0x7FFFFFFF  &&  new_landing != 0x7FFFFFFF  ) {
+								landing = new_landing + count_offset;
+							}
+							if(  search == 0x7FFFFFFF  &&  new_search != 0x7FFFFFFF ) {
+								search = new_search + count_offset;
+							}
+						}
+					}
+				}
+			}
+
+			if(  plane  ) {
+				// due to the complex state system of aircrafts, we have to restore index and state
+				plane->set_event_index( plane_state, takeoff, search, landing );
+			}
+		}
+
+		schedule->set_current_stop(current_stop);
+		if(  route_ok  ) {
+			assert(state==ROUTING_2);
+			state = ROUTE_JUST_FOUND;
+		}
+	}
+	assert(state!=ROUTING_2);
+}
+
+void* calc_route_threaded(void*) {
+	convoi_t::route_calc_entry_t entry;
+	while(  !env_t::quit_simutrans  ) {
+		// try to obtain request from the queue.
+		if(  convoi_t::get_calc_entry(entry)  ) {
+			// do route calculation
+			entry.owner->calc_route_intern(entry.start, entry.ziel);
+		} else {
+			// no request in the queue. wait.
+			pthread_mutex_lock(&convoi_t::cond_mutex);
+			pthread_cond_wait(&convoi_t::queue_cond, &convoi_t::cond_mutex);
+			
+			// wakeup
+			pthread_cond_init(&convoi_t::queue_cond, NULL);
+			pthread_mutex_unlock(&convoi_t::cond_mutex);
+		}
+	}
+	return NULL;
+}
+
+void convoi_t::activate_calc_thread() {
+	if(  !thread_activated  ) {
+		for(  uint8 i=0;  i<NUM_CALC_THREAD;  i++  ) {
+			pthread_create(thread+i, NULL, calc_route_threaded, NULL);
+			pthread_detach(*(thread+i));
+			thread_activated = true;
+		}
+	}
+}
+
+void convoi_t::push_calc_entry(route_calc_entry_t entry) {
+	pthread_mutex_lock(&queue_mutex);
+	pthread_mutex_lock(&cond_mutex);
+	route_calc_queue.push(entry);
+	pthread_cond_signal(&queue_cond);
+	pthread_mutex_unlock(&cond_mutex);
+	pthread_mutex_unlock(&queue_mutex);
+}
+
+bool convoi_t::get_calc_entry(convoi_t::route_calc_entry_t& res) {
+	pthread_mutex_lock(&queue_mutex);
+	if(  route_calc_queue.empty()  ) {
+		pthread_mutex_unlock(&queue_mutex);
+		return false;
+	}
+	// route_calc_queue is not empty.
+	res = route_calc_queue.front();
+	route_calc_queue.pop();
+	pthread_mutex_unlock(&queue_mutex);
+	return true;
 }

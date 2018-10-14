@@ -21,6 +21,9 @@
 #include "convoihandle_t.h"
 #include "halthandle_t.h"
 
+#include <queue>
+#include <pthread.h>
+
 #define MAX_MONTHS               12 // Max history
 
 class weg_t;
@@ -74,6 +77,8 @@ public:
 		CAN_START_TWO_MONTHS,
 		LEAVING_DEPOT,
 		ENTERING_DEPOT,
+		ROUTING_2,
+		ROUTE_JUST_FOUND,
 		MAX_STATES
 	};
 
@@ -310,6 +315,29 @@ private:
 	states state;
 
 	ribi_t::ribi alte_richtung;
+	
+	/*
+	 * For multi-threading purpose
+	 * @author THLeaderH
+	 */
+public:
+	typedef struct {
+		convoi_t* owner;
+		koord3d start;
+		koord3d ziel;
+	} route_calc_entry_t;
+	static pthread_mutex_t cond_mutex;
+	static pthread_cond_t queue_cond;
+	static void push_calc_entry(route_calc_entry_t);
+	static bool get_calc_entry(route_calc_entry_t&);
+	void calc_route_intern(koord3d, koord3d);
+private:
+	static std::queue<route_calc_entry_t> route_calc_queue;
+	static pthread_mutex_t queue_mutex;
+	#define NUM_CALC_THREAD 1
+	static pthread_t thread[NUM_CALC_THREAD];
+	static bool thread_activated;
+	static void activate_calc_thread();
 
 	/**
 	* Initialize all variables with default values.
