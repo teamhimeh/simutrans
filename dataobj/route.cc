@@ -139,7 +139,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	MAX_STEP = welt->get_settings().get_max_route_steps();
 	ANode* nodes_L = new ANode[MAX_STEP];
 
-	INT_CHECK("route 347");
+	//INT_CHECK("route 347");
 
 	// we clear it here probably twice: does not hurt ...
 	route.clear();
@@ -181,7 +181,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	do {
 		// Hajo: this is too expensive to be called each step
 		if((step & 4095) == 0) {
-			INT_CHECK("route 161");
+			//INT_CHECK("route 161");
 		}
 
 		tmp = queue.pop();
@@ -247,7 +247,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 	} while(  !queue.empty()  &&  step < MAX_STEP  &&  queue.get_count() < max_depth  );
 
-	INT_CHECK("route 194");
+	//INT_CHECK("route 194");
 
 	// target reached?
 	if(!target_reached  ||  step >= MAX_STEP) {
@@ -337,7 +337,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	MAX_STEP = welt->get_settings().get_max_route_steps();
 	ANode* nodes_L = new ANode[MAX_STEP + 4 + 2];
 
-	INT_CHECK("route 347");
+	//INT_CHECK("route 347");
 
 	binary_heap_tpl <ANode *> queue;
 
@@ -370,7 +370,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	do {
 		// Hajo: this is too expensive to be called each step
 		if((beat++ & 4095) == 0) {
-			INT_CHECK("route 161");
+			//INT_CHECK("route 161");
 		}
 
 		if (new_top) {
@@ -532,7 +532,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,MAX_STEP,queue.get_count(),tmp->g,max_cost);
 #endif
 
-	INT_CHECK("route 194");
+	//INT_CHECK("route 194");
 	// target reached?
 	if(!ziel_erreicht  || step >= MAX_STEP  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
 		if(  step >= MAX_STEP  ) {
@@ -682,14 +682,14 @@ route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, c
 {
 	route.clear();
 
-	INT_CHECK("route 336");
+	//INT_CHECK("route 336");
 
 	bool ok = intern_calc_route(welt, start, ziel, tdriver, max_khm, 0xFFFFFFFFul );
 #ifdef DEBUG_ROUTES
 	if(tdriver->get_waytype()==water_wt) {DBG_DEBUG("route_t::calc_route()","route from %d,%d to %d,%d with %i steps in %u ms found.",start.x, start.y, ziel.x, ziel.y, route.get_count()-1, dr_time()-ms );}
 #endif
 
-	INT_CHECK("route 343");
+	//INT_CHECK("route 343");
 
 	if( !ok ) {
 		DBG_MESSAGE("route_t::calc_route()","No route from %d,%d to %d,%d found",start.x, start.y, ziel.x, ziel.y);
