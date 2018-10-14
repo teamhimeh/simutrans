@@ -1888,6 +1888,17 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_gobal) const
 				tstrncpy( tooltip_text, translator::translate("clf_chk_noroute"), lengthof(tooltip_text) );
 				color = color_idx_to_rgb(COL_RED);
 				break;
+				
+			// for multi-thread debugging...
+			// @author THLeaderH
+			case convoi_t::ROUTE_JUST_FOUND:
+				tstrncpy( tooltip_text, translator::translate("ROUTE_JUST_FOUND"), lengthof(tooltip_text) );
+				color = color_idx_to_rgb(COL_GREEN);
+				break;
+			case convoi_t::ROUTING_2:
+				tstrncpy( tooltip_text, translator::translate("ROUTING2"), lengthof(tooltip_text) );
+				color = color_idx_to_rgb(COL_BLUE);
+				break;
 		}
 
 		// something to show?
