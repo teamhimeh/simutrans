@@ -172,7 +172,8 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	assert( (uint8)(~ribi_t::reverse_single(tmp->ribi_from)& 0xf)  == start_dir);
 
 	// nothing in lists
-	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	marker_t* marker = new marker_t();
+	marker->init(welt->get_size().x, welt->get_size().y);
 
 	queue.clear();
 	queue.insert(tmp);
@@ -187,7 +188,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		tmp = queue.pop();
 		const grund_t* gr = tmp->gr;
 
-		if(  marker.test_and_mark(gr)  ) {
+		if(  marker->test_and_mark(gr)  ) {
 			// we were already here on a faster route, thus ignore this branch
 			// (trading speed against memory consumption)
 			continue;
@@ -210,7 +211,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			if(  (ribi & ribi_t::nsew[r] )!=0 // do not go backwards
 				&& koord_distance(start, gr->get_pos() + koord::nsew[r])<max_depth	// not too far away
 				&& gr->get_neighbour(to, wegtyp, ribi_t::nsew[r])  // is connected
-				&& !marker.is_marked(to) // not already tested
+				&& !marker->is_marked(to) // not already tested
 				&& tdriver->check_next_tile(to)	// can be driven on
 			) {
 				// not in there or taken out => add new
@@ -266,6 +267,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	}
 
 	delete[] nodes_L;
+	delete marker;
 	return ok;
 }
 
@@ -359,7 +361,8 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	tmp->jps_ribi  = ribi_t::all;
 
 	// nothing in lists
-	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	marker_t* marker = new marker_t();
+	marker->init(welt->get_size().x, welt->get_size().y);
 
 	// clear the queue (should be empty anyhow)
 	queue.clear();
@@ -378,12 +381,12 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			tmp = new_top;
 			new_top = NULL;
 			gr = tmp->gr;
-			marker.mark(gr);
+			marker->mark(gr);
 		}
 		else {
 			tmp = queue.pop();
 			gr = tmp->gr;
-			if(marker.test_and_mark(gr)) {
+			if(marker->test_and_mark(gr)) {
 				// we were already here on a faster route, thus ignore this branch
 				// (trading speed against memory consumption)
 				continue;
@@ -417,7 +420,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 
 			// a way goes here, and it is not marked (i.e. in the closed list)
-			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to)  &&  !marker.is_marked(to)) {
+			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to)  &&  !marker->is_marked(to)) {
 
 				weg_t *w = to->get_weg(wegtyp);
 				// Do not go on a tile, where a oneway sign forbids going.
@@ -562,6 +565,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	}
 
 	delete[] nodes_L;
+	delete marker;
 
 	return ok;
 }
