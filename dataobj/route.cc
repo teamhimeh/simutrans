@@ -273,9 +273,8 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 
 
-ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel)
+void get_next_dirs(ribi_t::ribi next_ribi[4], const koord3d& gr_pos, const koord3d& ziel)
 {
-	static ribi_t::ribi next_ribi[4];
 	if( abs(gr_pos.x-ziel.x)>abs(gr_pos.y-ziel.y) ) {
 		next_ribi[0] = (ziel.x>gr_pos.x) ? ribi_t::east : ribi_t::west;
 		next_ribi[1] = (ziel.y>gr_pos.y) ? ribi_t::south : ribi_t::north;
@@ -286,7 +285,6 @@ ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel)
 	}
 	next_ribi[2] = ribi_t::reverse_single( next_ribi[1] );
 	next_ribi[3] = ribi_t::reverse_single( next_ribi[0] );
-	return next_ribi;
 }
 
 
@@ -406,7 +404,8 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		// mask direction we came from
 		const ribi_t::ribi ribi =  way_ribi  &  ( ~ribi_t::reverse_single(tmp->ribi_from) )  &  tmp->jps_ribi;
 
-		const ribi_t::ribi *next_ribi = get_next_dirs(gr->get_pos(), ziel);
+		ribi_t::ribi next_ribi[4];
+		get_next_dirs(next_ribi, gr->get_pos(), ziel);
 		for(int r=0; r<4; r++) {
 
 			// a way in our direction?
