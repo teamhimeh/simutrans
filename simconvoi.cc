@@ -172,7 +172,10 @@ void convoi_t::init(player_t *player)
 	recalc_data = true;
 
 	next_cross_lane = false;
+	request_cross_ticks = 0;
 	prev_tiles_overtaking = 0;
+	
+	longblock_signal_request.valid = false;
 }
 
 
@@ -1386,6 +1389,18 @@ void convoi_t::step()
 			welt->set_dirty();
 			destroy();
 			return; // must not continue method after deleting this object
+			
+		case DRIVING:
+			if(fahr[0]->get_waytype()==track_wt  ||  fahr[0]->get_waytype()==monorail_wt  ||  fahr[0]->get_waytype()==maglev_wt  ||  fahr[0]->get_waytype()==narrowgauge_wt) {
+				rail_vehicle_t* v = dynamic_cast<rail_vehicle_t*>(fahr[0]);
+				if(  v  &&  longblock_signal_request.valid  ) {
+					// process longblock signal judgement request
+					sint32 dummy = -1;
+					v->check_longblock_signal(longblock_signal_request.sig, longblock_signal_request.next_block, dummy);
+					set_longblock_signal_judge_request_invalid();
+				}
+			}
+			break;
 
 		default:	/* keeps compiler silent*/
 			break;
@@ -4113,4 +4128,40 @@ void convoi_t::refresh(sint8 prev_tiles_overtaking, sint8 current_tiles_overtaki
 			}
 		}
 	}
+}
+
+bool convoi_t::get_next_cross_lane() {
+	if(  !next_cross_lane  ) {
+		// no request
+		return false;
+	}
+	// next_cross_lane is true. Is the request obsolete?
+	sint64 diff = welt->get_ticks() - request_cross_ticks;
+	// If more than 8 sec, it's obsolete.
+	if(  diff>8000*16/welt->get_time_multiplier()  ) {
+		next_cross_lane = false;
+	}
+	return next_cross_lane;
+}
+
+void convoi_t::set_next_cross_lane(bool n) {
+	if(  !n  ) {
+		next_cross_lane = false;
+		request_cross_ticks = 0;
+		return;
+	} else if(  next_cross_lane  ) {
+		return;
+	}
+	// check time
+	sint64 diff = welt->get_ticks() - request_cross_ticks;
+	if(  request_cross_ticks==0  ||  diff<0  ||  diff>10000*16/welt->get_time_multiplier()  ) {
+		next_cross_lane = true;
+		request_cross_ticks = welt->get_ticks();
+	}
+}
+
+void convoi_t::request_longblock_signal_judge(signal_t *sig, uint16 next_block) {
+	longblock_signal_request.sig = sig;
+	longblock_signal_request.next_block = next_block;
+	longblock_signal_request.valid = true;
 }

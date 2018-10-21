@@ -2820,7 +2820,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 					return false;
 				}
 			}
-			else if(  private_car_t const* const pcar = obj_cast<private_car_t>(v)  ) {
+			else if(  private_car_t* const pcar = obj_cast<private_car_t>(v)  ) {
 				if(  pcar->get_next_cross_lane()  ) {
 					// vehicle must stop.
 					restart_speed = 0;
@@ -3347,9 +3347,7 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr) const
 	return false;
 }
 
-
-bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block, sint32 &restart_speed)
-{
+bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, sint32 &restart_speed) {
 	// longblock signal: first check, whether there is a signal coming up on the route => just like normal signal
 	uint16 next_signal, next_crossing;
 	if(  !block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false, true )  ) {
@@ -3394,7 +3392,8 @@ bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block,
 	while(  schedule_index != cnv->get_schedule()->get_current_stop()  ) {
 		// now search
 		// search for route
-		bool success = target_rt.calc_route( welt, cur_pos, cnv->get_schedule()->entries[schedule_index].pos, this, speed_to_kmh(cnv->get_min_top_speed()), 8888 /*cnv->get_tile_length()*/ );
+		uint16 len = welt->get_settings().get_advance_to_end() ? 8888 : cnv->get_tile_length();
+		bool success = target_rt.calc_route( welt, cur_pos, cnv->get_schedule()->entries[schedule_index].pos, this, speed_to_kmh(cnv->get_min_top_speed()), len );
 		if(  target_rt.is_contained(get_pos())  ) {
 			// do not reserve route going through my current stop&
 			break;
@@ -3447,6 +3446,22 @@ bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block,
 		cnv->set_next_stop_index( cnv->get_route()->get_count()-1 );
 	}
 	return true;
+}
+
+bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block, sint32 &restart_speed)
+{
+	if(  cnv->is_waiting()  ) {
+		// we are in a step. do that.
+		const bool res = check_longblock_signal(sig, next_block, restart_speed);
+		cnv->set_longblock_signal_judge_request_invalid();
+		return res;
+	}
+	else {
+		// we are in a sync_step. request to do this in a step.
+		cnv->request_longblock_signal_judge(sig, next_block);
+		restart_speed = 0; 
+		return false;
+	}
 }
 
 
