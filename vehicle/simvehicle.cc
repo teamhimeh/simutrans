@@ -1767,6 +1767,10 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_gobal) const
 						tstrncpy( tooltip_text, translator::translate("no load"), lengthof(tooltip_text) );
 						color = color_idx_to_rgb(COL_GREEN);
 					}
+					else {
+						tstrncpy( tooltip_text, translator::translate("driving"), lengthof(tooltip_text) );
+						color = color_idx_to_rgb(COL_GREEN);
+					}
 				}
 				break;
 
