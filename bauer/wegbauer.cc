@@ -121,11 +121,8 @@ bool way_builder_t::successfully_loaded()
 
 bool way_builder_t::register_desc(way_desc_t *desc)
 {
-	DBG_DEBUG("way_builder_t::register_desc()", desc->get_name());
-	const way_desc_t *old_desc = desc_table.get(desc->get_name());
-	if(  old_desc  ) {
-		desc_table.remove(desc->get_name());
-		dbg->warning( "way_builder_t::register_desc()", "Object %s was overlaid by addon!", desc->get_name() );
+	if(  const way_desc_t *old_desc = desc_table.remove(desc->get_name())  ) {
+		dbg->doubled( "way", desc->get_name() );
 		tool_t::general_tool.remove( old_desc->get_builder() );
 		delete old_desc->get_builder();
 		delete old_desc;
@@ -1098,6 +1095,7 @@ void way_builder_t::check_for_bridge(const grund_t* parent_from, const grund_t* 
 					}
 				}
 			}
+			/* FALLTHROUGH */
 
 			default:
 				if (way0->get_waytype()!=desc->get_wtyp()  ||  way1!=NULL) {

@@ -125,7 +125,13 @@ ifdef USE_FREETYPE
     ifneq ($(FREETYPE_CONFIG),)
       CFLAGS  += $(shell $(FREETYPE_CONFIG) --cflags)
       ifeq ($(shell expr $(STATIC) \>= 1), 1)
-        LDFLAGS += $(shell $(FREETYPE_CONFIG) --libs --static)
+        # since static is not supported by slightly old freetype versions
+        FTF = $(shell $(FREETYPE_CONFIG) --libs --static)
+        ifneq ($(FTF),)
+          LDFLAGS += $(FTF)
+        else
+          LDFLAGS += $(shell $(FREETYPE_CONFIG) --libs)
+        endif
       else
         LDFLAGS += $(shell $(FREETYPE_CONFIG) --libs)
       endif
@@ -264,6 +270,7 @@ SOURCES += dataobj/loadsave.cc
 SOURCES += dataobj/marker.cc
 SOURCES += dataobj/powernet.cc
 SOURCES += dataobj/records.cc
+SOURCES += dataobj/rect.cc
 SOURCES += dataobj/ribi.cc
 SOURCES += dataobj/route.cc
 SOURCES += dataobj/scenario.cc
@@ -582,7 +589,7 @@ ifeq ($(BACKEND),sdl2)
       LIBS    += -framework Foundation -framework QTKit
     endif
   else
-    SOURCES  += sound/sdl_sound.cc
+    SOURCES  += sound/sdl2_sound.cc
     ifneq ($(OSTYPE),mingw)
       SOURCES += music/no_midi.cc
     else

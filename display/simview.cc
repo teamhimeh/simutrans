@@ -167,6 +167,24 @@ void main_view_t::display(bool force_dirty)
 	int y_min = (-const_y_off + 4*tile_raster_scale_y( min(hmax_ground, welt->min_height)*TILE_HEIGHT_STEP, IMG_SIZE )
 					+ 4*(menu_height-IMG_SIZE)-IMG_SIZE/2-1) / IMG_SIZE;
 
+	// prepare view
+	rect_t const world_rect(koord(0, 0), welt->get_size());
+
+	koord const estimated_min(((y_min+(-2-((y_min+dpy_width) & 1))) >> 1) + i_off,
+		((y_min-(disp_width - const_x_off) / (IMG_SIZE/2) - 1) >> 1) + j_off);
+
+	sint16 const worst_case_mountain_extra = (welt->max_height - welt->min_height) / 2;
+	koord const estimated_max((((dpy_height+4*4)+(disp_width - const_x_off) / (IMG_SIZE/2) - 1) >> 1) + i_off + worst_case_mountain_extra,
+		(((dpy_height+4*4)-(-2-(((dpy_height+4*4)+dpy_width) & 1))) >> 1) + j_off + worst_case_mountain_extra);
+
+	rect_t view_rect(estimated_min, estimated_max - estimated_min + koord(1, 1));
+	view_rect.mask(world_rect);
+
+	if (view_rect != viewport->prepared_rect) {
+		welt->prepare_tiles(view_rect, viewport->prepared_rect);
+		viewport->prepared_rect = view_rect;
+	}
+
 #ifdef MULTI_THREAD
 	if(  can_multithreading  ) {
 		if(  !spawned_threads  ) {
@@ -293,11 +311,26 @@ void main_view_t::display(bool force_dirty)
 
 	if(welt) {
 		// show players income/cost messages
-		for(int x=0; x<MAX_PLAYER_COUNT; x++) {
-			if(  welt->get_player(x)  ) {
-				welt->get_player(x)->display_messages();
-			}
+		switch (env_t::show_money_message) {
+
+			case 0:
+				// show messages of all players
+				for(int x=0; x<MAX_PLAYER_COUNT; x++) {
+					if(  welt->get_player(x)  ) {
+						welt->get_player(x)->display_messages();
+					}
+				}
+				break;
+			
+			case 1:
+				// show message of active player
+				int x = welt->get_active_player_nr();
+				if(  welt->get_player(x)  ) {
+					welt->get_player(x)->display_messages();
+				}
+				break;
 		}
+
 	}
 
 	assert( rs == get_random_seed() ); (void)rs;
@@ -305,6 +338,11 @@ void main_view_t::display(bool force_dirty)
 #else
 	(void)force_dirty;
 #endif
+}
+
+void main_view_t::clear_prepared() const
+{
+	viewport->prepared_rect.discard_area();
 }
 
 

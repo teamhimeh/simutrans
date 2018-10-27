@@ -139,7 +139,11 @@ void roadsign_t::set_dir(ribi_t::ribi dir)
 		if(  desc->get_wtyp()!=track_wt  &&  desc->get_wtyp()!=monorail_wt  &&  desc->get_wtyp()!=maglev_wt  &&  desc->get_wtyp()!=narrowgauge_wt  ) {
 			weg->count_sign();
 		}
-		if(  desc->is_single_way()  ||  desc->is_signal()  ||  desc->is_pre_signal()  ||  desc->is_longblock_signal()  ) {
+		if(desc->is_single_way() ||
+           desc->is_signal() ||
+           desc->is_pre_signal() ||
+           desc->is_priority_signal() ||
+           desc->is_longblock_signal()) {
 			// set mask, if it is a single way ...
 			weg->count_sign();
 			weg->set_ribi_maske(calc_mask());
@@ -468,9 +472,10 @@ sync_result roadsign_t::sync_step(uint32 /*delta_t*/)
 	}
 	else {
 		// change every ~32s
-		uint32 ticks = ((welt->get_ticks()>>10)+ticks_offset) % (ticks_ns+ticks_ow);
+		// Must not overflow if ticks_ns+ticks_ow=256
+		uint32 ticks = ((welt->get_ticks()>>10)+ticks_offset) % ((uint32)ticks_ns+(uint32)ticks_ow);
 
-		uint8 new_state = (ticks >= ticks_ns) ^ (welt->get_settings().get_rotation() & 1);
+		uint8 new_state = (ticks >= ticks_ns);
 		if(state!=new_state) {
 			state = new_state;
 			dir = (new_state==0) ? ribi_t::northsouth : ribi_t::eastwest;
@@ -487,6 +492,11 @@ void roadsign_t::rotate90()
 	obj_t::rotate90();
 	if(automatic  &&  !desc->is_private_way()) {
 		state = (state+1)&1;
+		if (ticks_offset >= ticks_ns) {
+			ticks_offset -= ticks_ns;
+		} else {
+			ticks_offset += ticks_ow;
+		}
 		uint8 temp = ticks_ns;
 		ticks_ns = ticks_ow;
 		ticks_ow = temp;
@@ -651,10 +661,8 @@ bool roadsign_t::successfully_loaded()
 bool roadsign_t::register_desc(roadsign_desc_t *desc)
 {
 	// avoid duplicates with same name
-	const roadsign_desc_t *old_desc = table.get(desc->get_name());
-	if(old_desc) {
-		dbg->warning( "roadsign_t::register_desc()", "Object %s was overlaid by addon!", desc->get_name() );
-		table.remove(desc->get_name());
+	if(const roadsign_desc_t *old_desc = table.remove(desc->get_name())) {
+		dbg->doubled( "roadsign", desc->get_name() );
 		tool_t::general_tool.remove( old_desc->get_builder() );
 		delete old_desc->get_builder();
 		delete old_desc;

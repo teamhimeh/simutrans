@@ -27,6 +27,7 @@
 #include "dataobj/settings.h"
 #include "network/pwd_hash.h"
 #include "dataobj/loadsave.h"
+#include "dataobj/rect.h"
 
 #include "simplan.h"
 
@@ -614,6 +615,16 @@ private:
 	uint32 map_counter;
 
 	/**
+	 * the maximum allowed world height.
+	 */
+	sint8 world_maximum_height;
+
+	/**
+	 * the minimum allowed world height.
+	 */
+	sint8 world_minimum_height;
+
+	/**
 	 * Recalculated speed bonus for different vehicles.
 	 */
 	void recalc_average_speed();
@@ -693,11 +704,6 @@ private:
 	 * Updates all images.
 	 */
 	void update_map_intern(sint16, sint16, sint16, sint16);
-
-	/**
-	 * Updates images after change of underground mode.
-	 */
-	void update_underground_intern(sint16, sint16, sint16, sint16);
 
 public:
 	/**
@@ -814,6 +820,14 @@ public:
 	 * Recalcs images after change of underground mode.
 	 */
 	void update_underground();
+
+	/**
+	 * @brief Prepares an area of the map to be drawn.
+	 *
+	 * New area is the area that will be prepared. Old area is the area that was
+	 * already prepared. Only the difference between the two rects is prepared.
+	 */
+	void prepare_tiles(rect_t const& new_area, rect_t const& old_area);
 
 	/**
 	 * @returns true if world gets destroyed
@@ -1074,13 +1088,13 @@ public:
 	/**
 	 * Returns the minimum allowed height on the map.
 	 */
-	sint8 get_minimumheight() const { return groundwater-10; }
+	sint8 get_minimumheight() const { return world_minimum_height; }
 
 	/**
 	 * Returns the maximum allowed world height.
 	 * @author Hj. Malthaner
 	 */
-	sint8 get_maximumheight() const { return 32; }
+	sint8 get_maximumheight() const { return world_maximum_height; }
 
 	/**
 	 * Returns the current snowline height.

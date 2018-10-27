@@ -267,7 +267,7 @@ void convoi_t::unreserve_route()
 
 
 /**
- * unreserves the whole remaining route
+ * reserves route until next_reservation_index
  */
 void convoi_t::reserve_route()
 {
@@ -1353,6 +1353,7 @@ void convoi_t::step()
 		// just waiting for action here
 		case INITIAL:
 			welt->sync.remove(this);
+			/* FALLTHROUGH */
 		case EDIT_SCHEDULE:
 		case NO_ROUTE:
 			wait_lock = max( wait_lock, 25000 );

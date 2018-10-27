@@ -41,44 +41,6 @@
 #endif
 
 /**
- * writes important messages to stdout/logfile
- * use instead of printf()
- */
-void log_t::important(const char* format, ...)
-{
-	va_list argptr;
-
-	va_start( argptr, format );
-	if (  log  ) {
-		// If logfile, output there
-		vfprintf( log, format, argptr );
-		fprintf( log, "\n" );
-		if (  force_flush  ) { fflush( log ); }
-	}
-	va_end(argptr);
-
-#ifdef SYSLOG
-	va_start( argptr, format );
-	if (  syslog  ) {
-		// Send to syslog if available
-		vsyslog( LOG_NOTICE, format, argptr );
-	}
-	va_end(argptr);
-#endif
-
-	va_start( argptr, format );
-
-	// Print to stdout for important messages
-	if (  log != stderr  ) {
-		vfprintf( stdout, format, argptr );
-		fprintf( stdout, "\n" );
-		if (  force_flush  ) { fflush( stdout ); }
-	}
-
-	va_end( argptr );
-}
-
-/**
  * writes a debug message into the log.
  * @author Hj. Malthaner
  */
@@ -255,6 +217,37 @@ void log_t::error(const char *who, const char *format, ...)
 #endif
 	}
 }
+
+
+
+/**
+ * writes a warning into the log.
+ * @author Hj. Malthaner
+ */
+void log_t::doubled(const char *what, const char *name )
+{
+	if(debuglevel>=2) {
+
+		if( log ) {                             /* only log when a log */
+			fprintf(log ,"Warning: object %s::%s is overlaid!\n",what,name); /* is already open */
+			if( force_flush ) {
+				fflush(log);
+			}
+		}
+
+		if( tee ) {
+			fprintf(tee, "Warning: object %s::%s is overlaid!\n",what,name);
+		}
+
+#ifdef SYSLOG
+		if(  syslog  ) {
+			::syslog( LOG_WARNING, "Warning: object %s::%s is overlaid!", what, name );
+		}
+#endif
+	}
+	doublettes.append( (std::string)what+"::"+name+"<br/>" );
+}
+
 
 
 /**

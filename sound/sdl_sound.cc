@@ -27,12 +27,12 @@ static int use_sound = 0;
  * this structure contains the data for one sample
  */
 struct sample {
-    /* the buffer containing the data for the sample, the format
-     * must always be identical to the one of the system output
-     * format */
-    Uint8 *audio_data;
+	/* the buffer containing the data for the sample, the format
+	 * must always be identical to the one of the system output
+	 * format */
+	Uint8 *audio_data;
 
-    Uint32 audio_len;		    /* number of samples in the audio data */
+	Uint32 audio_len;	/* number of samples in the audio data */
 };
 
 
@@ -48,14 +48,13 @@ static int samplenumber = 0;
 /* this structure contains the information about one channel
  */
 struct channel {
-    Uint32 sample_pos; /* the current position inside this sample */
-    Uint8 sample;		/* which sample is played, 255 for no sample */
-    Uint8 volume;		/* the volume this channel should be played */
+	Uint32 sample_pos;	/* the current position inside this sample */
+	Uint8 sample;		/* which sample is played, 255 for no sample */
+	Uint8 volume;		/* the volume this channel should be played */
 };
 
 
-/* this array contains all the information of the currently played samples
- */
+/* this array contains all the information of the currently played samples */
 static channel channels[CHANNELS];
 
 
@@ -136,20 +135,22 @@ bool dr_init_sound()
 				// start playing sounds
 				SDL_PauseAudio(0);
 
-			} else {
-				dbg->important("Open audio channel doesn't meet requirements. Muting");
+			}
+			else {
+				dbg->error("dr_init_sound()", "Open audio channel doesn't meet requirements. Muting");
 				SDL_CloseAudio();
 				SDL_QuitSubSystem(SDL_INIT_AUDIO);
 			}
 
 
-		} else {
-			dbg->important("Could not open required audio channel. Muting");
+		}
+		else {
+			dbg->error("dr_init_sound()", "Could not open required audio channel. Muting");
 			SDL_QuitSubSystem(SDL_INIT_AUDIO);
 		}
 	}
 	else {
-		dbg->important("Could not initialize sound system. Muting");
+		dbg->error("dr_init_sound()", "Could not initialize sound system. Muting");
 	}
 
 	use_sound = sound_ok ? 1: -1;

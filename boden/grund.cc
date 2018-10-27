@@ -574,13 +574,6 @@ void grund_t::take_obj_from(grund_t* other_gr)
 
 void grund_t::open_info_window()
 {
-	int old_count = win_get_open_count();
-	if(get_halt().is_bound()) {
-		get_halt()->open_info_window();
-		if(env_t::single_info  &&  old_count!=win_get_open_count()  ) {
-			return;
-		}
-	}
 	if(env_t::ground_info  ||  hat_wege()) {
 		create_win(new grund_info_t(this), w_info, (ptrdiff_t)this);
 	}
@@ -856,10 +849,10 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 	for(uint i=0; i<grund_t::BACK_CORNER_COUNT; i++) {
 		corners[i] += corners_add[i];
 	}
+
 	// now test more tiles behind whether they are hidden by this tile
 	static const koord  testdir[grund_t::BACK_CORNER_COUNT] = { koord(-1,0), koord(-1,-1), koord(0,-1) };
-
-	for(int step = 0; step<5  &&  !get_flag(draw_as_obj); step ++) {
+	for(sint16 step = 0; step<grund_t::MAXIMUM_HIDE_TEST_DISTANCE  &&  !get_flag(draw_as_obj); step ++) {
 		sint16 test[grund_t::BACK_CORNER_COUNT];
 
 		for(uint i=0; i<grund_t::BACK_CORNER_COUNT; i++) {
@@ -897,8 +890,9 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 			}
 		}
 		if (test[0] < corners[0]  ||  test[1] < corners[1]  ||  test[2] < corners[2]) {
-			// we hide something behind
+			// we hide at least 1 thing behind
 			set_flag(draw_as_obj);
+			break;
 		}
 		else if (test[0] > corners[0]  &&  test[1] > corners[1]  &&  test[2] > corners[2]) {
 			// we cannot hide anything anymore
@@ -1452,7 +1446,7 @@ void grund_t::display_obj_all(const sint16 xpos, const sint16 ypos, const sint16
 	}
 
 	// display background
-	if (!tunnel_portal) {
+	if (!tunnel_portal  ||  slope == 0) {
 		activate_ribi_clip( (ribi_t::northwest & ribi) | 16 CLIP_NUM_PAR );	}
 	else {
 		// also clip along the upper edge of the tunnel tile
@@ -1554,7 +1548,7 @@ void grund_t::display_obj_all(const sint16 xpos, const sint16 ypos, const sint16
 	}
 
 	// foreground
-	if (tunnel_portal) {
+	if (tunnel_portal  &&  slope != 0) {
 		// clip at the upper edge
 		activate_ribi_clip( (ribi & (corner_se(slope)>0 ?  ribi_t::southeast : ribi_t::northwest) )| 16 CLIP_NUM_PAR );
 	}
