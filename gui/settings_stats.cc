@@ -366,6 +366,8 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "stop_pedestrians", sets->get_show_pax() );
 	INIT_NUM( "citycar_level", sets->get_traffic_level(), 0, 16, 1, false );
 	INIT_NUM( "default_citycar_life", sets->get_stadtauto_duration(), 1, 1200, 12, false );
+	
+	INIT_NUM( "max_cityroad_speed", sets->get_max_cityroad_speed(), 0, 65535, gui_numberinput_t::AUTOLINEAR, false );
 
 	clear_dirty();
 	height = ypos;
@@ -439,6 +441,8 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_BOOL( sets->set_show_pax );
 	READ_NUM( sets->set_traffic_level );
 	READ_NUM_VALUE( sets->stadtauto_duration );
+	
+	READ_NUM_VALUE( sets->max_cityroad_speed );
 }
 
 

@@ -824,6 +824,9 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_byte(world_maximum_height);
 			file->rdwr_byte(world_minimum_height);
 		}
+		if(  file->get_version() >= 120008  ) {
+			file->rdwr_short(max_cityroad_speed);
+		}
 		// otherwise the default values of the last one will be used
 	}
 }
