@@ -81,15 +81,10 @@ public:
 
 private:
 	enum type type;
-	sint32 selection; // only used when type is 'select'.
+	vector_tpl<sint32> selection; // only used when type is 'select'.
 	int border; // must be subtracted from size.h to get net size
 	int offset; // vertical offset of top left position.
-
-	/**
-	 * color of selected entry
-	 * @author Hj. Malthaner
-	 */
-	PIXVAL highlight_color;
+	bool multiple_selection; // true when multiple selection is enabled.
 
 	scrollbar_t sb;
 
@@ -102,17 +97,19 @@ public:
 
 	~gui_scrolled_list_t() { clear_elements(); }
 
-	/**
-	* Sets the color of selected entry
-	* @author Hj. Malthaner
-	*/
-	void set_highlight_color(PIXVAL c) { highlight_color = c; }
-
 	void show_selection(int s);
 
-	void set_selection(int s) { selection = s; }
-	sint32 get_selection() const { return selection; }
+	void set_selection(int s);
+	void set_selections(vector_tpl<sint32>);
+	void add_selection(int s);
+	void remove_selection(int s);
+	void clear_selection() { selection.clear(); }
+	void decrement_selection(int at);
+	sint32 get_selection() const { return selection.get_count()==0 ? -1 : selection[0]; }
+	vector_tpl<sint32> get_selections() const { return selection; }
 	sint32 get_count() const { return item_list.get_count(); }
+	
+	void enable_multiple_selection() { multiple_selection = true; }
 
 	/*  when rebuilding a list, be sure to call recalculate the slider
 	 *  with recalculate_slider() to update the scrollbar properly. */
@@ -136,6 +133,8 @@ public:
 
 	// resizes scrollbar
 	void adjust_scrollbar();
+	
+	void calc_selection(sint32);
 
 	/**
 	 * request other pane-size. returns realized size.

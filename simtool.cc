@@ -95,6 +95,7 @@
 #include "network/memory_rw.h"
 #include "utils/simrandom.h"
 #include "utils/simstring.h"
+#include "utils/plainstring.h"
 
 #include "simtool.h"
 #include "player/finance.h"
@@ -857,6 +858,7 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 	grund_t *gr_kartenboden = welt->lookup_kartenboden(start.x, start.y);
 	if (start.z != gr_kartenboden->get_pos().z) { is_lock_z_with_start = true; }
 	
+	const char* msg = NULL;
 	koord wh, nw;
 	wh.x = abs(end.x-start.x)+1;
 	wh.y = abs(end.y-start.y)+1;
@@ -875,12 +877,15 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 				gr = welt->lookup_kartenboden(x, y);
 			}
 			if (gr != NULL) {
-				process(player, gr->get_pos());
+				const char* err = process(player, gr->get_pos());
+				if(  msg==NULL  ||  strcmp(msg,"")==0  ) {
+					msg = err;
+				}
 			}
 		}
 	}
 	
-	return NULL;
+	return msg;
 }
 
 
@@ -3771,8 +3776,17 @@ void tool_build_wayobj_t::draw_after(scr_coord k, bool dirty) const
 bool tool_build_wayobj_t::calc_route( route_t &verbindung, player_t *player, const koord3d& start, const koord3d& to )
 {
 	waytype_t waytype = wt;
-	if (waytype == any_wt) {
+	if(  waytype == any_wt  ) {
 		waytype = welt->lookup(start)->get_weg(wt)->get_waytype();
+	}
+	// special treatment for deports, since track electrication cannot "drive" into tram depot
+	if(  waytype == track_wt  ) {
+		if(  depot_t  *dp = welt->lookup(start)->get_depot()  ) {
+			waytype = dp->get_waytype();
+		}
+		else if(  depot_t  *dp = welt->lookup(to)->get_depot()  ) {
+			waytype = dp->get_waytype();
+		}
 	}
 	// get a default vehikel
 	vehicle_desc_t remover_desc( waytype, 500, vehicle_desc_t::diesel );
@@ -5858,18 +5872,23 @@ const char *tool_build_house_t::work( player_t *player, koord k )
 	if(gr==NULL) {
 		return "";
 	}
-
-	// Parsing parameter (if there)
+	
 	const building_desc_t *desc = NULL;
-	if (!strempty(default_param)) {
+	if(  strempty(default_param)  ) {
+		// choose a building randomly
+		desc = hausbauer_t::get_random_attraction( welt->get_timeline_year_month(), false, welt->get_climate( k ) );
+	}
+	else if(  !buildings.empty()  ) {
+		// choose desc from buildings
+		desc = pick_any(buildings);
+	}
+	else {
+		// Parsing parameter
 		const char *c = default_param+2;
 		const building_tile_desc_t *tile = hausbauer_t::find_tile(c,0);
 		if(tile) {
 			desc = tile->get_desc();
 		}
-	}
-	else {
-		desc = hausbauer_t::get_random_attraction( welt->get_timeline_year_month(), false, welt->get_climate( k ) );
 	}
 
 	if(desc==NULL) {
@@ -5972,7 +5991,7 @@ const char *tool_build_house_t::do_work( player_t *player, const koord3d &start,
 		k.x = start.x;
 		k.y = start.y;
 		if(  grund_t *gr=welt->lookup_kartenboden(k)  ) {
-			work(player, k);
+			return work(player, k);
 		}
 	}
 	else {
@@ -5985,16 +6004,52 @@ const char *tool_build_house_t::do_work( player_t *player, const koord3d &start,
 		int dx = (start.x < end.x) ? 1 : -1;
 		int dy = (start.y < end.y) ? 1 : -1;
 		
+		const char* msg = NULL;
 		koord k;
 		for( k.x = start.x; k.x != (end.x+dx); k.x += dx) {
 			for( k.y = start.y; k.y != (end.y+dy); k.y += dy) {
 				if(  grund_t *gr=welt->lookup_kartenboden(k)  ) {
-					work(player, k);
+					const char* err = work(player, k);
+					if(  msg==NULL  ||  strcmp(msg,"")==0  ) {
+						msg = err;
+					}
 				}
 			}
 		}
+		return msg;
 	}
 	return NULL;
+}
+
+void tool_build_house_t::set_buildings(vector_tpl<const building_desc_t*> bldg) {
+	buildings.clear();
+	for(  uint32 i=0;  i<bldg.get_count();  i++  ) {
+		buildings.append(bldg[i]);
+	}
+}
+
+void tool_build_house_t::rdwr_custom_data(memory_rw_t *packet)
+{
+	two_click_tool_t::rdwr_custom_data(packet);
+	uint32 count = buildings.get_count();
+	packet->rdwr_long(count);
+	plainstring ps;
+	if(  packet->is_loading()  ) {
+		buildings.clear();
+		for(  uint32 i=0;  i<count;  i++  ) {
+			packet->rdwr_str(ps);
+			const building_tile_desc_t *tile = hausbauer_t::find_tile(ps,0);
+			if(tile) {
+				buildings.append(tile->get_desc());
+			}
+		}
+	} else {
+		// writing
+		for(  uint32 i=0;  i<count;  i++  ) {
+			ps = plainstring(buildings[i]->get_name());
+			packet->rdwr_str(ps);
+		}
+	}
 }
 
 

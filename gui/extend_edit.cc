@@ -40,7 +40,6 @@ extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 	// init scrolled list
 	scl.set_size(scr_size(tab_panel_width, SCL_HEIGHT-14));
 	scl.set_pos(scr_coord(0,1));
-	scl.set_highlight_color(color_idx_to_rgb(player->get_player_color1()+1));
 	scl.set_selection(-1);
 	scl.add_listener(this);
 
@@ -102,7 +101,7 @@ bool extend_edit_gui_t::infowin_event(const event_t *ev)
 
 
 
-bool extend_edit_gui_t::action_triggered( gui_action_creator_t *komp,value_t /* */)           // 28-Dec-01    Markus Weber    Added
+bool extend_edit_gui_t::action_triggered( gui_action_creator_t *komp,value_t v)           // 28-Dec-01    Markus Weber    Added
 {
 	if (komp == &tabs) {
 		// switch list translation or object name
@@ -119,7 +118,7 @@ bool extend_edit_gui_t::action_triggered( gui_action_creator_t *komp,value_t /* 
 	}
 	else if (komp == &scl) {
 		// select an item of scroll list ?
-		change_item_info(scl.get_selection());
+		change_item_info(v.i);
 	}
 	else if(  komp==&bt_obsolete  ) {
 		bt_obsolete.pressed ^= 1;

@@ -3407,7 +3407,8 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 			if(  next_next_signal<target_rt.get_count()  ) {
 				// and here is a signal => finished
 				sig->set_state( roadsign_t::gruen );
-				cnv->set_next_stop_index( min( min( next_crossing, next_signal ), cnv->get_route()->get_count() ) );
+				// we stop at the end of the route.
+				cnv->set_next_stop_index( min( min( next_crossing, next_signal ), cnv->get_route()->get_count()-1 ) );
 				return true;
 			}
 		}
@@ -3510,7 +3511,7 @@ bool rail_vehicle_t::is_choose_signal_clear(signal_t *sig, const uint16 start_bl
 		if(  way->has_sign()  ) {
 			roadsign_t *rs = gr->find<roadsign_t>(1);
 			if(  rs  &&  rs->get_desc()->get_wtyp()==get_waytype()  ) {
-				if(  (rs->get_desc()->get_flags()&roadsign_desc_t::END_OF_CHOOSE_AREA)!=0  ) {
+				if(  rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA  ) {
 					// end of choose on route => not choosing here
 					choose_ok = false;
 				}
@@ -3656,6 +3657,11 @@ bool rail_vehicle_t::is_signal_clear(uint16 next_block, sint32 &restart_speed)
 
 	// action depend on the next signal
 	const roadsign_desc_t *sig_desc=sig->get_desc();
+
+	// If the next signal is not a longblock signal, reservation must be handled by next_reservation_index.
+	if(  !sig_desc->is_longblock_signal()  ) {
+		cnv->clear_reserved_tiles();
+	}
 
 	// simple signal: drive on, if next block is free
 	if(  !sig_desc->is_longblock_signal() &&
@@ -3860,7 +3866,7 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 		}
 #endif
 		if(reserve) {
-			if(sch1->has_signal()) {
+			if(  sch1->has_signal()  &&  i<route->get_count()-1  ) {
 				if(count) {
 					signs.append(gr);
 				}
