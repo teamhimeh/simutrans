@@ -62,6 +62,7 @@
 #include "dataobj/tabfile.h"
 #include "dataobj/settings.h"
 #include "dataobj/translator.h"
+#include "dataobj/repositioning.h"
 #include "network/pakset_info.h"
 
 #include "descriptor/reader/obj_reader.h"
@@ -482,6 +483,8 @@ int simu_main(int argc, char** argv)
 			" -until YEAR.MONTH   quits when MONTH of YEAR starts\n"
 #endif
 			" -use_workdir        use current dir as basedir\n"
+			" -snapshot x,y,z,f   to make the snapshot like a commandline tool\n"
+			"                     (x,y,z) : center position, f : zoom_factor (from 0 to 9)\n"
 		);
 		return 0;
 	}
@@ -969,6 +972,10 @@ int simu_main(int argc, char** argv)
 		env_t::default_settings.parse_colours( simuconf );
 		simuconf.close();
 	}
+	//parse reposition.tab
+	sprintf(path_to_simuconf, "config%creposition.tab", PATH_SEPARATOR[0]);
+	obj_conf = env_t::program_dir + env_t::objfilename + path_to_simuconf;
+	repositioning_t::get_instance().read_tabfile(obj_conf.c_str());
 
 	// load with private addons (now in addons/pak-name either in simutrans main dir or in userdir)
 	if(  gimme_arg(argc, argv, "-objects", 1) != NULL  ) {
@@ -1122,6 +1129,20 @@ int simu_main(int argc, char** argv)
 
 	if(  translator::get_language()==-1  ) {
 		ask_language();
+	}
+	
+	env_t::commandline_snapshot = false;
+	if(  gimme_arg(argc, argv, "-snapshot", 0) != NULL  ) {
+		const char *s = gimme_arg(argc, argv, "-snapshot", 1);
+		int x = 0, y = 0, z = 0, f = 0;
+		if(  s!=NULL  ) {
+			if(  sscanf(s,"%d,%d,%d,%d",&x,&y,&z,&f) == 4  ) {
+				dbg->message("simmain()", "-snapshot x,y,z,f=%d,%d,%d,%d", x, y, z, f );
+				env_t::commandline_snapshot = true;
+				env_t::commandline_snapshot_world_position = koord3d(x,y,z);
+				env_t::commandline_snapshot_zoom_factor = f;
+			}
+		}
 	}
 
 	bool new_world = true;
@@ -1459,6 +1480,7 @@ DBG_MESSAGE("simmain","loadgame file found at %s",buffer);
 		env_t::default_settings.rdwr(&file);
 		file.close();
 	}
+	repositioning_t::get_instance().write_tabfile();
 
 	destroy_all_win( true );
 	tool_t::exit_menu();
