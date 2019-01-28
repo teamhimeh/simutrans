@@ -73,6 +73,7 @@ enum {
 	TOOL_CHANGE_WATER_HEIGHT,
 	TOOL_SET_CLIMATE,
 	TOOL_ROTATE_BUILDING,
+	TOOL_MERGE_STOP,
 	GENERAL_TOOL_COUNT,
 	GENERAL_TOOL = 0x1000
 };
@@ -437,7 +438,7 @@ public:
 	two_click_kartenboden_tool_t(uint16 const id) : two_click_tool_t(id){}
 
 	char const* check_pos(player_t*, koord3d);
-	
+
 	char const* do_work(player_t* player, koord3d const&, koord3d const& pos) OVERRIDE {return work(player, pos);};
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE {};
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE {return 2;};

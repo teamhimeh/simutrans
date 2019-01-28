@@ -296,13 +296,13 @@ private:
 
 	// if true, vehicles stop at the intersection without a traffic light
 	bool stop_at_intersection_without_traffic_light;
-	
+
 	// parameters related to routing of citycars
 	uint16 citycar_max_look_forward;
 	uint16 citycar_route_weight_crowded;
 	uint16 citycar_route_weight_vacant;
 	sint16 citycar_route_weight_speed;
-	
+
 	// only for trains. If true, trains advance to the end of the platform.
 	bool advance_to_end;
 
@@ -320,6 +320,10 @@ public:
 	sint64 cst_depot_road;
 	sint64 cst_depot_ship;
 	sint64 cst_depot_air;
+
+	// cost to merge station
+	bool allow_merge_distant_halt;
+	sint64 cst_multiply_merge_halt;
 
 	// alter landscape
 	sint64 cst_buy_land;
@@ -609,6 +613,8 @@ public:
 	bool get_allow_underground_transformers() const { return allow_underground_transformers; }
 	bool get_disable_make_way_public() const { return disable_make_way_public; }
 
+	bool get_allow_merge_distant_halt() const { return allow_merge_distant_halt; }
+
 	uint16 get_remove_dummy_player_months() const { return remove_dummy_player_months; }
 	uint16 get_unprotect_abandoned_player_months() const { return unprotect_abandoned_player_months; }
 
@@ -619,10 +625,10 @@ public:
 	void set_default_ai_construction_speed( uint32 n ) { default_ai_construction_speed = n; }
 
 	bool get_stop_at_intersection_without_traffic_light() const { return stop_at_intersection_without_traffic_light; }
-	
+
 	uint16 get_citycar_max_look_forward() const { return citycar_max_look_forward; }
 	citycar_routing_param_t get_citycar_routing_param() const;
-	
+
 	bool get_advance_to_end() const { return advance_to_end; }
 	void set_advance_to_end(bool b) { advance_to_end = b; }
 };

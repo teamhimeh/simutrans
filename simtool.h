@@ -62,7 +62,7 @@ public:
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Abriss"); }
 	char const* process(player_t*, koord3d);
 	bool is_init_network_save() const OVERRIDE { return true; }
-	
+
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE {return 2;};
@@ -456,7 +456,7 @@ class tool_build_station_t : public two_click_tool_t {
 	const char *tool_station_flat_dock_aux(player_t *, koord3d, const building_desc_t *, sint8 );
 	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix );
 	const building_desc_t *get_desc( sint8 &rotation ) const;
-	
+
   public:
 	tool_build_station_t() : two_click_tool_t(TOOL_BUILD_STATION | GENERAL_TOOL) {one_click = true;}
 	image_id get_icon(player_t*) const OVERRIDE;
@@ -468,7 +468,7 @@ class tool_build_station_t : public two_click_tool_t {
 	char const* work(player_t*, koord3d) OVERRIDE;
 	bool is_init_network_save() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
-	
+
 	char const* process(player_t*, koord3d) ;
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -554,7 +554,7 @@ public:
 class tool_build_house_t : public two_click_kartenboden_tool_t {
 private:
 	vector_tpl<const building_desc_t*> buildings;
-	
+
 public:
 	tool_build_house_t() : two_click_kartenboden_tool_t(TOOL_BUILD_HOUSE | GENERAL_TOOL) {one_click = true;}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Built random attraction"); }
@@ -697,6 +697,21 @@ public:
 	bool is_init_network_save() const OVERRIDE { return true; }
 };
 
+/* merge stop */
+class tool_merge_stop_t : public two_click_tool_t {
+private:
+	halthandle_t halt_be_merged_from;
+	halthandle_t halt_be_merged_to;
+public:
+	tool_merge_stop_t() : two_click_tool_t(TOOL_MERGE_STOP | GENERAL_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("merge stop"); }
+	bool is_init_network_save() const OVERRIDE { return true; }
+private:
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
+	image_id get_marker_image() OVERRIDE;
+};
 
 // internal tool: show error message at specific coordinate
 // used for scenario error messages send by server
