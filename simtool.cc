@@ -804,7 +804,7 @@ void tool_remover_t::mark_tiles(  player_t *, const koord3d &start, const koord3
 	bool is_lock_z_with_start = false;
 	grund_t *gr_kartenboden = welt->lookup_kartenboden(start.x, start.y);
 	if (start.z != gr_kartenboden->get_pos().z) { is_lock_z_with_start = true; }
-
+	
 	koord k1, k2;
 	k1.x = start.x < end.x ? start.x : end.x;
 	k1.y = start.y < end.y ? start.y : end.y;
@@ -823,9 +823,9 @@ void tool_remover_t::mark_tiles(  player_t *, const koord3d &start, const koord3
 			if (gr == NULL) {
 				continue;
 			}
-
+			
 			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL );
-
+			
 			const uint8 grund_hang = gr->get_grund_hang();
 			const uint8 weg_hang = gr->get_weg_hang();
 			const uint8 hang = max( corner_sw(grund_hang), corner_sw(weg_hang)) +
@@ -835,7 +835,7 @@ void tool_remover_t::mark_tiles(  player_t *, const koord3d &start, const koord3
 			uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
 			marker->set_foreground_image( ground_desc_t::marker->get_image( grund_hang % 27 ) );
 			marker->set_image( ground_desc_t::marker->get_image( back_hang ) );
-
+			
 			marker->mark_image_dirty( marker->get_image(), 0 );
 			gr->obj_add( marker );
 			marked.insert( marker );
@@ -857,14 +857,14 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 	bool is_lock_z_with_start = false;
 	grund_t *gr_kartenboden = welt->lookup_kartenboden(start.x, start.y);
 	if (start.z != gr_kartenboden->get_pos().z) { is_lock_z_with_start = true; }
-
+	
 	const char* msg = NULL;
 	koord wh, nw;
 	wh.x = abs(end.x-start.x)+1;
 	wh.y = abs(end.y-start.y)+1;
 	nw.x = min(start.x, end.x)+(wh.x/2);
 	nw.y = min(start.y, end.y)+(wh.y/2);
-
+	
 	int dx = (start.x < end.x) ? 1 : -1;
 	int dy = (start.y < end.y) ? 1 : -1;
 	for(int x=start.x; x!=(end.x+dx); x+=dx) {
@@ -884,10 +884,9 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 			}
 		}
 	}
-
+	
 	return msg;
 }
-
 
 
 const char *tool_raise_lower_base_t::move( player_t *player, uint16 buttonstate, koord3d pos )
@@ -979,11 +978,11 @@ const char *tool_raise_lower_base_t::do_work( player_t *player, const koord3d &s
 		process( player, start );
 		return NULL;
 	}
-
+	
 	int dx = (start.x < end.x) ? 1 : -1;
 	int dy = (start.y < end.y) ? 1 : -1;
 	koord k;
-
+	
 	if(  !is_dragging  ) {
 		bool is_flat = true;
 		for(  k.x=start.x;  k.x!=(end.x+dx) && is_flat;  k.x+=dx  ) {
@@ -1006,9 +1005,9 @@ const char *tool_raise_lower_base_t::do_work( player_t *player, const koord3d &s
 			is_area_process = true;
 		}
 	}
-
+	
 	is_area_process = true;
-
+	
 	for(  k.x=start.x;  k.x!=(end.x+dx);  k.x+=dx  ) {
 		for(  k.y=start.y;  k.y!=(end.y+dy);  k.y+=dy  ) {
 			if(  grund_t *gr=welt->lookup_kartenboden(k)  ) {
@@ -1016,9 +1015,9 @@ const char *tool_raise_lower_base_t::do_work( player_t *player, const koord3d &s
 			}
 		}
 	}
-
+	
 	if(  !is_dragging  ) { default_param = NULL; }
-
+	
 	return NULL;
 }
 
@@ -1044,7 +1043,7 @@ void tool_raise_lower_base_t::mark_tiles(player_t *, const koord3d &start, const
 				uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
 				marker->set_foreground_image( ground_desc_t::marker->get_image( grund_hang % 27 ) );
 				marker->set_image( ground_desc_t::marker->get_image( back_hang ) );
-
+				
 				marker->mark_image_dirty( marker->get_image(), 0 );
 				gr->obj_add( marker );
 				marked.insert( marker );
@@ -1130,7 +1129,7 @@ const char *tool_raise_t::process(player_t* player, koord3d pos )
 sint16 tool_lower_t::get_drag_height(koord k)
 {
 	const grund_t *gr = welt->lookup_kartenboden_gridcoords(k);
-
+	
 	return  gr->get_hoehe(welt->get_corner_to_operate(k)) - 1;
 }
 
@@ -1451,7 +1450,7 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 		const sint16 hgt=new_pos.z;
 		// maximum difference check with tiles to north, south east and west
 		const sint8 test_hgt = hgt+(new_slope!=0);
-
+		
 		if(  gr1->get_typ()==grund_t::boden  ) {
 			for(  sint16 i = 0 ;  i < 4 ;  i++  ) {
 				const koord neighbour = k + koord::nsew[i];
@@ -3713,7 +3712,7 @@ bool tool_build_wayobj_t::is_selected() const
 bool tool_build_wayobj_t::init( player_t *player )
 {
 	two_click_tool_t::init( player );
-
+	
 	if (is_ctrl_pressed()  &&  can_use_gui()) {
 		create_win(new wayobj_spacing_frame_t(player, this), w_info, (ptrdiff_t)this);
 	}
@@ -3828,7 +3827,7 @@ void tool_build_wayobj_t::mark_tiles( player_t* player, const koord3d &start, co
 		sint32 cost_estimate = 0;
 
 		bool keep_existing_faster_ways = !is_ctrl_pressed();
-
+		
 		tool_build_wayobj_t* toolbar_tool;
 		uint8 sp = spacing;
 		if(  look_toolbar  &&  (toolbar_tool=get_build_wayobj_tool_from_toolbar(desc))!=NULL  ) {
@@ -4837,7 +4836,7 @@ bool tool_build_station_t::init( player_t * player )
 {
 	two_click_tool_t::init(player);
 	one_click = true;
-
+	
 	sint8 rotation = -1;
 	const building_desc_t *bdsc = get_desc( rotation );
 	if(  bdsc==NULL  ) {
@@ -5089,9 +5088,9 @@ void tool_build_station_t::mark_tiles(  player_t *, const koord3d &start, const 
 	for(  k.x = k1.x;  k.x <= k2.x;  k.x++  ) {
 		for(  k.y = k1.y;  k.y <= k2.y;  k.y++  ) {
 			grund_t *gr = welt->lookup_kartenboden( k );
-
+			
 			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL );
-
+			
 			const uint8 grund_hang = gr->get_grund_hang();
 			const uint8 weg_hang = gr->get_weg_hang();
 			const uint8 hang = max( corner_sw(grund_hang), corner_sw(weg_hang)) +
@@ -5101,7 +5100,7 @@ void tool_build_station_t::mark_tiles(  player_t *, const koord3d &start, const 
 			uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
 			marker->set_foreground_image( ground_desc_t::marker->get_image( grund_hang % 27 ) );
 			marker->set_image( ground_desc_t::marker->get_image( back_hang ) );
-
+			
 			marker->mark_image_dirty( marker->get_image(), 0 );
 			gr->obj_add( marker );
 			marked.insert( marker );
@@ -5133,10 +5132,10 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 		wh.y = abs(end.y-start.y)+1;
 		nw.x = min(start.x, end.x)+(wh.x/2);
 		nw.y = min(start.y, end.y)+(wh.y/2);
-
+		
 		int dx = (start.x < end.x) ? 1 : -1;
 		int dy = (start.y < end.y) ? 1 : -1;
-
+		
 		koord k;
 		for( k.x = start.x; k.x != (end.x+dx); k.x += dx) {
 			for( k.y = start.y; k.y != (end.y+dy); k.y += dy) {
@@ -5872,7 +5871,7 @@ const char *tool_build_house_t::work( player_t *player, koord k )
 	if(gr==NULL) {
 		return "";
 	}
-
+	
 	const building_desc_t *desc = NULL;
 	if(  strempty(default_param)  ) {
 		// choose a building randomly
@@ -5956,9 +5955,9 @@ void tool_build_house_t::mark_tiles(  player_t *, const koord3d &start, const ko
 	for(  k.x = k1.x;  k.x <= k2.x;  k.x++  ) {
 		for(  k.y = k1.y;  k.y <= k2.y;  k.y++  ) {
 			grund_t *gr = welt->lookup_kartenboden( k );
-
+			
 			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL );
-
+			
 			const uint8 grund_hang = gr->get_grund_hang();
 			const uint8 weg_hang = gr->get_weg_hang();
 			const uint8 hang = max( corner_sw(grund_hang), corner_sw(weg_hang)) +
@@ -5968,7 +5967,7 @@ void tool_build_house_t::mark_tiles(  player_t *, const koord3d &start, const ko
 			uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
 			marker->set_foreground_image( ground_desc_t::marker->get_image( grund_hang % 27 ) );
 			marker->set_image( ground_desc_t::marker->get_image( back_hang ) );
-
+			
 			marker->mark_image_dirty( marker->get_image(), 0 );
 			gr->obj_add( marker );
 			marked.insert( marker );
@@ -6000,10 +5999,10 @@ const char *tool_build_house_t::do_work( player_t *player, const koord3d &start,
 		wh.y = abs(end.y-start.y)+1;
 		nw.x = min(start.x, end.x)+(wh.x/2);
 		nw.y = min(start.y, end.y)+(wh.y/2);
-
+		
 		int dx = (start.x < end.x) ? 1 : -1;
 		int dy = (start.y < end.y) ? 1 : -1;
-
+		
 		const char* msg = NULL;
 		koord k;
 		for( k.x = start.x; k.x != (end.x+dx); k.x += dx) {
@@ -6908,10 +6907,10 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 
 	player_t *const psplayer = welt->get_public_player();
 	bool const giveaway = player != psplayer;
-
+	
 	// make stop public if any suitable
 	halthandle_t const halt = gr->get_halt();
-
+	
 	// [mod : shingoushori] mod : changes this to a private transfer exchange stop 1/3
 	if( is_shift_pressed() || is_ctrl_pressed() ){
 		// [mod : shingoushori] shortcut the process "// make way public if any suitable" for avoid complexity
@@ -6921,7 +6920,7 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 			if(  giveaway  &&  !player->can_afford(workcost)  ) {
 				return NOTICE_INSUFFICIENT_FUNDS;
 			}
-
+			
 			// change ownership
 			// is_ctrl_pressed == true : public undertaking mode : no cost spend
 			halt->make_private_and_join(player, is_ctrl_pressed() );

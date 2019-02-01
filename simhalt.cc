@@ -2381,12 +2381,12 @@ void haltestelle_t::make_public_and_join( player_t *player )
 void haltestelle_t::make_private_and_join( player_t *player, bool public_undertaking )
 {
 	player_t *const public_owner = welt->get_public_player();
-
+	
 	// check if already private
 	if(  owner_p == player  ) {
 		return;
 	}
-
+	
 	// process every tile of stop
 	slist_tpl<halthandle_t> joining;
 	FOR(slist_tpl<tile_t>, const& i, tiles) {
@@ -2401,7 +2401,7 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 			waytype_t const costs_type = gb->get_waytype();
 			player_t::add_maintenance(current_owner, -monthly_costs, costs_type);
 			player_t::add_maintenance(player, monthly_costs, costs_type);
-
+			
 			// cost is computed and transfered to private player
 			if(  !public_undertaking  ) {
 				sint64 const cost = -welt->scale_with_month_length(monthly_costs * welt->get_settings().cst_make_public_months);
@@ -2409,7 +2409,7 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 				player_t::book_construction_costs(player, cost, koord::invalid, costs_type);
 			}
 		}
-
+		
 		// search for stops to join, starting with this tile
 		const planquadrat_t *pl = welt->access(gr->get_pos().get_2d());
 		for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
@@ -2431,19 +2431,19 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 			}
 		}
 	}
-
+	
 	// transfer ownership
 	owner_p = player;
-
+	
 	// set name to name of first public stop
 	if(  !joining.empty()  ) {
 		set_name( joining.front()->get_name());
 	}
-
+	
 	while(  !joining.empty()  ) {
 		// join this halt with me
 		halthandle_t halt = joining.remove_first();
-
+		
 		// now with the second stop
 		while(  halt.is_bound()  &&  halt!=self  ) {
 			// add statistics
@@ -2453,11 +2453,11 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 					halt->financial_history[month][type] = 0;	// to avoid counting twice
 				}
 			}
-
+			
 			// we always take the first remaining tile and transfer it => more safe
 			koord3d t = halt->get_basis_pos3d();
 			grund_t *gr = welt->lookup(t);
-
+			
 			// transfer tiles to us
 			halt->rem_grund(gr);
 			add_grund(gr);
@@ -2465,17 +2465,17 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 			if(!halt->existiert_in_welt()) {
 				// transfer goods
 				halt->transfer_goods(self);
-
+				
 				// rebuild connections of all linked halts
 				// otherwise these halts would lose connections and freight might get lost
 				// (until complete rebuild_connections task is finished)
 				halt->rebuild_linked_connections();
-
+				
 				destroy(halt);
 			}
 		}
 	}
-
+	
 	// tell the world of it ...
 	if(  player != public_owner  &&  env_t::networkmode  ) {
 		cbuffer_t buf;

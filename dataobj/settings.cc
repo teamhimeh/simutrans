@@ -303,7 +303,7 @@ settings_t::settings_t() :
 	frames_per_second = 20;
 	frames_per_step = 4;
 	server_frames_ahead = 4;
-	
+
 	stop_at_intersection_without_traffic_light = false;
 	
 	citycar_max_look_forward = 15;

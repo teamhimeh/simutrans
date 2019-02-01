@@ -651,8 +651,6 @@ void tool_t::read_menu(const std::string &objfilename)
 								wayobj_tool->set_look_toolbar();
 							}
 						}
-
-
 						general_tool.append( addtool );
 					}
 					else {
