@@ -1037,7 +1037,7 @@ void tool_raise_lower_base_t::mark_tiles(player_t *, const koord3d &start, const
 			if(  grund_t *gr = welt->lookup_kartenboden( k )  ) {
 				
 				zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL );
-
+				
 				const uint8 grund_hang = gr->get_grund_hang();
 				const uint8 weg_hang = gr->get_weg_hang();
 				const uint8 hang = max( corner_sw(grund_hang), corner_sw(weg_hang) ) + 3 * max( corner_se(grund_hang), corner_se(weg_hang) ) + 9 * max( corner_ne(grund_hang), corner_ne(weg_hang) ) + 27 * max( corner_nw(grund_hang), corner_nw(weg_hang) );

@@ -303,14 +303,14 @@ settings_t::settings_t() :
 	frames_per_second = 20;
 	frames_per_step = 4;
 	server_frames_ahead = 4;
-
+	
 	stop_at_intersection_without_traffic_light = false;
-
+	
 	citycar_max_look_forward = 15;
 	citycar_route_weight_crowded = 20;
 	citycar_route_weight_vacant = 100;
 	citycar_route_weight_speed = 0;
-
+	
 	advance_to_end = true;
 }
 
@@ -1468,7 +1468,7 @@ void settings_t::parse_simuconf(tabfile_t& simuconf, sint16& disp_width, sint16&
 	max_air_convoi_length = contents.get_int("max_air_convoi_length",max_air_convoi_length);
 
 	stop_at_intersection_without_traffic_light = contents.get_int("stop_at_intersection_without_traffic_light", stop_at_intersection_without_traffic_light);
-
+	
 	citycar_max_look_forward = contents.get_int("citycar_max_look_forward", citycar_max_look_forward);
 	citycar_route_weight_crowded = contents.get_int("citycar_route_weight_crowded", citycar_route_weight_crowded);
 	citycar_route_weight_vacant = contents.get_int("citycar_route_weight_vacant", citycar_route_weight_vacant);
