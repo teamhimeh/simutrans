@@ -2482,7 +2482,7 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 		buf.printf( translator::translate("%s at (%i,%i) now private stop."), get_name(), get_basis_pos().x, get_basis_pos().y );
 		welt->get_message()->add_message( buf, get_basis_pos(), message_t::ai, PLAYER_FLAG|player->get_player_nr(), IMG_EMPTY );
 	}
-
+	
 	recalc_station_type();
 }
 

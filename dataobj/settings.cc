@@ -1478,7 +1478,7 @@ void settings_t::parse_simuconf(tabfile_t& simuconf, sint16& disp_width, sint16&
 	if(  world_minimum_height>=world_maximum_height  ) {
 		world_minimum_height = world_maximum_height-1;
 	}
-
+	
 	advance_to_end = contents.get_int("advance_to_end", advance_to_end);
 
 	// Default pak file path

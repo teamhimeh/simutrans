@@ -291,7 +291,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->citycar_route_weight_crowded );
 	READ_NUM_VALUE( sets->citycar_route_weight_vacant );
 	READ_NUM_VALUE( sets->citycar_route_weight_speed );
-
+	
 	READ_BOOL_VALUE( sets->advance_to_end );
 }
 

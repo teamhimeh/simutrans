@@ -628,7 +628,7 @@ public:
 
 	uint16 get_citycar_max_look_forward() const { return citycar_max_look_forward; }
 	citycar_routing_param_t get_citycar_routing_param() const;
-
+	
 	bool get_advance_to_end() const { return advance_to_end; }
 	void set_advance_to_end(bool b) { advance_to_end = b; }
 };

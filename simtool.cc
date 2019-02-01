@@ -1035,7 +1035,7 @@ void tool_raise_lower_base_t::mark_tiles(player_t *, const koord3d &start, const
 	for(  k.x = k1.x;  k.x <= k2.x;  k.x++  ) {
 		for(  k.y = k1.y;  k.y <= k2.y;  k.y++  ) {
 			if(  grund_t *gr = welt->lookup_kartenboden( k )  ) {
-
+				
 				zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL );
 
 				const uint8 grund_hang = gr->get_grund_hang();
