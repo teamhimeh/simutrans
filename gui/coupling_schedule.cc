@@ -54,8 +54,8 @@ lb_line("Line:") {
 	bt_couple.add_listener(this);
 	bt_couple.pressed = true;
 	add_component(&bt_couple);
-	bt_uncouple.init(button_t::roundbox_state, "Decouple", scr_coord(BUTTON2_X, ypos ));
-	bt_uncouple.set_tooltip("Couple at this point");
+	bt_uncouple.init(button_t::roundbox_state, "Uncouple", scr_coord(BUTTON2_X, ypos ));
+	bt_uncouple.set_tooltip("Uncouple at this point");
 	bt_uncouple.add_listener(this);
 	bt_uncouple.pressed = false;
 	add_component(&bt_uncouple);
