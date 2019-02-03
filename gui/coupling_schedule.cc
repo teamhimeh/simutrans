@@ -27,13 +27,14 @@
 
 #include "karte.h"
 
-coupling_schedule_gui_t::coupling_schedule_gui_t(schedule_t* schedule, player_t* player):
+coupling_schedule_gui_t::coupling_schedule_gui_t(schedule_t* schedule, sint16 schedule_index, player_t* player):
 gui_frame_t( translator::translate("Coupling Schedule"), player),
 stats(NULL),
 scrolly(&stats),
 player(player),
 schedule(schedule),
-coupled_schedule(NULL),
+couple_index(-1),
+decouple_index(-1),
 lb_line("Line:") {
 	scr_coord_val ypos = 0;
 	
@@ -76,6 +77,8 @@ coupling_schedule_gui_t::coupling_schedule_gui_t():
 gui_frame_t( translator::translate("Coupling Schedule"), NULL),
 stats(NULL),
 scrolly(&stats),
+couple_index(-1),
+decouple_index(-1),
 lb_line("Line:") {
 	
 }
@@ -89,15 +92,26 @@ bool coupling_schedule_gui_t::action_triggered( gui_action_creator_t *komp, valu
 	if(  komp==&bt_couple  ) {
 		bt_couple.pressed = true;
 		bt_decouple.pressed = false;
+		coupled_line->get_schedule()->set_current_stop(couple_index);
 	}
 	else if(  komp==&bt_decouple  ) {
 		bt_couple.pressed = false;
 		bt_decouple.pressed = true;
+		coupled_line->get_schedule()->set_current_stop(decouple_index);
 	}
 	else if(  komp==&line_selector  ) {
 		uint32 selection = p.i;
 		if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(line_selector.get_element(selection))  ) {
-			stats.set_schedule(li->get_line()->get_schedule());
+			if(  coupled_line.is_bound()  &&  coupled_line!=li->get_line()  ) {
+				// different line is selected.
+				stats.highlight_schedule(coupled_line->get_schedule(), false);
+				couple_index = decouple_index = -1;
+				coupled_line->get_schedule()->set_current_stop(couple_index);
+			}
+			coupled_line = li->get_line();
+			if(  coupled_line.is_bound()  ) {
+				stats.set_schedule(coupled_line->get_schedule());
+			}
 		}
 	}
 	return true;
@@ -130,4 +144,50 @@ void coupling_schedule_gui_t::init_line_selector()
 	line_selector.set_selection(-1);
 	line_scrollitem_t::sort_mode = line_scrollitem_t::SORT_BY_NAME;
 	line_selector.sort( 0, NULL );
+}
+
+/**
+ * Mouse clicks are hereby reported to its GUI-Components
+ */
+bool coupling_schedule_gui_t::infowin_event(const event_t *ev)
+{
+	if( (ev)->ev_class == EVENT_CLICK  &&  !((ev)->ev_code==MOUSE_WHEELUP  ||  (ev)->ev_code==MOUSE_WHEELDOWN)  &&  !line_selector.getroffen(ev->cx, ev->cy-D_TITLEBAR_HEIGHT)  )  {
+
+		// close combo box; we must do it ourselves, since the box does not receive outside events ...
+		line_selector.close_box();
+
+		if(  ev->my >= scrolly.get_pos().y + D_TITLEBAR_HEIGHT ) {
+			// we are now in the multiline region ...
+			const uint16 idx = ( ev->my - scrolly.get_pos().y + scrolly.get_scroll_y() - D_TITLEBAR_HEIGHT )/schedule_gui_t::entry_height;
+
+			if(  idx >= 0 && idx < coupled_line->get_schedule()->get_count()  ) {
+				if(  IS_RIGHTCLICK(ev)  ||  ev->mx<16  ) {
+					// just center on it
+					welt->get_viewport()->change_world_position( coupled_line->get_schedule()->entries[idx].pos );
+				}
+				else if(  ev->mx<scrolly.get_size().w-11  ) {
+					// hold index of selected line.
+					// saving to the schedule is done when the window is closed.
+					if(  bt_couple.pressed  ) {
+						couple_index = idx;
+					} else if(  bt_decouple.pressed  ){
+						decouple_index = idx;
+					}
+					coupled_line->get_schedule()->set_current_stop(idx);
+				}
+			}
+		}
+	}
+	else if(  ev->ev_class == INFOWIN  &&  ev->ev_code == WIN_CLOSE  &&  schedule!=NULL  ) {
+		
+		if(  coupled_line.is_bound()  ) {
+			stats.highlight_schedule(coupled_line->get_schedule(), false);
+		}
+		// now apply the changes
+		if(  couple_index!=-1  &&  decouple_index!=-1  ) {
+			schedule->append_coupling(coupled_line, couple_index, decouple_index);
+		}
+	}
+
+	return gui_frame_t::infowin_event(ev);
 }

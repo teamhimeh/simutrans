@@ -501,3 +501,11 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 		buf.printf(" (%s)", entry.pos.get_str());
 	}
 }
+
+bool schedule_t::append_coupling(linehandle_t coupled_line, uint8 start_index, uint8 end_index) {
+	// for main line::
+	// set coupling and decoupling point.
+	
+	
+	return true;
+}

@@ -2,6 +2,7 @@
 #define schedule_entry_t_h
 
 #include "koord3d.h"
+#include "../linehandle_t.h"
 
 /**
  * A schedule entry.
@@ -37,6 +38,17 @@ public:
 	 * @author prissi
 	 */
 	sint8 waiting_time_shift;
+	
+	/**
+	 * entries related to coupling and decoupling
+	 * coupling_line: the line of another convoy which the convoy goes with
+	 * line_wait_for: the line which the convoy wait to couple with
+	 * decouple_line: target line to decouple from the convoy
+	 * @author THLeaderH
+	 */
+	linehandle_t couple_line;
+	linehandle_t line_wait_for;
+	linehandle_t decouple_line;
 };
 
 #endif

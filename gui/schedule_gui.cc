@@ -420,7 +420,7 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 						action_triggered( &bt_add, value_t() );
 					}
 					else if(  mode == coupling  ) {
-						create_win( new coupling_schedule_gui_t(schedule, player), w_info, (ptrdiff_t)this );
+						create_win( new coupling_schedule_gui_t(schedule, (sint16)line, player), w_info, (ptrdiff_t)this );
 					}
 					update_selection();
 				}

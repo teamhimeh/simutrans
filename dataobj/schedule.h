@@ -132,6 +132,11 @@ public:
 	 * Remove current_stop entry from the schedule.
 	 */
 	bool remove();
+	
+	/**
+	 * Appends coupling entries.
+	 */
+	bool append_coupling(linehandle_t coupled_line, uint8 start_index, uint8 end_index);
 
 	void rdwr(loadsave_t *file);
 
