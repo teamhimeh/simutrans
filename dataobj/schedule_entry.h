@@ -41,14 +41,14 @@ public:
 	
 	/**
 	 * entries related to coupling and decoupling
-	 * coupling_line: the line of another convoy which the convoy goes with
+	 * couple_line: the line of another convoy which the convoy goes with
 	 * line_wait_for: the line which the convoy wait to couple with
-	 * decouple_line: target line to decouple from the convoy
+	 * uncouple_line: target line to uncouple from the convoy
 	 * @author THLeaderH
 	 */
 	linehandle_t couple_line;
 	linehandle_t line_wait_for;
-	linehandle_t decouple_line;
+	linehandle_t uncouple_line;
 };
 
 #endif

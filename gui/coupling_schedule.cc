@@ -27,12 +27,13 @@
 
 #include "karte.h"
 
-coupling_schedule_gui_t::coupling_schedule_gui_t(schedule_t* schedule, sint16 schedule_index, player_t* player):
+coupling_schedule_gui_t::coupling_schedule_gui_t(schedule_t* schedule, linehandle_t line, player_t* player):
 gui_frame_t( translator::translate("Coupling Schedule"), player),
 stats(NULL),
 scrolly(&stats),
 player(player),
 schedule(schedule),
+line(line),
 couple_index(-1),
 uncouple_index(-1),
 lb_line("Line:") {
@@ -185,7 +186,7 @@ bool coupling_schedule_gui_t::infowin_event(const event_t *ev)
 		}
 		// now apply the changes
 		if(  couple_index!=-1  &&  uncouple_index!=-1  ) {
-			schedule->append_coupling(coupled_line, couple_index, uncouple_index);
+			schedule->append_coupling(line, coupled_line, couple_index, uncouple_index);
 		}
 	}
 

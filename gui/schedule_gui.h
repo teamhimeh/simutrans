@@ -114,13 +114,14 @@ protected:
 	schedule_t* old_schedule;
 	player_t *player;
 	convoihandle_t cnv;
+	linehandle_t line;
 
 	linehandle_t new_line, old_line;
 
 public:
 	static int entry_height;
 
-	schedule_gui_t(schedule_t* schedule, player_t* player, convoihandle_t cnv);
+	schedule_gui_t(schedule_t* schedule, player_t* player, convoihandle_t cnv, linehandle_t line);
 
 	virtual ~schedule_gui_t();
 

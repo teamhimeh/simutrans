@@ -177,7 +177,7 @@ schedule_gui_t::~schedule_gui_t()
 
 
 
-schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoihandle_t cnv_) :
+schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoihandle_t cnv_, linehandle_t line_) :
 	gui_frame_t( translator::translate("Fahrplan"), player_),
 	lb_line("Serves Line:"),
 	lb_wait("month wait time"),
@@ -187,7 +187,8 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 	scrolly(&stats),
 	old_schedule(schedule_),
 	player(player_),
-	cnv(cnv_)
+	cnv(cnv_),
+	line(line_)
 {
 	entry_height = max( D_BUTTON_HEIGHT, LINESPACE+1 );
 
@@ -420,7 +421,7 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 						action_triggered( &bt_add, value_t() );
 					}
 					else if(  mode == coupling  ) {
-						create_win( new coupling_schedule_gui_t(schedule, (sint16)line, player), w_info, (ptrdiff_t)this );
+						create_win( new coupling_schedule_gui_t(schedule, this->line, player), w_info, (ptrdiff_t)this );
 					}
 					update_selection();
 				}
@@ -733,6 +734,8 @@ void schedule_gui_t::rdwr(loadsave_t *file)
 		// handle
 		convoi_t::rdwr_convoihandle_t(file, cnv);
 	}
+	
+	// TODO: read and write line handle.
 
 	// schedules
 	if(  file->is_loading()  ) {
@@ -747,7 +750,7 @@ void schedule_gui_t::rdwr(loadsave_t *file)
 		if(  cnv.is_bound() ) {
 			// now we can open the window ...
 			scr_coord const& pos = win_get_pos(this);
-			schedule_gui_t *w = new schedule_gui_t( cnv->get_schedule(), cnv->get_owner(), cnv );
+			schedule_gui_t *w = new schedule_gui_t( cnv->get_schedule(), cnv->get_owner(), cnv, linehandle_t() );
 			create_win(pos.x, pos.y, w, w_info, (ptrdiff_t)cnv->get_schedule());
 			w->set_windowsize( size );
 			w->schedule->copy_from( schedule );

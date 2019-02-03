@@ -136,7 +136,7 @@ public:
 	/**
 	 * Appends coupling entries.
 	 */
-	bool append_coupling(linehandle_t coupled_line, uint8 start_index, uint8 end_index);
+	bool append_coupling(linehandle_t this_line, linehandle_t coupled_line, uint8 start_index, uint8 end_index);
 
 	void rdwr(loadsave_t *file);
 

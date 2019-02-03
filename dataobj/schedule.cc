@@ -502,10 +502,40 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 	}
 }
 
-bool schedule_t::append_coupling(linehandle_t coupled_line, uint8 start_index, uint8 end_index) {
-	// for main line::
+bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_line, uint8 start_index, uint8 end_index) {
+	// for coupled line::
 	// set coupling and uncoupling point.
+	schedule_t* cl_sch = coupled_line->get_schedule();
+	if(  start_index<0  ||  end_index<0  ||  start_index>=cl_sch->get_count()  ||  end_index>=cl_sch->get_count()  ) {
+		// start or end index is invalid.
+		return false;
+	}
+	// TODO: ensure the count of entries is less than 255!
 	
+	// coupling point
+	cl_sch->entries[start_index].line_wait_for = this_line;
+	// uncoupling point
+	cl_sch->entries[end_index].uncouple_line = this_line;
+	
+	// for this line::
+	// copy entries from the coupled line and set couple_line
+	sint16 idx = end_index;
+	while(  true  ) {
+		schedule_entry_t entry = cl_sch->entries[idx];
+		if(  idx!=end_index  ) {
+			// last coupling entry does not have couple_line. This is a marker of uncoupling.
+			entry.couple_line = coupled_line;
+		}
+		entries.insert_at(current_stop>=get_count()?current_stop:current_stop+1, entry);
+		if(  idx==start_index  ) {
+			break;
+		}
+		// decrement index
+		idx --;
+		if(  idx<0  ) {
+			idx += cl_sch->get_count();
+		}
+	}
 	
 	return true;
 }

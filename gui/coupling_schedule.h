@@ -33,8 +33,8 @@ private:
 	gui_scrollpane_t scrolly;
 	player_t* player;
 	schedule_t* schedule;
-	linehandle_t coupled_line;
-	sint16 schedule_index, couple_index, uncouple_index;
+	linehandle_t line, coupled_line;
+	sint16 couple_index, uncouple_index;
 	
 	gui_combobox_t line_selector;
 	gui_label_t lb_line;
@@ -43,7 +43,7 @@ private:
 	void init_line_selector();
 	
 public:
-	coupling_schedule_gui_t(schedule_t* schedule, sint16 schedule_index, player_t* player);
+	coupling_schedule_gui_t(schedule_t* schedule, linehandle_t line, player_t* player);
 	// this constructor is only used during loading
 	coupling_schedule_gui_t();
 	
