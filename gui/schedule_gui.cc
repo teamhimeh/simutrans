@@ -36,6 +36,7 @@
 #include "depot_frame.h"
 #include "schedule_gui.h"
 #include "line_item.h"
+#include "coupling_schedule.h"
 
 #include "components/gui_button.h"
 #include "karte.h"
@@ -300,6 +301,16 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 	bt_remove.add_listener(this);
 	bt_remove.pressed = false;
 	add_component(&bt_remove);
+	
+	if(  !cnv.is_bound()  ) {
+		// when this is called from line management window, convoy coupling can be configured.
+		ypos += D_BUTTON_HEIGHT+2;
+		bt_couple.init(button_t::roundbox_state, "Couple", scr_coord(BUTTON1_X, ypos ));
+		bt_couple.set_tooltip("Couple with another line");
+		bt_couple.add_listener(this);
+		bt_couple.pressed = false;
+		add_component(&bt_couple);
+	}
 
 	ypos += D_BUTTON_HEIGHT+2;
 
@@ -408,6 +419,9 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 						schedule->remove();
 						action_triggered( &bt_add, value_t() );
 					}
+					else if(  mode == coupling  ) {
+						create_win( new coupling_schedule_gui_t(schedule, player), w_info, (ptrdiff_t)this );
+					}
 					update_selection();
 				}
 			}
@@ -479,6 +493,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 		bt_add.pressed = true;
 		bt_insert.pressed = false;
 		bt_remove.pressed = false;
+		bt_couple.pressed = false;
 		update_tool( true );
 	}
 	else if(komp == &bt_insert) {
@@ -486,6 +501,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 		bt_add.pressed = false;
 		bt_insert.pressed = true;
 		bt_remove.pressed = false;
+		bt_couple.pressed = false;
 		update_tool( true );
 	}
 	else if(komp == &bt_remove) {
@@ -493,6 +509,15 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 		bt_add.pressed = false;
 		bt_insert.pressed = false;
 		bt_remove.pressed = true;
+		bt_couple.pressed = false;
+		update_tool( false );
+	}
+	else if(komp == &bt_couple) {
+		mode = coupling;
+		bt_add.pressed = false;
+		bt_insert.pressed = false;
+		bt_remove.pressed = false;
+		bt_couple.pressed = true;
 		update_tool( false );
 	}
 	else if(komp == &numimp_load) {

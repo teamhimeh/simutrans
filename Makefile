@@ -335,6 +335,7 @@ SOURCES += gui/convoi_filter_frame.cc
 SOURCES += gui/convoi_frame.cc
 SOURCES += gui/convoi_info_t.cc
 SOURCES += gui/convoy_item.cc
+SOURCES += gui/coupling_schedule.cc
 SOURCES += gui/curiosity_edit.cc
 SOURCES += gui/curiositylist_frame_t.cc
 SOURCES += gui/curiositylist_stats_t.cc

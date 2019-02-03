@@ -74,7 +74,7 @@ public:
 	static void gimme_short_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* player_, schedule_entry_t const& entry, int max_chars);
 
 private:
-	enum mode_t {adding, inserting, removing, undefined_mode};
+	enum mode_t {adding, inserting, removing, coupling, undefined_mode};
 
 	mode_t mode;
 
@@ -82,6 +82,7 @@ private:
 	button_t bt_promote_to_line;
 	gui_combobox_t line_selector;
 	gui_label_t lb_line;
+	button_t bt_couple; // to couple convoys
 
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
