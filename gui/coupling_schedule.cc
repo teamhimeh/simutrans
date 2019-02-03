@@ -34,7 +34,7 @@ scrolly(&stats),
 player(player),
 schedule(schedule),
 couple_index(-1),
-decouple_index(-1),
+uncouple_index(-1),
 lb_line("Line:") {
 	scr_coord_val ypos = 0;
 	
@@ -54,11 +54,11 @@ lb_line("Line:") {
 	bt_couple.add_listener(this);
 	bt_couple.pressed = true;
 	add_component(&bt_couple);
-	bt_decouple.init(button_t::roundbox_state, "Decouple", scr_coord(BUTTON2_X, ypos ));
-	bt_decouple.set_tooltip("Couple at this point");
-	bt_decouple.add_listener(this);
-	bt_decouple.pressed = false;
-	add_component(&bt_decouple);
+	bt_uncouple.init(button_t::roundbox_state, "Decouple", scr_coord(BUTTON2_X, ypos ));
+	bt_uncouple.set_tooltip("Couple at this point");
+	bt_uncouple.add_listener(this);
+	bt_uncouple.pressed = false;
+	add_component(&bt_uncouple);
 	
 	ypos += D_BUTTON_HEIGHT+2;
 	
@@ -78,7 +78,7 @@ gui_frame_t( translator::translate("Coupling Schedule"), NULL),
 stats(NULL),
 scrolly(&stats),
 couple_index(-1),
-decouple_index(-1),
+uncouple_index(-1),
 lb_line("Line:") {
 	
 }
@@ -91,13 +91,13 @@ bool coupling_schedule_gui_t::action_triggered( gui_action_creator_t *komp, valu
 	
 	if(  komp==&bt_couple  ) {
 		bt_couple.pressed = true;
-		bt_decouple.pressed = false;
+		bt_uncouple.pressed = false;
 		coupled_line->get_schedule()->set_current_stop(couple_index);
 	}
-	else if(  komp==&bt_decouple  ) {
+	else if(  komp==&bt_uncouple  ) {
 		bt_couple.pressed = false;
-		bt_decouple.pressed = true;
-		coupled_line->get_schedule()->set_current_stop(decouple_index);
+		bt_uncouple.pressed = true;
+		coupled_line->get_schedule()->set_current_stop(uncouple_index);
 	}
 	else if(  komp==&line_selector  ) {
 		uint32 selection = p.i;
@@ -105,7 +105,7 @@ bool coupling_schedule_gui_t::action_triggered( gui_action_creator_t *komp, valu
 			if(  coupled_line.is_bound()  &&  coupled_line!=li->get_line()  ) {
 				// different line is selected.
 				stats.highlight_schedule(coupled_line->get_schedule(), false);
-				couple_index = decouple_index = -1;
+				couple_index = uncouple_index = -1;
 				coupled_line->get_schedule()->set_current_stop(couple_index);
 			}
 			coupled_line = li->get_line();
@@ -170,8 +170,8 @@ bool coupling_schedule_gui_t::infowin_event(const event_t *ev)
 					// saving to the schedule is done when the window is closed.
 					if(  bt_couple.pressed  ) {
 						couple_index = idx;
-					} else if(  bt_decouple.pressed  ){
-						decouple_index = idx;
+					} else if(  bt_uncouple.pressed  ){
+						uncouple_index = idx;
 					}
 					coupled_line->get_schedule()->set_current_stop(idx);
 				}
@@ -184,8 +184,8 @@ bool coupling_schedule_gui_t::infowin_event(const event_t *ev)
 			stats.highlight_schedule(coupled_line->get_schedule(), false);
 		}
 		// now apply the changes
-		if(  couple_index!=-1  &&  decouple_index!=-1  ) {
-			schedule->append_coupling(coupled_line, couple_index, decouple_index);
+		if(  couple_index!=-1  &&  uncouple_index!=-1  ) {
+			schedule->append_coupling(coupled_line, couple_index, uncouple_index);
 		}
 	}
 

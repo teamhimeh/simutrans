@@ -25,7 +25,7 @@ class player_t;
 class cbuffer_t;
 class loadsave_t;
 
-// gui window for selecting coupling and decoupling point.
+// gui window for selecting coupling and uncoupling point.
 class coupling_schedule_gui_t :	public gui_frame_t, public action_listener_t {
 	
 private:
@@ -34,11 +34,11 @@ private:
 	player_t* player;
 	schedule_t* schedule;
 	linehandle_t coupled_line;
-	sint16 schedule_index, couple_index, decouple_index;
+	sint16 schedule_index, couple_index, uncouple_index;
 	
 	gui_combobox_t line_selector;
 	gui_label_t lb_line;
-	button_t bt_couple, bt_decouple;
+	button_t bt_couple, bt_uncouple;
 	
 	void init_line_selector();
 	
