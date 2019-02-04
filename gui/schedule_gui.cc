@@ -124,7 +124,25 @@ void schedule_gui_stats_t::draw(scr_coord offset)
 			buf.clear();
 			buf.printf("%i) ", ++i);
 			schedule_t::gimme_stop_name(buf, welt, player, e, -1);
-			PIXVAL const c = sel == 0 ? SYSCOL_LIST_TEXT_SELECTED_FOCUS : SYSCOL_TEXT;
+			// determine text color
+			// TODO: set color correctly!
+			PIXVAL c;
+			if(  sel==0  ) {
+				// selected
+				c = SYSCOL_LIST_TEXT_SELECTED_FOCUS;
+			} else if(  e.line_wait_for.is_bound()  ) {
+				// point to wait for the other line
+				c = COL_MAGENTA;
+			} else if(  e.uncouple_line.is_bound()  ) {
+				// uncoupling point
+				c = COL_GREEN;
+			} else if(  e.couple_line.is_bound()  ) {
+				// coupled entry
+				c = SYSCOL_TEXT_UNUSED;
+			} else {
+				// normal entry
+				c = SYSCOL_TEXT;
+			}
 			int h = (schedule_gui_t::entry_height-LINESPACE)/2;
 			sint16 const w = display_proportional_clip_rgb(offset.x + 4 + D_POS_BUTTON_WIDTH, offset.y+h, buf, ALIGN_LEFT, c, true);
 			if (width < w) {
@@ -422,6 +440,7 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 					}
 					else if(  mode == coupling  ) {
 						create_win( new coupling_schedule_gui_t(schedule, this->line, player), w_info, (ptrdiff_t)this );
+						action_triggered( &bt_add, value_t() );
 					}
 					update_selection();
 				}

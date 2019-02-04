@@ -401,7 +401,7 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
 	buf.printf("%u|%d|", current_stop, (int)get_type());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
-		buf.printf("%s,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift);
+		buf.printf("%s,%i,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.couple_line.get_id(), i.line_wait_for.get_id(), i.uncouple_line.get_id());
 	}
 }
 
@@ -444,24 +444,28 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	p++;
 	// now scan the entries
 	while(  *p>0  ) {
-		sint16 values[5];
-		for(  sint8 i=0;  i<5;  i++  ) {
+		sint16 values[8];
+		for(  sint8 i=0;  i<8;  i++  ) {
 			values[i] = atoi( p );
 			while(  *p  &&  (*p!=','  &&  *p!='|')  ) {
 				p++;
 			}
-			if(  i<4  &&  *p!=','  ) {
+			if(  i<7  &&  *p!=','  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete string!" );
 				return false;
 			}
-			if(  i==4  &&  *p!='|'  ) {
+			if(  i==7  &&  *p!='|'  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
 				return false;
 			}
 			p++;
 		}
 		// ok, now we have a complete entry
-		entries.append(schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4]));
+		schedule_entry_t entry = schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4]);
+		entry.couple_line.set_id(values[5]);
+		entry.line_wait_for.set_id(values[6]);
+		entry.uncouple_line.set_id(values[7]);
+		entries.append(entry);
 	}
 	return true;
 }
@@ -503,19 +507,12 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 }
 
 bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_line, uint8 start_index, uint8 end_index) {
-	// for coupled line::
-	// set coupling and uncoupling point.
 	schedule_t* cl_sch = coupled_line->get_schedule();
 	if(  start_index<0  ||  end_index<0  ||  start_index>=cl_sch->get_count()  ||  end_index>=cl_sch->get_count()  ) {
 		// start or end index is invalid.
 		return false;
 	}
 	// TODO: ensure the count of entries is less than 255!
-	
-	// coupling point
-	cl_sch->entries[start_index].line_wait_for = this_line;
-	// uncoupling point
-	cl_sch->entries[end_index].uncouple_line = this_line;
 	
 	// for this line::
 	// copy entries from the coupled line and set couple_line
@@ -536,6 +533,13 @@ bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_li
 			idx += cl_sch->get_count();
 		}
 	}
+	
+	// for coupled line::
+	// set coupling and uncoupling point.
+	// coupling point
+	cl_sch->entries[start_index].line_wait_for = this_line;
+	// uncoupling point
+	cl_sch->entries[end_index].uncouple_line = this_line;
 	
 	return true;
 }

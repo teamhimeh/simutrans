@@ -16,7 +16,10 @@ public:
 	schedule_entry_t(koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift) :
 		pos(pos),
 		minimum_loading(minimum_loading),
-		waiting_time_shift(waiting_time_shift)
+		waiting_time_shift(waiting_time_shift),
+		couple_line(linehandle_t()),
+		line_wait_for(linehandle_t()),
+		uncouple_line(linehandle_t())
 	{}
 
 	/**
