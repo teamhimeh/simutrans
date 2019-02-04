@@ -3130,6 +3130,55 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 }
 
 
+bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_point, uint16 &next_crossing) {
+	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().couple_line; 
+	// first, does the current schedule entry require coupling?
+	if(  !coupling_line.is_bound()  ) {
+		return false;
+	}
+	// start_index can be invalid.
+	if(start_index>=route->get_count()) {
+		return false;
+	}
+	
+	coupling_point = next_crossing = INVALID_INDEX;
+	// now check the tiles of the section.
+	for (  uint16 i=start_index;  i<route->get_count();  i++  ) {
+		// we have to investigate vehicles instead of reservation because convoys on the truck can be coupled with another and the reservation is hold by the another.
+		grund_t *gr = welt->lookup(route->at(i));
+		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+			if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
+				// designated line, waiting for coupling -> this is coupling point.
+				if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_line()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+					coupling_point = i;
+					//reserve tiles
+					for(  uint16 h=start_index;  h<i;  h++  ) {
+						grund_t* grn = welt->lookup(route->at(i));
+						schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
+						if(  schn  ) {
+							schn->reserve( cnv->self, ribi_type(route->at(max(1u,h)-1u), route->at(min(route->get_count()-1u,h+1u))) );
+						}
+					}
+					return true;
+				} else {
+					// other vehicles exist.
+					return false;
+				}
+			}
+		}
+		// check for crossings and signals
+		schiene_t * sch = gr ? (schiene_t *)gr->get_weg(get_waytype()) : NULL;
+		if(  !sch  ||  sch->has_signal()  ||  !sch->can_reserve(cnv->self)  ) {
+			// end of truck or section. or unreachable for some reasons. anyway, convoy for coupling is not found.
+			return false;
+		} else if(  sch->is_crossing()  &&  next_crossing!=INVALID_INDEX  ) {
+			next_crossing = i;
+		}
+	}
+	return false;
+}
+
+
 /* beware: we must un-reserve rail blocks... */
 void rail_vehicle_t::leave_tile()
 {

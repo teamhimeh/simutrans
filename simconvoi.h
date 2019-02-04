@@ -147,6 +147,12 @@ private:
 	* @author Hj. Malthaner
 	*/
 	player_t *owner_p;
+	
+	/**
+	* a convoy that goes together with this convoy.
+	* @author THLeaderH
+	*/
+	convoi_t* coupling_convoy;
 
 	/**
 	* Current map
