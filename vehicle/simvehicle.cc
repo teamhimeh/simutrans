@@ -2902,19 +2902,25 @@ bool rail_vehicle_t::is_signal_clear(uint16 next_block, sint32 &restart_speed)
 bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, uint8)
 {
 	assert(leading);
-	uint16 next_signal, next_crossing;
+	uint16 next_signal, next_crossing, next_coupling;
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
 		// reserve first block at the start until the next signal
 		grund_t *gr_current = welt->lookup( get_pos() );
 		weg_t *w = gr_current ? gr_current->get_weg(get_waytype()) : NULL;
 		if(  w==NULL  ||  !(w->has_signal()  ||  w->is_crossing())  ) {
 			// free track => reserve up to next signal
-			if(  !block_reserver(cnv->get_route(), max(route_index,1)-1, next_signal, next_crossing, 0, true, false )  ) {
+			bool block_reservation = block_reserver(cnv->get_route(), max(route_index,1)-1, next_signal, next_crossing, 0, true, false );
+			if(  block_reservation  ) {
+				cnv->set_next_stop_index( next_crossing<next_signal ? next_crossing : next_signal );
+				return true;
+			} else if(  can_couple(cnv->get_route(), route_index, next_coupling)  &&  next_coupling!=INVALID_INDEX  ) {
+				cnv->set_next_coupling_index(next_coupling);
+				cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
+				return cnv->get_next_stop_index()>route_index;
+			} else {
 				restart_speed = 0;
 				return false;
 			}
-			cnv->set_next_stop_index( next_crossing<next_signal ? next_crossing : next_signal );
-			return true;
 		}
 		cnv->set_next_stop_index( max(route_index,1)-1 );
 		if(  steps<steps_next  ) {
@@ -2956,12 +2962,16 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		bool ok = block_reserver( cnv->get_route(), route_index, next_signal, next_crossing, 0, true, false );
 		if (ok) {
 			cnv->set_next_stop_index( min( next_crossing, next_signal ) );
+		} else if(  can_couple(cnv->get_route(), route_index, next_coupling)  &&  next_coupling!=INVALID_INDEX  ) {
+			ok = true;
+			cnv->set_next_coupling_index(next_coupling);
+			cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
 		}
 		return ok;
 		// if reservation was not possible the train will wait on the track until block is free
 	}
 
-	if(  next_block <= route_index+3  ) {
+	if(  next_block <= route_index+3  &&  cnv->get_next_coupling_index()==INVALID_INDEX  ) {
 		koord3d block_pos=cnv->get_route()->at(next_block);
 		grund_t *gr_next_block = welt->lookup(block_pos);
 		const schiene_t *sch1 = gr_next_block ? (const schiene_t *)gr_next_block->get_weg(get_waytype()) : NULL;
@@ -2999,6 +3009,13 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 		}
 
+		// next check for coupling
+		if(  can_couple(cnv->get_route(), next_block, next_coupling)  &&  next_coupling!=INVALID_INDEX  ) {
+			cnv->set_next_coupling_index(next_coupling);
+			cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
+			return cnv->get_next_stop_index()>route_index;
+		}else {
+		}
 		// next check for signal
 		if(  sch1->has_signal()  ) {
 			if(  !is_signal_clear( next_block, restart_speed )  ) {
@@ -3130,7 +3147,7 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 }
 
 
-bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_point, uint16 &next_crossing) {
+bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index) {
 	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().couple_line; 
 	// first, does the current schedule entry require coupling?
 	if(  !coupling_line.is_bound()  ) {
@@ -3141,7 +3158,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 		return false;
 	}
 	
-	coupling_point = next_crossing = INVALID_INDEX;
+	coupling_index = INVALID_INDEX;
 	// now check the tiles of the section.
 	for (  uint16 i=start_index;  i<route->get_count();  i++  ) {
 		// we have to investigate vehicles instead of reservation because convoys on the truck can be coupled with another and the reservation is hold by the another.
@@ -3149,11 +3166,11 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 			if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 				// designated line, waiting for coupling -> this is coupling point.
-				if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_line()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
-					coupling_point = i;
+				if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+					coupling_index = i;
 					//reserve tiles
-					for(  uint16 h=start_index;  h<i;  h++  ) {
-						grund_t* grn = welt->lookup(route->at(i));
+					for(  uint16 h=start_index+1;  h<i;  h++  ) {
+						grund_t* grn = welt->lookup(route->at(h));
 						schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
 						if(  schn  ) {
 							schn->reserve( cnv->self, ribi_type(route->at(max(1u,h)-1u), route->at(min(route->get_count()-1u,h+1u))) );
@@ -3166,13 +3183,11 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				}
 			}
 		}
-		// check for crossings and signals
+		// check for signals
 		schiene_t * sch = gr ? (schiene_t *)gr->get_weg(get_waytype()) : NULL;
 		if(  !sch  ||  sch->has_signal()  ||  !sch->can_reserve(cnv->self)  ) {
 			// end of truck or section. or unreachable for some reasons. anyway, convoy for coupling is not found.
 			return false;
-		} else if(  sch->is_crossing()  &&  next_crossing!=INVALID_INDEX  ) {
-			next_crossing = i;
 		}
 	}
 	return false;

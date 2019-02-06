@@ -257,6 +257,13 @@ private:
 	 * @author prissi
 	 */
 	uint16 next_reservation_index;
+	
+	/**
+	 * this give the index of the coupling point.
+	 * Convois do the coupling process when reaching this index.
+	 * @author THLeaderH
+	 */
+	uint16 next_coupling_index;
 
 	/**
 	 * The convoi is not processed every sync step for various actions
@@ -860,6 +867,14 @@ public:
 	 */
 	uint16 get_next_reservation_index() const {return next_reservation_index;}
 	void set_next_reservation_index(uint16 n);
+	
+	/**
+	 * this give the index of the coupling point.
+	 * Convois do the coupling process when reaching this index.
+	 * @author THLeaderH
+	 */
+	uint16 get_next_coupling_index() const {return next_coupling_index;}
+	void set_next_coupling_index(uint16 n) { next_coupling_index = n; }
 
 	/* the current state of the convoi */
 	PIXVAL get_status_color() const;

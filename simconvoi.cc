@@ -156,6 +156,7 @@ void convoi_t::init(player_t *player)
 	sp_soll = 0;
 
 	next_stop_index = 65535;
+	next_coupling_index = INVALID_INDEX;
 
 	line_update_pending = linehandle_t();
 
@@ -2971,9 +2972,12 @@ station_tile_search_ready: ;
 		book(gewinn, CONVOI_PROFIT);
 		book(gewinn, CONVOI_REVENUE);
 	}
+	
+	bool coupling_ok = false; // temporary...
+	const bool coupling_cond = !schedule->get_current_entry().line_wait_for.is_bound()  ||  coupling_ok;
 
 	// loading is finished => maybe drive on
-	if(  loading_level >= loading_limit  ||  no_load
+	if(  (loading_level >= loading_limit  &&  coupling_cond)  ||  no_load
 		||  (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - schedule->get_current_entry().waiting_time_shift)) ) ) {
 
 		if(  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {

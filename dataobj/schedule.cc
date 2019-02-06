@@ -7,6 +7,7 @@
 #include "../simtypes.h"
 #include "../simworld.h"
 #include "../simhalt.h"
+#include "../simtool.h"
 #include "../display/simimg.h"
 
 #include "../utils/cbuffer_t.h"
@@ -540,6 +541,15 @@ bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_li
 	cl_sch->entries[start_index].line_wait_for = this_line;
 	// uncoupling point
 	cl_sch->entries[end_index].uncouple_line = this_line;
+	// we have to update the schedule of coupled line via tool!
+	tool_t *tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
+	cbuffer_t buf;
+	buf.printf( "g,%i,", coupled_line.get_id() );
+	cl_sch->sprintf_schedule( buf );
+	tool->set_default_param(buf);
+	world()->set_tool( tool, coupled_line->get_owner() );
+	// since init always returns false, it is safe to delete immediately
+	delete tool;
 	
 	return true;
 }
