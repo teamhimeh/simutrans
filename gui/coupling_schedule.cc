@@ -68,8 +68,8 @@ lb_line("Line:") {
 	scrolly.set_scroll_amount_y(LINESPACE+1);
 	add_component(&scrolly);
 	
-	set_windowsize( scr_size(BUTTON4_X, ypos+D_BUTTON_HEIGHT+(schedule->get_count()>0 ? min(15,schedule->get_count()) : 15)*(LINESPACE+1)+D_TITLEBAR_HEIGHT) );
 	set_min_windowsize( scr_size(BUTTON4_X, ypos+D_BUTTON_HEIGHT+3*(LINESPACE+1)+D_TITLEBAR_HEIGHT) );
+	set_windowsize( scr_size(BUTTON4_X, ypos+D_BUTTON_HEIGHT+15*(LINESPACE+1)+D_TITLEBAR_HEIGHT) );
 	set_resizemode(diagonal_resize);
 	resize( scr_coord(0,0) );
 }
