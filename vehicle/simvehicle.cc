@@ -1103,14 +1103,15 @@ void vehicle_t::hop(grund_t* gr)
 	leave_tile();
 
 	koord3d pos_prev = get_pos();
+	const uint16 coupling_index = cnv->get_next_coupling_index();
 	set_pos( pos_next );  // next field
-	if(route_index<cnv->get_route()->get_count()-1) {
+	if(  route_index>=cnv->get_route()->get_count()-1  ||  coupling_index==route_index  ) {
 		route_index ++;
-		pos_next = cnv->get_route()->at(route_index);
+		check_for_finish = true;
 	}
 	else {
 		route_index ++;
-		check_for_finish = true;
+		pos_next = cnv->get_route()->at(route_index);
 	}
 	previous_direction = direction;
 
@@ -1163,7 +1164,11 @@ void vehicle_t::hop(grund_t* gr)
 	}
 
 	if(  leading  ) {
-		if(  check_for_finish  &&  (direction==ribi_t::north  ||  direction==ribi_t::west)  ) {
+		if(  cnv->get_next_coupling_index()==route_index-1  ) {
+			// since route_index is already incremented, this is coupling point.
+			steps_next = cnv->get_next_coupling_steps();
+		}
+		else if(  check_for_finish  &&  (direction==ribi_t::north  ||  direction==ribi_t::west)  ) {
 			steps_next = (steps_next/2)+1;
 		}
 		cnv->add_running_cost( weg );
@@ -2903,6 +2908,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 {
 	assert(leading);
 	uint16 next_signal, next_crossing, next_coupling;
+	uint8 next_c_steps;
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
 		// reserve first block at the start until the next signal
 		grund_t *gr_current = welt->lookup( get_pos() );
@@ -2913,8 +2919,8 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			if(  block_reservation  ) {
 				cnv->set_next_stop_index( next_crossing<next_signal ? next_crossing : next_signal );
 				return true;
-			} else if(  can_couple(cnv->get_route(), route_index, next_coupling)  &&  next_coupling!=INVALID_INDEX  ) {
-				cnv->set_next_coupling_index(next_coupling);
+			} else if(  can_couple(cnv->get_route(), route_index, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
+				cnv->set_next_coupling(next_coupling, next_c_steps);
 				cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
 				return cnv->get_next_stop_index()>route_index;
 			} else {
@@ -2962,9 +2968,9 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		bool ok = block_reserver( cnv->get_route(), route_index, next_signal, next_crossing, 0, true, false );
 		if (ok) {
 			cnv->set_next_stop_index( min( next_crossing, next_signal ) );
-		} else if(  can_couple(cnv->get_route(), route_index, next_coupling)  &&  next_coupling!=INVALID_INDEX  ) {
+		} else if(  can_couple(cnv->get_route(), route_index, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
 			ok = true;
-			cnv->set_next_coupling_index(next_coupling);
+			cnv->set_next_coupling(next_coupling, next_c_steps);
 			cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
 		}
 		return ok;
@@ -3010,11 +3016,10 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		}
 
 		// next check for coupling
-		if(  can_couple(cnv->get_route(), next_block, next_coupling)  &&  next_coupling!=INVALID_INDEX  ) {
-			cnv->set_next_coupling_index(next_coupling);
+		if(  can_couple(cnv->get_route(), next_block, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
+			cnv->set_next_coupling(next_coupling, next_c_steps);
 			cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
 			return cnv->get_next_stop_index()>route_index;
-		}else {
 		}
 		// next check for signal
 		if(  sch1->has_signal()  ) {
@@ -3147,7 +3152,7 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 }
 
 
-bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index) {
+bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps) {
 	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().couple_line; 
 	// first, does the current schedule entry require coupling?
 	if(  !coupling_line.is_bound()  ) {
@@ -3163,11 +3168,18 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 	for (  uint16 i=start_index;  i<route->get_count();  i++  ) {
 		// we have to investigate vehicles instead of reservation because convoys on the truck can be coupled with another and the reservation is hold by the another.
 		grund_t *gr = welt->lookup(route->at(i));
+		if(  !gr  ) {
+			// ground does not exist!?
+			return false;
+		}
 		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 			if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 				// designated line, waiting for coupling -> this is coupling point.
 				if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
-					coupling_index = i;
+					if(  v!=v->get_convoi()->back()  ) {
+						// we have to couple with the last car of the convoy.
+						continue;
+					}
 					//reserve tiles
 					for(  uint16 h=start_index+1;  h<i;  h++  ) {
 						grund_t* grn = welt->lookup(route->at(h));
@@ -3176,6 +3188,12 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 							schn->reserve( cnv->self, ribi_type(route->at(max(1u,h)-1u), route->at(min(route->get_count()-1u,h+1u))) );
 						}
 					}
+					// set coupling index and step
+					// c_step can be negative, so it must be handled as sint16.
+					// TODO: in case that the vehicle length is over 16.
+					sint16 c_step = v->get_steps() - VEHICLE_STEPS_PER_CARUNIT*v->get_desc()->get_length();
+					coupling_index = c_step<0 ? max(i-1,0) : i;
+					coupling_steps = c_step<0 ? c_step+VEHICLE_STEPS_PER_TILE : c_step;
 					return true;
 				} else {
 					// other vehicles exist.

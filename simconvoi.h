@@ -74,6 +74,7 @@ public:
 		CAN_START_TWO_MONTHS,
 		LEAVING_DEPOT,
 		ENTERING_DEPOT,
+		COUPLED, 
 		MAX_STATES
 	};
 
@@ -152,7 +153,7 @@ private:
 	* a convoy that goes together with this convoy.
 	* @author THLeaderH
 	*/
-	convoi_t* coupling_convoy;
+	convoihandle_t coupling_convoi;
 
 	/**
 	* Current map
@@ -259,11 +260,12 @@ private:
 	uint16 next_reservation_index;
 	
 	/**
-	 * this give the index of the coupling point.
+	 * these give the index and steps of the coupling point.
 	 * Convois do the coupling process when reaching this index.
 	 * @author THLeaderH
 	 */
 	uint16 next_coupling_index;
+	uint8 next_coupling_steps;
 
 	/**
 	 * The convoi is not processed every sync step for various actions
@@ -869,12 +871,15 @@ public:
 	void set_next_reservation_index(uint16 n);
 	
 	/**
-	 * this give the index of the coupling point.
+	 * the index and steps of the coupling point.
 	 * Convois do the coupling process when reaching this index.
 	 * @author THLeaderH
 	 */
 	uint16 get_next_coupling_index() const {return next_coupling_index;}
-	void set_next_coupling_index(uint16 n) { next_coupling_index = n; }
+	uint8 get_next_coupling_steps() const {return next_coupling_steps;}
+	void set_next_coupling(uint16 n, uint8 m) { next_coupling_index = n; next_coupling_steps = m; }
+	
+	convoihandle_t get_coupling_convoi() const {return coupling_convoi;}
 
 	/* the current state of the convoi */
 	PIXVAL get_status_color() const;
@@ -905,6 +910,9 @@ public:
 
 	// Overtaking for convois
 	virtual bool can_overtake(overtaker_t *other_overtaker, sint32 other_speed, sint16 steps_other);
+	
+	// Couple with given convoy
+	bool couple_convoi(convoihandle_t coupled);
 };
 
 #endif

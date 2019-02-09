@@ -157,6 +157,7 @@ void convoi_t::init(player_t *player)
 
 	next_stop_index = 65535;
 	next_coupling_index = INVALID_INDEX;
+	next_coupling_steps = 0;
 
 	line_update_pending = linehandle_t();
 
@@ -974,6 +975,9 @@ sync_result convoi_t::sync_step(uint32 delta_t)
 			}
 			break;	// DRIVING
 
+		case COUPLED:
+			break;
+			
 		case LOADING:
 			// Hajo: loading is an async task, see laden()
 			break;
@@ -1585,8 +1589,40 @@ void convoi_t::ziel_erreicht()
 		betrete_depot(dp);
 	}
 	else {
-		// no depot reached, check for stop!
 		halthandle_t halt = haltestelle_t::get_halt(schedule->get_current_entry().pos,owner_p);
+		// check for coupling
+		if(  next_coupling_index!=INVALID_INDEX  &&  next_coupling_index<=v->get_route_index()  ) {
+			const uint16 route_index = v->get_route_index();
+			const grund_t* grc[2];
+			grc[0] = gr;
+			grc[1] = route_index+1>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index+1));
+			// find convoy to couple with
+			// convoy can be on the next tile of coupling_index.
+			for(  uint8 i=0;  i<2;  i++  ) {
+				const grund_t* g = grc[i];
+				if(  !g  ) {
+					continue;
+				}
+				for(  uint8 pos=1;  pos<(volatile uint8)g->get_top();  pos++  ) {
+					if(  vehicle_t* const v = dynamic_cast<vehicle_t*>(g->obj_bei(pos))  ) {
+						// designated line, waiting for coupling -> this is coupling point.
+						if(  v->get_convoi()->get_line()==get_schedule()->get_current_entry().couple_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+							akt_speed = 0;
+							if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
+								halt->book(1, HALT_CONVOIS_ARRIVED);
+							}
+							v->get_convoi()->couple_convoi(self);
+							wait_lock = 0;
+							return;
+						}
+					}
+				}
+			}
+			// convoy to couple with is not found!
+			set_next_coupling(INVALID_INDEX, 0);
+		}
+		
+		// no depot reached, no coupling, check for stop!
 		if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 			// seems to be a stop, so book the money for the trip
 			akt_speed = 0;
@@ -2777,6 +2813,12 @@ void convoi_t::laden()
 		if(  owner == get_owner()  ||  owner == welt->get_public_player()  ) {
 			// loading/unloading ...
 			halt->request_loading( self );
+			// load/unload recursively
+			convoihandle_t c_cnv = coupling_convoi;
+			while(  c_cnv.is_bound()  ) {
+				halt->request_loading(c_cnv);
+				c_cnv = c_cnv->get_coupling_convoi();
+			}
 		}
 	}
 }
@@ -2973,11 +3015,11 @@ station_tile_search_ready: ;
 		book(gewinn, CONVOI_REVENUE);
 	}
 	
-	bool coupling_ok = false; // temporary...
+	bool coupling_ok = coupling_convoi.is_bound(); // temporary...
 	const bool coupling_cond = !schedule->get_current_entry().line_wait_for.is_bound()  ||  coupling_ok;
 
 	// loading is finished => maybe drive on
-	if(  (loading_level >= loading_limit  &&  coupling_cond)  ||  no_load
+	if(  state==COUPLED  ||  (loading_level >= loading_limit  &&  coupling_cond)  ||  no_load
 		||  (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - schedule->get_current_entry().waiting_time_shift)) ) ) {
 
 		if(  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
@@ -2994,9 +3036,18 @@ station_tile_search_ready: ;
 		}
 
 		// Advance schedule
-		schedule->advance();
-		state = ROUTING_1;
-		loading_limit = 0;
+		if(  state!=COUPLED  ) {
+			schedule->advance();
+			state = ROUTING_1;
+			loading_limit = 0;
+			// Advance schedule of coupling convoy recursively.
+			convoihandle_t c_cnv = coupling_convoi;
+			while(  c_cnv.is_bound()  ) {
+				coupling_convoi->get_schedule()->advance();
+				c_cnv = c_cnv->get_coupling_convoi();
+			}
+		}
+		
 	}
 
 	INT_CHECK( "convoi_t::hat_gehalten" );
@@ -3860,4 +3911,12 @@ const char* convoi_t::send_to_depot(bool local)
 	delete shortest_route;
 
 	return txt;
+}
+
+bool convoi_t::couple_convoi(convoihandle_t coupled) {
+	coupled->set_state(COUPLED);
+	coupling_convoi = coupled;
+	coupling_convoi->front()->set_leading(false);
+	back()->set_last(false);
+	return true;
 }

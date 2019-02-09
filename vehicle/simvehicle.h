@@ -574,7 +574,7 @@ public:
 	// returns true on successful reservation
 	bool block_reserver(const route_t *route, uint16 start_index, uint16 &next_signal, uint16 &next_crossing, int signal_count, bool reserve, bool force_unreserve ) const;
 	
-	bool can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index);
+	bool can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps);
 
 	void leave_tile();
 
