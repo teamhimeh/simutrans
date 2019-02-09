@@ -2639,6 +2639,13 @@ void convoi_t::rdwr(loadsave_t *file)
 		file->rdwr_short( next_stop_index );
 		file->rdwr_short( next_reservation_index );
 	}
+	
+	// coupling related things
+	if(  file->get_version()>=120008  ) {
+		rdwr_convoihandle_t( file, coupling_convoi );
+		file->rdwr_short( next_coupling_index );
+		file->rdwr_byte( next_coupling_steps );
+	}
 
 	if(  file->is_loading()  ) {
 		reserve_route();

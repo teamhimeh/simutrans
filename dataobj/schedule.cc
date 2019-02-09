@@ -16,6 +16,7 @@
 #include "../boden/grund.h"
 #include "../obj/gebaeude.h"
 #include "../player/simplay.h"
+#include "../simline.h"
 #include "../simdepot.h"
 #include "loadsave.h"
 #include "translator.h"
@@ -244,6 +245,11 @@ void schedule_t::rdwr(loadsave_t *file)
 			file->rdwr_byte(entries[i].minimum_loading);
 			if(file->get_version()>=99018) {
 				file->rdwr_byte(entries[i].waiting_time_shift);
+			}
+			if(file->get_version()>=120008) {
+				simline_t::rdwr_linehandle_t(file, entries[i].couple_line);
+				simline_t::rdwr_linehandle_t(file, entries[i].line_wait_for);
+				simline_t::rdwr_linehandle_t(file, entries[i].uncouple_line);
 			}
 		}
 	}

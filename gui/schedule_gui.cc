@@ -753,8 +753,6 @@ void schedule_gui_t::rdwr(loadsave_t *file)
 		// handle
 		convoi_t::rdwr_convoihandle_t(file, cnv);
 	}
-	
-	// TODO: read and write line handle.
 
 	// schedules
 	if(  file->is_loading()  ) {
