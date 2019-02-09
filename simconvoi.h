@@ -913,6 +913,8 @@ public:
 	
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
+	
+	void set_arrived_time(uint32 t) { arrived_time = t; }
 };
 
 #endif

@@ -1621,6 +1621,7 @@ void convoi_t::ziel_erreicht()
 							}
 							v->get_convoi()->couple_convoi(self);
 							wait_lock = 0;
+							set_next_coupling(INVALID_INDEX, 0);
 							return;
 						}
 					}
@@ -2125,11 +2126,29 @@ void convoi_t::vorfahren()
 		state = CAN_START;
 	}
 	else {
+		// copy route to all coupling convoys in advance.
+		convoihandle_t inspecting = coupling_convoi;
+		while(  inspecting.is_bound()  ) {
+			inspecting->access_route()->clear();
+			inspecting->access_route()->append(get_route());
+			inspecting = inspecting->get_coupling_convoi();
+		}
+		
 		// still leaving depot (steps_driven!=0) or going in other direction or misalignment?
 		if(  steps_driven>0  ||  !can_go_alte_richtung()  ) {
 
 			// start route from the beginning at index 0, place everything on start
-			uint32 train_length = move_to(0);
+			uint32 train_length = 0;
+			inspecting = self;
+			while(  inspecting.is_bound()  ) {
+				train_length += inspecting->move_to(0);
+				if(  inspecting->get_coupling_convoi().is_bound()  ) {
+					inspecting = inspecting->get_coupling_convoi();
+				} else {
+					break;
+				}
+			}
+			// now inspecting represents the last convoy of all coupled convoys.
 
 			// move one train length to the start position ...
 			// in north/west direction, we leave the vehicle away to start as much back as possible
@@ -2138,11 +2157,11 @@ void convoi_t::vorfahren()
 				// drive the convoi to the same position, but do not hop into next tile!
 				if(  train_length%16==0  ) {
 					// any space we need => just add
-					train_length += fahr[anz_vehikel-1]->get_desc()->get_length();
+					train_length += inspecting->back()->get_desc()->get_length();
 				}
 				else {
 					// limit train to front of tile
-					train_length += min( (train_length%CARUNITS_PER_TILE)-1, fahr[anz_vehikel-1]->get_desc()->get_length() );
+					train_length += min( (train_length%CARUNITS_PER_TILE)-1, inspecting->back()->get_desc()->get_length() );
 				}
 			}
 			else {
@@ -2153,23 +2172,27 @@ void convoi_t::vorfahren()
 			// now advance all convoi until it is completely on the track
 			fahr[0]->set_leading(false); // switches off signal checks ...
 			uint32 dist = VEHICLE_STEPS_PER_CARUNIT*train_length<<YARDS_PER_VEHICLE_STEP_SHIFT;
-			for(unsigned i=0; i<anz_vehikel; i++) {
-				vehicle_t* v = fahr[i];
+			inspecting = self;
+			while(  inspecting.is_bound()  ) {
+				for(unsigned i=0; i<inspecting->get_vehicle_count(); i++) {
+					vehicle_t* v = inspecting->get_vehikel(i);
 
-				v->get_smoke(false);
-				uint32 const driven = fahr[i]->do_drive( dist );
-				if (i==0  &&  driven < dist) {
-					// we are already at our destination
-					at_dest = true;
-				}
-				// this gives the length in carunits, 1/CARUNITS_PER_TILE of a full tile => all cars closely coupled!
-				v->get_smoke(true);
+					v->get_smoke(false);
+					uint32 const driven = v->do_drive( dist );
+					if (i==0  &&  driven < dist) {
+						// we are already at our destination
+						at_dest = true;
+					}
+					// this gives the length in carunits, 1/CARUNITS_PER_TILE of a full tile => all cars closely coupled!
+					v->get_smoke(true);
 
-				uint32 const vlen = ((VEHICLE_STEPS_PER_CARUNIT*v->get_desc()->get_length())<<YARDS_PER_VEHICLE_STEP_SHIFT);
-				if (vlen > dist) {
-					break;
+					uint32 const vlen = ((VEHICLE_STEPS_PER_CARUNIT*v->get_desc()->get_length())<<YARDS_PER_VEHICLE_STEP_SHIFT);
+					if (vlen > dist) {
+						break;
+					}
+					dist = driven - vlen;
 				}
-				dist = driven - vlen;
+				inspecting = inspecting->get_coupling_convoi();
 			}
 			fahr[0]->set_leading(true);
 		}
@@ -3058,6 +3081,15 @@ station_tile_search_ready: ;
 
 		book(gewinn, CONVOI_PROFIT);
 		book(gewinn, CONVOI_REVENUE);
+	}
+	
+	// uncouple convoy if needed.
+	if(  coupling_convoi.is_bound()  &&  schedule->get_current_entry().uncouple_line==coupling_convoi->get_line()  ) {
+		coupling_convoi->set_arrived_time(arrived_time);
+		coupling_convoi->set_state(LOADING);
+		coupling_convoi->front()->set_leading(true);
+		back()->set_last(true);
+		coupling_convoi = convoihandle_t();
 	}
 	
 	bool coupling_ok = coupling_convoi.is_bound(); // temporary...
