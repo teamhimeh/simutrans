@@ -4489,6 +4489,12 @@ const char *tool_build_station_t::check_pos( player_t*,  koord3d pos )
 	if(  grund_t *gr = welt->lookup( pos )  ) {
 		sint8 rotation;
 		const building_desc_t *desc = get_desc(rotation);
+		if(desc == NULL) {
+			// tool is in bad state, eg due to invalid tool parameters
+			DBG_DEBUG("tool_build_station_t::check_pos()", "Cannot resolve building descriptor, default_param=\"%s\".", default_param);
+			return "ENGINE ERROR: Build station tool cannot resolve a building descriptor.";
+		}
+
 		if(  grund_t *bd = welt->lookup_kartenboden( pos.get_2d() )  ) {
 			const bool underground = bd->get_hoehe()>gr->get_hoehe();
 			if(  underground  ) {
@@ -5867,9 +5873,9 @@ const char *tool_lock_game_t::work( player_t *, koord3d )
 	if(  !welt->get_public_player()->is_locked() ) {
 		return "In order to lock the game, you have to protect the public player by password!";
 	}
-	welt->get_settings().set_allow_player_change(false);
 	destroy_all_win( true );
 	welt->switch_active_player( 0, true );
+	welt->get_settings().set_allow_player_change(false);
 	welt->set_tool( general_tool[TOOL_QUERY], welt->get_player(0) );
 	return NULL;
 }
