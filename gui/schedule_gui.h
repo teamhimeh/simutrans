@@ -30,6 +30,8 @@ class player_t;
 class cbuffer_t;
 class loadsave_t;
 class schedule_gui_stats_t;
+class zeiger_t;
+class gui_schedule_entry_t;
 
 
 /**
@@ -115,6 +117,32 @@ public:
 	void rdwr( loadsave_t *file ) OVERRIDE;
 
 	uint32 get_rdwr_id() OVERRIDE { return magic_schedule_rdwr_dummy; }
+};
+
+
+/**
+ * List of displayed schedule entries.
+ */
+class schedule_gui_stats_t : public gui_aligned_container_t, action_listener_t, public gui_action_creator_t
+{
+	static cbuffer_t buf;
+
+	vector_tpl<gui_schedule_entry_t*> entries;
+	schedule_t *last_schedule; ///< last displayed schedule
+	zeiger_t *current_stop_mark; ///< mark current stop on map
+	const char* empty_message;
+public:
+	schedule_t *schedule;      ///< schedule under editing
+	player_t*  player;
+
+	schedule_gui_stats_t();
+	~schedule_gui_stats_t();
+
+	// shows/deletes highlighting of tiles
+	void highlight_schedule(bool marking);
+	void update_schedule();
+	void draw(scr_coord offset);
+	bool action_triggered(gui_action_creator_t *, value_t v);
 };
 
 #endif

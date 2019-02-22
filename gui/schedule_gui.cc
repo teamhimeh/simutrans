@@ -34,6 +34,7 @@
 #include "depot_frame.h"
 #include "schedule_gui.h"
 #include "line_item.h"
+#include "coupling_schedule.h"
 
 #include "components/gui_button.h"
 #include "components/gui_image.h"
@@ -109,135 +110,128 @@ public:
 	}
 };
 
-/**
- * List of displayed schedule entries.
- */
-class schedule_gui_stats_t : public gui_aligned_container_t, action_listener_t, public gui_action_creator_t
+
+schedule_gui_stats_t::schedule_gui_stats_t()
 {
-	static cbuffer_t buf;
+	set_table_layout(1,0);
+	last_schedule = NULL;
 
-	vector_tpl<gui_schedule_entry_t*> entries;
-	schedule_t *last_schedule; ///< last displayed schedule
-	zeiger_t *current_stop_mark; ///< mark current stop on map
-public:
-	schedule_t *schedule;      ///< schedule under editing
-	player_t*  player;
+	current_stop_mark = new zeiger_t(koord3d::invalid, NULL );
+	current_stop_mark->set_image( tool_t::general_tool[TOOL_SCHEDULE_ADD]->cursor );
+	
+	empty_message = "Please click on the map to add\nwaypoints or stops to this\nschedule.";
+}
 
-	schedule_gui_stats_t()
-	{
-		set_table_layout(1,0);
-		last_schedule = NULL;
 
-		current_stop_mark = new zeiger_t(koord3d::invalid, NULL );
-		current_stop_mark->set_image( tool_t::general_tool[TOOL_SCHEDULE_ADD]->cursor );
-	}
-	~schedule_gui_stats_t()
-	{
-		delete current_stop_mark;
-		delete last_schedule;
-	}
+schedule_gui_stats_t::~schedule_gui_stats_t()
+{
+	delete current_stop_mark;
+	delete last_schedule;
+}
 
-	// shows/deletes highlighting of tiles
-	void highlight_schedule(bool marking)
-	{
-		marking &= env_t::visualize_schedule;
-		FOR(minivec_tpl<schedule_entry_t>, const& i, schedule->entries) {
-			if (grund_t* const gr = welt->lookup(i.pos)) {
-				for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
-					obj_t *obj = gr->obj_bei(idx);
-					if(  marking  ) {
-						if(  !obj->is_moving()  ) {
-							obj->set_flag( obj_t::highlight );
-						}
-					}
-					else {
-						obj->clear_flag( obj_t::highlight );
+// shows/deletes highlighting of tiles
+void schedule_gui_stats_t::highlight_schedule(bool marking)
+{
+	marking &= env_t::visualize_schedule;
+	FOR(minivec_tpl<schedule_entry_t>, const& i, schedule->entries) {
+		if (grund_t* const gr = welt->lookup(i.pos)) {
+			for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+				obj_t *obj = gr->obj_bei(idx);
+				if(  marking  ) {
+					if(  !obj->is_moving()  ) {
+						obj->set_flag( obj_t::highlight );
 					}
 				}
-				gr->set_flag( grund_t::dirty );
-				// here on water
-				if(  gr->is_water()  ||  gr->ist_natur()  ) {
-					if(  marking  ) {
-						gr->set_flag( grund_t::marked );
-					}
-					else {
-						gr->clear_flag( grund_t::marked );
-					}
+				else {
+					obj->clear_flag( obj_t::highlight );
 				}
+			}
+			gr->set_flag( grund_t::dirty );
+			// here on water
+			if(  gr->is_water()  ||  gr->ist_natur()  ) {
+				if(  marking  ) {
+					gr->set_flag( grund_t::marked );
+				}
+				else {
+					gr->clear_flag( grund_t::marked );
+				}
+			}
 
-			}
 		}
-		// always remove
-		if(  grund_t *old_gr = welt->lookup(current_stop_mark->get_pos())  ) {
-			current_stop_mark->mark_image_dirty( current_stop_mark->get_image(), 0 );
-			old_gr->obj_remove( current_stop_mark );
-			old_gr->set_flag( grund_t::dirty );
-			current_stop_mark->set_pos( koord3d::invalid );
-		}
-		// add if required
-		if(  marking  &&  schedule->get_current_stop() < schedule->get_count() ) {
-			current_stop_mark->set_pos( schedule->entries[schedule->get_current_stop()].pos );
-			if(  grund_t *gr = welt->lookup(current_stop_mark->get_pos())  ) {
-				gr->obj_add( current_stop_mark );
-				current_stop_mark->set_flag( obj_t::dirty );
-				gr->set_flag( grund_t::dirty );
-			}
-		}
-		current_stop_mark->clear_flag( obj_t::highlight );
 	}
-
-	void update_schedule()
-	{
-		// compare schedules
-		bool ok = (last_schedule != NULL)  &&  last_schedule->entries.get_count() == schedule->entries.get_count();
-		for(uint i=0; ok  &&  i<last_schedule->entries.get_count(); i++) {
-			ok = last_schedule->entries[i] == schedule->entries[i];
+	// always remove
+	if(  grund_t *old_gr = welt->lookup(current_stop_mark->get_pos())  ) {
+		current_stop_mark->mark_image_dirty( current_stop_mark->get_image(), 0 );
+		old_gr->obj_remove( current_stop_mark );
+		old_gr->set_flag( grund_t::dirty );
+		current_stop_mark->set_pos( koord3d::invalid );
+	}
+	// add if required
+	if(  marking  &&  schedule->get_current_stop() < schedule->get_count() ) {
+		current_stop_mark->set_pos( schedule->entries[schedule->get_current_stop()].pos );
+		if(  grund_t *gr = welt->lookup(current_stop_mark->get_pos())  ) {
+			gr->obj_add( current_stop_mark );
+			current_stop_mark->set_flag( obj_t::dirty );
+			gr->set_flag( grund_t::dirty );
 		}
-		if (ok) {
-			if (!last_schedule->empty()) {
-				entries[ last_schedule->get_current_stop() ]->set_active(false);
-				entries[ schedule->get_current_stop() ]->set_active(true);
-				last_schedule->set_current_stop( schedule->get_current_stop() );
-			}
+	}
+	current_stop_mark->clear_flag( obj_t::highlight );
+}
+
+void schedule_gui_stats_t::update_schedule()
+{
+	// compare schedules
+	bool ok = (last_schedule != NULL)  &&  last_schedule->entries.get_count() == schedule->entries.get_count();
+	for(uint i=0; ok  &&  i<last_schedule->entries.get_count(); i++) {
+		ok = last_schedule->entries[i] == schedule->entries[i];
+	}
+	if (ok) {
+		if (!last_schedule->empty()) {
+			entries[ last_schedule->get_current_stop() ]->set_active(false);
+			entries[ schedule->get_current_stop() ]->set_active(true);
+			last_schedule->set_current_stop( schedule->get_current_stop() );
+		}
+	}
+	else {
+		remove_all();
+		entries.clear();
+		buf.clear();
+		buf.append(translator::translate(empty_message));
+		if (schedule->empty()) {
+			new_component<gui_textarea_t>(&buf);
 		}
 		else {
-			remove_all();
-			entries.clear();
-			buf.clear();
-			buf.append(translator::translate("Please click on the map to add\nwaypoints or stops to this\nschedule."));
-			if (schedule->empty()) {
-				new_component<gui_textarea_t>(&buf);
+			for(uint i=0; i<schedule->entries.get_count(); i++) {
+				entries.append( new_component<gui_schedule_entry_t>(player, schedule->entries[i], i));
+				entries.back()->add_listener( this );
 			}
-			else {
-				for(uint i=0; i<schedule->entries.get_count(); i++) {
-					entries.append( new_component<gui_schedule_entry_t>(player, schedule->entries[i], i));
-					entries.back()->add_listener( this );
-				}
-				entries[ schedule->get_current_stop() ]->set_active(true);
-			}
-			if (last_schedule) {
-				last_schedule->copy_from(schedule);
-			}
-			else {
-				last_schedule = schedule->copy();
-			}
-			set_size(get_min_size());
+			entries[ schedule->get_current_stop() ]->set_active(true);
 		}
-		highlight_schedule(true);
+		if (last_schedule) {
+			last_schedule->copy_from(schedule);
+		}
+		else {
+			last_schedule = schedule->copy();
+		}
+		set_size(get_min_size());
 	}
-	void draw(scr_coord offset)
-	{
-		update_schedule();
+	highlight_schedule(true);
+}
 
-		gui_aligned_container_t::draw(offset);
-	}
-	bool action_triggered(gui_action_creator_t *, value_t v)
-	{
-		// has to be one of the entries
-		call_listeners(v);
-		return true;
-	}
-};
+void schedule_gui_stats_t::draw(scr_coord offset)
+{
+	update_schedule();
+
+	gui_aligned_container_t::draw(offset);
+}
+
+bool schedule_gui_stats_t::action_triggered(gui_action_creator_t *, value_t v)
+{
+	// has to be one of the entries
+	call_listeners(v);
+	return true;
+}
+
 
 /**
  * Entries in the waiting-time selection.
@@ -395,6 +389,19 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	bt_remove.pressed = false;
 	add_component(&bt_remove);
 	end_table();
+	
+	if(  line.is_bound()  ) {
+		// this is called from line_management_gui_t.
+		add_table(3,1)->set_force_equal_columns(true);
+		bt_couple.init(button_t::roundbox_state | button_t::flexible, "Couple");
+		bt_couple.set_tooltip("Set coupling after this entry");
+		bt_couple.add_listener(this);
+		bt_couple.pressed = false;
+		add_component(&bt_couple);
+		new_component<gui_fill_t>();
+		new_component<gui_fill_t>();
+		end_table();
+	}
 
 	scrolly.set_show_scroll_x(true);
 	scrolly.set_scroll_amount_y(LINESPACE+1);
@@ -568,6 +575,11 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 		bt_insert.pressed = false;
 		bt_remove.pressed = true;
 		update_tool( false );
+	}
+	else if(komp == &bt_couple) {
+		mode = coupling;
+		create_win( new coupling_schedule_gui_t(schedule, line, player), w_info, (ptrdiff_t)this );
+		action_triggered( &bt_add, value_t() );
 	}
 	else if(komp == &numimp_load) {
 		if (!schedule->empty()) {

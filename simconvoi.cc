@@ -2823,7 +2823,7 @@ void convoi_t::open_schedule_window( bool show )
 
 	if(  show  ) {
 		// Open schedule dialog
-		create_win( new schedule_gui_t(schedule,get_owner(),self,linehandle_t()), w_info, (ptrdiff_t)schedule );
+		create_win( new schedule_gui_t(schedule,get_owner(),self), w_info, (ptrdiff_t)schedule );
 		// TODO: what happens if no client opens the window??
 	}
 	schedule->start_editing();
