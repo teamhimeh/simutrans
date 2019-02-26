@@ -17,15 +17,15 @@
 本家フォーラム: https://forum.simutrans.com/index.php?topic=16659.0  
 Twitterハッシュタグ： [#OTRPatch](https://twitter.com/hashtag/OTRPatch?src=hash)
 
-version20現在、simutrans standard nightly r8646をベースにしています。
+version21現在、simutrans standard nightly r8694をベースにしています。
 
 # ダウンロード
 実行には本体の他にribi-arrowアドオンが必要なので https://drive.google.com/open?id=0B_rSte9xAhLDanhta1ZsSVcwdzg からDLしてpakセットの中に突っ込んでください。  
 
-本体は下のリンクからどうぞ。**（2019年1月2日PM4時　ver20に更新）**  
-windows（GDI）: https://osdn.net/projects/otrp/downloads/70477/sim-WinGDI-OTRPv20.exe/  
-mac: https://osdn.net/projects/otrp/downloads/70477/sim-mac-OTRPv20.zip/    
-Linux: https://osdn.net/projects/otrp/downloads/70477/sim-linux-OTRPv20.zip/  
+本体は下のリンクからどうぞ。**（2019年2月26日PM8時　ver21に更新）**  
+windows（GDI）: https://osdn.net/projects/otrp/downloads/70676/sim-WinGDI-OTRPv21.exe/  
+mac: https://osdn.net/projects/otrp/downloads/70676/sim-mac-OTRPv21.zip/    
+Linux: https://osdn.net/projects/otrp/downloads/70676/sim-linux-OTRPv21.zip/  
 ソース: https://github.com/teamhimeh/simutrans/tree/OTRP-distribute  
 
 OTRP専用のmakeobjはありません。simutrans standardのmakeobjをご利用ください。
@@ -103,6 +103,7 @@ pak128では鉄道車両の描画位置変更が行われた影響で、古い�
 - 起動時に出現するアドオン名重複警告はOTRPでは無効化されています。ただし、**-showoverlay** オプションをつけて起動したとき及びサーバーモードで起動したときはアドオン名重複警告が表示されます。
 - longblocksignal（多閉塞信号）は検査した範囲をすべて予約するようになっています。すなはち、停車駅をこえて次の信号まで予約するようになっています。これは本家フォーラムで議論中の機能の先行実装です。
 - 起動時に`-snapshot x,y,z,f`オプションで起動すると、スナップショットを撮影して終了します。x,y,zは中心座標、fはズーム率（0から9まで）です。異なるセーブファイルである固定地点のスクリーンショットを撮りたいときなどに便利です。
+- general_tool[41]にキーを割り当てると，駅統合ツールになります．統合したい2駅をツールで選択すると，2駅は統合されます．駅間の距離に応じてコストがかかります．（[HyperSim][2]氏による実装）
 
 # 設定項目
 主にsimuconf.tabや「高度な設定」で編集する項目です。  
@@ -144,3 +145,4 @@ OTRPはSimutrans Standardからの派生物ですので、Standardのライセ�
 特に「ネットワークプレイ」が安定動作するかが確認取れてないので遊んでみて動作状況を教えていただけるとうれしいです。ぜひOTRPでNSを楽しんでみてください。
 
 [1]:https://twitter.com/shingoushori
+[2]:https://twitter.com/hypersimu

@@ -889,7 +889,6 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 }
 
 
-
 const char *tool_raise_lower_base_t::move( player_t *player, uint16 buttonstate, koord3d pos )
 {
 	CHECK_FUNDS();
@@ -3378,11 +3377,11 @@ waytype_t tool_wayremover_t::get_waytype() const
 }
 
 class electron_t : public test_driver_t {
-	bool check_next_tile(const grund_t* gr) const { return gr->get_leitung()!=NULL; }
-	virtual ribi_t::ribi get_ribi(const grund_t* gr) const { return gr->get_leitung()->get_ribi(); }
-	virtual waytype_t get_waytype() const { return invalid_wt; }
-	virtual int get_cost(const grund_t *, const weg_t *, const sint32, ribi_t::ribi) const { return 1; }
-	virtual bool is_target(const grund_t *,const grund_t *) const { return false; }
+	bool check_next_tile(const grund_t* gr) const OVERRIDE { return gr->get_leitung()!=NULL; }
+	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return gr->get_leitung()->get_ribi(); }
+	waytype_t get_waytype() const OVERRIDE { return invalid_wt; }
+	int get_cost(const grund_t *, const weg_t *, const sint32, ribi_t::ribi) const OVERRIDE { return 1; }
+	bool is_target(const grund_t *,const grund_t *) const OVERRIDE { return false; }
 };
 
 class scenario_checker_t : public test_driver_t {
@@ -3410,11 +3409,11 @@ public:
 		return test_driver;
 	}
 private:
-	bool check_next_tile(const grund_t* gr) const { return other->check_next_tile(gr)  &&  scenario->is_work_allowed_here(player, id, other->get_waytype(), gr->get_pos())==NULL;}
-	virtual ribi_t::ribi get_ribi(const grund_t* gr) const { return other->get_ribi(gr); }
-	virtual waytype_t get_waytype() const { return other->get_waytype(); }
-	virtual int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const { return other->get_cost(gr, w, max_speed, from); }
-	virtual bool is_target(const grund_t *gr,const grund_t *gr2) const { return other->is_target(gr,gr2); }
+	bool check_next_tile(const grund_t* gr) const OVERRIDE { return other->check_next_tile(gr)  &&  scenario->is_work_allowed_here(player, id, other->get_waytype(), gr->get_pos())==NULL;}
+	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return other->get_ribi(gr); }
+	waytype_t get_waytype() const OVERRIDE { return other->get_waytype(); }
+	int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const OVERRIDE { return other->get_cost(gr, w, max_speed, from); }
+	bool is_target(const grund_t *gr,const grund_t *gr2) const OVERRIDE { return other->is_target(gr,gr2); }
 };
 
 void tool_wayremover_t::mark_tiles( player_t *player, const koord3d &start, const koord3d &end )
@@ -4958,6 +4957,12 @@ const char *tool_build_station_t::check_pos( player_t*,  koord3d pos )
 	if(  grund_t *gr = welt->lookup( pos )  ) {
 		sint8 rotation;
 		const building_desc_t *desc = get_desc(rotation);
+		if(desc == NULL) {
+			// tool is in bad state, eg due to invalid tool parameters
+			DBG_DEBUG("tool_build_station_t::check_pos()", "Cannot resolve building descriptor, default_param=\"%s\".", default_param);
+			return "ENGINE ERROR: Build station tool cannot resolve a building descriptor.";
+		}
+
 		if(  grund_t *bd = welt->lookup_kartenboden( pos.get_2d() )  ) {
 			const bool underground = bd->get_hoehe()>gr->get_hoehe();
 			if(  underground  ) {
@@ -6535,9 +6540,9 @@ const char *tool_lock_game_t::work( player_t *, koord3d )
 	if(  !welt->get_public_player()->is_locked() ) {
 		return "In order to lock the game, you have to protect the public player by password!";
 	}
-	welt->get_settings().set_allow_player_change(false);
 	destroy_all_win( true );
 	welt->switch_active_player( 0, true );
+	welt->get_settings().set_allow_player_change(false);
 	welt->set_tool( general_tool[TOOL_QUERY], welt->get_player(0) );
 	return NULL;
 }
@@ -7058,6 +7063,93 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 	return NULL;
 }
 
+/* merge stop */
+image_id tool_merge_stop_t::get_marker_image()
+{
+	return cursor;
+}
+
+uint8 tool_merge_stop_t::is_valid_pos(  player_t *player, const koord3d &pos, const char *&error, const koord3d &)
+{
+	grund_t *bd = welt->lookup(pos);
+	if (bd==NULL) {
+		error = "";
+		return 0;
+	}
+	// check halt ownership
+	halthandle_t h = haltestelle_t::get_halt(pos,player);
+	if(  h.is_bound()  &&  player != h->get_owner()  ) {
+		error = "Das Feld gehoert\neinem anderen Spieler\n";
+		return 0;
+	}
+	// check for halt on the tile
+	if(  h.is_bound()  &&  (  bd->is_halt()  ||  (h->get_station_type()&haltestelle_t::dock  &&  bd->is_water())  )  ) {
+		return 2;
+	}
+	error = NOTICE_UNSUITABLE_GROUND;
+	return 0;
+}
+
+void tool_merge_stop_t::mark_tiles(  player_t *player, const koord3d &start, const koord3d &end )
+{
+	halt_be_merged_from = halthandle_t();
+	halt_be_merged_to = halthandle_t();
+	halt_be_merged_from = haltestelle_t::get_halt(start,player);
+	halt_be_merged_to = haltestelle_t::get_halt(end,player);
+	sint64 workcost = 0;
+	if ( welt->get_settings().allow_merge_distant_halt ) {
+		sint32 dist = (sint32)koord_distance( halt_be_merged_from->get_center_pos(), halt_be_merged_to->get_center_pos() );
+		if (  !halt_be_merged_from->is_halt_covered( halt_be_merged_to )  &&  halt_be_merged_from->get_owner() == player  &&  halt_be_merged_to->get_owner() == player )	{
+			workcost = -welt->scale_with_month_length( (2 ^ dist) * welt->get_settings().cst_multiply_merge_halt);
+		}
+		win_set_static_tooltip( tooltip_with_price("Building costs estimates", workcost) );
+	}
+	else {
+		if ( halt_be_merged_from->is_halt_covered( halt_be_merged_to ) ) {
+			win_set_static_tooltip( tooltip_with_price("Building costs estimates", workcost) );
+		}
+		else {
+			win_set_static_tooltip( "Can not merge" );
+		}
+	}
+}
+
+const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_pos, const koord3d &pos)
+{
+	player_t *const psplayer = welt->get_public_player();
+	bool const giveaway = player != psplayer;
+	halt_be_merged_from = halthandle_t();
+	halt_be_merged_to = halthandle_t();
+	halt_be_merged_from = haltestelle_t::get_halt(last_pos,player);
+	halt_be_merged_to = haltestelle_t::get_halt(pos,player);
+	sint64 workcost = 0;
+	if ( welt->get_settings().allow_merge_distant_halt ) {
+		// check funds
+		sint32 dist = (sint32)koord_distance( halt_be_merged_from->get_center_pos(), halt_be_merged_to->get_center_pos() );
+		if ( !halt_be_merged_from->is_halt_covered( halt_be_merged_to ) )	{
+			workcost = -welt->scale_with_month_length( (2 ^ dist) * welt->get_settings().cst_multiply_merge_halt );
+		}
+		if(  giveaway  &&  !player->can_afford(workcost)  ) {
+			return NOTICE_INSUFFICIENT_FUNDS;
+		}
+	}
+	else {
+		if ( !halt_be_merged_from->is_halt_covered( halt_be_merged_to ) ) {
+			return "Too far stations!";
+		}
+	}
+
+	if(  halt_be_merged_to.is_bound()  &&  halt_be_merged_to->get_owner() == player  &&
+		   halt_be_merged_from.is_bound()  &&  halt_be_merged_from->get_owner() == player  ) {
+		// merge stop
+		player_t::book_construction_costs(player, -workcost, pos.get_2d(), ignore_wt);
+		halt_be_merged_to->merge_halt(player, halt_be_merged_from);
+		return NULL;
+	}
+
+	// nothing to do
+	return NULL;
+}
 
 
 bool tool_show_trees_t::init( player_t * )
