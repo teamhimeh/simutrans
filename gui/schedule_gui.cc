@@ -364,6 +364,40 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		wait_load.set_rigid(true);
 	}
 	end_table();
+	
+	// wait for time feature
+	bt_wait_for_time.init(button_t::square_automatic, "Wait for time");
+	bt_wait_for_time.set_tooltip("If this is set, convoys will wait until one of the specified times before departing, the specified times being fractions of a month.");
+	bt_wait_for_time.add_listener(this);
+	add_component(&bt_wait_for_time);
+	add_table(3,2);
+	{
+		new_component<gui_label_t>("Spacing cnv/month, shift");
+		
+		numimp_spacing.set_width( 60 );
+		numimp_spacing.set_value( schedule->get_spacing() );
+		numimp_spacing.set_limits( 0, 100 ); // TO BE FIXED!
+		numimp_spacing.set_increment_mode(1);
+		numimp_spacing.add_listener(this);
+		add_component(&numimp_spacing);
+		
+		numimp_spacing_shift.set_width( 90 );
+		numimp_spacing_shift.set_value( schedule->get_current_entry().spacing_shift );
+		numimp_spacing_shift.set_limits( 0, 100 ); // TO BE FIXED!
+		numimp_spacing_shift.set_increment_mode(1);
+		numimp_spacing_shift.add_listener(this);
+		add_component(&numimp_spacing_shift);
+		
+		bt_same_spacing_shift.init(button_t::square_automatic, "Use same shift for all stops");
+		bt_same_spacing_shift.set_tooltip("Use one spacing shift value for all stops in schedule.");
+		bt_same_spacing_shift.add_listener(this);
+		add_component(&bt_same_spacing_shift);
+		
+		add_component(&lb_spacing);
+		
+		new_component<gui_fill_t>();
+	}
+	end_table();
 
 	// return tickets
 	if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
@@ -571,6 +605,16 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 	else if(komp == &numimp_load) {
 		if (!schedule->empty()) {
 			schedule->entries[schedule->get_current_stop()].minimum_loading = (uint8)p.i;
+			update_selection();
+		}
+	}
+	else if(komp == &numimp_spacing) {
+		schedule->set_spacing((uint16)p.i);
+		update_selection();
+	}
+	else if(komp == &numimp_spacing_shift) {
+		if (!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].spacing_shift = (sint16)p.i;
 			update_selection();
 		}
 	}

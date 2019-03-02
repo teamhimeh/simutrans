@@ -52,9 +52,10 @@ class schedule_gui_t :	public gui_frame_t,
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
 	button_t bt_return;
+	button_t bt_wait_for_time, bt_same_spacing_shift;
 
-	gui_label_t lb_wait, lb_load;
-	gui_numberinput_t numimp_load;
+	gui_label_t lb_wait, lb_load, lb_spacing;
+	gui_numberinput_t numimp_load, numimp_spacing, numimp_spacing_shift;
 	gui_combobox_t wait_load;
 
 	schedule_gui_stats_t* stats;

@@ -23,6 +23,7 @@ class schedule_t
 {
 	bool  editing_finished;
 	uint8 current_stop;
+	uint16 spacing;
 
 	static schedule_entry_t dummy_entry;
 
@@ -41,7 +42,7 @@ class schedule_t
 	}
 
 protected:
-	schedule_t() : editing_finished(false), current_stop(0) {}
+	schedule_t() : editing_finished(false), current_stop(0), spacing(0) {}
 
 public:
 	enum schedule_type {
@@ -70,6 +71,9 @@ public:
 	virtual schedule_type get_type() const = 0;
 
 	virtual waytype_t get_waytype() const = 0;
+	
+	uint16 get_spacing() const { return spacing; }
+	void set_spacing(uint16 s) { spacing = s; }
 
 	/**
 	 * Get current stop of the schedule.
@@ -116,12 +120,12 @@ public:
 	/**
 	 * Inserts a coordinate at current_stop into the schedule.
 	 */
-	bool insert(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0);
+	bool insert(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0, sint16 spacing_shift = 0, bool wait_for_time = false);
 
 	/**
 	 * Appends a coordinate to the schedule.
 	 */
-	bool append(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0);
+	bool append(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0, sint16 spacing_shift = 0, bool wait_for_time = false);
 
 	/**
 	 * Cleanup a schedule, removes double entries.
