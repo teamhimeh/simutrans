@@ -243,6 +243,8 @@ settings_t::settings_t() :
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
+	
+	spacing_shift_divisor = 24*60;
 
 	// stop buildings
 	cst_multiply_dock=-50000;
@@ -821,6 +823,9 @@ void settings_t::rdwr(loadsave_t *file)
 		if(  file->get_version() > 120006  ) {
 			file->rdwr_byte(world_maximum_height);
 			file->rdwr_byte(world_minimum_height);
+		}
+		if(  file->get_version() > 120009  ) {
+			file->rdwr_short(spacing_shift_divisor);
 		}
 		// otherwise the default values of the last one will be used
 	}
@@ -1438,6 +1443,8 @@ void settings_t::parse_simuconf(tabfile_t& simuconf, sint16& disp_width, sint16&
 	if(  world_minimum_height>=world_maximum_height  ) {
 		world_minimum_height = world_maximum_height-1;
 	}
+	
+	spacing_shift_divisor = contents.get_int("spacing_shift_divisor",spacing_shift_divisor);
 
 	// Default pak file path
 	objfilename = ltrim(contents.get_string("pak_file_path", "" ) );

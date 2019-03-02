@@ -286,6 +286,8 @@ private:
 
 	// true if companies can make ways public
 	bool disable_make_way_public;
+	
+	uint16 spacing_shift_divisor;
 
 public:
 	/* the big cost section */
@@ -589,6 +591,9 @@ public:
 
 	bool get_allow_underground_transformers() const { return allow_underground_transformers; }
 	bool get_disable_make_way_public() const { return disable_make_way_public; }
+	
+	uint16 get_spacing_shift_divisor() const { return spacing_shift_divisor; }
+	void set_spacing_shift_divisor(uint16 s) { spacing_shift_divisor = s; }
 
 	uint16 get_remove_dummy_player_months() const { return remove_dummy_player_months; }
 	uint16 get_unprotect_abandoned_player_months() const { return unprotect_abandoned_player_months; }
