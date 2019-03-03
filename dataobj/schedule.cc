@@ -40,6 +40,7 @@ void schedule_t::copy_from(const schedule_t *src)
 		entries.append(i);
 	}
 	set_current_stop( src->get_current_stop() );
+	set_spacing( src->get_spacing() );
 
 	editing_finished = src->is_editing_finished();
 }
@@ -295,6 +296,10 @@ bool schedule_t::matches(karte_t *welt, const schedule_t *schedule)
 	if(  schedule->entries.empty()  ||  entries.empty()  ) {
 		return false;
 	}
+	// is spacing same?
+	if(  schedule->get_spacing()!=spacing  ) {
+		return false;
+	}
 	// now we have to check all entries ...
 	// we need to do this that complicated, because the last stop may make the difference
 	uint16 f1=0, f2=0;
@@ -408,7 +413,7 @@ void schedule_t::add_return_way()
 
 void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
-	buf.printf("%u|%d|", current_stop, (int)get_type());
+	buf.printf("%u,%u|%d|", current_stop, spacing, (int)get_type());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
 		buf.printf("%s,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, (int)i.spacing_shift, (int)i.wait_for_time);
 	}
@@ -428,6 +433,15 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	}
 	//  first get current_stop pointer
 	current_stop = atoi( p );
+	while(  *p  &&  *p!=','  ) {
+		p++;
+	}
+	if(  *p!=','  ) {
+		dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
+		return false;
+	}
+	p++;
+	spacing = atoi( p );
 	while(  *p  &&  *p!='|'  ) {
 		p++;
 	}
