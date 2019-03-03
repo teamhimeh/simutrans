@@ -394,6 +394,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_same_spacing_shift.add_listener(this);
 		add_component(&bt_same_spacing_shift);
 		
+		lb_spacing.set_align(gui_label_t::align_t::centered);
 		lb_spacing.set_text_pointer(lb_spacing_str);
 		sprintf(lb_spacing_str, "off");
 		add_component(&lb_spacing);
@@ -481,7 +482,9 @@ void schedule_gui_t::update_selection()
 	lb_spacing.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 	numimp_spacing_shift.disable();
 	numimp_spacing_shift.set_value( 0 );
+	numimp_spacing.disable();
 	wait_load.disable();
+	bt_wait_for_time.pressed = false;
 
 	if(  !schedule->empty()  ) {
 		schedule->set_current_stop( min(schedule->get_count()-1,schedule->get_current_stop()) );
@@ -513,6 +516,7 @@ void schedule_gui_t::update_selection()
 				numimp_spacing_shift.enable();
 				numimp_spacing_shift.set_value(schedule->entries[current_stop].spacing_shift);
 				numimp_spacing.enable();
+				bt_wait_for_time.pressed = true;
 			}
 
 		}
@@ -520,7 +524,6 @@ void schedule_gui_t::update_selection()
 			lb_load.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 			numimp_load.disable();
 			numimp_load.set_value( 0 );
-			numimp_spacing.disable();
 		}
 	}
 }
@@ -634,7 +637,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 		}
 	}
 	else if(komp == &bt_wait_for_time) {
-		schedule->entries[schedule->get_current_stop()].wait_for_time = (bool)p.i;
+		schedule->entries[schedule->get_current_stop()].wait_for_time = bt_wait_for_time.pressed;
 		update_selection();
 	}
 	else if(komp == &wait_load) {
