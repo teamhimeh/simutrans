@@ -98,7 +98,7 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 	fab = fab_;
 	// window name
 	tstrncpy( fabname, fab->get_name(), lengthof(fabname) );
-	gui_frame_t::set_name( fabname );
+	gui_frame_t::set_name(fab->get_name());
 	set_owner(fab->get_owner());
 
 	set_table_layout(1,0);
@@ -171,15 +171,29 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 
 	// factory description in tab
 	{
-		// Hajo: "About" button only if translation is available
+		bool add_tab = false;
+		details_buf.clear();
+
+		// factory details
 		char key[256];
 		sprintf(key, "factory_%s_details", fab->get_desc()->get_name());
 		const char * value = translator::translate(key);
 		if(value && *value != 'f') {
+			details_buf.append(value);
+			add_tab = true;
+		}
+
+		if (char const* const maker = fab->get_desc()->get_copyright()) {
+			details_buf.append("<p>");
+			details_buf.printf(translator::translate("Constructed by %s"), maker);
+			add_tab = true;
+		}
+
+		if (add_tab) {
 			switch_mode.add_tab(&container_details, translator::translate("Details"));
 			container_details.set_table_layout(1,0);
 			gui_flowtext_t* f = container_details.new_component<gui_flowtext_t>();
-			f->set_text(value);
+			f->set_text( (const char*)details_buf);
 		}
 	}
 	reset_min_windowsize();
@@ -218,7 +232,7 @@ void fabrik_info_t::rename_factory()
  */
 void fabrik_info_t::draw(scr_coord pos, scr_size size)
 {
-	update_info();
+	update_components();
 
 	// boost stuff
 	boost_electric.set_transparent(fab->get_prodfactor_electric()>0 ? 0 : TRANSPARENT50_FLAG | OUTLINE_FLAG | color_idx_to_rgb(COL_BLACK));
@@ -263,16 +277,22 @@ void fabrik_info_t::map_rotate90(sint16)
 	old_consumers_count ++;
 	old_stops_count ++;
 	old_cities_count ++;
-	update_info();
+	update_components();
 }
 
-
+// update name and buffers
 void fabrik_info_t::update_info()
 {
 	tstrncpy( fabname, fab->get_name(), lengthof(fabname) );
-	gui_frame_t::set_name( fabname );
+	gui_frame_t::set_name(fab->get_name());
 	input.set_text( fabname, lengthof(fabname) );
 
+	update_components();
+}
+
+// update all buffers
+void fabrik_info_t::update_components()
+{
 	// update texts
 	fab->info_prod( prod_buf );
 	fab->info_conn( info_buf );
@@ -339,6 +359,7 @@ void fabrik_info_t::update_info()
 		old_cities_count = fab->get_target_cities().get_count();
 	}
 	container_info.set_size(container_info.get_min_size());
+	set_dirty();
 }
 
 /***************** Saveload stuff from here *****************/

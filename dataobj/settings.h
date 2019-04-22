@@ -304,6 +304,10 @@ public:
 	sint64 cst_depot_ship;
 	sint64 cst_depot_air;
 
+	// cost to merge station
+	uint32 allow_merge_distant_halt;
+	sint64 cst_multiply_merge_halt;
+
 	// alter landscape
 	sint64 cst_buy_land;
 	sint64 cst_alter_land;
@@ -594,6 +598,8 @@ public:
 	
 	uint16 get_spacing_shift_divisor() const { return spacing_shift_divisor; }
 	void set_spacing_shift_divisor(uint16 s) { spacing_shift_divisor = s; }
+
+	uint32 get_allow_merge_distant_halt() const { return allow_merge_distant_halt; }
 
 	uint16 get_remove_dummy_player_months() const { return remove_dummy_player_months; }
 	uint16 get_unprotect_abandoned_player_months() const { return unprotect_abandoned_player_months; }
