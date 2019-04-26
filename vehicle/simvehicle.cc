@@ -1741,7 +1741,11 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_gobal) const
 
 			case convoi_t::LOADING:
 				if(  state>=1  ) {
-					sprintf( tooltip_text, translator::translate("Loading (%i->%i%%)!"), cnv->get_loading_level(), cnv->get_loading_limit() );
+					if(  cnv->get_schedule()->get_current_entry().wait_for_time  ) {
+						sprintf( tooltip_text, translator::translate("Waiting for schedule. %i left!"), cnv->get_time_to_depart() );
+					} else {
+						sprintf( tooltip_text, translator::translate("Loading (%i->%i%%)!"), cnv->get_loading_level(), cnv->get_loading_limit() );
+					}
 					color = color_idx_to_rgb(COL_YELLOW);
 				}
 				break;

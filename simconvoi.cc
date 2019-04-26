@@ -3872,3 +3872,14 @@ const char* convoi_t::send_to_depot(bool local)
 
 	return txt;
 }
+
+const uint16 convoi_t::get_time_to_depart() const {
+	if(  !schedule->get_current_entry().wait_for_time  ) {
+		return 0;
+	}
+	const uint16 divisor = welt->get_settings().get_spacing_shift_divisor();
+	const sint32 spacing_shift = schedule->get_current_entry().spacing_shift;
+	const uint32 arr_time = arrived_time * divisor / welt->ticks_per_world_month;
+	const sint32 dep_time = ((arr_time - spacing_shift) * schedule->get_spacing() / divisor + 1) * divisor / schedule->get_spacing() + spacing_shift;
+	return dep_time - welt->get_ticks() * divisor / welt->ticks_per_world_month;
+}

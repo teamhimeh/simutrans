@@ -771,6 +771,12 @@ public:
 	* @date  12.06.2003
 	*/
 	const sint32 &get_loading_limit() const { return loading_limit; }
+	
+	/**
+	* returns remaining time to departure in the range of spacing_shift_divisor
+	* @author THLeaderH
+	*/
+	const uint16 get_time_to_depart() const;
 
 	/**
 	* Schedule convois for self destruction. Will be executed
