@@ -396,7 +396,8 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		
 		lb_spacing.set_align(gui_label_t::align_t::centered);
 		lb_spacing.set_text_pointer(lb_spacing_str);
-		sprintf(lb_spacing_str, "off");
+		const uint16 p = schedule->get_spacing();
+		p==0 ? sprintf(lb_spacing_str,"off") : sprintf(lb_spacing_str,"%d",welt->get_settings().get_spacing_shift_divisor()/p);
 		add_component(&lb_spacing);
 		
 		new_component<gui_fill_t>();
