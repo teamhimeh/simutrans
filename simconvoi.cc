@@ -2969,11 +2969,13 @@ station_tile_search_ready: ;
 
 	// loading is finished => maybe drive on
 	bool can_go = loading_level >= loading_limit;
+	sint64 go_on_ticks = 0;
 	if(  schedule->get_spacing()>0  ) {
 		// consider spacing
-		const sint64 spacing_shift = schedule->get_current_entry().spacing_shift * welt->ticks_per_world_month / welt->get_settings().get_spacing_shift_divisor();
-		const sint64 spacing = welt->ticks_per_world_month / schedule->get_spacing();
-		const sint64 go_on_ticks = ((arrived_time - spacing_shift) / spacing + 1) * spacing + spacing_shift;
+		// subtract wait_lock (time) from spacing_shift
+		const sint32 spacing_shift = schedule->get_current_entry().spacing_shift * welt->ticks_per_world_month / welt->get_settings().get_spacing_shift_divisor() - time;
+		const sint32 spacing = welt->ticks_per_world_month / schedule->get_spacing();
+		go_on_ticks = ((arrived_time - spacing_shift) / spacing + 1) * spacing + spacing_shift;
 		can_go &= (!schedule->get_current_entry().wait_for_time  ||  welt->get_ticks() >= go_on_ticks);
 	}
 	can_go |= no_load;
@@ -2998,6 +3000,14 @@ station_tile_search_ready: ;
 		schedule->advance();
 		state = ROUTING_1;
 		loading_limit = 0;
+	}
+	else if(  schedule->get_current_entry().wait_for_time  &&  schedule->get_spacing()>0  ) {
+		const sint32 ticks_remain = go_on_ticks - welt->get_ticks();
+		if(  ticks_remain>0  &&  ticks_remain<time  ) {
+			// this convoy is about to start. we don't want to wait for 2000 ms or more.
+			// just wait for ticks_remain
+			time = ticks_remain;
+		}
 	}
 
 	INT_CHECK( "convoi_t::hat_gehalten" );
