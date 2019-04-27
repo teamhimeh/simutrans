@@ -56,7 +56,7 @@ class schedule_gui_t :	public gui_frame_t,
 
 	char lb_spacing_str[10];
 	gui_label_t lb_wait, lb_load, lb_spacing;
-	gui_numberinput_t numimp_load, numimp_spacing, numimp_spacing_shift;
+	gui_numberinput_t numimp_load, numimp_spacing, numimp_spacing_shift, numimp_delay_tolerance;
 	gui_combobox_t wait_load;
 
 	schedule_gui_stats_t* stats;

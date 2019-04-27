@@ -120,12 +120,12 @@ public:
 	/**
 	 * Inserts a coordinate at current_stop into the schedule.
 	 */
-	bool insert(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0, sint16 spacing_shift = 0, bool wait_for_time = false);
+	bool insert(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0, sint16 spacing_shift = 0, bool wait_for_time = false, uint16 delay_tolerance = 0);
 
 	/**
 	 * Appends a coordinate to the schedule.
 	 */
-	bool append(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0, sint16 spacing_shift = 0, bool wait_for_time = false);
+	bool append(const grund_t* gr, uint8 minimum_loading = 0, uint8 waiting_time_shift = 0, sint16 spacing_shift = 0, bool wait_for_time = false, uint16 delay_tolerance = 0);
 
 	/**
 	 * Cleanup a schedule, removes double entries.

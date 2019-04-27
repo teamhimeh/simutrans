@@ -366,15 +366,25 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	end_table();
 	
 	// wait for time feature
-	bt_wait_for_time.init(button_t::square_automatic, "Wait for time");
-	bt_wait_for_time.set_tooltip("If this is set, convoys will wait until one of the specified times before departing, the specified times being fractions of a month.");
-	bt_wait_for_time.add_listener(this);
-	add_component(&bt_wait_for_time);
-	add_table(3,2);
-	{
+	add_table(3,3);
+	{	
+		const uint16 spacing_divisor = welt->get_settings().get_spacing_shift_divisor();
+		const uint16 p = schedule->get_spacing();
+		
+		bt_wait_for_time.init(button_t::square_automatic, "Wait for time");
+		bt_wait_for_time.set_tooltip("If this is set, convoys will wait until one of the specified times before departing, the specified times being fractions of a month.");
+		bt_wait_for_time.add_listener(this);
+		add_component(&bt_wait_for_time);
+		
+		lb_spacing.set_align(gui_label_t::align_t::centered);
+		lb_spacing.set_text_pointer(lb_spacing_str);
+		p==0 ? sprintf(lb_spacing_str,"off") : sprintf(lb_spacing_str,"%d",welt->get_settings().get_spacing_shift_divisor()/p);
+		add_component(&lb_spacing);
+		
+		new_component<gui_fill_t>();
+		
 		new_component<gui_label_t>("Spacing cnv/month, shift");
 		
-		const uint16 spacing_divisor = welt->get_settings().get_spacing_shift_divisor();
 		numimp_spacing.set_width( 60 );
 		numimp_spacing.set_value( schedule->get_spacing() );
 		numimp_spacing.set_limits( 0, spacing_divisor );
@@ -389,20 +399,23 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		numimp_spacing_shift.add_listener(this);
 		add_component(&numimp_spacing_shift);
 		
-		bt_same_spacing_shift.init(button_t::square_automatic, "Use same shift for all stops");
-		bt_same_spacing_shift.set_tooltip("Use one spacing shift value for all stops in schedule.");
-		bt_same_spacing_shift.add_listener(this);
-		add_component(&bt_same_spacing_shift);
+		new_component<gui_label_t>("Delay tolerance");
 		
-		lb_spacing.set_align(gui_label_t::align_t::centered);
-		lb_spacing.set_text_pointer(lb_spacing_str);
-		const uint16 p = schedule->get_spacing();
-		p==0 ? sprintf(lb_spacing_str,"off") : sprintf(lb_spacing_str,"%d",welt->get_settings().get_spacing_shift_divisor()/p);
-		add_component(&lb_spacing);
+		numimp_delay_tolerance.set_width( 90 );
+		numimp_delay_tolerance.set_value( schedule->get_current_entry().delay_tolerance );
+		numimp_delay_tolerance.set_limits( 0, p==0 ? 0 : spacing_divisor/schedule->get_spacing()/2 );
+		numimp_delay_tolerance.set_increment_mode(1);
+		numimp_delay_tolerance.add_listener(this);
+		add_component(&numimp_delay_tolerance);
 		
 		new_component<gui_fill_t>();
 	}
 	end_table();
+	
+	bt_same_spacing_shift.init(button_t::square_automatic, "Use same shift and tolerance for all stops");
+	bt_same_spacing_shift.set_tooltip("Use one spacing shift and delay tolerance value for all stops in schedule.");
+	bt_same_spacing_shift.add_listener(this);
+	add_component(&bt_same_spacing_shift);
 
 	// return tickets
 	if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
@@ -484,6 +497,8 @@ void schedule_gui_t::update_selection()
 	numimp_spacing_shift.disable();
 	numimp_spacing_shift.set_value( 0 );
 	numimp_spacing.disable();
+	numimp_delay_tolerance.disable();
+	numimp_delay_tolerance.set_value( 0 );
 	wait_load.disable();
 	bt_wait_for_time.pressed = false;
 
@@ -517,6 +532,10 @@ void schedule_gui_t::update_selection()
 				numimp_spacing_shift.enable();
 				numimp_spacing_shift.set_value(schedule->entries[current_stop].spacing_shift);
 				numimp_spacing.enable();
+				numimp_delay_tolerance.enable();
+				numimp_delay_tolerance.set_value(schedule->entries[current_stop].delay_tolerance);
+				const uint16 spacing_divisor = welt->get_settings().get_spacing_shift_divisor();
+				numimp_delay_tolerance.set_limits( 0, schedule->get_spacing()>0 ? spacing_divisor/schedule->get_spacing()/2 : 0 );
 				bt_wait_for_time.pressed = true;
 			}
 
@@ -634,6 +653,12 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 	else if(komp == &numimp_spacing_shift) {
 		if (!schedule->empty()) {
 			schedule->entries[schedule->get_current_stop()].spacing_shift = (sint16)p.i;
+			update_selection();
+		}
+	}
+	else if(komp == &numimp_delay_tolerance) {
+		if (!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].delay_tolerance = (sint16)p.i;
 			update_selection();
 		}
 	}

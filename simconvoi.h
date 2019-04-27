@@ -776,7 +776,7 @@ public:
 	* returns remaining time to departure in the range of spacing_shift_divisor
 	* @author THLeaderH
 	*/
-	const uint16 get_time_to_depart() const;
+	uint16 get_time_to_depart() const;
 
 	/**
 	* Schedule convois for self destruction. Will be executed

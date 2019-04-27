@@ -833,7 +833,7 @@ void settings_t::rdwr(loadsave_t *file)
 		if(  file->get_version() > 120008  ) {
 			file->rdwr_long(allow_merge_distant_halt);
 		}
-		if(  file->get_version() > 120009  ) {
+		if(  file->get_version() >= 120009  ) {
 			file->rdwr_short(spacing_shift_divisor);
 		}
 		// otherwise the default values of the last one will be used

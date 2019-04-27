@@ -12,12 +12,13 @@ struct schedule_entry_t
 public:
 	schedule_entry_t() {}
 
-	schedule_entry_t(koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift, sint16 spacing_shift, bool wait_for_time) :
+	schedule_entry_t(koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift, sint16 spacing_shift, bool wait_for_time, uint16 delay_tolerance) :
 		pos(pos),
 		minimum_loading(minimum_loading),
 		waiting_time_shift(waiting_time_shift),
 		spacing_shift(spacing_shift),
-		wait_for_time(wait_for_time)
+		wait_for_time(wait_for_time),
+		delay_tolerance(delay_tolerance)
 	{}
 
 	/**
@@ -45,13 +46,18 @@ public:
 	 * @brought by THLeaderH
 	 */
 	 sint16 spacing_shift;
+	 
 	 // Whether a convoy must wait for a time slot at this entry.
 	 bool wait_for_time;
+	 
+	 // Departure can be delayed for this duration.
+	 uint16 delay_tolerance;
+	
 };
 
 inline bool operator ==(const schedule_entry_t &a, const schedule_entry_t &b)
 {
-	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.spacing_shift == b.spacing_shift  &&  a.wait_for_time == b.wait_for_time;
+	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.spacing_shift == b.spacing_shift  &&  a.wait_for_time == b.wait_for_time  &&  a.delay_tolerance == b.delay_tolerance;
 }
 
 

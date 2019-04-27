@@ -24,7 +24,7 @@
 #include "../tpl/slist_tpl.h"
 
 
-schedule_entry_t schedule_t::dummy_entry(koord3d::invalid, 0, 0, 0, false);
+schedule_entry_t schedule_t::dummy_entry(koord3d::invalid, 0, 0, 0, false, 0);
 
 
 // copy all entries from schedule src to this and adjusts current_stop
@@ -111,7 +111,7 @@ halthandle_t schedule_t::get_prev_halt( player_t *player ) const
 }
 
 
-bool schedule_t::insert(const grund_t* gr, uint8 minimum_loading, uint8 waiting_time_shift, sint16 spacing_shift, bool wait_for_time)
+bool schedule_t::insert(const grund_t* gr, uint8 minimum_loading, uint8 waiting_time_shift, sint16 spacing_shift, bool wait_for_time, uint16 delay_tolerance)
 {
 	// stored in minivec, so we have to avoid adding too many
 	if(  entries.get_count()>=254  ) {
@@ -120,7 +120,7 @@ bool schedule_t::insert(const grund_t* gr, uint8 minimum_loading, uint8 waiting_
 	}
 
 	if(  is_stop_allowed(gr)  ) {
-		entries.insert_at(current_stop, schedule_entry_t(gr->get_pos(), minimum_loading, waiting_time_shift, spacing_shift, wait_for_time));
+		entries.insert_at(current_stop, schedule_entry_t(gr->get_pos(), minimum_loading, waiting_time_shift, spacing_shift, wait_for_time, delay_tolerance));
 		current_stop ++;
 		make_current_stop_valid();
 		return true;
@@ -134,7 +134,7 @@ bool schedule_t::insert(const grund_t* gr, uint8 minimum_loading, uint8 waiting_
 
 
 
-bool schedule_t::append(const grund_t* gr, uint8 minimum_loading, uint8 waiting_time_shift, sint16 spacing_shift, bool wait_for_time)
+bool schedule_t::append(const grund_t* gr, uint8 minimum_loading, uint8 waiting_time_shift, sint16 spacing_shift, bool wait_for_time, uint16 delay_tolerance)
 {
 	// stored in minivec, so we have to avoid adding too many
 	if(entries.get_count()>=254) {
@@ -143,7 +143,7 @@ bool schedule_t::append(const grund_t* gr, uint8 minimum_loading, uint8 waiting_
 	}
 
 	if(is_stop_allowed(gr)) {
-		entries.append(schedule_entry_t(gr->get_pos(), minimum_loading, waiting_time_shift, spacing_shift, wait_for_time), 4);
+		entries.append(schedule_entry_t(gr->get_pos(), minimum_loading, waiting_time_shift, spacing_shift, wait_for_time, delay_tolerance), 4);
 		return true;
 	}
 	else {
@@ -230,7 +230,7 @@ void schedule_t::rdwr(loadsave_t *file)
 			uint32 dummy;
 			pos.rdwr(file);
 			file->rdwr_long(dummy);
-			entries.append(schedule_entry_t(pos, (uint8)dummy, 0, 0, false));
+			entries.append(schedule_entry_t(pos, (uint8)dummy, 0, 0, false, 0));
 		}
 	}
 	else {
@@ -241,6 +241,7 @@ void schedule_t::rdwr(loadsave_t *file)
 				entries[i] .waiting_time_shift = 0;
 				entries[i] .spacing_shift = 0;
 				entries[i] .wait_for_time = false;
+				entries[i] .delay_tolerance = 0;
 			}
 			entries[i].pos.rdwr(file);
 			file->rdwr_byte(entries[i].minimum_loading);
@@ -250,6 +251,7 @@ void schedule_t::rdwr(loadsave_t *file)
 			if(file->get_version()>=120009) {
 				file->rdwr_short(entries[i].spacing_shift);
 				file->rdwr_bool(entries[i].wait_for_time);
+				file->rdwr_short(entries[i].delay_tolerance);
 			}
 		}
 	}
@@ -415,7 +417,7 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
 	buf.printf("%u,%u|%d|", current_stop, spacing, (int)get_type());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
-		buf.printf("%s,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, (int)i.spacing_shift, (int)i.wait_for_time);
+		buf.printf("%s,%i,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, (int)i.spacing_shift, (int)i.wait_for_time, (int)i.delay_tolerance);
 	}
 }
 
@@ -467,24 +469,24 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	p++;
 	// now scan the entries
 	while(  *p>0  ) {
-		sint16 values[7];
-		for(  sint8 i=0;  i<7;  i++  ) {
+		sint16 values[8];
+		for(  sint8 i=0;  i<8;  i++  ) {
 			values[i] = atoi( p );
 			while(  *p  &&  (*p!=','  &&  *p!='|')  ) {
 				p++;
 			}
-			if(  i<6  &&  *p!=','  ) {
+			if(  i<7  &&  *p!=','  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete string!" );
 				return false;
 			}
-			if(  i==6  &&  *p!='|'  ) {
+			if(  i==7  &&  *p!='|'  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
 				return false;
 			}
 			p++;
 		}
 		// ok, now we have a complete entry
-		entries.append(schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4],values[5],values[6]));
+		entries.append(schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4],values[5],values[6],values[7]));
 	}
 	return true;
 }
