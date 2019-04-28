@@ -415,6 +415,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	bt_same_spacing_shift.init(button_t::square_automatic, "Use same shift and tolerance for all stops");
 	bt_same_spacing_shift.set_tooltip("Use one spacing shift and delay tolerance value for all stops in schedule.");
 	bt_same_spacing_shift.add_listener(this);
+	bt_same_spacing_shift.pressed = false;
 	add_component(&bt_same_spacing_shift);
 
 	// return tickets
@@ -537,6 +538,16 @@ void schedule_gui_t::update_selection()
 				const uint16 spacing_divisor = welt->get_settings().get_spacing_shift_divisor();
 				numimp_delay_tolerance.set_limits( 0, schedule->get_spacing()>0 ? spacing_divisor/schedule->get_spacing()/2 : 0 );
 				bt_wait_for_time.pressed = true;
+			}
+			
+			if(  bt_same_spacing_shift.pressed  ) {
+				// set same spacing shift and delay tolerance to all entries.
+				const sint16 shift = schedule->entries[current_stop].spacing_shift;
+				const uint16 tolerance = schedule->entries[current_stop].delay_tolerance;
+				for(  uint8 i=0;  i<schedule->get_count();  i++  ) {
+					schedule->entries[i].spacing_shift = shift;
+					schedule->entries[i].delay_tolerance = tolerance;
+				}
 			}
 
 		}
