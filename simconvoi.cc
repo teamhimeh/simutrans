@@ -2968,19 +2968,22 @@ station_tile_search_ready: ;
 	}
 
 	// loading is finished => maybe drive on
-	bool can_go = loading_level >= loading_limit;
+	bool can_go;
 	sint64 go_on_ticks = 0;
-	if(  schedule->get_spacing()>0  ) {
+	if(  schedule->get_current_entry().wait_for_time  &&  schedule->get_spacing()>0  ) {
 		// consider spacing
 		// subtract wait_lock (time) from spacing_shift
 		const sint32 spacing_shift = schedule->get_current_entry().spacing_shift * welt->ticks_per_world_month / welt->get_settings().get_spacing_shift_divisor() - time;
 		const sint32 spacing = welt->ticks_per_world_month / schedule->get_spacing();
 		const uint32 delay_tolerance = schedule->get_current_entry().delay_tolerance * welt->ticks_per_world_month / welt->get_settings().get_spacing_shift_divisor();
 		go_on_ticks = ((arrived_time - delay_tolerance - spacing_shift) / spacing + 1) * spacing + spacing_shift;
-		can_go &= (!schedule->get_current_entry().wait_for_time  ||  welt->get_ticks() >= go_on_ticks);
+		can_go = welt->get_ticks() >= go_on_ticks;
+		can_go |= (loading_limit > 0  &&  loading_level >= loading_limit);
+	} else {
+		can_go = loading_level >= loading_limit;
 	}
 	can_go |= no_load;
-	can_go |= (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - schedule->get_current_entry().waiting_time_shift)) );
+	can_go |= (loading_limit > 0  &&  schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - schedule->get_current_entry().waiting_time_shift)) );
 	
 	if(  can_go  ) {
 
