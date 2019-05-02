@@ -75,6 +75,7 @@ public:
 	{
 		stop.buf().printf("%i) ", number+1);
 		schedule_t::gimme_stop_name(stop.buf(), welt, player, entry, -1);
+		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : entry.couple_line.is_bound() ? SYSCOL_BUTTON_TEXT_DISABLED  : SYSCOL_TEXT);
 		stop.update();
 	}
 
@@ -91,7 +92,6 @@ public:
 	{
 		is_current = yesno;
 		arrow.set_image(gui_theme_t::pos_button_img[yesno ? 1: 0], true);
-		stop.set_color(yesno ? SYSCOL_TEXT_HIGHLIGHT : SYSCOL_TEXT);
 	}
 
 	bool infowin_event(const event_t *ev)
