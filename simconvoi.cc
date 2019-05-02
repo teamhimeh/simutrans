@@ -2640,6 +2640,13 @@ void convoi_t::rdwr(loadsave_t *file)
 			next_reservation_index = route.get_count()-1;
 		}
 		file->rdwr_short( next_reservation_index );
+		// If this convoy is an aircraft, next_reservation_index must be 0. sanitaze next_reservation_index because next_reservation_index often be an illegal number. The cause of this problem is still not found!
+		const waytype_t typ = front()->get_waytype();
+		const bool rail_convoy = typ==track_wt  ||  typ==tram_wt  ||  typ==maglev_wt  ||  typ==monorail_wt  ||  typ==narrowgauge_wt;
+		if(  !rail_convoy  &&  next_reservation_index!=0  &&  file->is_loading()  ) {
+			dbg->warning( "convoi_t::rdwr()","next_reservation_index of convoy %d is %d while this is not a rail convoy. next_reservation_index is sanitized to 0.", self.get_id(), next_reservation_index );
+			next_reservation_index = 0;
+		}
 	}
 	
 	// for new reservation system with reserved_tiles

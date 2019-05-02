@@ -2518,13 +2518,21 @@ bool tool_build_way_t::exit( player_t *player )
 
 void tool_build_way_t::draw_after(scr_coord k, bool dirty) const
 {
-	if(  desc  &&  desc->get_waytype()==road_wt  ) {
+	if(  desc  &&  (desc->get_waytype()==road_wt  ||  desc->get_styp()==type_elevated)  ) {
 		if(  icon!=IMG_EMPTY  &&  is_selected()  ) {
 			display_img_blend( icon, k.x, k.y, TRANSPARENT50_FLAG|OUTLINE_FLAG|color_idx_to_rgb(COL_BLACK), false, dirty );
-			char level_str[16];
-			tool_build_way_t::set_mode_str(level_str, overtaking_mode);
-			uint8 color = tool_build_way_t::get_flag_color(street_flag);
-			display_proportional_rgb( k.x+4, k.y+4, level_str, ALIGN_LEFT, color_idx_to_rgb(color), true );
+			char mode_str[8], offset_str[8];
+			// show overtaking_mode when this way is road_wt.
+			if(  desc->get_waytype()==road_wt  ) {
+				tool_build_way_t::set_mode_str(mode_str, overtaking_mode);
+				uint8 color = tool_build_way_t::get_flag_color(street_flag);
+				display_proportional_rgb( k.x+4, k.y+4, mode_str, ALIGN_LEFT, color_idx_to_rgb(color), true );
+			}
+			// show height offset when height offset is set for this elevated way.
+			if(  desc->get_styp()==type_elevated  &&  height_offset!=0  ) {
+				sprintf(offset_str, "%d", height_offset);
+				display_proportional_rgb( k.x+28, k.y+4, offset_str, ALIGN_RIGHT, color_idx_to_rgb(COL_YELLOW), true );
+			}
 		}
 	} else {
 		two_click_tool_t::draw_after(k,dirty);
@@ -7007,7 +7015,7 @@ image_id tool_merge_stop_t::get_marker_image()
 	return cursor;
 }
 
-uint8 tool_merge_stop_t::is_valid_pos( player_t *player, const koord3d &pos, const char *&error, const koord3d &start )
+uint8 tool_merge_stop_t::is_valid_pos( player_t *player, const koord3d &pos, const char *&error, const koord3d &)
 {
 	grund_t *bd = welt->lookup(pos);
 	if (bd==NULL) {
@@ -7054,19 +7062,13 @@ void tool_merge_stop_t::mark_tiles(  player_t *player, const koord3d &start, con
 		}
 	}
 
-	if(  distance > 1  &&  welt->get_settings().allow_merge_distant_halt  ) {
-		if (  !halt_be_merged_from->is_halt_covered( halt_be_merged_to )  &&  halt_be_merged_from->get_owner() == player  &&  halt_be_merged_to->get_owner() == player )	{
-			workcost = -welt->scale_with_month_length( (2 ^ distance) * welt->get_settings().cst_multiply_merge_halt);
-		}
+	if(  distance  < welt->get_settings().allow_merge_distant_halt  ) {
+		distance = clamp(distance,2,33)-2;
+		workcost = -welt->scale_with_month_length( (1<<distance) * welt->get_settings().cst_multiply_merge_halt );
 		win_set_static_tooltip( tooltip_with_price("Building costs estimates", workcost) );
 	}
 	else {
-		if ( halt_be_merged_from->is_halt_covered( halt_be_merged_to ) ) {
-			win_set_static_tooltip( tooltip_with_price("Building costs estimates", workcost) );
-		}
-		else {
-			win_set_static_tooltip( "Can not merge" );
-		}
+		win_set_static_tooltip( "Too far away to merge stations!" );
 	}
 }
 
@@ -7092,24 +7094,21 @@ const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_po
 		}
 	}
 
-	if(  distance > 1  ) {
-		if(  welt->get_settings().allow_merge_distant_halt  ) {
-			// check funds
-			if ( !halt_be_merged_from->is_halt_covered( halt_be_merged_to ) )	{
-				distance = min( 31, distance ); // to avoid overflow
-				workcost = -welt->scale_with_month_length( (1ul<<distance) * welt->get_settings().cst_multiply_merge_halt );
-			}
-			if(  player != welt->get_public_player()  ||  !player->can_afford(workcost)  ) {
-				return NOTICE_INSUFFICIENT_FUNDS;
-			}
+	if(  distance  < welt->get_settings().allow_merge_distant_halt  ) {
+		distance = clamp(distance,2,33)-2;
+		workcost = -welt->scale_with_month_length( (1<<distance) * welt->get_settings().cst_multiply_merge_halt );
+		win_set_static_tooltip( tooltip_with_price("Building costs estimates", workcost) );
+		if(  player != welt->get_public_player()  ||  !player->can_afford(workcost)  ) {
+			return NOTICE_INSUFFICIENT_FUNDS;
 		}
-		else {
-			return "Only merge adjacent stations!";
-		}
+	}
+	else {
+		return "Too far away to merge stations!";
 	}
 
 	// and now just do it ...
 	halt_be_merged_to->merge_halt(halt_be_merged_from);
+	player_t::book_construction_costs( player, workcost, halt_be_merged_to->get_basis_pos(), ignore_wt );
 
 	// nothing to do
 	return NULL;
