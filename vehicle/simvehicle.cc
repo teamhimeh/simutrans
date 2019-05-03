@@ -3014,9 +3014,10 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		}
 
 		// next check for coupling
-		if(  can_couple(cnv->get_route(), next_block, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
+		if(  can_couple(cnv->get_route(), next_block+1, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
 			cnv->set_next_coupling(next_coupling, next_c_steps);
-			cnv->set_next_stop_index(min(next_crossing,min(next_signal,next_coupling)));
+			// since signal does not exist till the coupling point...
+			cnv->set_next_stop_index(min(next_crossing,next_coupling));
 			return cnv->get_next_stop_index()>route_index;
 		}
 		// next check for signal
@@ -3179,7 +3180,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 						continue;
 					}
 					//reserve tiles
-					for(  uint16 h=start_index+1;  h<i;  h++  ) {
+					for(  uint16 h=start_index;  h<i;  h++  ) {
 						grund_t* grn = welt->lookup(route->at(h));
 						schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
 						if(  schn  ) {
