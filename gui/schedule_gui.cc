@@ -625,59 +625,59 @@ bool schedule_gui_t::infowin_event(const event_t *ev)
 }
 
 
-bool schedule_gui_t::action_triggered( gui_action_creator_t *komp, value_t p)
+bool schedule_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 {
-DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_selector);
+DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_selector);
 
-	if(komp == &bt_add) {
+	if(comp == &bt_add) {
 		mode = adding;
 		bt_add.pressed = true;
 		bt_insert.pressed = false;
 		bt_remove.pressed = false;
 		update_tool( true );
 	}
-	else if(komp == &bt_insert) {
+	else if(comp == &bt_insert) {
 		mode = inserting;
 		bt_add.pressed = false;
 		bt_insert.pressed = true;
 		bt_remove.pressed = false;
 		update_tool( true );
 	}
-	else if(komp == &bt_remove) {
+	else if(comp == &bt_remove) {
 		mode = removing;
 		bt_add.pressed = false;
 		bt_insert.pressed = false;
 		bt_remove.pressed = true;
 		update_tool( false );
 	}
-	else if(komp == &numimp_load) {
+	else if(comp == &numimp_load) {
 		if (!schedule->empty()) {
 			schedule->entries[schedule->get_current_stop()].minimum_loading = (uint8)p.i;
 			update_selection();
 		}
 	}
-	else if(komp == &numimp_spacing) {
+	else if(comp == &numimp_spacing) {
 		schedule->set_spacing((uint16)p.i);
 		p.i==0 ? sprintf(lb_spacing_str,"off") : sprintf(lb_spacing_str,"%d",welt->get_settings().get_spacing_shift_divisor()/(uint16)p.i);
 		update_selection();
 	}
-	else if(komp == &numimp_spacing_shift) {
+	else if(comp == &numimp_spacing_shift) {
 		if (!schedule->empty()) {
 			schedule->entries[schedule->get_current_stop()].spacing_shift = (sint16)p.i;
 			update_selection();
 		}
 	}
-	else if(komp == &numimp_delay_tolerance) {
+	else if(comp == &numimp_delay_tolerance) {
 		if (!schedule->empty()) {
 			schedule->entries[schedule->get_current_stop()].delay_tolerance = (sint16)p.i;
 			update_selection();
 		}
 	}
-	else if(komp == &bt_wait_for_time) {
+	else if(comp == &bt_wait_for_time) {
 		schedule->entries[schedule->get_current_stop()].wait_for_time = bt_wait_for_time.pressed;
 		update_selection();
 	}
-	else if(komp == &wait_load) {
+	else if(comp == &wait_load) {
 		if(!schedule->empty()) {
 			if (gui_waiting_time_item_t *item = dynamic_cast<gui_waiting_time_item_t*>( wait_load.get_selected_item())) {
 				schedule->entries[schedule->get_current_stop()].waiting_time_shift = item->get_wait_shift();
@@ -686,10 +686,10 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 			}
 		}
 	}
-	else if(komp == &bt_return) {
+	else if(comp == &bt_return) {
 		schedule->add_return_way();
 	}
-	else if(komp == &line_selector) {
+	else if(comp == &line_selector) {
 		uint32 selection = p.i;
 		if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(line_selector.get_element(selection))  ) {
 			new_line = li->get_line();
@@ -703,7 +703,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 			line_selector.set_selection( 0 );
 		}
 	}
-	else if(komp == &bt_promote_to_line) {
+	else if(comp == &bt_promote_to_line) {
 		// update line schedule via tool!
 		tool_t *tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 		cbuffer_t buf;
@@ -714,7 +714,7 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","komp=%p combo=%p",komp,&line_s
 		// since init always returns false, it is safe to delete immediately
 		delete tool;
 	}
-	else if (komp == stats) {
+	else if (comp == stats) {
 		// click on one of the schedule entries
 		const int line = p.i;
 
