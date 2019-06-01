@@ -582,6 +582,7 @@ public:
 	 * @author Hj. Malthaner
 	 */
 	const uint32 & get_sum_power() const {return sum_power;}
+	const sint32 & get_sum_gear_and_power() const {return sum_gear_and_power;}
 	const sint32 & get_min_top_speed() const {return min_top_speed;}
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
@@ -900,6 +901,7 @@ public:
 	void must_recalc_data() { recalc_data = true; }
 	void must_recalc_data_front() { recalc_data_front = true; }
 	void must_recalc_speed_limit() { recalc_speed_limit = true; }
+	bool get_recalc_speed_limit() const { return recalc_speed_limit; }
 
 	// calculates the speed used for the speedbonus base, and the max achievable speed at current power/weight for overtakers
 	void calc_speedbonus_kmh();

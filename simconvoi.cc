@@ -699,7 +699,14 @@ static inline sint32 res_power(sint64 speed, sint32 total_power, sint64 friction
  */
 void convoi_t::calc_acceleration(uint32 delta_t)
 {
-	if(  !recalc_data  &&  !recalc_speed_limit  &&  !recalc_data_front  &&  (
+	convoihandle_t c = self;
+	bool rsl = recalc_speed_limit; // Must speed limit be recalculated?
+	while(  c.is_bound()  &&  !rsl  ) {
+		rsl |= c->get_recalc_speed_limit();
+		c = c->get_coupling_convoi();
+	}
+	
+	if(  !recalc_data  &&  !rsl  &&  !recalc_data_front  &&  (
 		(sum_friction_weight == sum_gesamtweight  &&  akt_speed_soll <= akt_speed  &&  akt_speed_soll+24 >= akt_speed)  ||
 		(sum_friction_weight > sum_gesamtweight  &&  akt_speed_soll == akt_speed)  )
 		) {
@@ -710,7 +717,7 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 	}
 
 	// Dwachs: only compute this if a vehicle in the convoi hopped
-	if(  recalc_data  ||  recalc_speed_limit  ) {
+	if(  recalc_data  ||  rsl  ) {
 		// calculate total friction and lowest speed limit
 		const vehicle_t* v = front();
 		speed_limit = min( min_top_speed, v->get_speed_limit() );
@@ -718,16 +725,21 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 			sum_gesamtweight   = v->get_total_weight();
 			sum_friction_weight = v->get_frictionfactor() * sum_gesamtweight;
 		}
+		
+		c = self;
+		while(  c.is_bound()  ) {
+			speed_limit = min( speed_limit, c->get_min_top_speed() );
+			for(  uint8 i=(c==self?1:0);  i<c->get_vehicle_count();  i++  ) {
+				const vehicle_t* v = c->get_vehikel(i);
+				speed_limit = min( speed_limit, v->get_speed_limit() );
 
-		for(  unsigned i=1; i<anz_vehikel; i++  ) {
-			const vehicle_t* v = fahr[i];
-			speed_limit = min( speed_limit, v->get_speed_limit() );
-
-			if (recalc_data) {
-				int total_vehicle_weight = v->get_total_weight();
-				sum_friction_weight += v->get_frictionfactor() * total_vehicle_weight;
-				sum_gesamtweight += total_vehicle_weight;
+				if (recalc_data) {
+					int total_vehicle_weight = v->get_total_weight();
+					sum_friction_weight += v->get_frictionfactor() * total_vehicle_weight;
+					sum_gesamtweight += total_vehicle_weight;
+				}
 			}
+			c = c->get_coupling_convoi();
 		}
 		recalc_data = recalc_speed_limit = false;
 		akt_speed_soll = min( speed_limit, brake_speed_soll );
@@ -774,8 +786,16 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 		// prissi: integer sucks with planes => using floats ...
 		// turfit: result can overflow sint32 and double so onto sint64. planes ok.
 		//sint32 delta_v =  (sint32)( ( (double)( (akt_speed>akt_speed_soll?0l:sum_gear_and_power) - deccel)*(double)delta_t)/(double)sum_gesamtweight);
+		
+		// calculate sum_gear_and_power of all coupled convoys
+		sint32 gear_and_power = sum_gear_and_power;
+		c = get_coupling_convoi();
+		while(c.is_bound()) {
+			gear_and_power += c->get_sum_gear_and_power();
+			c = c->get_coupling_convoi();
+		}
 
-		sint64 residual_power = res_power(akt_speed, akt_speed>akt_speed_soll? 0l : sum_gear_and_power, sum_friction_weight, sum_gesamtweight);
+		sint64 residual_power = res_power(akt_speed, akt_speed>akt_speed_soll? 0l : gear_and_power, sum_friction_weight, sum_gesamtweight);
 
 		// we normalize delta_t to 1/64th and check for speed limit */
 		//sint32 delta_v = ( ( (akt_speed>akt_speed_soll?0l:sum_gear_and_power) - deccel) * delta_t)/sum_gesamtweight;
