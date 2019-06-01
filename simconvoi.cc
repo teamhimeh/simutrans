@@ -830,6 +830,13 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 		max_record_speed = akt_speed;
 		record_pos = fahr[0]->get_pos().get_2d();
 	}
+	
+	// broadcast new akt_speed to all coupling convoys
+	c = get_coupling_convoi();
+	while(  c.is_bound()  ) {
+		c->set_akt_speed(akt_speed);
+		c = c->get_coupling_convoi();
+	}
 }
 
 

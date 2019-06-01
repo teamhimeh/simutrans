@@ -576,6 +576,12 @@ public:
 	 * @author Hj. Malthaner
 	 */
 	const sint32& get_akt_speed() const { return akt_speed; }
+	
+	/*
+	 * When this convoy is coupled, akt_speed is set by the head convoy.
+	 * @author THLeaderH
+	 */
+	void set_akt_speed(sint32 s) { akt_speed = s;}
 
 	/**
 	 * @return total power of this convoi

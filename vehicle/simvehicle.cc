@@ -1169,8 +1169,12 @@ void vehicle_t::hop(grund_t* gr)
 		else if(  check_for_finish  &&  (direction==ribi_t::north  ||  direction==ribi_t::west)  ) {
 			steps_next = (steps_next/2)+1;
 		}
-		cnv->add_running_cost( weg );
 		cnv->must_recalc_data_front();
+	}
+	
+	// the convoy of this vehicle may be coupling with other convoy.
+	if(  this==cnv->front()  ) {
+		cnv->add_running_cost( weg );
 	}
 
 	// update friction and friction weight of convoy
