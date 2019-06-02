@@ -74,7 +74,8 @@ public:
 		CAN_START_TWO_MONTHS,
 		LEAVING_DEPOT,
 		ENTERING_DEPOT,
-		COUPLED, 
+		COUPLED,
+		COUPLED_LOADING,
 		MAX_STATES
 	};
 
@@ -332,6 +333,9 @@ private:
 	* @author Hanjsörg Malthaner
 	*/
 	bool can_go_alte_richtung();
+	
+	// alte_richtung of coupled convoy is set by the head convoy.
+	void set_alte_richtung(ribi_t::ribi r) { alte_richtung = r; }
 
 	/**
 	 * remove all track reservations (trains only)
@@ -793,6 +797,8 @@ public:
 	* @date  12.06.2003
 	*/
 	const sint32 &get_loading_limit() const { return loading_limit; }
+	
+	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
 
 	/**
 	* Schedule convois for self destruction. Will be executed

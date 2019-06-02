@@ -86,7 +86,9 @@ static const char * state_names[convoi_t::MAX_STATES] =
 	"WAITING_FOR_CLEARANCE_TWO_MONTHS",
 	"CAN_START_TWO_MONTHS",
 	"LEAVING_DEPOT",
-	"ENTERING_DEPOT"
+	"ENTERING_DEPOT",
+	"COUPLED",
+	"COUPLED_LOADING"
 };
 
 
@@ -1006,6 +1008,7 @@ sync_result convoi_t::sync_step(uint32 delta_t)
 			break;	// DRIVING
 
 		case COUPLED:
+		case COUPLED_LOADING:
 			break;
 			
 		case LOADING:
@@ -1597,8 +1600,14 @@ void convoi_t::start()
  * called from the first vehicle_t of a convoi */
 void convoi_t::ziel_erreicht()
 {
+	convoihandle_t c = self;
+	// broadcast alte_richtung
+	while(  c.is_bound()  ) {
+		c->set_alte_richtung(c->front()->get_direction());
+		c = c->get_coupling_convoi();
+	}
+	
 	const vehicle_t* v = fahr[0];
-	alte_richtung = v->get_direction();
 
 	// check, what is at destination!
 	const grund_t *gr = welt->lookup(v->get_pos());
@@ -1655,9 +1664,14 @@ void convoi_t::ziel_erreicht()
 		// no depot reached, no coupling, check for stop!
 		if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 			// seems to be a stop, so book the money for the trip
-			akt_speed = 0;
 			halt->book(1, HALT_CONVOIS_ARRIVED);
-			state = LOADING;
+			c = self;
+			while(  c.is_bound()  ) {
+				c->set_akt_speed(0);
+				c->set_state(c==self ? LOADING : COUPLED_LOADING);
+				c = c->get_coupling_convoi();
+			}
+			// arrived_time update is currently needed only for the head convoy.
 			arrived_time = welt->get_ticks();
 		}
 		else {
@@ -3134,7 +3148,7 @@ station_tile_search_ready: ;
 		}
 
 		// Advance schedule
-		if(  state!=COUPLED  ) {
+		if(  state!=COUPLED  &&  state!=COUPLED_LOADING  ) {
 			schedule->advance();
 			state = ROUTING_1;
 			loading_limit = 0;
@@ -4012,7 +4026,7 @@ const char* convoi_t::send_to_depot(bool local)
 }
 
 bool convoi_t::couple_convoi(convoihandle_t coupled) {
-	coupled->set_state(COUPLED);
+	coupled->set_state(COUPLED_LOADING);
 	coupling_convoi = coupled;
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
