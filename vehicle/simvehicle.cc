@@ -2948,6 +2948,12 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	if(w==NULL) {
 		return false;
 	}
+	
+	const uint16 cidx = cnv->get_next_coupling_index();
+	if(  cidx<cnv->get_route()->get_count()  &&  cnv->get_route()->at(cidx)==gr->get_pos()  ) {
+		// the next tile is coupling point.
+		return true;
+	}
 
 	/* this should happen only before signals ...
 	 * but if it is already reserved, we can save lots of other checks later
