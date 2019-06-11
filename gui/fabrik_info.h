@@ -43,7 +43,7 @@ class fabrik_info_t : public gui_frame_t, public action_listener_t
 private:
 	fabrik_t *fab;
 
-	cbuffer_t info_buf, prod_buf;
+	cbuffer_t info_buf, prod_buf, details_buf;
 
 	factory_chart_t chart;
 
@@ -68,6 +68,8 @@ private:
 	gui_scrollpane_t scroll_info;
 
 	void rename_factory();
+
+	void update_components();
 public:
 	// refreshes text, images, indicator
 	void update_info();

@@ -10,7 +10,7 @@
 #ifndef gui_gui_label_h
 #define gui_gui_label_h
 
-#include "gui_komponente.h"
+#include "gui_component.h"
 #include "../../simcolor.h"
 #include "../gui_theme.h"
 #include "../../simskin.h"
@@ -161,7 +161,7 @@ public:
 	 */
 	void append_money(double money);
 
-	void draw(scr_coord offset);
+	void draw(scr_coord offset) OVERRIDE;
 
 protected:
 	using gui_label_t::get_text_pointer;

@@ -141,8 +141,8 @@ public:
 	// shows/deletes highlighting of tiles
 	void highlight_schedule(bool marking);
 	void update_schedule();
-	void draw(scr_coord offset);
-	bool action_triggered(gui_action_creator_t *, value_t v);
+	void draw(scr_coord offset) OVERRIDE;
+	bool action_triggered(gui_action_creator_t *, value_t v) OVERRIDE;
 };
 
 #endif

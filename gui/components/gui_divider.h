@@ -9,7 +9,7 @@
 #ifndef gui_components_gui_divider_h
 #define gui_components_gui_divider_h
 
-#include "gui_komponente.h"
+#include "gui_component.h"
 #include "../gui_theme.h"
 
 /**
@@ -27,11 +27,11 @@ public:
 		set_size( scr_size( width, height ) );
 	};
 
-	scr_size get_min_size() const;
+	scr_size get_min_size() const OVERRIDE;
 
-	scr_size get_max_size() const;
+	scr_size get_max_size() const OVERRIDE;
 
-	void draw(scr_coord offset);
+	void draw(scr_coord offset) OVERRIDE;
 };
 
 #endif

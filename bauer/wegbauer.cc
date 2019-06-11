@@ -328,7 +328,7 @@ void way_builder_t::fill_menu(tool_selector_t *tool_selector, const waytype_t wt
 /* allow for railroad crossing
  * @author prissi
  */
-bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, waytype_t wtyp0, const player_t *player_) const
+bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, waytype_t wtyp0, const player_t *player) const
 {
 	const waytype_t wtyp = wtyp0==tram_wt ? track_wt : wtyp0;
 	// nothing to cross here
@@ -356,7 +356,7 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, waytype_t 
 		return true;
 	}
 	// right owner of the other way
-	if(!check_owner(w->get_owner(),player_)) {
+	if(!check_owner(w->get_owner(),player)) {
 		return false;
 	}
 	// check for existing crossing
@@ -1161,9 +1161,9 @@ void way_builder_t::check_for_bridge(const grund_t* parent_from, const grund_t* 
 }
 
 
-way_builder_t::way_builder_t(player_t* player_) : next_gr(32)
+way_builder_t::way_builder_t(player_t* player) : next_gr(32)
 {
-	player_builder     = player_;
+	player_builder     = player;
 	bautyp = strasse;   // kann mit init_builder() gesetzt werden
 	maximum = 2000;// CA $ PER TILE
 
@@ -2804,13 +2804,13 @@ void way_builder_t::build_powerline()
 
 
 // this can drive any river, even a river that has max_speed=0
-class fluss_fahrer_t : public test_driver_t
+class fluss_test_driver_t : public test_driver_t
 {
-	bool check_next_tile(const grund_t* gr) const { return gr->get_weg_ribi_unmasked(water_wt)!=0; }
-	virtual ribi_t::ribi get_ribi(const grund_t* gr) const { return gr->get_weg_ribi_unmasked(water_wt); }
-	virtual waytype_t get_waytype() const { return invalid_wt; }
-	virtual int get_cost(const grund_t *, const weg_t *, const sint32, ribi_t::ribi) const { return 1; }
-	virtual bool is_target(const grund_t *cur,const grund_t *) const { return cur->is_water()  &&  cur->get_grund_hang()==slope_t::flat; }
+	bool check_next_tile(const grund_t* gr) const OVERRIDE { return gr->get_weg_ribi_unmasked(water_wt)!=0; }
+	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return gr->get_weg_ribi_unmasked(water_wt); }
+	waytype_t get_waytype() const OVERRIDE { return invalid_wt; }
+	int get_cost(const grund_t *, const weg_t *, const sint32, ribi_t::ribi) const OVERRIDE { return 1; }
+	bool is_target(const grund_t *cur,const grund_t *) const OVERRIDE { return cur->is_water()  &&  cur->get_grund_hang()==slope_t::flat; }
 };
 
 
@@ -2893,8 +2893,8 @@ void way_builder_t::build_river()
 		 * thus we use the routefinder to find the sea
 		 */
 		route_t to_the_sea;
-		fluss_fahrer_t ff;
-		if (to_the_sea.find_route(welt, welt->lookup_kartenboden(route[start_n].get_2d())->get_pos(), &ff, 0, ribi_t::all, 0x7FFFFFFF)) {
+		fluss_test_driver_t river_tester;
+		if (to_the_sea.find_route(welt, welt->lookup_kartenboden(route[start_n].get_2d())->get_pos(), &river_tester, 0, ribi_t::all, 0x7FFFFFFF)) {
 			FOR(koord3d_vector_t, const& i, to_the_sea.get_route()) {
 				if (weg_t* const w = welt->lookup(i)->get_weg(water_wt)) {
 					int type;

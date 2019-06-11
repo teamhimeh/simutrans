@@ -19,6 +19,7 @@
 
 #include "../dataobj/loadsave.h"
 #include "../dataobj/environment.h"
+#include "../dataobj/translator.h"
 
 #include "../utils/cbuffer_t.h"
 
@@ -28,7 +29,8 @@
 
 #ifdef MULTI_THREAD
 #include "../utils/simthread.h"
-static pthread_mutex_t crossing_logic_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+static pthread_mutex_t crossing_logic_mutex;
+static recursive_mutex_maker_t crossing_lm_maker(crossing_logic_mutex);
 #endif
 
 
@@ -40,14 +42,14 @@ crossing_t::crossing_t(loadsave_t* const file) : obj_no_info_t()
 }
 
 
-crossing_t::crossing_t(player_t* const player_, koord3d const pos, crossing_desc_t const* const desc, uint8 const ns) : obj_no_info_t(pos)
+crossing_t::crossing_t(player_t* const player, koord3d const pos, crossing_desc_t const* const desc, uint8 const ns) : obj_no_info_t(pos)
 {
 	this->ns = ns;
 	this->desc = desc;
 	logic = NULL;
 	state = crossing_logic_t::CROSSING_INVALID;
 	image = foreground_image = IMG_EMPTY;
-	set_owner( player_ );
+	set_owner( player );
 }
 
 
@@ -205,5 +207,19 @@ const char *crossing_t::is_deletable(const player_t *player)
 	}
 	else {
 		return obj_t::is_deletable(player);
+	}
+}
+
+
+void crossing_t::info(cbuffer_t & buf) const
+{
+	buf.append(translator::translate(get_name()));
+	buf.append("\n");
+	logic->info(buf);
+	buf.append("\n");
+
+	if (char const* const maker = get_desc()->get_copyright()) {
+		buf.printf(translator::translate("Constructed by %s"), maker);
+		buf.append("\n\n");
 	}
 }

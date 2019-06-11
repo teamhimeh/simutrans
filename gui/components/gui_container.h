@@ -20,7 +20,7 @@
 #include "../../simdebug.h"
 #include "../../simevent.h"
 #include "../../tpl/vector_tpl.h"
-#include "gui_komponente.h"
+#include "gui_component.h"
 
 class gui_container_t : virtual public gui_component_t
 {
@@ -96,6 +96,11 @@ public:
 	 * @author Knightly
 	 */
 	scr_coord get_focus_pos() OVERRIDE { return comp_focus ? pos+comp_focus->get_focus_pos() : scr_coord::invalid; }
+
+
+	// FIXME
+	scr_size get_min_size() const OVERRIDE { return get_size(); }
+	scr_size get_max_size() const OVERRIDE { return get_size(); }
 };
 
 #endif

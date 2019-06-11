@@ -11,7 +11,7 @@
 #include "../../descriptor/skin_desc.h"
 
 #include "gui_action_creator.h"
-#include "gui_komponente.h"
+#include "gui_component.h"
 #include "gui_button.h"
 
 class image_t;
@@ -113,6 +113,9 @@ public:
 
 
 	scr_size get_min_size() const OVERRIDE;
+
+	// size of tab header
+	scr_size get_required_size() const { return required_size; }
 
 	/**
 	 * Take tabs from other tab.

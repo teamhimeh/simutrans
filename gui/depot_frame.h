@@ -44,7 +44,7 @@ private:
 public:
 	depot_convoi_capacity_t();
 	void set_totals(uint32 pax, uint32 mail, uint32 goods);
-	void draw(scr_coord offset);
+	void draw(scr_coord offset) OVERRIDE;
 };
 
 
@@ -160,10 +160,6 @@ private:
 	gui_image_list_t electrics;
 	gui_image_list_t loks;
 	gui_image_list_t waggons;
-	gui_container_t cont_pas;
-	gui_container_t cont_electrics;
-	gui_container_t cont_loks;
-	gui_container_t cont_waggons;
 	gui_scrollpane_t scrolly_pas;
 	gui_scrollpane_t scrolly_electrics;
 	gui_scrollpane_t scrolly_loks;

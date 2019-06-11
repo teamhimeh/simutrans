@@ -73,14 +73,14 @@ public:
 	public:
 		const_text_scrollitem_t(char const* const t, PIXVAL const col) : gui_label_t(NULL, col) { set_text_pointer(t); }
 
-		virtual char const* get_text() const { return get_text_pointer(); }
+		char const* get_text() const OVERRIDE { return get_text_pointer(); }
 
-		scr_size get_min_size() const;
-		scr_size get_max_size() const;
+		scr_size get_min_size() const OVERRIDE;
+		scr_size get_max_size() const OVERRIDE;
 
-		virtual void set_text(char const *) {}
+		void set_text(char const *) OVERRIDE {}
 
-		void draw(scr_coord pos);
+		void draw(scr_coord pos) OVERRIDE;
 
 		using gui_label_t::get_color;
 	private:
@@ -95,6 +95,9 @@ private:
 	scr_coord_val max_width; // need for overlength entries
 
 	item_compare_func compare;
+	
+	bool multiple_selection; // true when multiple selection is enabled.
+	void calc_selection(scrollitem_t*, scrollitem_t*, event_t);
 
 protected:
 	scroll_container_t container;
@@ -116,7 +119,12 @@ public:
 
 	void set_selection(int s);
 	sint32 get_selection() const;
+	vector_tpl<sint32> get_selections() const;
+	
+	scrollitem_t* get_selected_item() const;
 	sint32 get_count() const { return item_list.get_count(); }
+	
+	void enable_multiple_selection() { multiple_selection = true; }
 
 	/*  when rebuilding a list, be sure to call recalculate the slider
 	 *  with recalculate_slider() to update the scrollbar properly. */

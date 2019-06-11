@@ -396,10 +396,10 @@ bool server_frame_t::infowin_event (const event_t *ev)
 }
 
 
-bool server_frame_t::action_triggered (gui_action_creator_t *komp, value_t p)
+bool server_frame_t::action_triggered (gui_action_creator_t *comp, value_t p)
 {
 	// Selection has changed
-	if(  &serverlist == komp  ) {
+	if(  &serverlist == comp  ) {
 		if(  p.i <= -1  ) {
 			join.disable();
 			gi = gameinfo_t(welt);
@@ -425,7 +425,7 @@ bool server_frame_t::action_triggered (gui_action_creator_t *komp, value_t p)
 			}
 		}
 	}
-	else if (  &add == komp  ||  &addinput ==komp  ) {
+	else if (  &add == comp  ||  &addinput ==comp  ) {
 		if (  newserver_name[0] != '\0'  ) {
 			join.disable();
 
@@ -444,17 +444,17 @@ bool server_frame_t::action_triggered (gui_action_creator_t *komp, value_t p)
 			serverlist.set_selection( -1 );
 		}
 	}
-	else if (  &show_mismatched == komp  ) {
+	else if (  &show_mismatched == comp  ) {
 		show_mismatched.pressed ^= 1;
 		serverlist.clear_elements();
 		update_serverlist();
 	}
-	else if (  &show_offline == komp  ) {
+	else if (  &show_offline == comp  ) {
 		show_offline.pressed ^= 1;
 		serverlist.clear_elements();
 		update_serverlist();
 	}
-	else if (  &nick == komp  ) {
+	else if (  &nick == comp  ) {
 		char* nickname = nick.get_text();
 		if (  env_t::networkmode  ) {
 			// Only try and change the nick with server if we're in network mode
@@ -468,7 +468,7 @@ bool server_frame_t::action_triggered (gui_action_creator_t *komp, value_t p)
 			env_t::nickname = nickname;
 		}
 	}
-	else if (  &join == komp  ) {
+	else if (  &join == comp  ) {
 		char* nickname = nick.get_text();
 		if (  strlen( nickname ) == 0  ) {
 			// forbid joining?
@@ -478,7 +478,7 @@ bool server_frame_t::action_triggered (gui_action_creator_t *komp, value_t p)
 
 		// Prefer serverlist entry if one is selected
 		if (  serverlist.get_selection() >= 0  ) {
-			filename += ((server_scrollitem_t*)serverlist.get_element(serverlist.get_selection()))->get_dns();
+			filename += ((server_scrollitem_t*)serverlist.get_selected_item())->get_dns();
 			destroy_win( this );
 			welt->load( filename.c_str() );
 		}
@@ -493,14 +493,14 @@ bool server_frame_t::action_triggered (gui_action_creator_t *komp, value_t p)
 			join.disable();
 		}
 	}
-	else if (  &find_mismatch == komp  ) {
+	else if (  &find_mismatch == comp  ) {
 		if (  gui_frame_t *info = win_get_magic(magic_pakset_info_t)  ) {
 			top_win( info );
 		}
 		else {
 			std::string msg;
 			if (  serverlist.get_selection() >= 0  ) {
-				network_compare_pakset_with_server( ((server_scrollitem_t*)serverlist.get_element(serverlist.get_selection()))->get_dns(), msg );
+				network_compare_pakset_with_server( ((server_scrollitem_t*)serverlist.get_selected_item())->get_dns(), msg );
 			}
 			else if (  custom_valid  ) {
 				network_compare_pakset_with_server( newserver_name, msg );

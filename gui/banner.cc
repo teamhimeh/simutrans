@@ -56,12 +56,12 @@ class banner_text_t : public gui_component_t
 public:
 	banner_text_t() : last_ms(dr_time() - 70), line(0) {}
 
-	scr_size get_min_size() const
+	scr_size get_min_size() const OVERRIDE
 	{
 		return scr_size(0, L_BANNER_HEIGHT);
 	}
 
-	void draw(scr_coord offset);
+	void draw(scr_coord offset) OVERRIDE;
 };
 
 banner_t::banner_t() : gui_frame_t("")
@@ -156,24 +156,24 @@ bool banner_t::infowin_event(const event_t *ev)
 }
 
 
-bool banner_t::action_triggered( gui_action_creator_t *komp, value_t)
+bool banner_t::action_triggered( gui_action_creator_t *comp, value_t)
 {
-	if(  komp == &quit  ) {
+	if(  comp == &quit  ) {
 		env_t::quit_simutrans = true;
 		destroy_all_win(true);
 	}
-	else if(  komp == &new_map  ) {
+	else if(  comp == &new_map  ) {
 		destroy_all_win(true);
 	}
-	else if(  komp == &load_map  ) {
+	else if(  comp == &load_map  ) {
 		destroy_all_win(true);
 		create_win( new loadsave_frame_t(true), w_info, magic_load_t);
 	}
-	else if(  komp == &load_scenario  ) {
+	else if(  comp == &load_scenario  ) {
 		destroy_all_win(true);
 		create_win( new scenario_frame_t(), w_info, magic_load_t );
 	}
-	else if(  komp == &join_map  ) {
+	else if(  comp == &join_map  ) {
 		destroy_all_win(true);
 		create_win( new server_frame_t(), w_info, magic_server_frame_t );
 	}

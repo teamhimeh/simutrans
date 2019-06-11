@@ -48,10 +48,10 @@ public:
 		minimaps_size = scr_size(PAX_DESTINATIONS_SIZE, PAX_DESTINATIONS_SIZE); // default minimaps size
 		minimap2_offset = scr_coord(minimaps_size.w + D_H_SPACE, 0);
 	}
-	scr_size get_min_size() const { return scr_size(PAX_DEST_MIN_SIZE*2 + D_H_SPACE, PAX_DEST_MIN_SIZE); }
+	scr_size get_min_size() const OVERRIDE { return scr_size(PAX_DEST_MIN_SIZE*2 + D_H_SPACE, PAX_DEST_MIN_SIZE); }
 
 	// set size of minimap, decide for horizontal or vertical arrangement
-	void set_size(scr_size size)
+	void set_size(scr_size size) OVERRIDE
 	{
 		gui_world_component_t::set_size(size);
 		// calculate new minimaps size : expand horizontally or vertically ?
@@ -98,7 +98,7 @@ public:
 		pax_destinations_last_change = city->get_pax_destinations_new_change();
 	}
 	// handle clicks into minimaps
-	bool infowin_event(const event_t *ev)
+	bool infowin_event(const event_t *ev) OVERRIDE
 	{
 		int my = ev->my;
 		if(  my > minimaps_size.h  &&  minimap2_offset.y > 0  ) {
@@ -125,7 +125,7 @@ public:
 		return false;
 	}
 	// draw both minimaps
-	void draw(scr_coord offset)
+	void draw(scr_coord offset) OVERRIDE
 	{
 		const uint32 current_pax_destinations = city->get_pax_destinations_new_change();
 		if(  pax_destinations_last_change > current_pax_destinations  ) {
@@ -389,16 +389,16 @@ void city_info_t::draw(scr_coord pos, scr_size size)
 }
 
 
-bool city_info_t::action_triggered( gui_action_creator_t *komp,value_t /* */)
+bool city_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 {
 	static char param[16];
-	if(  komp==&allow_growth  ) {
+	if(  comp==&allow_growth  ) {
 		sprintf(param,"g%hi,%hi,%hi", city->get_pos().x, city->get_pos().y, (short)(!city->get_citygrowth()) );
 		tool_t::simple_tool[TOOL_CHANGE_CITY]->set_default_param( param );
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_CITY], welt->get_public_player());
 		return true;
 	}
-	if(  komp==&name_input  ) {
+	if(  comp==&name_input  ) {
 		// send rename command if necessary
 		rename_city();
 	}
