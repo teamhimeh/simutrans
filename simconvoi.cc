@@ -397,7 +397,7 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 					realign_position |= ribi_t::is_bend(v->get_direction())  &&  (state==DRIVING  ||  is_waiting());
 				}
 				// if version is 99.17 or lower, some convois are broken, i.e. had too large gaps between vehicles
-				if(  !realign_position  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  ) {
+				if(  !realign_position  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  &&  state != COUPLED  &&  state != COUPLED_LOADING  ) {
 					if(  i==0  ) {
 						step_pos = v->get_steps();
 					}
@@ -516,6 +516,14 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 			wait_lock = 30000; // 60s to drive on, if the client in question had left
 		}
 		schedule->finish_editing();
+	}
+	// If this is a coupled convoi, the front car is not a leading car of the entire convoi.
+	if(  state==COUPLED  ||  state==COUPLED_LOADING  ) {
+		front()->set_leading(false);
+	}
+	// If this has a child convoi, the last car is not the last of the entire convoi.
+	if(  coupling_convoi.is_bound()  ) {
+		back()->set_last(false);
 	}
 	// remove wrong freight
 	check_freight();

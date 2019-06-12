@@ -349,7 +349,7 @@ uint32 vehicle_base_t::do_drive(uint32 distance)
 			}
 		}
 
-		if(  steps_next == 0  ) {
+		if(  steps_next == 0  &&  this->get_waytype() == air_wt  ) {
 			// only needed for aircrafts, which can turn on the same tile
 			// the indicate the turn with this here
 			steps_next = VEHICLE_STEPS_PER_TILE - 1;
