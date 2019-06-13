@@ -2924,12 +2924,6 @@ void convoi_t::laden()
 		if(  halt_owner == get_owner()  ||  halt_owner == welt->get_public_player()  ) {
 			// loading/unloading ...
 			halt->request_loading( self );
-			// load/unload recursively
-			convoihandle_t c_cnv = coupling_convoi;
-			while(  c_cnv.is_bound()  ) {
-				halt->request_loading(c_cnv);
-				c_cnv = c_cnv->get_coupling_convoi();
-			}
 		}
 	}
 }
@@ -3136,6 +3130,11 @@ station_tile_search_ready: ;
 		coupling_convoi = convoihandle_t();
 	}
 	
+	if(  coupling_convoi.is_bound()  ) {
+		// load/unload cargo of coupling convoy.
+		coupling_convoi->hat_gehalten(halt);
+	}
+	
 	bool coupling_ok = coupling_convoi.is_bound(); // temporary...
 	const bool coupling_cond = !schedule->get_current_entry().line_wait_for.is_bound()  ||  coupling_ok;
 
@@ -3164,7 +3163,8 @@ station_tile_search_ready: ;
 			// Advance schedule of coupling convoy recursively.
 			convoihandle_t c_cnv = coupling_convoi;
 			while(  c_cnv.is_bound()  ) {
-				coupling_convoi->get_schedule()->advance();
+				c_cnv->get_schedule()->advance();
+				c_cnv->set_state(COUPLED);
 				c_cnv = c_cnv->get_coupling_convoi();
 			}
 		}
