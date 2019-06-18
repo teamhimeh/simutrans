@@ -2477,7 +2477,7 @@ bool rail_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 }
 
 
-bool rail_vehicle_t::check_next_tile(const grund_t *bd) const
+bool rail_vehicle_t::check_next_tile(const grund_t *bd, const linehandle_t coupling_line) const
 {
 	schiene_t const* const sch = obj_cast<schiene_t>(bd->get_weg(get_waytype()));
 	if(  !sch  ) {
@@ -2528,7 +2528,26 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd) const
 		}
 		// but we can only use empty blocks ...
 		// now check, if we could enter here
-		return sch->can_reserve(cnv->self);
+		if(  sch->can_reserve(cnv->self)  ) {
+			return true;
+		}
+		if(  coupling_line.is_bound()  ) {
+			// see if the blocking vehicle is waiting for coupling.
+			for(  uint8 pos=1;  pos<(volatile uint8)bd->get_top();  pos++  ) {
+				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(bd->obj_bei(pos))  ) {
+					// designated line, waiting for coupling -> this is coupling point.
+					if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+						if(  v!=v->get_convoi()->back()  ) {
+							// we have to couple with the last car of the convoy.
+							continue;
+						}
+						return true;
+					}
+				}
+			}
+		}
+		// block is not empty.
+		return false;
 	}
 
 	return true;
@@ -2593,6 +2612,43 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr) const
 			}
 		}
 	}
+	return false;
+}
+
+// this routine is called by find_route, to determined if we reached a coupling point
+bool rail_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_gr, const linehandle_t coupling_line, sint16 &coupling_steps) const
+{
+	const schiene_t * sch = (const schiene_t *) gr->get_weg(get_waytype());
+	if(  !gr  ||  !prev_gr  ||  !sch  ) {
+		// tile or rail does not exist.
+		return false;
+	}
+	if(  !gr->is_halt()  ||  gr->get_halt()!=target_halt  ) {
+		// This is not target halt.
+		return false;
+	}
+	// Find target vehicle to couple with 
+	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+		if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
+			// designated line, waiting for coupling -> this is coupling point.
+			if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+				if(  v!=v->get_convoi()->back()  ) {
+					// we have to couple with the last car of the convoy.
+					continue;
+				}
+				// set coupling index and step
+				// c_step can be negative, so it must be handled as sint16.
+				// TODO: in case that the vehicle length is over 16.
+				coupling_steps = v->get_steps() - VEHICLE_STEPS_PER_CARUNIT*v->get_desc()->get_length();
+				// coupling_steps = c_step<0 ? c_step+VEHICLE_STEPS_PER_TILE : c_step;
+				return true;
+			} else {
+				// other convoy exists.
+				return false;
+			}
+		}
+	}
+	
 	return false;
 }
 
@@ -2752,7 +2808,13 @@ skip_choose:
 	}
 
 	target_halt = target->get_halt();
-	if(  !block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false )  ) {
+	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().couple_line;
+	bool route_found = false;
+	if(  !coupling_line.is_bound()  ) {
+		// call block_reserver only when the next halt is not a coupling point.
+		route_found = block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false );
+	}
+	if(  !route_found  ) {
 		// no free route to target!
 		// note: any old reservations should be invalid after the block reserver call.
 		// => We can now start freshly all over
@@ -2767,7 +2829,14 @@ skip_choose:
 		// now it we are in a step and can use the route search
 		route_t target_rt;
 		const int richtung = ribi_type(get_pos(), pos_next);	// to avoid confusion at diagonals
-		if(  !target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps() )  ) {
+		if(  coupling_line.is_bound()  ) {
+			// search for coupling point.
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), coupling_line );
+		}
+		if(  !route_found  ) {
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps() );
+		}
+		if(  !route_found  ) {
 			// nothing empty or not route with less than get_max_choose_route_steps() tiles
 			target_halt = halthandle_t();
 			sig->set_state(  roadsign_t::rot );
@@ -3205,7 +3274,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 					coupling_steps = c_step<0 ? c_step+VEHICLE_STEPS_PER_TILE : c_step;
 					return true;
 				} else {
-					// other vehicles exist.
+					// other convoy exists.
 					return false;
 				}
 			}

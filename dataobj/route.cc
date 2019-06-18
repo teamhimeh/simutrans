@@ -11,6 +11,7 @@
 #include "../simworld.h"
 #include "../simintr.h"
 #include "../simhalt.h"
+#include "../simconvoi.h"
 #include "../boden/wege/weg.h"
 #include "../boden/grund.h"
 #include "../boden/wasser.h"
@@ -19,6 +20,7 @@
 #include "loadsave.h"
 #include "route.h"
 #include "environment.h"
+#include "../vehicle/simvehicle.h"
 
 // define USE_VALGRIND_MEMCHECK to make
 // valgrind aware of the memory pool for A* nodes
@@ -116,7 +118,7 @@ bool route_t::node_in_use=false;
 /* find the route to an unknown location
  * @author prissi
  */
-bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth )
+bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, linehandle_t coupling_line )
 {
 	bool ok = false;
 
@@ -175,6 +177,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	queue.insert(tmp);
 
 	bool target_reached = false;
+	sint16 coupling_steps = 0;
 	do {
 		// Hajo: this is too expensive to be called each step
 		if((step & 4095) == 0) {
@@ -193,7 +196,15 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 
 		// already there
-		if(  tdriver->is_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr )  ) {
+		bool already_there;
+		if(  coupling_line.is_bound()  ) {
+			// find place to do a coupling.
+			already_there = tdriver->is_coupling_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr, coupling_line, coupling_steps );
+		} else {
+			// normal routine.
+			already_there = tdriver->is_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr );
+		}
+		if(  already_there  ) {
 			// we added a target to the closed list: check for length
 			target_reached = true;
 			break;
@@ -208,7 +219,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 				&& koord_distance(start, gr->get_pos() + koord::nsew[r])<max_depth	// not too far away
 				&& gr->get_neighbour(to, wegtyp, ribi_t::nsew[r])  // is connected
 				&& !marker.is_marked(to) // not already tested
-				&& tdriver->check_next_tile(to)	// can be driven on
+				&& tdriver->check_next_tile(to, coupling_line)	// can be driven on
 			) {
 				// not in there or taken out => add new
 				ANode* k = &nodes[step++];
@@ -260,6 +271,14 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			tmp = tmp->parent;
 		}
 		ok = !route.empty();
+		if(  coupling_line.is_bound()  ) {
+			// register next_coupling_index and next_coupling_steps
+			if(  vehicle_t* v = dynamic_cast<vehicle_t*>(tdriver)  ) {
+				uint16 c_index = coupling_steps<0 ? max(route.get_count()-2,0) : route.get_count()-1;
+				uint8 c_steps = coupling_steps<0 ? coupling_steps+VEHICLE_STEPS_PER_TILE : coupling_steps;
+				v->get_convoi()->set_next_coupling(c_index,c_steps);
+			}
+		}
 	}
 
 	RELEASE_NODE();

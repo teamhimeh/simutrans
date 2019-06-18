@@ -16,6 +16,7 @@
 #include "../simobj.h"
 #include "../halthandle_t.h"
 #include "../convoihandle_t.h"
+#include "../linehandle_t.h"
 #include "../ifc/simtestdriver.h"
 #include "../boden/grund.h"
 #include "../descriptor/vehicle_desc.h"
@@ -258,7 +259,7 @@ protected:
 	bool check_for_finish:1;		// true, if on the last tile
 	bool has_driven:1;
 
-	bool check_next_tile(const grund_t* ) const OVERRIDE {return false;}
+	virtual bool check_next_tile(const grund_t* ) const OVERRIDE {return false;}
 
 public:
 	void calc_image() OVERRIDE;
@@ -543,7 +544,8 @@ public:
 class rail_vehicle_t : public vehicle_t
 {
 protected:
-	bool check_next_tile(const grund_t *bd) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd, const linehandle_t) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd,linehandle_t()); }
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -566,6 +568,7 @@ public:
 
 	// returns true for the way search to an unknown target.
 	bool is_target(const grund_t *,const grund_t *) const OVERRIDE;
+	bool is_coupling_target(const grund_t *, const grund_t *, const linehandle_t, sint16 &) const OVERRIDE;
 
 	// handles all block stuff and route choosing ...
 	bool can_enter_tile(const grund_t *gr_next, sint32 &restart_speed, uint8) OVERRIDE;
