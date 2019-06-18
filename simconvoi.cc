@@ -1641,7 +1641,7 @@ void convoi_t::ziel_erreicht()
 			const uint16 route_index = v->get_route_index();
 			const grund_t* grc[2];
 			grc[0] = gr;
-			grc[1] = route_index+1>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index+1));
+			grc[1] = route_index>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index));
 			// find convoy to couple with
 			// convoy can be on the next tile of coupling_index.
 			for(  uint8 i=0;  i<2;  i++  ) {

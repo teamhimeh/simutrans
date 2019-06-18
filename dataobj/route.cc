@@ -271,14 +271,6 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			tmp = tmp->parent;
 		}
 		ok = !route.empty();
-		if(  coupling_line.is_bound()  ) {
-			// register next_coupling_index and next_coupling_steps
-			if(  vehicle_t* v = dynamic_cast<vehicle_t*>(tdriver)  ) {
-				uint16 c_index = coupling_steps<0 ? max(route.get_count()-2,0) : route.get_count()-1;
-				uint8 c_steps = coupling_steps<0 ? coupling_steps+VEHICLE_STEPS_PER_TILE : coupling_steps;
-				v->get_convoi()->set_next_coupling(c_index,c_steps);
-			}
-		}
 	}
 
 	RELEASE_NODE();
