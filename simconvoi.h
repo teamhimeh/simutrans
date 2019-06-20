@@ -928,6 +928,10 @@ public:
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
 	
+	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
+	
+	convoihandle_t uncouple_convoi();
+	
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 };
 

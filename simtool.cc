@@ -6755,6 +6755,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 's' : change state to [number] (and maybe set open schedule flag)
  * 'l' : apply new line [number]
  * 'd' : go to nearest depot
+ * 'r' : release the child convoy
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -6890,6 +6891,13 @@ bool tool_change_convoi_t::init( player_t *player )
 				create_win( new news_img(msg), w_time_delete, magic_none);
 			}
 		}
+		break;
+		
+		case 'r': // release the child convoy
+		{
+			cnv->uncouple_convoi();
+		}
+		break;
 	}
 
 	if(  cnv->in_depot()  &&  (tool=='g'  ||  tool=='l')  ) {

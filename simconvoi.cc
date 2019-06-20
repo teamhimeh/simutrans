@@ -4043,3 +4043,15 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	back()->set_last(false);
 	return true;
 }
+
+convoihandle_t convoi_t::uncouple_convoi() {
+	if(  !coupling_convoi.is_bound()  ) {
+		return convoihandle_t();
+	}
+	convoihandle_t ret = coupling_convoi;
+	coupling_convoi->set_state(state==LOADING ? LOADING : ROUTING_1);
+	coupling_convoi->front()->set_leading(true);
+	back()->set_last(true);
+	coupling_convoi = convoihandle_t();
+	return coupling_convoi;
+}
