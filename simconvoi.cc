@@ -2185,6 +2185,10 @@ void convoi_t::vorfahren()
 			inspecting = self;
 			while(  inspecting.is_bound()  ) {
 				train_length += inspecting->move_to(0);
+				// since move_to() returns convoy length minus last vehicle length...
+				if(  inspecting!=self  ) {
+					train_length += inspecting->back()->get_desc()->get_length();
+				}
 				if(  inspecting->get_coupling_convoi().is_bound()  ) {
 					inspecting = inspecting->get_coupling_convoi();
 				} else {
