@@ -75,7 +75,7 @@ public:
 	{
 		stop.buf().printf("%i) ", number+1);
 		schedule_t::gimme_stop_name(stop.buf(), welt, player, entry, -1);
-		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : entry.couple_line.is_bound() ? SYSCOL_BUTTON_TEXT_DISABLED  : SYSCOL_TEXT);
+		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : entry.parent_line.is_bound() ? SYSCOL_BUTTON_TEXT_DISABLED  : SYSCOL_TEXT);
 		stop.update();
 	}
 

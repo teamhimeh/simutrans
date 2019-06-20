@@ -17,9 +17,8 @@ public:
 		pos(pos),
 		minimum_loading(minimum_loading),
 		waiting_time_shift(waiting_time_shift),
-		couple_line(linehandle_t()),
-		line_wait_for(linehandle_t()),
-		uncouple_line(linehandle_t())
+		child_line(linehandle_t()),
+		parent_line(linehandle_t())
 	{}
 
 	/**
@@ -44,19 +43,17 @@ public:
 	
 	/**
 	 * entries related to coupling and decoupling
-	 * couple_line: the line of another convoy which the convoy goes with
-	 * line_wait_for: the line which the convoy wait to couple with
-	 * uncouple_line: target line to uncouple from the convoy
+	 * child_line: A convoy of child_line follows this convoy when coupling.
+	 * parent_line: This convoy follows the convoy of parent_line when coupling.
 	 * @author THLeaderH
 	 */
-	linehandle_t couple_line;
-	linehandle_t line_wait_for;
-	linehandle_t uncouple_line;
+	linehandle_t child_line;
+	linehandle_t parent_line;
 };
 
 inline bool operator ==(const schedule_entry_t &a, const schedule_entry_t &b)
 {
-	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift;
+	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.child_line == b.child_line  &&  a.parent_line == b.parent_line;
 }
 
 

@@ -2536,7 +2536,7 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const linehandle_t coupl
 			for(  uint8 pos=1;  pos<(volatile uint8)bd->get_top();  pos++  ) {
 				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(bd->obj_bei(pos))  ) {
 					// designated line, waiting for coupling -> this is coupling point.
-					if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+					if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->line_wait_for()==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
 						if(  v!=v->get_convoi()->back()  ) {
 							// we have to couple with the last car of the convoy.
 							continue;
@@ -2631,7 +2631,7 @@ bool rail_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_g
 	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 		if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 			// designated line, waiting for coupling -> this is coupling point.
-			if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+			if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->line_wait_for()==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
 				if(  v!=v->get_convoi()->back()  ) {
 					// we have to couple with the last car of the convoy.
 					continue;
@@ -2808,7 +2808,7 @@ skip_choose:
 	}
 
 	target_halt = target->get_halt();
-	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().couple_line;
+	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().parent_line;
 	bool route_found = false;
 	if(  !coupling_line.is_bound()  ) {
 		// call block_reserver only when the next halt is not a coupling point.
@@ -3231,7 +3231,7 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 
 
 bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps) {
-	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().couple_line; 
+	linehandle_t coupling_line = cnv->get_schedule()->get_current_entry().parent_line; 
 	// first, does the current schedule entry require coupling?
 	if(  !coupling_line.is_bound()  ) {
 		return false;
@@ -3253,7 +3253,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 			if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 				// designated line, waiting for coupling -> this is coupling point.
-				if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+				if(  v->get_convoi()->get_line()==coupling_line  &&  v->get_convoi()->get_schedule()->line_wait_for()==cnv->get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
 					if(  v!=v->get_convoi()->back()  ) {
 						// we have to couple with the last car of the convoy.
 						continue;

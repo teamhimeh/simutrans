@@ -133,10 +133,26 @@ public:
 	 */
 	bool remove();
 	
+	/*
+	 * Convoy coupling related functions.
+	 * @author THLeaderH
+	 */
+	 
 	/**
 	 * Appends coupling entries.
 	 */
 	bool append_coupling(linehandle_t this_line, linehandle_t coupled_line, uint8 start_index, uint8 end_index);
+	
+	/*
+	 * Returns the line for which we wait in the current schedule entry.
+	 */
+	linehandle_t line_wait_for() const;
+	
+	/*
+	 * Returns the line which we release in the current schedule entry.
+	 */
+	linehandle_t line_to_be_released() const;
+	
 
 	void rdwr(loadsave_t *file);
 

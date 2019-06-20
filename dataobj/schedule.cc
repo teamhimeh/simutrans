@@ -247,9 +247,8 @@ void schedule_t::rdwr(loadsave_t *file)
 				file->rdwr_byte(entries[i].waiting_time_shift);
 			}
 			if(file->get_version()>=120008) {
-				simline_t::rdwr_linehandle_t(file, entries[i].couple_line);
-				simline_t::rdwr_linehandle_t(file, entries[i].line_wait_for);
-				simline_t::rdwr_linehandle_t(file, entries[i].uncouple_line);
+				simline_t::rdwr_linehandle_t(file, entries[i].child_line);
+				simline_t::rdwr_linehandle_t(file, entries[i].parent_line);
 			}
 		}
 	}
@@ -408,7 +407,7 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
 	buf.printf("%u|%d|", current_stop, (int)get_type());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
-		buf.printf("%s,%i,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.couple_line.get_id(), i.line_wait_for.get_id(), i.uncouple_line.get_id());
+		buf.printf("%s,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.child_line.get_id(), i.parent_line.get_id());
 	}
 }
 
@@ -451,17 +450,17 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	p++;
 	// now scan the entries
 	while(  *p>0  ) {
-		sint16 values[8];
-		for(  sint8 i=0;  i<8;  i++  ) {
+		sint16 values[7];
+		for(  sint8 i=0;  i<7;  i++  ) {
 			values[i] = atoi( p );
 			while(  *p  &&  (*p!=','  &&  *p!='|')  ) {
 				p++;
 			}
-			if(  i<7  &&  *p!=','  ) {
+			if(  i<6  &&  *p!=','  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete string!" );
 				return false;
 			}
-			if(  i==7  &&  *p!='|'  ) {
+			if(  i==6  &&  *p!='|'  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
 				return false;
 			}
@@ -469,9 +468,8 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		}
 		// ok, now we have a complete entry
 		schedule_entry_t entry = schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4]);
-		entry.couple_line.set_id(values[5]);
-		entry.line_wait_for.set_id(values[6]);
-		entry.uncouple_line.set_id(values[7]);
+		entry.child_line.set_id(values[5]);
+		entry.parent_line.set_id(values[6]);
 		entries.append(entry);
 	}
 	return true;
@@ -522,13 +520,13 @@ bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_li
 	// TODO: ensure the count of entries is less than 255!
 	
 	// for this line::
-	// copy entries from the coupled line and set couple_line
+	// copy entries from the parent line and set parent_line to the entries.
 	sint16 idx = end_index;
 	while(  true  ) {
 		schedule_entry_t entry = cl_sch->entries[idx];
 		if(  idx!=end_index  ) {
-			// last coupling entry does not have couple_line. This is a marker of uncoupling.
-			entry.couple_line = coupled_line;
+			// last coupling entry does not have parent_line. This is a marker of uncoupling.
+			entry.parent_line = coupled_line;
 		}
 		entries.insert_at(current_stop>=get_count()?current_stop:current_stop+1, entry);
 		if(  idx==start_index  ) {
@@ -541,12 +539,17 @@ bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_li
 		}
 	}
 	
-	// for coupled line::
-	// set coupling and uncoupling point.
-	// coupling point
-	cl_sch->entries[start_index].line_wait_for = this_line;
-	// uncoupling point
-	cl_sch->entries[end_index].uncouple_line = this_line;
+	// for parent line::
+	// set child_line to the entries.
+	// The parent convoy releases its child convoy when child_line of current entry is no longer the line of its child.
+	idx = start_index;
+	while(  true  ) {
+		if(  idx==end_index  ) {
+			break;
+		}
+		cl_sch->entries[idx].child_line = this_line;
+		idx = (idx+1)%cl_sch->get_count();
+	}
 	// we have to update the schedule of coupled line via tool!
 	tool_t *tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 	cbuffer_t buf;
@@ -558,4 +561,20 @@ bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_li
 	delete tool;
 	
 	return true;
+}
+
+linehandle_t schedule_t::line_wait_for() const {
+	uint8 prev_idx = current_stop==0 ? entries.get_count()-1: current_stop-1;
+	if(  entries[current_stop].child_line.is_bound()  &&  entries[prev_idx].child_line!=entries[current_stop].child_line  ) {
+		return entries[current_stop].child_line;
+	}
+	return linehandle_t();
+}
+
+linehandle_t schedule_t::line_to_be_released() const {
+	uint8 prev_idx = current_stop==0 ? entries.get_count()-1: current_stop-1;
+	if(  entries[prev_idx].child_line.is_bound()  &&  entries[prev_idx].child_line!=entries[current_stop].child_line  ) {
+		return entries[prev_idx].child_line;
+	}
+	return linehandle_t();
 }

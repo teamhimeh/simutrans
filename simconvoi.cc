@@ -1652,7 +1652,7 @@ void convoi_t::ziel_erreicht()
 				for(  uint8 pos=1;  pos<(volatile uint8)g->get_top();  pos++  ) {
 					if(  vehicle_t* const v = dynamic_cast<vehicle_t*>(g->obj_bei(pos))  ) {
 						// designated line, waiting for coupling -> this is coupling point.
-						if(  v->get_convoi()->get_line()==get_schedule()->get_current_entry().couple_line  &&  v->get_convoi()->get_schedule()->get_current_entry().line_wait_for==get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+						if(  v->get_convoi()->get_line()==get_schedule()->get_current_entry().parent_line  &&  v->get_convoi()->get_schedule()->line_wait_for()==get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
 							akt_speed = 0;
 							if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 								halt->book(1, HALT_CONVOIS_ARRIVED);
@@ -3124,7 +3124,7 @@ station_tile_search_ready: ;
 	}
 	
 	// uncouple convoy if needed.
-	if(  coupling_convoi.is_bound()  &&  schedule->get_current_entry().uncouple_line==coupling_convoi->get_line()  ) {
+	if(  coupling_convoi.is_bound()  &&  schedule->line_to_be_released()==coupling_convoi->get_line()  ) {
 		coupling_convoi->set_arrived_time(arrived_time);
 		coupling_convoi->set_state(LOADING);
 		coupling_convoi->front()->set_leading(true);
@@ -3138,7 +3138,7 @@ station_tile_search_ready: ;
 	}
 	
 	bool coupling_ok = coupling_convoi.is_bound(); // temporary...
-	const bool coupling_cond = !schedule->get_current_entry().line_wait_for.is_bound()  ||  coupling_ok;
+	const bool coupling_cond = !schedule->line_wait_for().is_bound()  ||  coupling_ok;
 
 	// loading is finished => maybe drive on
 	if(  state==COUPLED  ||  (loading_level >= loading_limit  &&  coupling_cond)  ||  no_load
