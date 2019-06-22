@@ -33,6 +33,7 @@
 #include "../gui/trafficlight_info.h"
 #include "../gui/privatesign_info.h"
 #include "../gui/tool_selector.h"
+#include "../gui/signal_info.h"
 
 #include "../tpl/stringhashtable_tpl.h"
 
@@ -40,6 +41,7 @@
 #include "../utils/simstring.h"
 
 #include "roadsign.h"
+#include "signal.h"
 
 
 const roadsign_desc_t *roadsign_t::default_signal=NULL;
@@ -81,6 +83,7 @@ roadsign_t::roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const ro
 	state = 0;
 	ticks_ns = ticks_ow = 16;
 	ticks_offset = 0;
+	guide_signal = false;
 	set_owner( player );
 	if(  desc->is_private_way()  ) {
 		// init ownership of private ways
@@ -175,6 +178,17 @@ void roadsign_t::show_info()
 	}
 	else if(  automatic  ) {
 		create_win(new trafficlight_info_t(this), w_info, (ptrdiff_t)this );
+	}
+	else if(  desc->is_signal_type()  ) {
+		// this should be a signal.
+		signal_t* s = dynamic_cast<signal_t*>(this);
+		if(  !s  ) {
+			dbg->error("roadsign_t::show_info","roadsign %s should be a signal but is not!", get_pos().get_str());
+			obj_t::show_info();
+		}
+		else {
+			create_win(new signal_info_t(s), w_info, (ptrdiff_t)this);
+		}
 	}
 	else {
 		obj_t::show_info();
@@ -571,6 +585,12 @@ void roadsign_t::rdwr(loadsave_t *file)
 	dir = dummy;
 	if(file->get_version()<89000) {
 		dir = ribi_t::backward(dir);
+	}
+	
+	if(file->get_version()>=120009) {
+		file->rdwr_bool(guide_signal);
+	} else {
+		guide_signal = false;
 	}
 
 	if(file->is_saving()) {

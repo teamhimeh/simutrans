@@ -57,6 +57,7 @@
 #include "gui/trafficlight_info.h"
 #include "gui/privatesign_info.h"
 #include "gui/messagebox.h"
+#include "gui/signal_info.h"
 
 #include "obj/zeiger.h"
 #include "obj/bruecke.h"
@@ -7494,6 +7495,28 @@ bool tool_change_traffic_light_t::init( player_t *player )
 	return false;
 }
 
+/*
+ * change state of roadsign
+ */
+bool tool_change_roadsign_t::init( player_t* )
+{
+	koord3d pos;
+	sint16 z, inst;
+	if(  4!=sscanf( default_param, "%hi,%hi,%hi,%hi", &pos.x, &pos.y, &z, &inst )  ) {
+		return false;
+	}
+	pos.z = (sint8)z;
+	if(  grund_t *gr = welt->lookup(pos)  ) {
+		if( roadsign_t *rs = gr->find<signal_t>()  ) {
+			rs->set_guide_signal(inst);
+			signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+			if(  signal_info_win  ) {
+				signal_info_win->update_data();
+			}
+		}
+	}
+	return false;
+}
 
 /**
  * change city:
