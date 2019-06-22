@@ -639,7 +639,8 @@ void vehicle_t::set_convoi(convoi_t *c)
 		// we need to re-establish the finish flag after loading
 		if(leading) {
 			route_t const& r = *cnv->get_route();
-			check_for_finish = r.empty() || route_index >= r.get_count() || get_pos() == r.at(route_index);
+			uint16 cidx = cnv->get_next_coupling_index();
+			check_for_finish = r.empty() || route_index >= r.get_count() || get_pos() == r.at(route_index) || (cidx<r.get_count() && r.at(cidx)==get_pos());
 		}
 		if(  pos_next != koord3d::invalid  ) {
 			route_t const& r = *cnv->get_route();
