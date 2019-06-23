@@ -2834,7 +2834,7 @@ skip_choose:
 			// search for coupling point.
 			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), coupling_line );
 		}
-		if(  !route_found  ) {
+		if(  !route_found  &&  (!sig->is_guide_signal()  ||  !coupling_line.is_bound())  ) {
 			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps() );
 		}
 		if(  !route_found  ) {

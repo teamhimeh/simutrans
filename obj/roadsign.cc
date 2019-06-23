@@ -179,7 +179,7 @@ void roadsign_t::show_info()
 	else if(  automatic  ) {
 		create_win(new trafficlight_info_t(this), w_info, (ptrdiff_t)this );
 	}
-	else if(  desc->is_signal_type()  ) {
+	else if(  desc->is_signal_type()  &&  desc->is_choose_sign()  ) {
 		// this should be a signal.
 		signal_t* s = dynamic_cast<signal_t*>(this);
 		if(  !s  ) {
