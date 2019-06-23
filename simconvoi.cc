@@ -2709,7 +2709,7 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 	
 	// coupling related things
-	if(  file->get_version()>=120008  ) {
+	if(  file->is_version_atleast(120, 9)  ) {
 		rdwr_convoihandle_t( file, coupling_convoi );
 		file->rdwr_short( next_coupling_index );
 		file->rdwr_byte( next_coupling_steps );

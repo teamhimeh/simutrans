@@ -246,7 +246,7 @@ void schedule_t::rdwr(loadsave_t *file)
 			if(file->is_version_atleast(99, 18)) {
 				file->rdwr_byte(entries[i].waiting_time_shift);
 			}
-			if(file->get_version()>=120008) {
+			if(file->is_version_atleast(120, 9)) {
 				simline_t::rdwr_linehandle_t(file, entries[i].child_line);
 				simline_t::rdwr_linehandle_t(file, entries[i].parent_line);
 			}

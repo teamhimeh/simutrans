@@ -587,7 +587,7 @@ void roadsign_t::rdwr(loadsave_t *file)
 		dir = ribi_t::backward(dir);
 	}
 	
-	if(file->get_version()>=120008) {
+	if(file->is_version_atleast(120, 9)) {
 		file->rdwr_bool(guide_signal);
 	} else {
 		guide_signal = false;
