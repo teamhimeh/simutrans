@@ -13,22 +13,13 @@ struct schedule_entry_t
 public:
 	schedule_entry_t() {}
 
-	schedule_entry_t(sint16 id, koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift) :
-		id(id),
+	schedule_entry_t(koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift) :
 		pos(pos),
 		minimum_loading(minimum_loading),
 		waiting_time_shift(waiting_time_shift),
 		child_line(linehandle_t()),
-		child_entry_id(-1),
-		parent_line(linehandle_t()),
-		parent_entry_id(-1)
+		parent_line(linehandle_t())
 	{}
-		
-	/**
-	 * entry id in the schedule
-	 * @author THLeaderH
-	 */
-	sint16 id;
 
 	/**
 	 * target position
@@ -57,14 +48,12 @@ public:
 	 * @author THLeaderH
 	 */
 	linehandle_t child_line;
-	sint16 child_entry_id;
 	linehandle_t parent_line;
-	sint16 parent_entry_id;
 };
 
 inline bool operator ==(const schedule_entry_t &a, const schedule_entry_t &b)
 {
-	return a.id == b.id  &&  a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.child_line == b.child_line  &&  a.parent_line == b.parent_line;
+	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.child_line == b.child_line  &&  a.parent_line == b.parent_line;
 }
 
 

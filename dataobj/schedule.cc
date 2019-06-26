@@ -26,7 +26,7 @@
 #include "../tpl/slist_tpl.h"
 
 
-schedule_entry_t schedule_t::dummy_entry(-1, koord3d::invalid, 0, 0);
+schedule_entry_t schedule_t::dummy_entry(koord3d::invalid, 0, 0);
 
 
 // copy all entries from schedule src to this and adjusts current_stop
@@ -121,7 +121,7 @@ bool schedule_t::insert(const grund_t* gr, uint8 minimum_loading, uint8 waiting_
 	}
 
 	if(  is_stop_allowed(gr)  ) {
-		entries.insert_at(current_stop, schedule_entry_t(get_max_entry_id()+1, gr->get_pos(), minimum_loading, waiting_time_shift));
+		entries.insert_at(current_stop, schedule_entry_t(gr->get_pos(), minimum_loading, waiting_time_shift));
 		current_stop ++;
 		make_current_stop_valid();
 		return true;
@@ -144,7 +144,7 @@ bool schedule_t::append(const grund_t* gr, uint8 minimum_loading, uint8 waiting_
 	}
 
 	if(is_stop_allowed(gr)) {
-		entries.append(schedule_entry_t(get_max_entry_id()+1, gr->get_pos(), minimum_loading, waiting_time_shift), 4);
+		entries.append(schedule_entry_t(gr->get_pos(), minimum_loading, waiting_time_shift), 4);
 		return true;
 	}
 	else {
@@ -231,7 +231,7 @@ void schedule_t::rdwr(loadsave_t *file)
 			uint32 dummy;
 			pos.rdwr(file);
 			file->rdwr_long(dummy);
-			entries.append(schedule_entry_t(get_max_entry_id()+1, pos, (uint8)dummy, 0));
+			entries.append(schedule_entry_t(pos, (uint8)dummy, 0));
 		}
 	}
 	else {
@@ -249,11 +249,6 @@ void schedule_t::rdwr(loadsave_t *file)
 			if(file->is_version_atleast(120, 9)) {
 				simline_t::rdwr_linehandle_t(file, entries[i].child_line);
 				simline_t::rdwr_linehandle_t(file, entries[i].parent_line);
-				file->rdwr_short(entries[i].id);
-				file->rdwr_short(entries[i].child_entry_id);
-				file->rdwr_short(entries[i].parent_entry_id);
-			} else {
-				entries[i].id = get_max_entry_id() + 1;
 			}
 		}
 	}
@@ -410,7 +405,7 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
 	buf.printf("%u|%d|", current_stop, (int)get_type());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
-		buf.printf("%s,%i,%i,%i,%i,%i,%i,%i|", i.id, i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.child_line.get_id(), i.child_entry_id, i.parent_line.get_id(), i.parent_entry_id);
+		buf.printf("%s,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.child_line.get_id(), i.parent_line.get_id());
 	}
 }
 
@@ -453,28 +448,26 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	p++;
 	// now scan the entries
 	while(  *p>0  ) {
-		sint16 values[10];
-		for(  sint8 i=0;  i<10;  i++  ) {
+		sint16 values[7];
+		for(  sint8 i=0;  i<7;  i++  ) {
 			values[i] = atoi( p );
 			while(  *p  &&  (*p!=','  &&  *p!='|')  ) {
 				p++;
 			}
-			if(  i<9  &&  *p!=','  ) {
+			if(  i<6  &&  *p!=','  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete string!" );
 				return false;
 			}
-			if(  i==9  &&  *p!='|'  ) {
+			if(  i==6  &&  *p!='|'  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
 				return false;
 			}
 			p++;
 		}
 		// ok, now we have a complete entry
-		schedule_entry_t entry = schedule_entry_t(values[0], koord3d(values[1], values[2], values[3]), values[4], values[5]);
-		entry.child_line.set_id(values[6]);
-		entry.child_entry_id = values[7];
-		entry.parent_line.set_id(values[8]);
-		entry.parent_entry_id = values[9];
+		schedule_entry_t entry = schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4]);
+		entry.child_line.set_id(values[5]);
+		entry.parent_line.set_id(values[6]);
 		entries.append(entry);
 	}
 	return true;
@@ -529,7 +522,6 @@ bool schedule_t::append_coupling(linehandle_t this_line, linehandle_t coupled_li
 	sint16 idx = end_index;
 	while(  true  ) {
 		schedule_entry_t entry = cl_sch->entries[idx];
-		entry.id = get_max_entry_id() + 1;
 		if(  idx!=end_index  ) {
 			// last coupling entry does not have parent_line. This is a marker of uncoupling.
 			entry.parent_line = coupled_line;
@@ -583,12 +575,4 @@ linehandle_t schedule_t::line_to_be_released() const {
 		return entries[prev_idx].child_line;
 	}
 	return linehandle_t();
-}
-
-sint16 schedule_t::get_max_entry_id() const {
-	sint16 m = -1;
-	for(uint8 i=0;  i<entries.get_count();  i++) {
-		m = max(m, entries[i].id);
-	}
-	return m;
 }
