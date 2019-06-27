@@ -118,7 +118,7 @@ bool route_t::node_in_use=false;
 /* find the route to an unknown location
  * @author prissi
  */
-bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, linehandle_t coupling_line )
+bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool coupling )
 {
 	bool ok = false;
 
@@ -197,9 +197,9 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 		// already there
 		bool already_there;
-		if(  coupling_line.is_bound()  ) {
+		if(  coupling  ) {
 			// find place to do a coupling.
-			already_there = tdriver->is_coupling_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr, coupling_line, coupling_steps );
+			already_there = tdriver->is_coupling_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr, coupling_steps );
 		} else {
 			// normal routine.
 			already_there = tdriver->is_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr );
@@ -219,7 +219,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 				&& koord_distance(start, gr->get_pos() + koord::nsew[r])<max_depth	// not too far away
 				&& gr->get_neighbour(to, wegtyp, ribi_t::nsew[r])  // is connected
 				&& !marker.is_marked(to) // not already tested
-				&& tdriver->check_next_tile(to, coupling_line)	// can be driven on
+				&& tdriver->check_next_tile(to, true)	// can be driven on
 			) {
 				// not in there or taken out => add new
 				ANode* k = &nodes[step++];

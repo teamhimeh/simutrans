@@ -1651,8 +1651,8 @@ void convoi_t::ziel_erreicht()
 				}
 				for(  uint8 pos=1;  pos<(volatile uint8)g->get_top();  pos++  ) {
 					if(  vehicle_t* const v = dynamic_cast<vehicle_t*>(g->obj_bei(pos))  ) {
-						// designated line, waiting for coupling -> this is coupling point.
-						if(  v->get_convoi()->get_line()==get_schedule()->get_current_entry().parent_line  &&  v->get_convoi()->get_schedule()->line_wait_for()==get_line()  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+						// there is a suitable waiting convoy for coupling -> this is coupling point.
+						if(  can_start_coupling(v->get_convoi())  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
 							akt_speed = 0;
 							if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 								halt->book(1, HALT_CONVOIS_ARRIVED);
@@ -3124,7 +3124,7 @@ station_tile_search_ready: ;
 	}
 	
 	// uncouple convoy if needed.
-	if(  coupling_convoi.is_bound()  &&  schedule->line_to_be_released()==coupling_convoi->get_line()  ) {
+	if(  coupling_convoi.is_bound()  &&  !can_continue_coupling()  ) {
 		coupling_convoi->set_arrived_time(arrived_time);
 		coupling_convoi->set_state(LOADING);
 		coupling_convoi->front()->set_leading(true);
@@ -3138,7 +3138,7 @@ station_tile_search_ready: ;
 	}
 	
 	bool coupling_ok = coupling_convoi.is_bound(); // temporary...
-	const bool coupling_cond = !schedule->line_wait_for().is_bound()  ||  coupling_ok;
+	const bool coupling_cond = schedule->get_current_entry().coupling_point!=1  ||  coupling_ok;
 
 	// loading is finished => maybe drive on
 	if(  state==COUPLED  ||  (loading_level >= loading_limit  &&  coupling_cond)  ||  no_load
@@ -4054,4 +4054,50 @@ convoihandle_t convoi_t::uncouple_convoi() {
 	back()->set_last(true);
 	coupling_convoi = convoihandle_t();
 	return coupling_convoi;
+}
+
+bool convoi_t::can_continue_coupling() const {
+	/* 
+	* <conditions to continue coupling>
+	* 1) next schedule entry is same except for coupling_point parameter.
+	* 2) The next planned platform has adequate length for entire convoy length.
+	*/
+	if(  !coupling_convoi.is_bound()  ) {
+		// this convoy is not coupling with others!
+		return false;
+	}
+	// Is the next entry same?
+	const schedule_entry_t t = schedule->get_next_entry();
+	const schedule_entry_t c = coupling_convoi->get_schedule()->get_next_entry();
+	if(  t.pos!=c.pos  ||  t.minimum_loading!=c.minimum_loading  ||  t.waiting_time_shift!=c.waiting_time_shift  ) {
+		return false;
+	}
+	// Does the next platform has adequate length?
+	return true;
+}
+
+bool convoi_t::can_start_coupling(convoi_t* parent) const {
+	/* conditions to continue coupling
+	* 1) next schedule entry is same except for coupling_point parameter.
+	* 2) The next planned platform has adequate length for entire convoy length.
+	* 3) current schedule entry is same except for coupling_point parameter
+	* 4) current schedule entry has appropriate coupling_point for both convoys
+	* 5) The coming platform has adequate length for entire convoy.
+	*/
+	const schedule_entry_t t_c = schedule->get_current_entry();
+	const schedule_entry_t p_c = parent->get_schedule()->get_current_entry();
+	const schedule_entry_t t_n = schedule->get_next_entry();
+	const schedule_entry_t p_n = parent->get_schedule()->get_next_entry();
+	
+	if(  p_c.coupling_point!=1  ||  t_c.coupling_point!=2  ) {
+		// rejected by coupling_point condition.
+		return false;
+	}
+	// Is current and next entry same?
+	if(  t_c.pos!=p_c.pos  ||  t_c.minimum_loading!=p_c.minimum_loading  ||  t_c.waiting_time_shift!=p_c.waiting_time_shift  ||  
+		t_n.pos!=p_n.pos  ||  t_n.minimum_loading!=p_n.minimum_loading  ||  t_n.waiting_time_shift!=p_n.waiting_time_shift  ) {
+		return false;
+	}
+	// Does the current and next platform has adequate length?
+	return true;
 }

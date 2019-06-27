@@ -932,6 +932,10 @@ public:
 	
 	convoihandle_t uncouple_convoi();
 	
+	bool can_continue_coupling() const;
+	
+	bool can_start_coupling(convoi_t* parent) const;
+	
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 };
 

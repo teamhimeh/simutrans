@@ -42,7 +42,7 @@ class gui_schedule_entry_t;
 class schedule_gui_t :	public gui_frame_t,
 						public action_listener_t
 {
-	enum mode_t {adding, inserting, removing, coupling, undefined_mode};
+	enum mode_t {adding, inserting, removing, undefined_mode};
 
 	mode_t mode;
 
@@ -50,7 +50,6 @@ class schedule_gui_t :	public gui_frame_t,
 	button_t bt_promote_to_line;
 	gui_combobox_t line_selector;
 	gui_label_buf_t lb_waitlevel;
-	button_t bt_couple; // to couple convoys
 
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
@@ -59,6 +58,8 @@ class schedule_gui_t :	public gui_frame_t,
 	gui_label_t lb_wait, lb_load;
 	gui_numberinput_t numimp_load;
 	gui_combobox_t wait_load;
+	
+	button_t bt_find_parent, bt_wait_for_child;
 
 	schedule_gui_stats_t* stats;
 	gui_scrollpane_t scrolly;

@@ -13,12 +13,11 @@ struct schedule_entry_t
 public:
 	schedule_entry_t() {}
 
-	schedule_entry_t(koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift) :
+	schedule_entry_t(koord3d const& pos, uint const minimum_loading, sint8 const waiting_time_shift, uint8 const coupling_point) :
 		pos(pos),
 		minimum_loading(minimum_loading),
 		waiting_time_shift(waiting_time_shift),
-		child_line(linehandle_t()),
-		parent_line(linehandle_t())
+		coupling_point(coupling_point)
 	{}
 
 	/**
@@ -42,18 +41,18 @@ public:
 	sint8 waiting_time_shift;
 	
 	/**
-	 * entries related to coupling and decoupling
-	 * child_line: A convoy of child_line follows this convoy when coupling.
-	 * parent_line: This convoy follows the convoy of parent_line when coupling.
+	 * Is this entry a coupling or uncoupling point?
+	 * 0... nothing
+	 * 1... the convoy wait for the child
+	 * 2... the convoy find a parent and couple with. 
 	 * @author THLeaderH
 	 */
-	linehandle_t child_line;
-	linehandle_t parent_line;
+	uint8 coupling_point;
 };
 
 inline bool operator ==(const schedule_entry_t &a, const schedule_entry_t &b)
 {
-	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.child_line == b.child_line  &&  a.parent_line == b.parent_line;
+	return a.pos == b.pos  &&  a.minimum_loading == b.minimum_loading  &&  a.waiting_time_shift == b.waiting_time_shift  &&  a.coupling_point == b.coupling_point;
 }
 
 

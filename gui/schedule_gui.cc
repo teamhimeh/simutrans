@@ -34,7 +34,6 @@
 #include "depot_frame.h"
 #include "schedule_gui.h"
 #include "line_item.h"
-#include "coupling_schedule.h"
 
 #include "components/gui_button.h"
 #include "components/gui_image.h"
@@ -75,7 +74,7 @@ public:
 	{
 		stop.buf().printf("%i) ", number+1);
 		schedule_t::gimme_stop_name(stop.buf(), welt, player, entry, -1);
-		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : entry.parent_line.is_bound() ? SYSCOL_BUTTON_TEXT_DISABLED  : SYSCOL_TEXT);
+		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : SYSCOL_TEXT);
 		stop.update();
 	}
 
@@ -359,6 +358,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		wait_load.set_rigid(true);
 	}
 	end_table();
+	
+	// coupling related buttons
+	{
+		bt_wait_for_child.init(button_t::square_state, "Wait for child");
+		bt_wait_for_child.set_tooltip("A convoy waits for child convoy to couple.");
+		bt_wait_for_child.add_listener(this);
+		bt_wait_for_child.disable();
+		add_component(&bt_wait_for_child);
+		
+		bt_find_parent.init(button_t::square_state, "Find parent");
+		bt_find_parent.set_tooltip("A convoy tries to find a parent convoy to couple with.");
+		bt_find_parent.add_listener(this);
+		bt_find_parent.disable();
+		add_component(&bt_find_parent);
+	}
 
 	// return tickets
 	if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
@@ -389,19 +403,6 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	bt_remove.pressed = false;
 	add_component(&bt_remove);
 	end_table();
-	
-	if(  line.is_bound()  ) {
-		// this is called from line_management_gui_t.
-		add_table(3,1)->set_force_equal_columns(true);
-		bt_couple.init(button_t::roundbox_state | button_t::flexible, "Couple");
-		bt_couple.set_tooltip("Set coupling after this entry");
-		bt_couple.add_listener(this);
-		bt_couple.pressed = false;
-		add_component(&bt_couple);
-		new_component<gui_fill_t>();
-		new_component<gui_fill_t>();
-		end_table();
-	}
 
 	scrolly.set_show_scroll_x(true);
 	scrolly.set_scroll_amount_y(LINESPACE+1);
@@ -475,12 +476,19 @@ void schedule_gui_t::update_selection()
 					}
 				}
 			}
-
+			
+			uint8 c = schedule->entries[current_stop].coupling_point;
+			bt_find_parent.enable();
+			bt_find_parent.pressed = c==2;
+			bt_wait_for_child.enable();
+			bt_wait_for_child.pressed = c==1;
 		}
 		else {
 			lb_load.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 			numimp_load.disable();
 			numimp_load.set_value( 0 );
+			bt_find_parent.disable();
+			bt_wait_for_child.disable();
 		}
 	}
 }
@@ -576,10 +584,19 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 		bt_remove.pressed = true;
 		update_tool( false );
 	}
-	else if(comp == &bt_couple) {
-		mode = coupling;
-		create_win( new coupling_schedule_gui_t(schedule, line, player), w_info, (ptrdiff_t)this );
-		action_triggered( &bt_add, value_t() );
+	else if(comp == &bt_find_parent) {
+		if(!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].coupling_point = bt_find_parent.pressed ? 0 : 2;
+			bt_wait_for_child.pressed = false;
+			update_selection();
+		}
+	}
+	else if(comp == &bt_wait_for_child) {
+		if(!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].coupling_point = bt_wait_for_child.pressed ? 0 : 1;
+			bt_find_parent.pressed = false;
+			update_selection();
+		}
 	}
 	else if(comp == &numimp_load) {
 		if (!schedule->empty()) {
