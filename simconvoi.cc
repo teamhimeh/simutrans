@@ -3136,13 +3136,20 @@ station_tile_search_ready: ;
 		// load/unload cargo of coupling convoy.
 		coupling_convoi->hat_gehalten(halt);
 	}
-	
-	bool coupling_ok = coupling_convoi.is_bound(); // temporary...
-	const bool coupling_cond = schedule->get_current_entry().coupling_point!=1  ||  coupling_ok;
+
+	convoihandle_t c = self;
+	bool departure_cond = true;
+	while(  c.is_bound()  ) {
+		bool cond = c->get_loading_level() >= c->get_schedule()->get_current_entry().minimum_loading; // minimum loading
+		cond &= (c->get_schedule()->get_current_entry().coupling_point!=1  ||  c->get_coupling_convoi().is_bound()); // coupling done?
+		cond |= c->get_no_load(); // no load
+		cond |= (c->get_schedule()->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - c->get_schedule()->get_current_entry().waiting_time_shift)) ); // waiting time
+		departure_cond &= cond;
+		c = c->get_coupling_convoi();
+	}
 
 	// loading is finished => maybe drive on
-	if(  state==COUPLED  ||  (loading_level >= loading_limit  &&  coupling_cond)  ||  no_load
-		||  (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - schedule->get_current_entry().waiting_time_shift)) ) ) {
+	if(  state==COUPLED  ||  departure_cond  ) {
 
 		if(  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
 			// destroy when empty
@@ -4057,22 +4064,16 @@ convoihandle_t convoi_t::uncouple_convoi() {
 }
 
 bool convoi_t::can_continue_coupling() const {
-	/* 
-	* <conditions to continue coupling>
-	* 1) next schedule entry is same except for coupling_point parameter.
-	* 2) The next planned platform has adequate length for entire convoy length.
-	*/
 	if(  !coupling_convoi.is_bound()  ) {
 		// this convoy is not coupling with others!
 		return false;
 	}
-	// Is the next entry same?
+	// Do the next entries have same position?
 	const schedule_entry_t t = schedule->get_next_entry();
 	const schedule_entry_t c = coupling_convoi->get_schedule()->get_next_entry();
-	if(  t.pos!=c.pos  ||  t.minimum_loading!=c.minimum_loading  ||  t.waiting_time_shift!=c.waiting_time_shift  ) {
+	if(  t.pos!=c.pos  ) {
 		return false;
 	}
-	// Does the next platform has adequate length?
 	return true;
 }
 
@@ -4094,8 +4095,7 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 		return false;
 	}
 	// Is current and next entry same?
-	if(  t_c.pos!=p_c.pos  ||  t_c.minimum_loading!=p_c.minimum_loading  ||  t_c.waiting_time_shift!=p_c.waiting_time_shift  ||  
-		t_n.pos!=p_n.pos  ||  t_n.minimum_loading!=p_n.minimum_loading  ||  t_n.waiting_time_shift!=p_n.waiting_time_shift  ) {
+	if(  t_c.pos!=p_c.pos  ||  t_n.pos!=p_n.pos  ) {
 		return false;
 	}
 	// Does the current and next platform has adequate length?
