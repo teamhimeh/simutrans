@@ -1751,7 +1751,12 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 
 			case convoi_t::LOADING:
 				if(  state>=1  ) {
-					sprintf( tooltip_text, translator::translate("Loading (%i->%i%%)!"), cnv->get_loading_level(), cnv->get_loading_limit() );
+					if(  cnv->is_waiting_for_coupling()  ) {
+						tstrncpy( tooltip_text, translator::translate("Waiting for coupling!"), lengthof(tooltip_text) );
+					} else {
+						sprintf( tooltip_text, translator::translate("Loading (%i->%i%%)!"), cnv->get_loading_level(), cnv->get_loading_limit() );
+					}
+					
 					color = color_idx_to_rgb(COL_YELLOW);
 				}
 				break;
@@ -2537,7 +2542,7 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, bool coupling) const
 			for(  uint8 pos=1;  pos<(volatile uint8)bd->get_top();  pos++  ) {
 				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(bd->obj_bei(pos))  ) {
 					// there is a suitable waiting convoy for coupling -> this is coupling point.
-					if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+					if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
 						if(  v!=v->get_convoi()->back()  ) {
 							// we have to couple with the last car of the convoy.
 							continue;
@@ -3254,7 +3259,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 			if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 				// there is a suitable waiting convoy for coupling -> this is coupling point.
-				if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+				if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
 					if(  v!=v->get_convoi()->back()  ) {
 						// we have to couple with the last car of the convoy.
 						continue;

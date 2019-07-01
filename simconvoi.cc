@@ -1652,7 +1652,7 @@ void convoi_t::ziel_erreicht()
 				for(  uint8 pos=1;  pos<(volatile uint8)g->get_top();  pos++  ) {
 					if(  vehicle_t* const v = dynamic_cast<vehicle_t*>(g->obj_bei(pos))  ) {
 						// there is a suitable waiting convoy for coupling -> this is coupling point.
-						if(  can_start_coupling(v->get_convoi())  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+						if(  can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
 							akt_speed = 0;
 							if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 								halt->book(1, HALT_CONVOIS_ARRIVED);
@@ -4100,4 +4100,14 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 	}
 	// Does the current and next platform has adequate length?
 	return true;
+}
+
+bool convoi_t::is_waiting_for_coupling() const {
+	convoihandle_t c = self;
+	bool waiting_for_coupling = false;
+	while(  c.is_bound()  ) {
+		waiting_for_coupling |= (!c->get_coupling_convoi().is_bound()  &&  c->get_schedule()->get_current_entry().coupling_point==1);
+		c = c->get_coupling_convoi();
+	}
+	return waiting_for_coupling;
 }
