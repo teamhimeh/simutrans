@@ -16,7 +16,6 @@
 #include "../simobj.h"
 #include "../halthandle_t.h"
 #include "../convoihandle_t.h"
-#include "../linehandle_t.h"
 #include "../ifc/simtestdriver.h"
 #include "../boden/grund.h"
 #include "../descriptor/vehicle_desc.h"

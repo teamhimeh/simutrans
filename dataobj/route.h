@@ -11,7 +11,7 @@
 #include "../simdebug.h"
 
 #include "../dataobj/koord3d.h"
-#include "../linehandle_t.h"
+
 
 #include "../tpl/vector_tpl.h"
 

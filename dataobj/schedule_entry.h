@@ -2,7 +2,6 @@
 #define schedule_entry_t_h
 
 #include "koord3d.h"
-#include "../linehandle_t.h"
 
 /**
  * A schedule entry.
