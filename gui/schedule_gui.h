@@ -78,11 +78,10 @@ protected:
 	schedule_t* old_schedule;
 	player_t *player;
 	convoihandle_t cnv;
-	linehandle_t line;
 
 	linehandle_t new_line, old_line;
 
-	void init(schedule_t* schedule, player_t* player, convoihandle_t cnv, linehandle_t line = linehandle_t());
+	void init(schedule_t* schedule, player_t* player, convoihandle_t cnv);
 
 public:
 	schedule_gui_t(schedule_t* schedule = NULL, player_t* player = NULL, convoihandle_t cnv = convoihandle_t());

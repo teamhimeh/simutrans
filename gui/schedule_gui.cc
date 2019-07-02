@@ -287,12 +287,11 @@ schedule_gui_t::~schedule_gui_t()
 	delete stats;
 }
 
-void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_t cnv, linehandle_t line)
+void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_t cnv)
 {
 	// initialization
 	this->old_schedule = schedule_;
 	this->cnv = cnv;
-	this->line = line;
 	this->player = player;
 	set_owner(player);
 
