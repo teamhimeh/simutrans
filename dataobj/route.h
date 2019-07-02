@@ -12,7 +12,6 @@
 
 #include "../dataobj/koord3d.h"
 
-
 #include "../tpl/vector_tpl.h"
 
 class karte_t;

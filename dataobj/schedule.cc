@@ -16,7 +16,6 @@
 #include "../boden/grund.h"
 #include "../obj/gebaeude.h"
 #include "../player/simplay.h"
-#include "../simline.h"
 #include "../simdepot.h"
 #include "loadsave.h"
 #include "translator.h"
