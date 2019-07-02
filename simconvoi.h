@@ -611,6 +611,7 @@ public:
 	static sint32 calc_max_speed(uint64 total_power, uint64 total_weight, sint32 speed_limit);
 
 	uint32 get_length() const;
+	uint32 get_entire_convoy_length() const;
 
 	/**
 	 * @return length of convoi in the correct units for movement

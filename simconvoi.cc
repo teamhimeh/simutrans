@@ -643,6 +643,17 @@ uint32 convoi_t::get_length() const
 	return len;
 }
 
+uint32 convoi_t::get_entire_convoy_length() const
+{
+	uint32 len = 0;
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		len += c->get_length();
+		c = c->get_coupling_convoi();
+	}
+	return len;
+}
+
 
 /**
  * convoi add their running cost for traveling one tile

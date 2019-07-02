@@ -2633,11 +2633,13 @@ bool rail_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_g
 		// This is not target halt.
 		return false;
 	}
+	const koord dir=gr->get_pos().get_2d()-prev_gr->get_pos().get_2d();
+	const ribi_t::ribi ribi = ribi_type(dir);
 	// Find target vehicle to couple with 
 	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 		if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 			// there is a suitable waiting convoy for coupling -> this is coupling point.
-			if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->get_state()==convoi_t::LOADING  ) {
+			if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
 				if(  v!=v->get_convoi()->back()  ) {
 					// we have to couple with the last car of the convoy.
 					continue;
@@ -2646,7 +2648,19 @@ bool rail_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_g
 				// c_step can be negative, so it must be handled as sint16.
 				// TODO: in case that the vehicle length is over 16.
 				coupling_steps = v->get_steps() - VEHICLE_STEPS_PER_CARUNIT*v->get_desc()->get_length();
-				// coupling_steps = c_step<0 ? c_step+VEHICLE_STEPS_PER_TILE : c_step;
+				// Is the platform long enough?
+				grund_t *to;
+				sint16 steps_remain = cnv->get_entire_convoy_length() * VEHICLE_STEPS_PER_CARUNIT - coupling_steps - VEHICLE_STEPS_PER_TILE;
+				if(  coupling_steps>0  ) {
+					steps_remain += VEHICLE_STEPS_PER_TILE;
+				}
+				while(  steps_remain>0  ) {
+					if(  gr->get_weg(get_waytype())->get_ribi_maske() & ribi  ||  !gr->get_neighbour(to,get_waytype(),ribi_t::backward(ribi))  ||  !(to->get_halt()==target_halt)  ) {
+						return false;
+					}
+					gr = to;
+					steps_remain -= VEHICLE_STEPS_PER_TILE;
+				}
 				return true;
 			} else {
 				// other convoy exists.
@@ -2853,7 +2867,7 @@ skip_choose:
 			// try to alloc the whole route
 			cnv->access_route()->remove_koord_from(start_block);
 			cnv->access_route()->append( &target_rt );
-			if(  !block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false )  ) {
+			if(  !try_coupling  &&  !block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false )  ) {
 				dbg->error( "rail_vehicle_t::is_choose_signal_clear()", "could not reserved route after find_route!" );
 				target_halt = halthandle_t();
 				sig->set_state(  roadsign_t::rot );
@@ -3098,8 +3112,9 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 		}
 
-		// next check for coupling
-		if(  can_couple(cnv->get_route(), next_block+1, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
+		signal_t* c_sig = sch1->has_signal() ? gr_next_block->find<signal_t>() : NULL;
+		// next check for coupling. no check in front of a choose signal
+		if(  !(c_sig  &&  c_sig->get_desc()->is_choose_sign())  &&  can_couple(cnv->get_route(), next_block+1, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
 			cnv->set_next_coupling(next_coupling, next_c_steps);
 			// since signal does not exist till the coupling point...
 			cnv->set_next_stop_index(min(next_crossing,next_coupling));
