@@ -361,7 +361,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	
 	// coupling related buttons
 	add_table(2,1);
-	{
+	if(  schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt  ) {
 		bt_wait_for_child.init(button_t::square_state, "Wait for child");
 		bt_wait_for_child.set_tooltip("A convoy waits for child convoy to couple.");
 		bt_wait_for_child.add_listener(this);
