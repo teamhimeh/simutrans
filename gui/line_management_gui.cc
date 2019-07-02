@@ -18,7 +18,7 @@ line_management_gui_t::line_management_gui_t(linehandle_t line, player_t* player
 	schedule_gui_t()
 {
 	if (line.is_bound() ) {
-		schedule_gui_t::init(line->get_schedule()->copy(), player_, convoihandle_t());
+		schedule_gui_t::init(line->get_schedule()->copy(), player_, convoihandle_t() );
 
 		this->line = line;
 		// has this line a single running convoi?
@@ -97,7 +97,7 @@ void line_management_gui_t::rdwr(loadsave_t *file)
 
 			schedule_t *save_schedule = schedule->copy();
 
-			init(line->get_schedule()->copy(), line->get_owner(), convoihandle_t());
+			init(line->get_schedule()->copy(), line->get_owner(), convoihandle_t() );
 			// init replaced schedule, restore
 			schedule->copy_from(save_schedule);
 			delete save_schedule;
