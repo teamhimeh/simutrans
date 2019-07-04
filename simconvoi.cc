@@ -3732,11 +3732,20 @@ PIXVAL convoi_t::get_status_color() const
 
 
 // returns tiles needed for this convoi
-uint16 convoi_t::get_tile_length() const
+uint16 convoi_t::get_tile_length(bool entire) const
 {
 	uint16 carunits=0;
-	for(uint8 i=0;  i<anz_vehikel-1;  i++) {
-		carunits += fahr[i]->get_desc()->get_length();
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		for(uint8 i=0;  i<c->get_vehicle_count()-1;  i++) {
+			carunits += c->get_vehikel(i)->get_desc()->get_length();
+		}
+		if(  !entire  ||  !c->get_coupling_convoi().is_bound()  ) {
+			break;
+		} else {
+			carunits += c->back()->get_desc()->get_length();
+			c = c->get_coupling_convoi();
+		}
 	}
 	// the last vehicle counts differently in stations and for reserving track
 	// (1) add 8 = 127/256 tile to account for the driving in stations in north/west direction

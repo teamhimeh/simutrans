@@ -2479,7 +2479,7 @@ bool rail_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 	cnv->set_next_reservation_index( 0 );	// nothing to reserve
 	target_halt = halthandle_t();	// no block reserved
 	// use length 8888 tiles to advance to the end of all stations
-	return route->calc_route(welt, start, ziel, this, max_speed, 8888 /*cnv->get_tile_length()*/ );
+	return route->calc_route(welt, start, ziel, this, max_speed, cnv->get_tile_length(true) );
 }
 
 
@@ -2543,8 +2543,8 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, bool coupling) const
 				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(bd->obj_bei(pos))  ) {
 					// there is a suitable waiting convoy for coupling -> this is coupling point.
 					if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
-						if(  v!=v->get_convoi()->back()  ) {
-							// we have to couple with the last car of the convoy.
+						if(  !v->is_last()  &&  !v->is_leading()  ) {
+							// we have to couple with either end of the convoy.
 							continue;
 						}
 						return true;
@@ -2640,8 +2640,8 @@ bool rail_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_g
 		if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 			// there is a suitable waiting convoy for coupling -> this is coupling point.
 			if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
-				if(  v!=v->get_convoi()->back()  ) {
-					// we have to couple with the last car of the convoy.
+				if(  !v->is_last()  &&  !v->is_leading()  ) {
+					// we have to couple with either end of the convoy.
 					continue;
 				}
 				// set coupling index and step
@@ -3275,8 +3275,8 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
 				// there is a suitable waiting convoy for coupling -> this is coupling point.
 				if(  cnv->can_start_coupling(v->get_convoi())  &&  v->get_convoi()->is_loading()  ) {
-					if(  v!=v->get_convoi()->back()  ) {
-						// we have to couple with the last car of the convoy.
+					if(  !v->is_last()  &&  !v->is_leading()  ) {
+						// we have to couple with either end of the convoy.
 						continue;
 					}
 					//reserve tiles
