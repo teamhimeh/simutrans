@@ -3162,8 +3162,8 @@ station_tile_search_ready: ;
 	// loading is finished => maybe drive on
 	if(  state==COUPLED  ||  departure_cond  ) {
 
-		if(  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
-			// destroy when empty
+		if(  !is_coupled()  &&  !coupling_convoi.is_bound()  &&  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
+			// destroy when empty, alone
 			self_destruct();
 			return;
 		}
