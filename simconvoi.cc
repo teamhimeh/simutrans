@@ -1680,6 +1680,7 @@ void convoi_t::ziel_erreicht()
 			set_next_coupling(INVALID_INDEX, 0);
 		}
 		
+		arrived_time = welt->get_ticks();
 		// no depot reached, no coupling, check for stop!
 		if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 			// seems to be a stop, so book the money for the trip
@@ -1688,10 +1689,10 @@ void convoi_t::ziel_erreicht()
 			while(  c.is_bound()  ) {
 				c->set_akt_speed(0);
 				c->set_state(c==self ? LOADING : COUPLED_LOADING);
+				c->set_arrived_time(arrived_time);
 				c = c->get_coupling_convoi();
 			}
-			// arrived_time update is currently needed only for the head convoy.
-			arrived_time = welt->get_ticks();
+			
 		}
 		else {
 			// Neither depot nor station: waypoint
@@ -3136,11 +3137,7 @@ station_tile_search_ready: ;
 	
 	// uncouple convoy if needed.
 	if(  coupling_convoi.is_bound()  &&  !can_continue_coupling()  ) {
-		coupling_convoi->set_arrived_time(arrived_time);
-		coupling_convoi->set_state(LOADING);
-		coupling_convoi->front()->set_leading(true);
-		back()->set_last(true);
-		coupling_convoi = convoihandle_t();
+		uncouple_convoi();
 	}
 	
 	if(  coupling_convoi.is_bound()  ) {
@@ -4067,11 +4064,11 @@ convoihandle_t convoi_t::uncouple_convoi() {
 		return convoihandle_t();
 	}
 	convoihandle_t ret = coupling_convoi;
-	coupling_convoi->set_state(state==LOADING ? LOADING : ROUTING_1);
+	coupling_convoi->set_state(is_loading() ? LOADING : ROUTING_1);
 	coupling_convoi->front()->set_leading(true);
 	back()->set_last(true);
 	coupling_convoi = convoihandle_t();
-	return coupling_convoi;
+	return ret;
 }
 
 bool convoi_t::can_continue_coupling() const {
