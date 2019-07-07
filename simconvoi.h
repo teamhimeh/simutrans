@@ -267,6 +267,9 @@ private:
 	 */
 	uint16 next_coupling_index;
 	uint8 next_coupling_steps;
+	
+	bool coupling_done;
+	ribi_t::ribi next_initial_direction;
 
 	/**
 	 * The convoi is not processed every sync step for various actions
@@ -935,6 +938,11 @@ public:
 	
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
+	bool is_this_convoy_parent(convoi_t* other) const;
+	
+	ribi_t::ribi get_next_initial_direction() const { return next_initial_direction; }
+	bool is_coupling_done() const { return coupling_done; }
+	void set_coupling_done(bool tf) { coupling_done = tf; }
 	
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 };

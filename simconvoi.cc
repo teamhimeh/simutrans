@@ -160,6 +160,9 @@ void convoi_t::init(player_t *player)
 	next_stop_index = 65535;
 	next_coupling_index = INVALID_INDEX;
 	next_coupling_steps = 0;
+	
+	coupling_done = false;
+	next_initial_direction = ribi_t::none;
 
 	line_update_pending = linehandle_t();
 
@@ -1668,9 +1671,17 @@ void convoi_t::ziel_erreicht()
 							if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 								halt->book(1, HALT_CONVOIS_ARRIVED);
 							}
-							v->get_convoi()->couple_convoi(self);
+							if(  ribi_t::backward(front()->get_direction())==v->get_convoi()->get_next_initial_direction()  ) {
+								// this convoy leads the other.
+								couple_convoi(v->get_convoi()->self);
+							} else {
+								// this convoy follows the other.
+								v->get_convoi()->couple_convoi(self);
+							}
 							wait_lock = 0;
 							set_next_coupling(INVALID_INDEX, 0);
+							v->get_convoi()->set_coupling_done(true);
+							coupling_done = true;
 							return;
 						}
 					}
@@ -2724,6 +2735,8 @@ void convoi_t::rdwr(loadsave_t *file)
 		rdwr_convoihandle_t( file, coupling_convoi );
 		file->rdwr_short( next_coupling_index );
 		file->rdwr_byte( next_coupling_steps );
+		file->rdwr_bool(coupling_done);
+		file->rdwr_byte(next_initial_direction);
 	}
 
 	if(  file->is_loading()  ) {
@@ -3150,17 +3163,32 @@ station_tile_search_ready: ;
 
 	convoihandle_t c = self;
 	bool departure_cond = true;
-	while(  c.is_bound()  ) {
+	bool need_coupling_at_this_stop = false;
+	// A coupled convoy does not have to judge the departure.
+	while(  !is_coupled()  &&  c.is_bound()  ) {
 		bool cond = c->get_loading_level() >= c->get_schedule()->get_current_entry().minimum_loading; // minimum loading
-		cond &= (c->get_schedule()->get_current_entry().coupling_point!=1  ||  c->get_coupling_convoi().is_bound()); // coupling done?
+		need_coupling_at_this_stop |= (c->get_schedule()->get_current_entry().coupling_point==1  &&  !c->is_coupling_done()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled())); // coupling done?
 		cond |= c->get_no_load(); // no load
 		cond |= (c->get_schedule()->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - c->get_schedule()->get_current_entry().waiting_time_shift)) ); // waiting time
 		departure_cond &= cond;
 		c = c->get_coupling_convoi();
 	}
+	departure_cond &= !need_coupling_at_this_stop;
+	
+	if(  need_coupling_at_this_stop  &&  next_initial_direction==ribi_t::none  ) {
+		// calc the initial direction to the next stop.
+		route_t r;
+		route_t::route_result_t res = r.calc_route(welt, front()->get_pos(), schedule->get_next_entry().pos, front(), speed_to_kmh(min_top_speed), 8888);
+		if(  res==route_t::no_route  ||  r.get_count()<2  ) {
+			// assume we do not turn here
+			next_initial_direction = front()->get_direction();
+		} else {
+			next_initial_direction = ribi_type(r.at(0), r.at(1));
+		}
+	}
 
 	// loading is finished => maybe drive on
-	if(  state==COUPLED  ||  departure_cond  ) {
+	if(  is_coupled()  ||  departure_cond  ) {
 
 		if(  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
 			// destroy when empty
@@ -3176,15 +3204,17 @@ station_tile_search_ready: ;
 		}
 
 		// Advance schedule
-		if(  state!=COUPLED  &&  state!=COUPLED_LOADING  ) {
+		if(  !is_coupled()  ) {
 			schedule->advance();
 			state = ROUTING_1;
 			loading_limit = 0;
+			coupling_done = false;
 			// Advance schedule of coupling convoy recursively.
 			convoihandle_t c_cnv = coupling_convoi;
 			while(  c_cnv.is_bound()  ) {
 				c_cnv->get_schedule()->advance();
 				c_cnv->set_state(COUPLED);
+				c_cnv->set_coupling_done(false);
 				c_cnv = c_cnv->get_coupling_convoi();
 			}
 		}
@@ -4065,6 +4095,7 @@ const char* convoi_t::send_to_depot(bool local)
 
 bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupled->set_state(COUPLED_LOADING);
+	set_state(LOADING);
 	coupling_convoi = coupled;
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
@@ -4130,4 +4161,13 @@ bool convoi_t::is_waiting_for_coupling() const {
 		c = c->get_coupling_convoi();
 	}
 	return waiting_for_coupling;
+}
+
+bool convoi_t::is_this_convoy_parent(convoi_t *other) const {
+	if(  front()->get_direction()==other->front()->get_direction()  ) {
+		return false;
+	}
+	
+	
+	return false;
 }
