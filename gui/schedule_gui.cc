@@ -361,14 +361,14 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	// coupling related buttons
 	add_table(2,1);
 	if(  schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt  ) {
-		bt_wait_for_child.init(button_t::square_state, "Wait for child");
-		bt_wait_for_child.set_tooltip("A convoy waits for child convoy to couple.");
+		bt_wait_for_child.init(button_t::square_state, "Wait for coupling");
+		bt_wait_for_child.set_tooltip("A convoy waits for other convoy to couple.");
 		bt_wait_for_child.add_listener(this);
 		bt_wait_for_child.disable();
 		add_component(&bt_wait_for_child);
 		
-		bt_find_parent.init(button_t::square_state, "Find parent");
-		bt_find_parent.set_tooltip("A convoy tries to find a parent convoy to couple with.");
+		bt_find_parent.init(button_t::square_state, "Try coupling");
+		bt_find_parent.set_tooltip("A convoy tries to find a waiting convoy to couple with.");
 		bt_find_parent.add_listener(this);
 		bt_find_parent.disable();
 		add_component(&bt_find_parent);
@@ -462,7 +462,7 @@ void schedule_gui_t::update_selection()
 			numimp_load.set_value( schedule->entries[current_stop].minimum_loading );
 
 			sint8 wait = 0;
-			if(  schedule->entries[current_stop].minimum_loading>0  ) {
+			if(  schedule->entries[current_stop].minimum_loading>0  ||  schedule->entries[current_stop].coupling_point!=0  ) {
 				lb_wait.set_color( SYSCOL_TEXT );
 				wait_load.enable();
 
