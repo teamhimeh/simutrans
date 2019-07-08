@@ -4078,7 +4078,15 @@ convoihandle_t convoi_t::uncouple_convoi() {
 	coupling_convoi->front()->set_leading(true);
 	back()->set_last(true);
 	must_recalc_min_top_speed();
-	coupling_convoi->must_recalc_min_top_speed();
+	// for child convoy, recalculate is_electric and min_top_speed immediately.
+	coupling_convoi->check_electrification();
+	const sint32 mts = coupling_convoi->calc_min_top_speed();
+	convoihandle_t c = coupling_convoi->get_coupling_convoi();
+	// broadcast min_top_speed
+	while(  c.is_bound()  ) {
+		c->set_min_top_speed(mts);
+		c = c->get_coupling_convoi();
+	}
 	coupling_convoi = convoihandle_t();
 	return ret;
 }
