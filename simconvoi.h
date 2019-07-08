@@ -947,7 +947,6 @@ public:
 	
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
-	bool is_this_convoy_parent(convoi_t* other) const;
 	
 	ribi_t::ribi get_next_initial_direction() const { return next_initial_direction; }
 	bool is_coupling_done() const { return coupling_done; }
