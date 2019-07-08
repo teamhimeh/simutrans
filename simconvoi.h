@@ -234,6 +234,7 @@ private:
 	bool recalc_data_front;  ///< true, when front vehicle has to recalculate braking
 	bool recalc_data;        ///< true, when convoy has to recalculate weights and speed limits
 	bool recalc_speed_limit; ///< true, when convoy has to recalculate speed limits
+	bool recalc_min_top_speed; ///< true, when convoy has to recalculate min_top_speed and is_electric
 
 	sint64 sum_friction_weight;
 	sint32 speed_limit;
@@ -440,6 +441,7 @@ public:
 
 	/* true, if electrification needed for this convoi */
 	bool needs_electrification() const { return is_electric; }
+	bool check_electrification();
 
 	/**
 	* set line
@@ -600,6 +602,10 @@ public:
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
 	void set_speed_limit(sint32 s) { speed_limit = s;}
+	void set_min_top_speed(sint32 t) {min_top_speed = t;}
+	
+	// calculate min_top_speed taking coupling convoys into account. This does not broadcast min_top_speed for the coupling convoys.
+	sint32 calc_min_top_speed();
 
 	/// @returns weight of the convoy's vehicles (excluding freight)
 	const sint64 & get_sum_weight() const {return sum_weight;}
@@ -918,6 +924,9 @@ public:
 	void must_recalc_data_front() { recalc_data_front = true; }
 	void must_recalc_speed_limit() { recalc_speed_limit = true; }
 	bool get_recalc_speed_limit() const { return recalc_speed_limit; }
+	void must_recalc_min_top_speed() { recalc_min_top_speed = true; }
+	void reset_recalc_min_top_speed() { recalc_min_top_speed = false; }
+	bool get_recalc_min_top_speed() const { return recalc_min_top_speed; }
 
 	// calculates the speed used for the speedbonus base, and the max achievable speed at current power/weight for overtakers
 	void calc_speedbonus_kmh();

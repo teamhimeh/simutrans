@@ -92,20 +92,6 @@ static const char * state_names[convoi_t::MAX_STATES] =
 };
 
 
-/**
- * Calculates speed of slowest vehicle in the given array
- * @author Hj. Matthaner
- */
-static int calc_min_top_speed(const array_tpl<vehicle_t*>& fahr, uint8 anz_vehikel)
-{
-	int min_top_speed = SPEED_UNLIMITED;
-	for(uint8 i=0; i<anz_vehikel; i++) {
-		min_top_speed = min(min_top_speed, kmh_to_speed( fahr[i]->get_desc()->get_topspeed() ) );
-	}
-	return min_top_speed;
-}
-
-
 void convoi_t::init(player_t *player)
 {
 	owner = player;
@@ -170,6 +156,7 @@ void convoi_t::init(player_t *player)
 
 	recalc_data_front = true;
 	recalc_data = true;
+	recalc_min_top_speed = true;
 }
 
 
@@ -539,6 +526,8 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 		register_stops();
 	}
 
+	check_electrification();
+	calc_min_top_speed();
 	calc_speedbonus_kmh();
 }
 
@@ -725,12 +714,14 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 {
 	convoihandle_t c = self;
 	bool rsl = recalc_speed_limit; // Must speed limit be recalculated?
+	bool rmt = recalc_min_top_speed; // Must min_top_speed be recalculated?
 	while(  c.is_bound()  &&  !rsl  ) {
 		rsl |= c->get_recalc_speed_limit();
+		rmt |= c->get_recalc_min_top_speed();
 		c = c->get_coupling_convoi();
 	}
 	
-	if(  !recalc_data  &&  !rsl  &&  !recalc_data_front  &&  (
+	if(  !recalc_data  &&  !rsl  &&  !rmt  &&  !recalc_data_front  &&  (
 		(sum_friction_weight == sum_gesamtweight  &&  akt_speed_soll <= akt_speed  &&  akt_speed_soll+24 >= akt_speed)  ||
 		(sum_friction_weight > sum_gesamtweight  &&  akt_speed_soll == akt_speed)  )
 		) {
@@ -739,21 +730,33 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 		akt_speed = akt_speed_soll;
 		return;
 	}
+	
+	if(  rmt  ) {
+		// min_top_speed and is_electric must be recalculated.
+		check_electrification();
+		calc_min_top_speed();
+		recalc_min_top_speed = false;
+		// broadcast min_top_speed
+		// is_electric must be updated only for the front convoy.
+		c = coupling_convoi;
+		while(  c.is_bound()  ) {
+			c->set_min_top_speed(min_top_speed);
+			c->reset_recalc_min_top_speed();
+			c = c->get_coupling_convoi();
+		}
+	}
 
 	// Dwachs: only compute this if a vehicle in the convoi hopped
 	if(  recalc_data  ||  rsl  ) {
-		// calculate total friction and lowest speed limit
-		const vehicle_t* v = front();
-		speed_limit = min( min_top_speed, v->get_speed_limit() );
-		if (recalc_data) {
-			sum_gesamtweight   = v->get_total_weight();
-			sum_friction_weight = v->get_frictionfactor() * sum_gesamtweight;
+		if(  recalc_data  ) {
+			sum_friction_weight = sum_gesamtweight = 0;
 		}
+		// calculate total friction and lowest speed limit
+		speed_limit = min_top_speed;
 		
 		c = self;
 		while(  c.is_bound()  ) {
-			speed_limit = min( speed_limit, c->get_min_top_speed() );
-			for(  uint8 i=(c==self?1:0);  i<c->get_vehicle_count();  i++  ) {
+			for(  uint8 i=0;  i<c->get_vehicle_count();  i++  ) {
 				const vehicle_t* v = c->get_vehikel(i);
 				speed_limit = min( speed_limit, v->get_speed_limit() );
 
@@ -1691,6 +1694,7 @@ void convoi_t::ziel_erreicht()
 			set_next_coupling(INVALID_INDEX, 0);
 		}
 		
+		arrived_time = welt->get_ticks();
 		// no depot reached, no coupling, check for stop!
 		if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 			// seems to be a stop, so book the money for the trip
@@ -1699,10 +1703,10 @@ void convoi_t::ziel_erreicht()
 			while(  c.is_bound()  ) {
 				c->set_akt_speed(0);
 				c->set_state(c==self ? LOADING : COUPLED_LOADING);
+				c->set_arrived_time(arrived_time);
 				c = c->get_coupling_convoi();
 			}
-			// arrived_time update is currently needed only for the head convoy.
-			arrived_time = welt->get_ticks();
+			
 		}
 		else {
 			// Neither depot nor station: waypoint
@@ -1822,7 +1826,7 @@ vehicle_t *convoi_t::remove_vehikel_bei(uint16 i)
 		}
 
 		// Hajo: calculate new minimum top speed
-		min_top_speed = calc_min_top_speed(fahr, anz_vehikel);
+		min_top_speed = calc_min_top_speed();
 
 		// check for obsolete
 		if(has_obsolete) {
@@ -2410,7 +2414,6 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 	else {
 		bool override_monorail = false;
-		is_electric = false;
 		for(  uint8 i=0;  i<anz_vehikel;  i++  ) {
 			obj_t::typ typ = (obj_t::typ)file->rd_obj_id();
 			vehicle_t *v = 0;
@@ -2475,7 +2478,6 @@ void convoi_t::rdwr(loadsave_t *file)
 				sum_gear_and_power += info->get_power()*info->get_gear();
 				sum_weight += info->get_weight();
 				sum_running_costs -= info->get_running_cost();
-				is_electric |= info->get_engine_type()==vehicle_desc_t::electric;
 				has_obsolete |= welt->use_timeline()  &&  info->is_retired( welt->get_timeline_year_month() );
 				player_t::add_maintenance( get_owner(), info->get_maintenance(), info->get_waytype() );
 			}
@@ -2551,9 +2553,6 @@ void convoi_t::rdwr(loadsave_t *file)
 		next_wolke = 0;
 		calc_loading();
 	}
-
-	// Hajo: calculate new minimum top speed
-	min_top_speed = calc_min_top_speed(fahr, anz_vehikel);
 
 	// Hajo: since sp_ist became obsolete, sp_soll is used modulo 65536
 	sp_soll &= 65535;
@@ -3149,11 +3148,18 @@ station_tile_search_ready: ;
 	
 	// uncouple convoy if needed.
 	if(  coupling_convoi.is_bound()  &&  !can_continue_coupling()  ) {
-		coupling_convoi->set_arrived_time(arrived_time);
-		coupling_convoi->set_state(LOADING);
-		coupling_convoi->front()->set_leading(true);
-		back()->set_last(true);
-		coupling_convoi = convoihandle_t();
+		uncouple_convoi();
+	}
+	
+	convoihandle_t c = self;
+	if(  recalc_min_top_speed  ) {
+		check_electrification();
+		calc_min_top_speed();
+		while(  c.is_bound()  ) {
+			c->set_min_top_speed(min_top_speed);
+			c->reset_recalc_min_top_speed();
+			c = c->get_coupling_convoi();
+		}
 	}
 	
 	if(  coupling_convoi.is_bound()  ) {
@@ -3161,9 +3167,9 @@ station_tile_search_ready: ;
 		coupling_convoi->hat_gehalten(halt);
 	}
 
-	convoihandle_t c = self;
 	bool departure_cond = true;
 	bool need_coupling_at_this_stop = false;
+	c = self;
 	// A coupled convoy does not have to judge the departure.
 	while(  !is_coupled()  &&  c.is_bound()  ) {
 		bool cond = c->get_loading_level() >= c->get_schedule()->get_current_entry().minimum_loading; // minimum loading
@@ -3190,8 +3196,8 @@ station_tile_search_ready: ;
 	// loading is finished => maybe drive on
 	if(  is_coupled()  ||  departure_cond  ) {
 
-		if(  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
-			// destroy when empty
+		if(  !is_coupled()  &&  !coupling_convoi.is_bound()  &&  withdraw  &&  (loading_level == 0  ||  goods_catg_index.empty())  ) {
+			// destroy when empty, alone
 			self_destruct();
 			return;
 		}
@@ -4099,6 +4105,7 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupling_convoi = coupled;
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
+	must_recalc_min_top_speed();
 	return true;
 }
 
@@ -4107,11 +4114,21 @@ convoihandle_t convoi_t::uncouple_convoi() {
 		return convoihandle_t();
 	}
 	convoihandle_t ret = coupling_convoi;
-	coupling_convoi->set_state(state==LOADING ? LOADING : ROUTING_1);
+	coupling_convoi->set_state(is_loading() ? LOADING : ROUTING_1);
 	coupling_convoi->front()->set_leading(true);
 	back()->set_last(true);
+	must_recalc_min_top_speed();
+	// for child convoy, recalculate is_electric and min_top_speed immediately.
+	coupling_convoi->check_electrification();
+	const sint32 mts = coupling_convoi->calc_min_top_speed();
+	convoihandle_t c = coupling_convoi->get_coupling_convoi();
+	// broadcast min_top_speed
+	while(  c.is_bound()  ) {
+		c->set_min_top_speed(mts);
+		c = c->get_coupling_convoi();
+	}
 	coupling_convoi = convoihandle_t();
-	return coupling_convoi;
+	return ret;
 }
 
 bool convoi_t::can_continue_coupling() const {
@@ -4163,11 +4180,26 @@ bool convoi_t::is_waiting_for_coupling() const {
 	return waiting_for_coupling;
 }
 
-bool convoi_t::is_this_convoy_parent(convoi_t *other) const {
-	if(  front()->get_direction()==other->front()->get_direction()  ) {
-		return false;
+bool convoi_t::check_electrification() {
+	is_electric = false;
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		for(uint8 i=0;  i<c->get_vehicle_count();  i++) {
+			is_electric |= c->get_vehikel(i)->get_desc()->get_engine_type()==vehicle_desc_t::electric;
+		}
+		c = c->get_coupling_convoi();
 	}
-	
-	
-	return false;
+	return is_electric;
+}
+
+sint32 convoi_t::calc_min_top_speed() {
+	min_top_speed = SPEED_UNLIMITED;
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		for(uint8 i=0; i<c->get_vehicle_count(); i++) {
+			min_top_speed = min(min_top_speed, kmh_to_speed( c->get_vehikel(i)->get_desc()->get_topspeed() ) );
+		}
+		c = c->get_coupling_convoi();
+	}
+	return min_top_speed;
 }

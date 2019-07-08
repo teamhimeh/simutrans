@@ -327,13 +327,13 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			button.enable();
 		}
 
-		if(  cnv->is_coupled()  ||  route_search_in_progress  ) {
-			go_home_button.disable();
-		}
-		else if(  cnv->get_coupling_convoi().is_bound()  ) {
-			go_home_button.set_tooltip("Uncouple the child convoy now.");
-			go_home_button.set_text("release child");
+		if(  cnv->get_coupling_convoi().is_bound()  ) {
+			go_home_button.set_tooltip("Uncouple the back convoy now.");
+			go_home_button.set_text("release back");
 			go_home_button.enable();
+		}
+		else if(  cnv->is_coupled()  ||  route_search_in_progress  ) {
+			go_home_button.disable();
 		}
 		else {
 			go_home_button.set_tooltip("Sends the convoi to the last depot it departed from!");
