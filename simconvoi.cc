@@ -4101,7 +4101,9 @@ const char* convoi_t::send_to_depot(bool local)
 
 bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupled->set_state(COUPLED_LOADING);
-	set_state(LOADING);
+	if(  !is_coupled()  ) {
+		set_state(LOADING);
+	}
 	coupling_convoi = coupled;
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
