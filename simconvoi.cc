@@ -155,6 +155,8 @@ void convoi_t::init(player_t *player)
 	coupling_done = false;
 	next_initial_direction = ribi_t::none;
 
+	coupling_convoi = convoihandle_t();
+	
 	line_update_pending = linehandle_t();
 
 	home_depot = koord3d::invalid;
@@ -1813,7 +1815,13 @@ void convoi_t::ziel_erreicht()
 		}
 		else {
 			// Neither depot nor station: waypoint
-			schedule->advance();
+			c = self;
+			// advance schedule for all coupling convoys.
+			while(  c.is_bound()  ) {
+				c->get_schedule()->advance();
+				printf("%s) schedule advanced\n", c->get_name());
+				c = c->get_coupling_convoi();
+			}
 			state = ROUTING_1;
 		}
 	}
