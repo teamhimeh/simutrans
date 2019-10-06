@@ -17,15 +17,15 @@
 本家フォーラム: https://forum.simutrans.com/index.php?topic=16659.0  
 Twitterハッシュタグ： [#OTRPatch](https://twitter.com/hashtag/OTRPatch?src=hash)
 
-version22_1現在、simutrans standard nightly r8794をベースにしています。
+version23_1現在、simutrans standard nightly r8820をベースにしています。
 
 # ダウンロード
 実行には本体の他にribi-arrowアドオンが必要なので https://drive.google.com/open?id=0B_rSte9xAhLDanhta1ZsSVcwdzg からDLしてpakセットの中に突っ込んでください。  
 
-本体は下のリンクからどうぞ。**（2019年7月30日PM7時　ver22_1に更新）**  
-windows（GDI）: https://osdn.net/projects/otrp/downloads/71377/sim-WinGDI-OTRPv22_1.exe/  
-mac: https://osdn.net/projects/otrp/downloads/71377/sim-mac-OTRPv22_1.zip/    
-Linux: https://osdn.net/projects/otrp/downloads/71377/sim-linux-OTRPv22_1.zip/  
+本体は下のリンクからどうぞ。**（2019年9月22日PM10時　ver23_1に更新）**  
+windows（GDI）: https://osdn.net/projects/otrp/downloads/71640/sim-WinGDI-OTRPv23_1.exe/  
+mac: https://osdn.net/projects/otrp/downloads/71640/sim-mac-OTRPv23_1.zip/    
+Linux: https://osdn.net/projects/otrp/downloads/71640/sim-linux-OTRPv23_1.zip/  
 ソース: https://github.com/teamhimeh/simutrans/tree/OTRP-distribute  
 
 OTRP専用のmakeobjはありません。simutrans standardのmakeobjをご利用ください。
@@ -92,10 +92,33 @@ pak128では鉄道車両の描画位置変更が行われた影響で、古い�
 オフセットの設定は、pakxyz/config/reposition.tabに保存されます。reposition.tabはテキストファイルなので手で編集することもできます。  
 なお、車庫画面でset offsetが出てくるのと、reposition.tabが保存されるのは128系のpakサイズでsimutransを起動したときのみです。reposition.tabの読み込みはその他のサイズのpakで起動したときも行われます。
 
-## 増解結
+## スケジュール設定
+OTRPでは高度なスケジュール設定により，より柔軟な運行ができるようになっています．  
+スケジュール画面で「詳細設定を展開」の三角形アイコンをクリックすると，詳細設定が出現します．詳細設定を閉じるには，もう一度三角形アイコンをクリックします．  
+![fig12](images/fig12.png)  
+
+### 臨時系統/乗車・降車不可
+- **臨時系統**：このスケジュールはRouteCostの計算に影響を与えなくなります．一時的な混雑解消用の直通路線の設定によって旅客の経由地を変更させたくない場合に便利です．
+- **乗車不可**：この停留所で乗車・積載が不可能になります．すなはち，降車専用になります．
+- **降車不可**：この停留所で降車・荷降ろしが不可能になります．すなはち，乗車専用になります．
+
+乗車不可・降車不可を両方有効にすると，乗車・降車ともにできなくなりますので，運転停車となります．
+
+### 増解結
 本機能はInternational Forumで議論中の機能の先行実装です． [本家フォーラムのスレッドはこちら](https://forum.simutrans.com/index.php/topic,19064.0.html)
 
 増解結の使い方は [こちらを参照](how_to_convoy_coupling.pdf) してください．
+
+### 発車時刻指定
+「発車時刻まで待機」を有効にすると，予めスケジュールされた時間に発車するようになります．発車時刻には，ゲーム画面左下部に表示されている時間軸が使用されます．  
+![fig13](images/fig13.png)  
+この場合，一ヶ月が1440等分され，発車時間として使用されます．ゲーム内時間を使用しないのは，ゲーム内の月日表示は月によって一日の長さが異なるためです．一ヶ月を何等分するかは，高度な設定の「全般」タブにある **spacing_shift_divisor** で設定できます．デフォルトは1440です．
+
+発車時間を指定するには，月あたりの **発車本数**，**オフセット**，**遅延許容時間** を設定します．月あたりの発車本数を**F**，オフセットを**D**とすると，1ヶ月を1440等分した時間軸で，(1440/**F**)×**n**+**D** (0≦**n**<**F**) の時間に発車します．例えば，月当たり発車本数を8，オフセットを20に設定すると，発車の間隔は1440/8=180となり，20, 200, 380, 560,...の時間に発車するようになります．
+
+遅延許容時間を設定すると，正規の発車時刻から許容時間以内は発車が許可されます．例えば，遅延許容時間が30，正規の発車時刻の一つが100の場合は，列車が100+30=130までに発車できるのであればそのスロットでの発車が許可されます．
+
+「全て同じ発車時刻設定を適用」を有効にすると，それを有効にして以降の発車本数，オフセット，遅延許容の設定がそのスケジュールの全エントリに適用されます．
 
 ## その他
 - 運賃収受に伴う金額表示をON/OFFできるようになりました。表示設定ウィンドウから切り替えられるほか、simple_tool[38]にキーを割り当てることでも切り替えることができます。
@@ -127,6 +150,7 @@ pak128では鉄道車両の描画位置変更が行われた影響で、古い�
 ## その他
 - **stop_at_intersection_without_traffic_light**（経済タブにあります）のチェックを入れることで、車両が信号機ナシ交差点の手前で特定の条件に従って一時停止するようになります。デフォルトでは無効です。
 - **advance_to_end**（ルートタブにあります）のチェックを外すことで列車のホームでの停車位置が実際に指定した位置になります。（デフォルトではstandardと同じく指定位置にかかわらず列車は先頭まで進みます。）なお指定した位置で編成がおさまらないときは編成全体がおさまるまで前進します。（extendedと同じです。）
+- **routecost_halt**, **routecost_wait** （ルートタブにあります）を変更することで，旅客の乗り換え駅を制御することができます．routecost_haltは1駅ごとのルートコスト，routecost_waitは1回乗り換えするごとのルートコストです．デフォルト値はそれぞれ1と8です．
 
 # データの互換性
 ## アドオンの互換性

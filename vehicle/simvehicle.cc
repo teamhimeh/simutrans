@@ -1857,9 +1857,18 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 
 			case convoi_t::LOADING:
 				if(  state>=1  ) {
-					if(  cnv->is_waiting_for_coupling()  ) {
+					if(  cnv->get_departure_time()>0  ) {
+						// the convoy is waiting for departure time.
+						// we use floating operation just for display purpose.
+						const float conversion_ratio = (float)world()->get_settings().get_spacing_shift_divisor()/world()->ticks_per_world_month;
+						const sint32 time_remain = (cnv->get_departure_time() - world()->get_ticks())*conversion_ratio;
+						sprintf( tooltip_text, translator::translate("Waiting for schedule. %i left!"), time_remain);
+					}
+					else if(  cnv->is_waiting_for_coupling()  ) {
+						// the convoy is waiting for coupling.
 						tstrncpy( tooltip_text, translator::translate("Waiting for coupling!"), lengthof(tooltip_text) );
 					} else {
+						// the convoy is waiting for minimum loading.
 						sprintf( tooltip_text, translator::translate("Loading (%i->%i%%)!"), cnv->get_loading_level(), cnv->get_loading_limit() );
 					}
 					
@@ -3626,7 +3635,7 @@ skip_choose:
 
 	target_halt = target->get_halt();
 	bool route_found = false;
-	const bool try_coupling = cnv->get_schedule()->get_current_entry().coupling_point==2;
+	bool try_coupling = cnv->get_schedule()->get_current_entry().get_coupling_point()==2;
 	if(  !try_coupling  ) {
 		// call block_reserver only when the next halt is not a coupling point.
 		route_found = block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false );
@@ -3652,6 +3661,7 @@ skip_choose:
 		}
 		if(  !route_found  &&  (!sig->is_guide_signal()  ||  !try_coupling)  ) {
 			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), false );
+			try_coupling = false;
 		}
 		if(  !route_found  ) {
 			// nothing empty or not route with less than get_max_choose_route_steps() tiles
@@ -3669,7 +3679,23 @@ skip_choose:
 				c = c->get_coupling_convoi();
 			}
 			// try to alloc the whole route
-			if(  !try_coupling  &&  !block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false )  ) {
+			const bool reserver_result = block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false );
+			if(  try_coupling  ) {
+				uint16 next_coupling;
+				uint8 next_c_steps;
+				if(  !can_couple(cnv->get_route(), route_index, next_coupling, next_c_steps)  ||  next_coupling==INVALID_INDEX  ) {
+					dbg->error( "rail_vehicle_t::is_choose_signal_clear()", "could not find coupling point after find_route!" );
+					target_halt = halthandle_t();
+					sig->set_state( roadsign_t::rot );
+					restart_speed = 0;
+					return false;
+				} 
+				cnv->set_next_coupling(next_coupling, next_c_steps);
+				cnv->set_next_stop_index( min(next_crossing, next_coupling) );
+				sig->set_state( roadsign_t::gruen );
+				return true;
+			}
+			else if(  !reserver_result  ) {
 				dbg->error( "rail_vehicle_t::is_choose_signal_clear()", "could not reserved route after find_route!" );
 				target_halt = halthandle_t();
 				sig->set_state(  roadsign_t::rot );
@@ -3765,11 +3791,8 @@ bool rail_vehicle_t::is_signal_clear(uint16 next_block, sint32 &restart_speed)
 		cnv->clear_reserved_tiles();
 	}
 
-	// simple signal: drive on, if next block is free
-	if(  !sig_desc->is_longblock_signal() &&
-      !sig_desc->is_choose_sign() &&
-      !sig_desc->is_pre_signal() &&
-      !sig_desc->is_priority_signal()) {
+	// simple signal: fail, if next block is not free
+	if(  sig_desc->is_simple_signal()  ) {
 
 		uint16 next_signal, next_crossing;
 		if(  block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false )  ) {
@@ -3942,7 +3965,9 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 
 		signal_t* c_sig = sch1->has_signal() ? gr_next_block->find<signal_t>() : NULL;
 		// next check for coupling. no check in front of a choose signal
-		if(  !(c_sig  &&  c_sig->get_desc()->is_choose_sign())  &&  can_couple(cnv->get_route(), next_block+1, next_coupling, next_c_steps)  &&  next_coupling!=INVALID_INDEX  ) {
+		if(  !(c_sig  &&  c_sig->get_desc()->is_choose_sign()  &&  cnv->get_schedule_target()==koord3d::invalid)
+		  &&  can_couple(cnv->get_route(), next_block+1, next_coupling, next_c_steps)  
+			&&  next_coupling!=INVALID_INDEX  ) {
 			cnv->set_next_coupling(next_coupling, next_c_steps);
 			// since signal does not exist till the coupling point...
 			cnv->set_next_stop_index(min(next_crossing,next_coupling));
@@ -4087,9 +4112,19 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 
 
 bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps) {
-	const bool try_coupling = cnv->get_schedule()->get_current_entry().coupling_point==2;
 	// first, does the current schedule entry require coupling?
-	if(  !try_coupling  ) {
+	// Since current schedule entry can be a waypoint, we proceed to a genuine stop point.
+	sint16 idx = cnv->get_schedule()->get_current_stop();
+	bool stop_found = false;
+	do {
+		if(  !cnv->is_waypoint(cnv->get_schedule()->entries[idx].pos)  ) {
+			stop_found = true;
+			break;
+		}
+		idx = (idx+1)%cnv->get_schedule()->get_count();
+	} while(  idx!=cnv->get_schedule()->get_current_stop()  );
+	if(  !stop_found  ||  cnv->get_schedule()->entries[idx].get_coupling_point()!=2  ) {
+		// all schedule entries are waypoint or the next stop point is not a coupling point.
 		return false;
 	}
 	// start_index can be invalid.
@@ -4115,7 +4150,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 						// we have to couple with either end of the convoy.
 						continue;
 					}
-					if(  i!=start_index  &&  ((v->is_last()&&(v->get_direction()&dir)==0)  ||  (v->is_leading()&&(v->get_direction()&dir)!=0))  ) {
+					if(  i!=start_index  &&  v->get_convoi()->get_vehicle_count()>1  &&  ((v->is_last()&&(v->get_direction()&dir)==0)  ||  (v->is_leading()&&(v->get_direction()&dir)!=0))  ) {
 						// direction is bad to couple.
 						continue;
 					}

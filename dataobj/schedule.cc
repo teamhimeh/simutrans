@@ -43,6 +43,8 @@ void schedule_t::copy_from(const schedule_t *src)
 	set_current_stop( src->get_current_stop() );
 
 	editing_finished = src->is_editing_finished();
+	temporary = src->is_temporary();
+	same_dep_time = src->is_same_dep_time();
 }
 
 
@@ -223,6 +225,13 @@ void schedule_t::rdwr(loadsave_t *file)
 		file->rdwr_byte(size);
 	}
 	entries.resize(size);
+	
+	if(  file->get_OTRP_version()>=23  ) {
+		file->rdwr_bool(temporary);
+		file->rdwr_bool(same_dep_time);
+	} else {
+		temporary = same_dep_time = false;
+	}
 
 	if(file->is_version_less(99, 12)) {
 		for(  uint8 i=0; i<size; i++  ) {
@@ -246,7 +255,21 @@ void schedule_t::rdwr(loadsave_t *file)
 				file->rdwr_byte(entries[i].waiting_time_shift);
 			}
 			if(file->get_OTRP_version()>=22) {
-				file->rdwr_byte(entries[i].coupling_point);
+				uint8 flags = entries[i].get_stop_flags();
+				file->rdwr_byte(flags);
+				entries[i].set_stop_flags(flags);
+			}
+			if(file->get_OTRP_version()>=23) {
+				file->rdwr_short(entries[i].spacing);
+				file->rdwr_short(entries[i].spacing_shift);
+				file->rdwr_short(entries[i].delay_tolerance);
+				// v23 can violate spacing must be larger than 0 limitation.
+				if(  file->is_loading()  &&  entries[i].spacing<1  ) {
+					entries[i].spacing = 1;
+				}
+			} else {
+				entries[i].spacing = 1;
+				entries[i].spacing_shift = entries[i].delay_tolerance = 0;
 			}
 		}
 	}
@@ -401,9 +424,10 @@ void schedule_t::add_return_way()
 
 void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
-	buf.printf("%u|%d|", current_stop, (int)get_type());
+	uint16 s = current_stop + (temporary<<8) + (same_dep_time<<9);
+	buf.printf("%u|%d|", s, (int)get_type());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
-		buf.printf("%s,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.coupling_point);
+		buf.printf("%s,%i,%i,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.get_stop_flags(), i.spacing, i.spacing_shift, i.delay_tolerance);
 	}
 }
 
@@ -420,7 +444,10 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		return false;
 	}
 	//  first get current_stop pointer
-	current_stop = atoi( p );
+	uint16 s = atoi( p );
+	current_stop = s & 0xff;
+	temporary = (s&(1<<8)) > 0;
+	same_dep_time = (s&(1<<9)) > 0;
 	while(  *p  &&  *p!='|'  ) {
 		p++;
 	}
@@ -446,17 +473,17 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	p++;
 	// now scan the entries
 	while(  *p>0  ) {
-		sint16 values[6];
-		for(  sint8 i=0;  i<6;  i++  ) {
+		sint16 values[9];
+		for(  sint8 i=0;  i<9;  i++  ) {
 			values[i] = atoi( p );
 			while(  *p  &&  (*p!=','  &&  *p!='|')  ) {
 				p++;
 			}
-			if(  i<5  &&  *p!=','  ) {
+			if(  i<8  &&  *p!=','  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete string!" );
 				return false;
 			}
-			if(  i==5  &&  *p!='|'  ) {
+			if(  i==8  &&  *p!='|'  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
 				return false;
 			}
@@ -464,6 +491,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		}
 		// ok, now we have a complete entry
 		schedule_entry_t entry = schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4], values[5]);
+		entry.set_spacing(values[6], values[7], values[8]);
 		entries.append(entry);
 	}
 	return true;
@@ -477,6 +505,9 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 	if(halt.is_bound()) {
 		if (entry.minimum_loading != 0  &&  max_chars <= 0) {
 			buf.printf("%d%% ", entry.minimum_loading);
+		}
+		else if(  entry.get_coupling_point()!=0  ) {
+			buf.printf("[#] ");
 		}
 		p = halt->get_name();
 	}
@@ -510,5 +541,23 @@ schedule_entry_t const& schedule_t::get_next_entry() const {
 		return dummy_entry;
 	} else {
 		return entries[(current_stop+1)%entries.get_count()];
+	}
+}
+
+void schedule_t::set_spacing_for_all(uint16 v) {
+	for(uint8 i=0; i<entries.get_count(); i++) {
+		entries[i].spacing = v;
+	}
+}
+
+void schedule_t::set_spacing_shift_for_all(uint16 v) {
+	for(uint8 i=0; i<entries.get_count(); i++) {
+		entries[i].spacing_shift = v;
+	}
+}
+
+void schedule_t::set_delay_tolerance_for_all(uint16 v) {
+	for(uint8 i=0; i<entries.get_count(); i++) {
+		entries[i].delay_tolerance = v;
 	}
 }

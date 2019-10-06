@@ -358,9 +358,44 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	}
 	end_table();
 	
+	add_table(2,1);
+	{
+		bt_extract_settings.init(button_t::arrowdown, "Extract advanced settings");
+		bt_extract_settings.set_tooltip("Show some more."); // TODO: fix me :(
+		bt_extract_settings.add_listener(this);
+		bt_extract_settings.pressed = false;
+		add_component(&bt_extract_settings);
+		
+		new_component<gui_label_t>("Extract advanced settings");
+	}
+	end_table();
+	
+	// Components for advanced settings
+	bt_tmp_schedule.init(button_t::square_state, "Temporary schedule");
+	bt_tmp_schedule.set_tooltip("This schedule does not affect the route cost calculation.");
+	bt_tmp_schedule.add_listener(this);
+	bt_tmp_schedule.pressed = schedule->is_temporary();
+	add_component(&bt_tmp_schedule);
+	
+	// load and unload settings
+	add_table(2,1);
+	{
+		bt_no_load.init(button_t::square_state, "No Load");
+		bt_no_load.set_tooltip("The convoy does not load goods and passengers at this stop.");
+		bt_no_load.add_listener(this);
+		bt_no_load.disable();
+		add_component(&bt_no_load);
+		bt_no_unload.init(button_t::square_state, "No Unload");
+		bt_no_unload.set_tooltip("The convoy does not unload goods and passengers at this stop.");
+		bt_no_unload.add_listener(this);
+		bt_no_unload.disable();
+		add_component(&bt_no_unload);
+	}
+	end_table();
+	
 	// coupling related buttons
 	add_table(2,1);
-	if(  schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt  ) {
+	{
 		bt_wait_for_child.init(button_t::square_state, "Wait for coupling");
 		bt_wait_for_child.set_tooltip("A convoy waits for other convoy to couple.");
 		bt_wait_for_child.add_listener(this);
@@ -372,8 +407,67 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_find_parent.add_listener(this);
 		bt_find_parent.disable();
 		add_component(&bt_find_parent);
+	}	
+	end_table();
+	
+	// for departure time settings
+	add_table(3,3);
+	{
+		bt_wait_for_time.init(button_t::square_state, "Wait for time");
+		bt_wait_for_time.set_tooltip("If this is set, convoys will wait until one of the specified times before departing, the specified times being fractions of a month.");
+		bt_wait_for_time.add_listener(this);
+		bt_wait_for_time.disable();
+		add_component(&bt_wait_for_time);
+		
+		lb_spacing.set_align(gui_label_t::align_t::centered);
+		sprintf(lb_spacing_str,"off");
+		lb_spacing.set_text_pointer(lb_spacing_str);
+		add_component(&lb_spacing);
+		
+		new_component<gui_fill_t>();
+		
+		lb_title1.set_text("Spacing cnv/month, shift");
+		add_component(&lb_title1);
+		
+		const uint16 spacing_divisor = world()->get_settings().get_spacing_shift_divisor();
+		
+		numimp_spacing.set_width( 60 );
+		numimp_spacing.set_value( 5 );
+		numimp_spacing.set_limits( 1, spacing_divisor );
+		numimp_spacing.set_increment_mode(1);
+		numimp_spacing.disable();
+		numimp_spacing.add_listener(this);
+		add_component(&numimp_spacing);
+		
+		numimp_spacing_shift.set_width( 90 );
+		numimp_spacing_shift.set_value( 0 );
+		numimp_spacing_shift.set_limits( 0, spacing_divisor );
+		numimp_spacing_shift.set_increment_mode(1);
+		numimp_spacing_shift.add_listener(this);
+		numimp_spacing_shift.disable();
+		add_component(&numimp_spacing_shift);
+		
+		lb_title2.set_text("Delay tolerance");
+		add_component(&lb_title2);
+		
+		numimp_delay_tolerance.set_width( 90 );
+		numimp_delay_tolerance.set_value( 0 );
+		numimp_delay_tolerance.set_increment_mode(1);
+		numimp_delay_tolerance.disable();
+		numimp_delay_tolerance.add_listener(this);
+		add_component(&numimp_delay_tolerance);
+		
+		new_component<gui_fill_t>();
 	}
 	end_table();
+	
+	bt_same_dep_time.init(button_t::square_automatic, "Use same departure time for all stops");
+	bt_same_dep_time.set_tooltip("Use one spacing, shift and delay tolerance value for all stops in schedule.");
+	bt_same_dep_time.add_listener(this);
+	bt_same_dep_time.pressed = schedule->is_same_dep_time();
+	add_component(&bt_same_dep_time);
+	
+	extract_advanced_settings(false);
 
 	// return tickets
 	if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
@@ -450,25 +544,67 @@ void schedule_gui_t::update_tool(bool set)
 
 void schedule_gui_t::update_selection()
 {
+	// First, disable all.
 	lb_wait.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 	wait_load.disable();
+	lb_load.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
+	numimp_load.disable();
+	numimp_load.set_value( 0 );
+	bt_find_parent.disable();
+	bt_wait_for_child.disable();
+	bt_no_load.disable();
+	bt_no_unload.disable();
+	bt_wait_for_time.disable();
+	numimp_spacing.disable();
+	numimp_spacing_shift.disable();
+	numimp_delay_tolerance.disable();
 
 	if(  !schedule->empty()  ) {
 		schedule->set_current_stop( min(schedule->get_count()-1,schedule->get_current_stop()) );
 		const uint8 current_stop = schedule->get_current_stop();
 		if(  haltestelle_t::get_halt(schedule->entries[current_stop].pos, player).is_bound()  ) {
-			lb_load.set_color( SYSCOL_TEXT );
-			numimp_load.enable();
-			numimp_load.set_value( schedule->entries[current_stop].minimum_loading );
-
+			
+			const uint8 c = schedule->entries[current_stop].get_coupling_point();
+			bt_find_parent.enable();
+			bt_find_parent.pressed = c==2;
+			bt_wait_for_child.enable();
+			bt_wait_for_child.pressed = c==1;
+			bt_no_load.enable();
+			bt_no_load.pressed = schedule->entries[current_stop].is_no_load();
+			bt_no_unload.enable();
+			bt_no_unload.pressed = schedule->entries[current_stop].is_no_unload();
+			
+			// wait_for_time releated things
+			const bool wft = schedule->entries[current_stop].get_wait_for_time();
+			bt_wait_for_time.enable();
+			bt_wait_for_time.pressed = wft;
 			sint8 wait = 0;
-			if(  schedule->entries[current_stop].minimum_loading>0  ||  schedule->entries[current_stop].coupling_point!=0  ) {
-				lb_wait.set_color( SYSCOL_TEXT );
-				wait_load.enable();
-
-				wait = schedule->entries[current_stop].waiting_time_shift;
+			if(  wft  ) {
+				// enable departure time settings only
+				//schedule->entries[current_stop].spacing cannot be zero.
+				sprintf(lb_spacing_str, "%d", world()->get_settings().get_spacing_shift_divisor()/schedule->entries[current_stop].spacing);
+				numimp_spacing.enable();
+				numimp_spacing_shift.enable();
+				numimp_delay_tolerance.enable();
 			}
-
+			else {
+				// disable departure time settings and enable minimum loading
+				lb_load.set_color( SYSCOL_TEXT );
+				numimp_load.enable();
+				if(  schedule->entries[current_stop].minimum_loading>0  ||  schedule->entries[current_stop].get_coupling_point()!=0  ) {
+					lb_wait.set_color( SYSCOL_TEXT );
+					wait_load.enable();
+					wait = schedule->entries[current_stop].waiting_time_shift;
+				}
+				sprintf(lb_spacing_str, "off");
+			}
+			
+			numimp_load.set_value( schedule->entries[current_stop].minimum_loading );
+			numimp_spacing.set_value( schedule->entries[current_stop].spacing );
+			numimp_spacing_shift.set_value( schedule->entries[current_stop].spacing_shift );
+			numimp_delay_tolerance.set_value( schedule->entries[current_stop].delay_tolerance );
+			
+			// wait_load configuration
 			for(int i=0; i<wait_load.count_elements(); i++) {
 				if (gui_waiting_time_item_t *item = dynamic_cast<gui_waiting_time_item_t*>( wait_load.get_element(i) ) ) {
 					if (item->get_wait_shift() == wait) {
@@ -478,18 +614,6 @@ void schedule_gui_t::update_selection()
 				}
 			}
 			
-			uint8 c = schedule->entries[current_stop].coupling_point;
-			bt_find_parent.enable();
-			bt_find_parent.pressed = c==2;
-			bt_wait_for_child.enable();
-			bt_wait_for_child.pressed = c==1;
-		}
-		else {
-			lb_load.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
-			numimp_load.disable();
-			numimp_load.set_value( 0 );
-			bt_find_parent.disable();
-			bt_wait_for_child.disable();
 		}
 	}
 }
@@ -587,14 +711,22 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 	}
 	else if(comp == &bt_find_parent) {
 		if(!schedule->empty()) {
-			schedule->entries[schedule->get_current_stop()].coupling_point = bt_find_parent.pressed ? 0 : 2;
+			if(  bt_find_parent.pressed  ) {
+				schedule->entries[schedule->get_current_stop()].reset_coupling();
+			} else {
+				schedule->entries[schedule->get_current_stop()].set_try_coupling();
+			}
 			bt_wait_for_child.pressed = false;
 			update_selection();
 		}
 	}
 	else if(comp == &bt_wait_for_child) {
 		if(!schedule->empty()) {
-			schedule->entries[schedule->get_current_stop()].coupling_point = bt_wait_for_child.pressed ? 0 : 1;
+			if(  bt_wait_for_child.pressed  ) {
+				schedule->entries[schedule->get_current_stop()].reset_coupling();
+			} else {
+				schedule->entries[schedule->get_current_stop()].set_wait_for_coupling();
+			}
 			bt_find_parent.pressed = false;
 			update_selection();
 		}
@@ -655,6 +787,68 @@ DBG_MESSAGE("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_s
 			}
 			update_selection();
 		}
+	}
+	else if(comp == &bt_extract_settings) {
+		extract_advanced_settings(!bt_tmp_schedule.is_visible());
+		// reload window
+		reset_min_windowsize();
+		set_windowsize(get_min_windowsize());
+	}
+	else if(comp == &bt_no_load) {
+		if (!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].set_no_load(!bt_no_load.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_no_unload) {
+		if (!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].set_no_unload(!bt_no_unload.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_tmp_schedule) {
+		schedule->set_temporary(!bt_tmp_schedule.pressed);
+		bt_tmp_schedule.pressed = schedule->is_temporary();
+	}
+	else if(comp == &bt_wait_for_time) {
+		if (!schedule->empty()) {
+			schedule->entries[schedule->get_current_stop()].set_wait_for_time(!bt_wait_for_time.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &numimp_spacing) {
+		if (!schedule->empty()) {
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_spacing_for_all((uint16)p.i);
+			} else {
+				schedule->entries[schedule->get_current_stop()].spacing = (uint16)p.i;
+			}
+			update_selection();
+		}
+	}
+	else if(comp == &numimp_spacing_shift) {
+		if (!schedule->empty()) {
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_spacing_shift_for_all((uint16)p.i);
+			} else {
+				schedule->entries[schedule->get_current_stop()].spacing_shift = (uint16)p.i;
+			}
+			update_selection();
+		}
+	}
+	else if(comp == &numimp_delay_tolerance) {
+		if (!schedule->empty()) {
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_delay_tolerance_for_all((uint16)p.i);
+			} else {
+				schedule->entries[schedule->get_current_stop()].delay_tolerance = (uint16)p.i;
+			}
+			update_selection();
+		}
+	}
+	else if(comp == &bt_same_dep_time) {
+		schedule->set_same_dep_time(!schedule->is_same_dep_time());
+		bt_same_dep_time.pressed = schedule->is_same_dep_time();
 	}
 	// recheck lines
 	if(  cnv.is_bound()  ) {
@@ -805,4 +999,23 @@ void schedule_gui_t::rdwr(loadsave_t *file)
 			dbg->error( "schedule_gui_t::rdwr", "Could not restore schedule window for (%d)", cnv.get_id() );
 		}
 	}
+}
+
+void schedule_gui_t::extract_advanced_settings(bool yesno) {
+	bt_extract_settings.set_typ(yesno ? button_t::arrowup : button_t::arrowdown);
+	bt_tmp_schedule.set_visible(yesno);
+	bt_no_load.set_visible(yesno);
+	bt_no_unload.set_visible(yesno);
+	bt_wait_for_time.set_visible(yesno);
+	lb_spacing.set_visible(yesno);
+	lb_title1.set_visible(yesno);
+	lb_title2.set_visible(yesno);
+	numimp_spacing.set_visible(yesno);
+	numimp_spacing_shift.set_visible(yesno);
+	numimp_delay_tolerance.set_visible(yesno);
+	bt_same_dep_time.set_visible(yesno);
+	
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
+	bt_find_parent.set_visible(coupling_waytype  &&  yesno);
 }

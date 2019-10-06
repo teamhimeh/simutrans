@@ -116,6 +116,7 @@ void convoi_t::init(player_t *player)
 	no_load = false;
 	wait_lock = 0;
 	arrived_time = 0;
+	scheduled_departure_time = 0;
 
 	requested_change_lane = false;
 
@@ -155,6 +156,8 @@ void convoi_t::init(player_t *player)
 	coupling_done = false;
 	next_initial_direction = ribi_t::none;
 
+	coupling_convoi = convoihandle_t();
+	
 	line_update_pending = linehandle_t();
 
 	home_depot = koord3d::invalid;
@@ -163,6 +166,7 @@ void convoi_t::init(player_t *player)
 
 	recalc_data_front = true;
 	recalc_data = true;
+	recalc_speed_limit = true;
 
 	next_cross_lane = false;
 	request_cross_ticks = 0;
@@ -1817,7 +1821,6 @@ void convoi_t::ziel_erreicht()
 			// advance schedule for all coupling convoys.
 			while(  c.is_bound()  ) {
 				c->get_schedule()->advance();
-				printf("%s) schedule advanced\n", c->get_name());
 				c = c->get_coupling_convoi();
 			}
 			state = ROUTING_1;
@@ -2261,6 +2264,7 @@ void convoi_t::vorfahren()
 	}
 	recalc_data_front = true;
 	recalc_data = true;
+	recalc_speed_limit = true;
 
 	koord3d k0 = route.front();
 	grund_t *gr = welt->lookup(k0);
@@ -3161,6 +3165,46 @@ void convoi_t::calc_gewinn()
 }
 
 
+/*
+ * a helper function of convoi_t::hat_gehalten()
+ * This judges whether the convoy satisfies all departure conditions.
+ *
+ * <<Departure Conditions>>
+ * 1) minimum loading rate
+ * 2) maximum waiting time
+ * 3) designated departure time
+ * 4) convoy coupling
+ * -> can_depart = [3]+[3]*([4]*[1]+[2])
+ *
+ * @author THLeaderH
+ */
+bool can_depart(convoihandle_t cnv, uint32 arrived_time, uint32 time_to_load, bool &coupling_cond, sint64 &go_on_ticks) {
+	const schedule_entry_t current_entry = cnv->get_schedule()->get_current_entry();
+	
+	bool loading_cond = cnv->get_loading_level() >= current_entry.minimum_loading; // minimum loading
+	const bool waiting_time_cond = (current_entry.waiting_time_shift > 0  &&  world()->get_ticks() - arrived_time > (world()->ticks_per_world_month >> (16 - cnv->get_schedule()->get_current_entry().waiting_time_shift)) ); // waiting time
+	coupling_cond = (current_entry.get_coupling_point()==1  &&  !cnv->is_coupling_done()  &&  !(cnv->get_coupling_convoi().is_bound()  &&  cnv->is_coupled())); // wait for coupling?
+	
+	// designated departure time has the absolute priority.
+	if(  current_entry.get_wait_for_time()  ) {
+		// consider spacing
+		// subtract wait_lock (time_to_load) from spacing_shift
+		const sint32 spacing_shift = current_entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor() - time_to_load;
+		const sint32 spacing = world()->ticks_per_world_month / current_entry.spacing;
+		const uint32 delay_tolerance = current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
+		go_on_ticks = ((arrived_time - delay_tolerance - spacing_shift) / spacing + 1) * spacing + spacing_shift;
+		return world()->get_ticks() >= go_on_ticks;
+	}
+	
+	go_on_ticks = 0;
+	bool cond = loading_cond;
+	cond &= !coupling_cond;
+	cond |= cnv->get_no_load(); // no load
+	cond |= waiting_time_cond;
+	return cond;
+}
+
+
 /**
  * convoi an haltestelle anhalten
  * @author Hj. Malthaner
@@ -3222,7 +3266,7 @@ station_tile_search_ready: ;
 
 	// prepare a list of all destination halts in the schedule
 	vector_tpl<halthandle_t> destination_halts(schedule->get_count());
-	if (!no_load) {
+	if (  !no_load  &&  !schedule->get_current_entry().is_no_load()  ) {
 		const uint8 count = schedule->get_count();
 		for(  uint8 i=1;  i<count;  i++  ) {
 			const uint8 wrap_i = (i + schedule->get_current_stop()) % count;
@@ -3232,7 +3276,8 @@ station_tile_search_ready: ;
 				// we will come later here again ...
 				break;
 			}
-			else if(  !plan_halt.is_bound()  ) {
+			else if(  !plan_halt.is_bound()  ||  schedule->entries[wrap_i].is_no_unload()  ) {
+				// not a halt or set no_unload. no_unload -> we cannot unload the cargo there.
 				if(  grund_t *gr = welt->lookup( schedule->entries[wrap_i].pos )  ) {
 					if(  gr->get_depot()  ) {
 						// do not load for stops after a depot
@@ -3323,7 +3368,7 @@ station_tile_search_ready: ;
 	}
 	
 	convoihandle_t c = self;
-	if(  recalc_min_top_speed  ) {
+	if(  !is_coupled()  &&  recalc_min_top_speed  ) {
 		check_electrification();
 		calc_min_top_speed();
 		while(  c.is_bound()  ) {
@@ -3340,18 +3385,23 @@ station_tile_search_ready: ;
 
 	bool departure_cond = true;
 	bool need_coupling_at_this_stop = false;
+	sint64 go_on_ticks = 0;
 	c = self;
 	// A coupled convoy does not have to judge the departure.
 	while(  !is_coupled()  &&  c.is_bound()  ) {
-		bool cond = c->get_loading_level() >= c->get_schedule()->get_current_entry().minimum_loading; // minimum loading
-		bool waiting_time_cond = (c->get_schedule()->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time > (welt->ticks_per_world_month >> (16 - c->get_schedule()->get_current_entry().waiting_time_shift)) ); // waiting time
-		bool coupling_cond = (c->get_schedule()->get_current_entry().coupling_point==1  &&  !c->is_coupling_done()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled())); // wait for coupling?
-		cond &= !coupling_cond;
-		cond |= c->get_no_load(); // no load
-		cond |= waiting_time_cond;
-		departure_cond &= cond;
-		need_coupling_at_this_stop |= (coupling_cond  &&  !cond); // Is coupling needed at this stop?
+		bool coupling_cond; // Is coupling requested by the schedule entry?
+		// Does the convoy satisfy the departure conditions?
+		sint64 gt;
+		const bool this_can_go = can_depart(c, arrived_time, time, coupling_cond, gt);
+		departure_cond &= this_can_go;
+		need_coupling_at_this_stop |= (coupling_cond  &&  !this_can_go); // Is coupling needed at this stop?
+		go_on_ticks = max(gt, go_on_ticks);
 		c = c->get_coupling_convoi();
+	}
+	
+	if(  go_on_ticks>0  ) {
+		// departure time is set. we have to take wait_lock into account.
+		scheduled_departure_time = go_on_ticks + time;
 	}
 	
 	if(  need_coupling_at_this_stop  &&  next_initial_direction==ribi_t::none  ) {
@@ -3400,11 +3450,21 @@ station_tile_search_ready: ;
 			}
 		}
 		
+		// reset scheduled departure time
+		scheduled_departure_time = 0;
 	}
 
 	INT_CHECK( "convoi_t::hat_gehalten" );
 
 	// at least wait the minimum time for loading
+	if(  !is_coupled()  &&  go_on_ticks>0  ) {
+		const sint32 ticks_remain = go_on_ticks - welt->get_ticks();
+		if(  ticks_remain>0  &&  ticks_remain<(sint32)time  ) {
+			// this convoy is about to start. we don't want to wait for 2000 ms or more.
+			// just wait for ticks_remain
+			time = ticks_remain;
+		}
+	}
 	wait_lock = time;
 }
 
@@ -3836,12 +3896,12 @@ void convoi_t::check_pending_updates()
 				 * We are already there => keep current state
 				 */
 			}
-			else {
+			else if(  !is_coupled()  ) {
 				// need re-routing
 				state = EDIT_SCHEDULE;
 			}
 			// make this change immediately
-			if(  state!=LOADING  ) {
+			if(  !is_loading()  ) {
 				wait_lock = 0;
 			}
 		}
@@ -4586,18 +4646,30 @@ bool convoi_t::can_continue_coupling() const {
 
 bool convoi_t::can_start_coupling(convoi_t* parent) const {
 	/* conditions to continue coupling
-	* 1) next schedule entry is same except for coupling_point parameter.
-	* 2) The next planned platform has adequate length for entire convoy length.
-	* 3) current schedule entry is same except for coupling_point parameter
-	* 4) current schedule entry has appropriate coupling_point for both convoys
-	* 5) The coming platform has adequate length for entire convoy.
+	* 1) next schedule entries have the same position.
+	* 2) current schedule entries have the same position.
+	* 3) current schedule entry has appropriate coupling_point for both convoys.
 	*/
-	const schedule_entry_t t_c = schedule->get_current_entry();
+	// Since current schedule entry of this convoy can be waypoint, we proceed to a genuine stop point.
+	sint16 t_idx = schedule->get_current_stop();
+	bool stop_found = false;
+	do {
+		if(  !is_waypoint(schedule->entries[t_idx].pos)  ) {
+			stop_found = true;
+			break;
+		}
+		t_idx = (t_idx+1)%schedule->get_count();
+	} while(  t_idx!=schedule->get_current_stop()  );
+	if(  !stop_found  ) {
+		// all schedule entries are waypoint.
+		return false;
+	}
+	const schedule_entry_t t_c = schedule->entries[t_idx];
+	const schedule_entry_t t_n = schedule->entries[(t_idx+1)%schedule->get_count()];
 	const schedule_entry_t p_c = parent->get_schedule()->get_current_entry();
-	const schedule_entry_t t_n = schedule->get_next_entry();
 	const schedule_entry_t p_n = parent->get_schedule()->get_next_entry();
 	
-	if(  p_c.coupling_point!=1  ||  t_c.coupling_point!=2  ) {
+	if(  p_c.get_coupling_point()!=1  ||  t_c.get_coupling_point()!=2  ) {
 		// rejected by coupling_point condition.
 		return false;
 	}
@@ -4605,7 +4677,6 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 	if(  t_c.pos!=p_c.pos  ||  t_n.pos!=p_n.pos  ) {
 		return false;
 	}
-	// Does the current and next platform has adequate length?
 	return true;
 }
 
@@ -4613,7 +4684,7 @@ bool convoi_t::is_waiting_for_coupling() const {
 	convoihandle_t c = self;
 	bool waiting_for_coupling = false;
 	while(  c.is_bound()  ) {
-		waiting_for_coupling |= (!c->get_coupling_convoi().is_bound()  &&  c->get_schedule()->get_current_entry().coupling_point==1);
+		waiting_for_coupling |= (!c->get_coupling_convoi().is_bound()  &&  c->get_schedule()->get_current_entry().get_coupling_point()==1);
 		c = c->get_coupling_convoi();
 	}
 	return waiting_for_coupling;

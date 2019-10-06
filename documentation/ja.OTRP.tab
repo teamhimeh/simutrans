@@ -53,6 +53,8 @@ set height offset
 高度オフセットの設定
 height offset
 高度のオフセット
+Waiting for schedule. %i left!
+発車時刻待ち（残り %i）
 #------Convoy coupling related stuff------
 #------増解結関連のエントリ------
 Wait for coupling
@@ -73,3 +75,31 @@ Uncouple the back convoy now.
 即時に後ろの編成を解放します．
 Please decouple the other convoy to edit the schedule.
 スケジュールを編集するには連結解除してください．
+#------Schedule window related stuff------
+#------スケジュールウィンドウ関連のエントリ------
+Extract advanced settings
+詳細設定を展開
+Temporary schedule
+臨時系統
+This schedule does not affect the route cost calculation.
+このスケジュールはルートコストの計算に寄与しません．
+No Load
+乗車不可
+The convoy does not load goods and passengers at this stop.
+この停留所での積載を禁止します．
+No Unload
+降車不可
+The convoy does not unload goods and passengers at this stop.
+この停留所での降車/荷降ろしを禁止します．
+Wait for time
+発車時刻まで待機
+Spacing cnv/month, shift
+月あたり発車本数, オフセット
+Delay tolerance
+遅延許容時間
+Use same departure time for all stops
+全て同じ発車時刻設定を適用
+If this is set, convoys will wait until one of the specified times before departing, the specified times being fractions of a month.
+指定された時刻まで発車を待機し，その時刻に発車します．発車時刻は一ヶ月を発車本数で等分したタイミングです．
+Use one spacing, shift and delay tolerance value for all stops in schedule.
+全ての停車地点に対して，同じ月あたり発車本数，タイミングオフセット，遅延許容時間を適用します．
