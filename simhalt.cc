@@ -2947,7 +2947,14 @@ void haltestelle_t::finish_rd()
 	}
 	else {
 		const char *current_name = bd->get_text();
-		if(  all_names.get(current_name).is_bound()  &&  fabrik_t::get_fab(get_basis_pos())==NULL  ) {
+		halthandle_t same_name_halt = all_names.get(current_name);
+		bool name_dup = same_name_halt.is_bound()  &&  fabrik_t::get_fab(get_basis_pos())==NULL;
+		if(  name_dup  ) {
+			const char *pos_text = strdup(bd->get_pos().get_str());
+			printf("haltstelle_t::finish_rd() name %s (%s) <%d> is duplication of %s (%s) <%d>\n", current_name, pos_text, all_names.get_hash(current_name), same_name_halt->get_name(), same_name_halt->get_basis_pos().get_str(), all_names.get_hash(same_name_halt->get_name()));
+		}
+		/*
+		if(  name_dup  &&  strcmp(current_name, same_name_halt->get_name())==0  ) {
 			// try to get a new name ...
 			const char *new_name;
 			if(  station_type & airstop  ) {
@@ -2966,6 +2973,7 @@ void haltestelle_t::finish_rd()
 			bd->set_text( new_name );
 			current_name = new_name;
 		}
+		*/
 		all_names.set( current_name, self );
 	}
 	recalc_status();
