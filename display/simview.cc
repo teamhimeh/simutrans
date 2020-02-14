@@ -347,29 +347,26 @@ void main_view_t::display(bool force_dirty)
 	assert( rs == get_random_seed() ); (void)rs;
 
 
-	if (jump_frame_t::auto_jump)
-	{
+	if(jump_frame_t::auto_jump) {
 		sprintf(jump_frame_t::auto_jump_countdown_char, "%ld", (jump_frame_t::auto_jump_interval - (time(NULL) - jump_frame_t::auto_jump_base_time)));
-		if( time(NULL) - jump_frame_t::auto_jump_base_time >= jump_frame_t::auto_jump_interval ) {
+		if(time(NULL) - jump_frame_t::auto_jump_base_time >= jump_frame_t::auto_jump_interval) {
 			jump_frame_t::auto_jump_base_time = time(NULL);
 
 			uint32 halt_count = haltestelle_t::get_alle_haltestellen().get_count();
 			uint32 no_depot_cnv = 0;
 			FOR(vector_tpl<convoihandle_t>, const cnv, welt->convoys()) {
-				if (!cnv->in_depot())
-				{
+				if(!cnv->in_depot()) {
 					no_depot_cnv++;
 				}
 			}
 
-			if( halt_count + no_depot_cnv != 0 ) {
+			if(halt_count + no_depot_cnv != 0) {
 				uint32 rnd = rand() % ( halt_count + no_depot_cnv );
 
 				koord my_pos;
 				uint32 counter = 0;
 				FOR(vector_tpl<halthandle_t>, const halt, haltestelle_t::get_alle_haltestellen()) {
-					if ( rnd == counter )
-					{
+					if(rnd == counter) {
 						my_pos = halt->get_init_pos();
 					}
 					counter++;
@@ -378,10 +375,8 @@ void main_view_t::display(bool force_dirty)
 				welt->get_viewport()->change_world_position(koord3d(my_pos,welt->min_hgt(my_pos)));
 
 				FOR(vector_tpl<convoihandle_t>, const cnv, welt->convoys()) {
-					if (!cnv->in_depot())
-					{
-						if ( rnd == counter )
-						{
+					if(!cnv->in_depot()) {
+						if(rnd == counter) {
 							dbg->message( "auto_jump", "follow convoi %s", cnv->get_name());
 							welt->get_viewport()->set_follow_convoi(cnv);
 						}
