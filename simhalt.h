@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997 - 2001 Hansjörg Malthaner
+ * Copyright (c) 1997 - 2001 HansjÃ¶rg Malthaner
  *
  * This file is part of the Simutrans project under the artistic license.
  * (see license.txt)
@@ -26,7 +26,6 @@
 
 #include "tpl/slist_tpl.h"
 #include "tpl/vector_tpl.h"
-#include "tpl/binary_heap_tpl.h"
 
 
 #define RECONNECTING (1)
@@ -54,6 +53,7 @@ class loadsave_t;
 class schedule_t;
 class player_t;
 class ware_t;
+template<class T> class bucket_heap_tpl;
 
 // -------------------------- Haltestelle ----------------------------
 
@@ -69,14 +69,14 @@ class ware_t;
 class haltestelle_t
 {
 public:
-	enum station_flags { NOT_ENABLED=0, PAX=1, POST=2, WARE=4, CROWDED=8 };
+	enum station_flags { NOT_ENABLED=0, PAX=1, POST=2, WARE=4};
 
 	//13-Jan-02     Markus Weber    Added
 	enum stationtyp {invalid=0, loadingbay=1, railstation = 2, dock = 4, busstop = 8, airstop = 16, monorailstop = 32, tramstop = 64, maglevstop=128, narrowgaugestop=256 }; //could be combined with or!
 
 private:
 	/**
-	 * Manche Methoden müssen auf alle Haltestellen angewandt werden
+	 * Manche Methoden mÃ¼ssen auf alle Haltestellen angewandt werden
 	 * deshalb verwaltet die Klasse eine Liste aller Haltestellen
 	 * @author Hj. Malthaner
 	 */
@@ -204,7 +204,7 @@ public:
 	static void destroy_all();
 
 	/**
-	 * Liste aller felder (Grund-Objekte) die zu dieser Haltestelle gehören
+	 * Liste aller felder (Grund-Objekte) die zu dieser Haltestelle gehÃ¶ren
 	 * @author Hj. Malthaner
 	 */
 	struct tile_t
@@ -478,6 +478,9 @@ private:
 		inline uint16 operator * () const { return aggregate_weight; }
 	};
 
+	// open_list needs access to route_node_t
+	template<class T> friend class bucket_heap_tpl;
+
 	/* Extra data for route search */
 	struct halt_data_t
 	{
@@ -495,7 +498,7 @@ private:
 	static halt_data_t halt_data[65536];
 
 	// for efficient retrieval of the node with the smallest weight
-	static binary_heap_tpl<route_node_t> open_list;
+	static bucket_heap_tpl<route_node_t> open_list;
 
 	/**
 	 * Markers used in route searching to avoid processing the same halt more than once
@@ -601,8 +604,7 @@ public:
 	koord get_init_pos() const { return init_pos; }
 	koord get_basis_pos() const;
 	koord3d get_basis_pos3d() const;
-	koord get_center_pos() const { return center_pos; }
-	
+
 public:
 	void recalc_basis_pos();
 
@@ -619,7 +621,7 @@ public:
 	bool is_overcrowded( const uint8 idx ) const { return (overcrowded[idx/8] & (1<<(idx%8)))!=0; }
 
 	/**
-	 * gibt Gesamtmenge derware vom typ typ zurück
+	 * gibt Gesamtmenge derware vom typ typ zurÃ¼ck
 	 * @author Hj. Malthaner
 	 */
 	uint32 get_ware_summe(const goods_desc_t *warentyp) const;
@@ -656,7 +658,7 @@ public:
 	void fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
 
 	/* liefert ware an. Falls die Ware zu wartender Ware dazugenommen
-	 * werden kann, kann ware_t gelöscht werden! D.h. man darf ware nach
+	 * werden kann, kann ware_t gelÃ¶scht werden! D.h. man darf ware nach
 	 * aufruf dieser Methode nicht mehr referenzieren!
 	 *
 	 * The second version is like the first, but will not recalculate the route
@@ -803,9 +805,6 @@ public:
 	 * @author hsiegeln
 	 */
 	sint64 get_finance_history(int month, int cost_type) const { return financial_history[month][cost_type]; }
-
-	// flags station for a crowded message at the beginning of next month
-//	void bescheid_station_voll() { enables |= CROWDED; status_color = color_idx_to_rgb(COL_RED); }  // for now report only serious overcrowding on transfer stops
 
 	/* marks a coverage area
 	* @author prissi

@@ -1,6 +1,6 @@
 /**
  * convoi_t Class for vehicle associations
- * Hansjörg Malthaner
+ * HansjÃ¶rg Malthaner
  */
 
 #include <stdlib.h>
@@ -1111,7 +1111,10 @@ bool was_coupling_with_heading(convoi_t* cnv) {
 	const vehicle_t* v = cnv->front();
 	const grund_t* gr = world()->lookup(v->get_pos());
 	grund_t* ngr;
-	if(  !cnv->get_coupling_convoi().is_bound()  ||  !gr  ||  !gr->get_neighbour(ngr, v->get_waytype(), v->get_direction())  ) {
+	// Since this function is called before the route is calculated, vehicle_base_t::get_90direction() cannot be used.
+	// So we use get_direction() and give up the judge when the obtained direction is not single. This judgement only affects visual jupming of the convoy.
+	ribi_t::ribi v_dir = v->get_direction();
+	if(  !cnv->get_coupling_convoi().is_bound()  ||  !gr  ||  !ribi_t::is_single(v_dir)  ||  !gr->get_neighbour(ngr, v->get_waytype(), v_dir)  ) {
 		return false;
 	}
 	// Is there a car which is the coupling target?
@@ -1126,7 +1129,7 @@ bool was_coupling_with_heading(convoi_t* cnv) {
 
 /**
  * Berechne route von Start- zu Zielkoordinate
- * @author Hanjsörg Malthaner
+ * @author HanjsÃ¶rg Malthaner
  */
 bool convoi_t::drive_to()
 {
@@ -1301,7 +1304,7 @@ bool convoi_t::drive_to()
 /**
  * Ein Fahrzeug hat ein Problem erkannt und erzwingt die
  * Berechnung einer neuen Route
- * @author Hanjsörg Malthaner
+ * @author HanjsÃ¶rg Malthaner
  */
 void convoi_t::suche_neue_route()
 {
@@ -3264,6 +3267,9 @@ void convoi_t::hat_gehalten(halthandle_t halt)
 station_tile_search_ready: ;
 	}
 
+	// next stop in schedule will be a depot
+	bool next_depot = false;
+
 	// prepare a list of all destination halts in the schedule
 	vector_tpl<halthandle_t> destination_halts(schedule->get_count());
 	if (  !no_load  &&  !schedule->get_current_entry().is_no_load()  ) {
@@ -3280,6 +3286,8 @@ station_tile_search_ready: ;
 				// not a halt or set no_unload. no_unload -> we cannot unload the cargo there.
 				if(  grund_t *gr = welt->lookup( schedule->entries[wrap_i].pos )  ) {
 					if(  gr->get_depot()  ) {
+
+						next_depot = i==1;
 						// do not load for stops after a depot
 						break;
 					}
@@ -3311,8 +3319,6 @@ station_tile_search_ready: ;
 			v->last_stop_pos = v->get_pos();
 		}
 
-		const grund_t *gr = welt->lookup( schedule->entries[(schedule->get_current_stop()+1)%schedule->get_count()].pos );
-		const bool next_depot = gr  &&  gr->get_depot();
 		uint16 amount = v->unload_cargo(halt, next_depot  );
 
 		if(  !no_load  &&  !next_depot  &&  v->get_total_cargo() < v->get_cargo_max()  ) {
