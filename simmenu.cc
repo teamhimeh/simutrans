@@ -213,6 +213,7 @@ tool_t *create_dialog_tool(int toolnr)
 		case DIALOG_SCENARIO_INFO:  tool = new dialog_scenario_info_t(); break;
 		case DIALOG_LIST_DEPOT:     tool = new dialog_list_depot_t(); break;
 		case DIALOG_LIST_VEHICLE:   tool = new dialog_list_vehicle_t(); break;
+		case DIALOG_SCRIPT_TOOL:    tool = new dialog_script_tool_t(); break;
 		default:                 dbg->error("create_dialog_tool()","cannot satisfy request for dialog_tool[%i]!",toolnr);
 		                         return NULL;
 	}
