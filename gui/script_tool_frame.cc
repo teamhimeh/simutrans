@@ -12,6 +12,7 @@
 #include "simwin.h"
 #include "../simworld.h"
 #include "../simmenu.h"
+#include "../simtool.h"
 
 #include "../dataobj/environment.h"
 #include "../dataobj/translator.h"
@@ -47,9 +48,9 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
  */
 bool script_tool_frame_t::item_action(const char *fullpath)
 {
-	//const char* err = scn->init(this->get_basename(fullpath).c_str(), this->get_filename(fullpath).c_str(), welt );
-	tool_t* tool = tool_t::general_tool[TOOL_EXEC_SCRIPT];
-	
+	tool_exec_script_t* tool = static_cast<tool_exec_script_t*>(tool_t::general_tool[TOOL_EXEC_SCRIPT]);
+	welt->set_tool( tool, welt->get_active_player() );
+	tool->load_script(fullpath);
 	return true;
 }
 
@@ -67,13 +68,10 @@ const char *script_tool_frame_t::get_info(const char *filename)
 bool script_tool_frame_t::check_file( const char *filename, const char * )
 {
 	char buf[PATH_MAX];
-	/*
-	sprintf( buf, "%s/script_tool.nut", filename );
+	sprintf( buf, "%s/tool.nut", filename );
 	if (FILE* const f = dr_fopen(buf, "r")) {
 		fclose(f);
 		return true;
 	}
 	return false;
-	*/
-	return true;
 }

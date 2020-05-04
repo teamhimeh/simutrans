@@ -6479,10 +6479,27 @@ void tool_exec_script_t::load_script( const char* path ) {
 	cbuffer_t buf;
 	buf.printf("script-exec-%d.log", player->get_player_nr());
 	script = new script_vm_t(path, buf);
+	// load ai definition
+	char filename[PATH_MAX];
+	sprintf( filename, "%s/tool.nut", path );
+	if (const char* err = script->call_script(filename)) {
+		if (strcmp(err, "suspended")) {
+			dbg->error("ai_scripted_t::load_script", "error [%s] calling %s", err, filename);
+		}
+		return;
+	}
+	// exec init() here
+	if(  script  ) {
+		script->call_function(script_vm_t::QUEUE, "init", dummy, player->get_player_nr());
+	}
 }
 
 char const* tool_exec_script_t::work(player_t*, koord3d pos) {
 	printf("tool called for %s\n", pos.get_str());
+	// exec work() here.
+	if(  script  ) {
+		script->call_function(script_vm_t::QUEUE, "work", dummy, player->get_player_nr());
+	}
 	return NULL;
 }
 
