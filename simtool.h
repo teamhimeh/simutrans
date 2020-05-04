@@ -33,6 +33,7 @@ class roadsign_desc_t;
 class way_desc_t;
 class route_t;
 class way_obj_desc_t;
+class script_vm_t;
 
 /****************************** helper functions: *****************************/
 
@@ -643,6 +644,21 @@ public:
 	bool init(player_t*) OVERRIDE { return true; }
 	bool is_init_network_save() const OVERRIDE { return true; }
 	char const* work(player_t*, koord3d) OVERRIDE { return default_param ? default_param : ""; }
+};
+
+
+class tool_exec_script_t : public tool_t {
+private:
+	script_vm_t *script;
+	player_t* player;
+public:
+	tool_exec_script_t() : tool_t(TOOL_EXEC_SCRIPT | GENERAL_TOOL) {}
+	bool is_init_network_save() const OVERRIDE { return true; }
+	//image_id get_icon(player_t*) const OVERRIDE;
+	//char const* get_tooltip(player_t const*) const OVERRIDE;
+	bool init(player_t*) OVERRIDE;
+	void load_script(const char* path);
+	char const* work(player_t*, koord3d) OVERRIDE;
 };
 
 /********************* one click tools ****************************/

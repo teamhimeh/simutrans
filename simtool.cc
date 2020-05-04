@@ -91,6 +91,7 @@
 
 #include "simtool.h"
 #include "player/finance.h"
+#include "script/script.h"
 
 
 #define is_scenario()  welt->get_scenario()->is_scripted()
@@ -6465,6 +6466,26 @@ const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_po
 	// nothing to do
 	return NULL;
 }
+
+
+bool tool_exec_script_t::init( player_t * p) {
+	script = NULL;
+	player = p;
+	return true;
+}
+
+void tool_exec_script_t::load_script( const char* path ) {
+	printf("load script: %s\n", path);
+	cbuffer_t buf;
+	buf.printf("script-exec-%d.log", player->get_player_nr());
+	script = new script_vm_t(path, buf);
+}
+
+char const* tool_exec_script_t::work(player_t*, koord3d pos) {
+	printf("tool called for %s\n", pos.get_str());
+	return NULL;
+}
+
 
 bool tool_show_trees_t::init( player_t * )
 {

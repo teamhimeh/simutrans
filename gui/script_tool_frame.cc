@@ -48,6 +48,7 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
 bool script_tool_frame_t::item_action(const char *fullpath)
 {
 	//const char* err = scn->init(this->get_basename(fullpath).c_str(), this->get_filename(fullpath).c_str(), welt );
+	tool_t* tool = tool_t::general_tool[TOOL_EXEC_SCRIPT];
 	
 	return true;
 }
