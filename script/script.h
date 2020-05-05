@@ -140,6 +140,15 @@ public:
 		script_api::param<A3>::push(job, arg3); nparam++;
 		do_function_call();
 	}
+	template<class R, class A1, class A2, class A3, class A4>
+	const char* call_function(call_type_t ct, const char* function, R& ret, A1 arg1, A2 arg2, A3 arg3, A4 arg4) {
+		prep_function_call();
+		script_api::param<A1>::push(job, arg1); nparam++;
+		script_api::param<A2>::push(job, arg2); nparam++;
+		script_api::param<A3>::push(job, arg3); nparam++;
+		script_api::param<A4>::push(job, arg4); nparam++;
+		do_function_call();
+	}
 
 	/**
 	 * Registers a c++ function to be available as callback.

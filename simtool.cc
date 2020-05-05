@@ -6499,7 +6499,7 @@ char const* tool_exec_script_t::work(player_t*, koord3d pos) {
 	// exec work() here.
 	plainstring msg;
 	if(  script  ) {
-		script->call_function(script_vm_t::QUEUE, "work", msg, player->get_player_nr());
+		script->call_function(script_vm_t::QUEUE, "work", msg, player->get_player_nr(), pos.x, pos.y, pos.z);
 	}
 	return msg.c_str();
 }
