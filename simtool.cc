@@ -91,7 +91,11 @@
 
 #include "simtool.h"
 #include "player/finance.h"
+
+// scripting
 #include "script/script.h"
+#include "script/export_objs.h"
+#include "script/api/api.h"
 
 
 #define is_scenario()  welt->get_scenario()->is_scripted()
@@ -6474,6 +6478,8 @@ bool tool_exec_script_t::init( player_t * p) {
 	return true;
 }
 
+bool load_base_script(script_vm_t *script, const char* base); // scenario.cc
+
 void tool_exec_script_t::load_script( const char* path ) {
 	printf("load script: %s\n", path);
 	cbuffer_t buf;
@@ -6482,9 +6488,26 @@ void tool_exec_script_t::load_script( const char* path ) {
 	// load ai definition
 	char filename[PATH_MAX];
 	sprintf( filename, "%s/tool.nut", path );
+	// load global stuff
+	// constants must be known compile time
+	export_global_constants(script->get_vm());
+
+	// load scripting base definitions
+	if (!load_base_script(script, "script_base.nut")) {
+		return;
+	}
+
+	// register api functions
+	register_export_function(script->get_vm(), false);
+	if (script->get_error()) {
+		dbg->error("tool_exec_script_t::load_script", "error [%s] calling register_export_function", script->get_error());
+		return;
+	}
+	// set my player number
+	script->set_my_player(player->get_player_nr());
 	if (const char* err = script->call_script(filename)) {
 		if (strcmp(err, "suspended")) {
-			dbg->error("ai_scripted_t::load_script", "error [%s] calling %s", err, filename);
+			dbg->error("tool_exec_script_t::load_script", "error [%s] calling %s", err, filename);
 		}
 		return;
 	}
@@ -6495,7 +6518,6 @@ void tool_exec_script_t::load_script( const char* path ) {
 }
 
 char const* tool_exec_script_t::work(player_t*, koord3d pos) {
-	printf("tool called for %s\n", pos.get_str());
 	// exec work() here.
 	plainstring msg;
 	if(  script  ) {
