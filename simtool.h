@@ -663,7 +663,7 @@ public:
 	const char *call_function(const char*, player_t*, koord3d, uint8 = 0);
 	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
 	const char *check_pos(player_t* pl, koord3d pos) OVERRIDE  { return call_function("check_pos", pl, pos); }
-	const char *move( player_t * pl, uint16 b, koord3d pos) OVERRIDE { return call_function("check_pos", pl, pos, b); };
+	const char *move( player_t * pl, uint16 b, koord3d pos) OVERRIDE { return call_function("move", pl, pos, b); }
 };
 
 /********************* one click tools ****************************/

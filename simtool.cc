@@ -6560,6 +6560,7 @@ const char* tool_exec_script_t::call_function(const char* func_name, player_t* p
 		return err;
 	}
 	
+	// propagate error
 	if(  msg->c_str()==NULL  ) {
 		delete msg;
 		return NULL;
