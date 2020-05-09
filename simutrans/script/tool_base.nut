@@ -44,3 +44,38 @@ function exit(pl)
 {
 	return true
 }
+
+/* For two-click tools */
+
+/**
+ * no return value
+ */
+function start_at(pos)
+{
+	
+}
+
+/**
+ * return state number and error message as table object
+ */
+function is_valid_pos(pl, pos, start)
+{
+	local ret = {state = 0, err = null}
+	return ret
+}
+
+/**
+ * return error message
+ */
+function do_work(pl, start, end)
+{
+	return null
+}
+
+/**
+ * no return value
+ */
+function mark_tiles(pl, start, end)
+{
+
+}
