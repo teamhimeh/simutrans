@@ -49,8 +49,9 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
 bool script_tool_frame_t::item_action(const char *fullpath)
 {
 	tool_exec_script_t* tool = static_cast<tool_exec_script_t*>(tool_t::general_tool[TOOL_EXEC_SCRIPT]);
-	welt->set_tool( tool, welt->get_active_player() );
+	tool->set_default_param(fullpath);
 	tool->load_script(fullpath);
+	welt->set_tool( tool, welt->get_active_player() );
 	return true;
 }
 

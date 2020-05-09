@@ -232,6 +232,7 @@ SOURCES += bauer/fabrikbauer.cc
 SOURCES += bauer/goods_manager.cc
 SOURCES += bauer/hausbauer.cc
 SOURCES += bauer/tunnelbauer.cc
+SOURCES += bauer/script_tool_manager.cc
 SOURCES += bauer/vehikelbauer.cc
 SOURCES += bauer/wegbauer.cc
 SOURCES += boden/boden.cc

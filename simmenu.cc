@@ -22,6 +22,7 @@
 #include "bauer/wegbauer.h"
 #include "bauer/brueckenbauer.h"
 #include "bauer/tunnelbauer.h"
+#include "bauer/script_tool_manager.h"
 
 #include "descriptor/building_desc.h"
 #include "descriptor/bridge_desc.h"
@@ -888,6 +889,12 @@ void toolbar_t::update(player_t *player)
 					}
 					waytype_t way = (waytype_t)(*c!=0 ? atoi(++c) : 0);
 					hausbauer_t::fill_menu( tool_selector, utype, way, get_sound(c));
+				}
+				else if (char const* const c = strstart(param, "scripts(")) {
+					char buf[1000];
+					strcpy(buf, c);
+					buf[strlen(c)-1] = '\0'; // omit the last ')' charactor
+					script_tool_manager_t::fill_menu(tool_selector, buf, get_sound(c));
 				}
 				else if (param[0] == '-') {
 					// add dummy tool_t as seperator

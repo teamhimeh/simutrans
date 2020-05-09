@@ -651,11 +651,12 @@ class tool_exec_script_t : public tool_t {
 private:
 	script_vm_t *script;
 	player_t* player;
+	char title[PATH_MAX];
+	char menu_arg[PATH_MAX];
+	bool restart = false; // true -> the script vm is always scrapped when exit() is called.
 public:
 	tool_exec_script_t() : tool_t(TOOL_EXEC_SCRIPT | GENERAL_TOOL) {}
 	bool is_init_network_save() const OVERRIDE { return true; }
-	//image_id get_icon(player_t*) const OVERRIDE;
-	//char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool init(player_t*) OVERRIDE;
 	bool exit( player_t * ) OVERRIDE;
 	void load_script(const char* path);
@@ -663,6 +664,11 @@ public:
 	const char *call_function(const char*, player_t*, koord3d);
 	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
 	const char *check_pos(player_t* pl, koord3d pos) OVERRIDE  { return call_function("check_pos", pl, pos); }
+	void set_title(const char* str) { strcpy(title, str); }
+	const char *get_tooltip(const player_t *) const OVERRIDE { return title; }
+	const char* get_menu_arg() const { return menu_arg; }
+	void set_menu_arg(const char* arg) { strcpy(menu_arg, arg); }
+	void enable_restart() { restart = true; }
 };
 
 /********************* one click tools ****************************/

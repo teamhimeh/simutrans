@@ -81,6 +81,7 @@
 #include "utils/simrandom.h"
 
 #include "bauer/vehikelbauer.h"
+#include "bauer/script_tool_manager.h"
 
 #include "vehicle/simvehicle.h"
 #include "vehicle/simroadtraffic.h"
@@ -1112,6 +1113,13 @@ int simu_main(int argc, char** argv)
 		win->set_text( overlaid_warning.c_str() );
 		modal_dialogue( win, magic_pakset_info_t, NULL, wait_for_key );
 		destroy_all_win(true);
+	}
+	
+	// load tool scripts
+	dbg->message("simmain()","Reading tool scripts ...");
+	script_tool_manager_t::load_scripts((env_t::objfilename + "tool/").c_str());
+	if(  env_t::default_settings.get_with_private_paks()  ) {
+		script_tool_manager_t::load_scripts(("addons/" + env_t::objfilename + "tool/").c_str());
 	}
 
 	dbg->message("simmain()","Reading menu configuration ...");

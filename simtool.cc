@@ -6473,15 +6473,30 @@ const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_po
 
 
 bool tool_exec_script_t::init( player_t * p ) {
-	script = NULL;
 	player = p;
-	return true;
+	if(  !script  ) {
+		// default_param holds script path
+		load_script(get_default_param());
+	}
+	// exec init() here
+	if(  script  ) {
+		return call_function("init", player);
+	} else {
+		dbg->error("tool_exec_script_t::init()", "failed to launch script vm!");
+		return false;
+	}
 }
 
 bool tool_exec_script_t::exit( player_t* p ) {
+	if(  !script  ) {
+		dbg->warning("tool_exec_script_t::exit()", "script vm is not available");
+		return true;
+	}
 	bool ret_val = call_function("exit", p);
-	delete script;
-	script = NULL;
+	if(  restart  ) {
+		delete script;
+		script = NULL;
+	}
 	return ret_val;
 }
 
@@ -6490,6 +6505,9 @@ bool load_base_script(script_vm_t *script, const char* base); // scenario.cc
 void tool_exec_script_t::load_script( const char* path ) {
 	cbuffer_t buf;
 	buf.printf("script-exec-%d.log", player->get_player_nr());
+	if(  script  ) {
+		delete script;
+	}
 	script = new script_vm_t(path, buf);
 	// load ai definition
 	char filename[PATH_MAX];
@@ -6518,8 +6536,6 @@ void tool_exec_script_t::load_script( const char* path ) {
 		}
 		return;
 	}
-	// exec init() here
-	call_function("init", player);
 }
 
 bool tool_exec_script_t::call_function(const char* func_name, player_t* player) {
