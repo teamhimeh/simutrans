@@ -6523,7 +6523,7 @@ void tool_exec_script_t::load_script( const char* path ) {
 }
 
 bool tool_exec_script_t::call_function(const char* func_name, player_t* player) {
-	// exec script function
+	// exec script function that takes player and return bool
 	if(  !script  ) {
 		dbg->error("tool_exec_script_t::call_function", "script vm is not available.");
 		return "script vm internal error!";
@@ -6541,25 +6541,19 @@ bool tool_exec_script_t::call_function(const char* func_name, player_t* player) 
 	return ret_val;
 }
 
-const char* tool_exec_script_t::call_function(const char* func_name, player_t* player, koord3d pos, uint8 button_state) {
-	// exec script function
+const char* tool_exec_script_t::call_function(const char* func_name, player_t* player, koord3d pos) {
+	// exec script function that takes player and pos
 	plainstring* msg = new plainstring();
 	if(  !script  ) {
 		dbg->error("tool_exec_script_t::call_function", "script vm is not available.");
 		return "script vm internal error!";
 	}
-	const char* err;
-	if(  strcmp(func_name, "move")==0  ) {
-		err = script->call_function(script_vm_t::QUEUE, func_name, *msg, player, pos, button_state);
-	} else {
-		err = script->call_function(script_vm_t::QUEUE, func_name, *msg, player, pos);
-	}
+	const char* err = script->call_function(script_vm_t::QUEUE, func_name, *msg, player, pos);
 	if(  err  ) {
 		// script execution error
 		dbg->error("tool_exec_script_t::call_function", "%s", err);
 		return err;
 	}
-	
 	// propagate error
 	if(  msg->c_str()==NULL  ) {
 		delete msg;

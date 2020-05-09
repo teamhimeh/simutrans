@@ -660,10 +660,9 @@ public:
 	bool exit( player_t * ) OVERRIDE;
 	void load_script(const char* path);
 	bool call_function(const char*, player_t*);
-	const char *call_function(const char*, player_t*, koord3d, uint8 = 0);
+	const char *call_function(const char*, player_t*, koord3d);
 	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
 	const char *check_pos(player_t* pl, koord3d pos) OVERRIDE  { return call_function("check_pos", pl, pos); }
-	const char *move( player_t * pl, uint16 b, koord3d pos) OVERRIDE { return call_function("move", pl, pos, b); }
 };
 
 /********************* one click tools ****************************/
