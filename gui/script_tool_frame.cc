@@ -50,7 +50,7 @@ bool script_tool_frame_t::item_action(const char *fullpath)
 {
 	tool_exec_script_t* tool = static_cast<tool_exec_script_t*>(tool_t::general_tool[TOOL_EXEC_SCRIPT]);
 	tool->set_default_param(fullpath);
-	tool->load_script(fullpath);
+	tool->enable_restart();
 	welt->set_tool( tool, welt->get_active_player() );
 	return true;
 }
