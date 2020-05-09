@@ -577,7 +577,7 @@ void haltestelle_t::set_name(const char *new_name)
 		if(!gr->find<label_t>()) {
 			gr->set_text( new_name );
 			if(new_name  &&  all_names.set(gr->get_text(),self).is_bound() ) {
- 				DBG_MESSAGE("haltestelle_t::set_name()","name %s already used!",new_name);
+				DBG_MESSAGE("haltestelle_t::set_name()","name %s already used!",new_name);
 			}
 		}
 		halt_info_t *const info_frame = dynamic_cast<halt_info_t *>( win_get_magic( magic_halt_info + self.get_id() ) );
@@ -955,7 +955,7 @@ void haltestelle_t::new_month()
 	if(  welt->get_active_player()==owner  &&  status_color==color_idx_to_rgb(COL_RED)  ) {
 		cbuffer_t buf;
 		buf.printf( translator::translate("%s\nis crowded."), get_name() );
-		welt->get_message()->add_message(buf, get_basis_pos(),message_t::full, PLAYER_FLAG|owner->get_player_nr(), IMG_EMPTY );
+		welt->get_message()->add_message(buf, get_basis_pos(),message_t::full|message_t::expire_after_one_month_flag, PLAYER_FLAG|owner->get_player_nr(), IMG_EMPTY );
 		enables &= (PAX|POST|WARE);
 	}
 

@@ -24,14 +24,12 @@
 #include "display/simimg.h"
 #include "siminteraction.h"
 #include "simintr.h"
-#include "simio.h"
 #include "simlinemgmt.h"
 #include "simloadingscreen.h"
 #include "simmenu.h"
 #include "simmesg.h"
 #include "simskin.h"
 #include "simsound.h"
-#include "simsys.h"
 #include "simticker.h"
 #include "simunits.h"
 #include "simversion.h"
@@ -39,6 +37,7 @@
 #include "simtool.h"
 #include "gui/simwin.h"
 #include "simworld.h"
+#include "sys/simsys.h"
 
 #include "tpl/vector_tpl.h"
 #include "tpl/binary_heap_tpl.h"
@@ -210,8 +209,8 @@ void karte_t::world_xy_loop(xy_loop_func function, uint8 flags)
 			sem_init(&sems[t], 0, 0);
 		}
 
-   		world_thread_param[t].welt = this;
-   		world_thread_param[t].thread_num = t;
+		world_thread_param[t].welt = this;
+		world_thread_param[t].thread_num = t;
 		world_thread_param[t].x_step = min( 64, max_x / env_t::num_threads );
 		world_thread_param[t].x_world_max = max_x;
 		world_thread_param[t].y_min = (t * max_y) / env_t::num_threads;
@@ -4162,7 +4161,7 @@ void karte_t::step()
 		last_clients = socket_list_t::get_playing_clients();
 		// add message via tool
 		cbuffer_t buf;
-		buf.printf("%d,", message_t::general | message_t::local_flag);
+		buf.printf("%d,", message_t::general | message_t::do_not_rdwr_flag);
 		buf.printf(translator::translate("Now %u clients connected.", settings.get_name_language_id()), last_clients);
 		tool_t *tmp_tool = create_tool( TOOL_ADD_MESSAGE | SIMPLE_TOOL );
 		tmp_tool->set_default_param( buf );
@@ -5320,7 +5319,7 @@ DBG_DEBUG("karte_t::load", "init felder ok");
 	set_ticks_per_world_month_shift(settings.get_bits_per_month());
 	current_month = last_month + (last_year*12);
 	season = (2+last_month/3)&3; // summer always zero
-	next_month_ticks = 	( (ticks >> karte_t::ticks_per_world_month_shift) + 1 ) << karte_t::ticks_per_world_month_shift;
+	next_month_ticks = ( (ticks >> karte_t::ticks_per_world_month_shift) + 1 ) << karte_t::ticks_per_world_month_shift;
 	last_step_ticks = ticks;
 	steps = 0;
 	network_frame_count = 0;
@@ -6359,7 +6358,7 @@ void karte_t::switch_active_player(uint8 new_player, bool silent)
 			// tell the player
 			cbuffer_t buf;
 			buf.printf( translator::translate("Now active as %s.\n"), get_active_player()->get_name() );
-			msg->add_message(buf, koord::invalid, message_t::ai | message_t::local_flag, PLAYER_FLAG|get_active_player()->get_player_nr(), IMG_EMPTY);
+			msg->add_message(buf, koord::invalid, message_t::ai | message_t::do_not_rdwr_flag, PLAYER_FLAG|get_active_player()->get_player_nr(), IMG_EMPTY);
 		}
 
 		// update menu entries

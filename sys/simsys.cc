@@ -20,12 +20,13 @@
 #define NO_UINT64_TYPES
 #endif
 
-#include "macros.h"
-#include "simmain.h"
+#include "../macros.h"
+#include "../simmain.h"
 #include "simsys.h"
-#include "pathes.h"
-#include "simevent.h"
-#include "utils/simstring.h"
+#include "../pathes.h"
+#include "../simevent.h"
+#include "../utils/simstring.h"
+#include "../simevent.h"
 
 
 #ifdef _WIN32
@@ -372,7 +373,6 @@ char const *dr_query_homedir()
 	return buffer;
 }
 
-#include <dirent.h>
 
 const char *dr_query_fontpath(int which)
 {
@@ -432,12 +432,12 @@ const char *dr_query_fontpath(int which)
 		char fontpath[PATH_MAX];
 		if( trypaths[i][0] == '~' ) {
 			// prepace with homedirectory
-			snprintf( fontpath, PATH_MAX, "%s%s", dr_query_homedir(), trypaths[i]+2 );
+			snprintf( fontpath, PATH_MAX, "%s../%s", dr_query_homedir(), trypaths[i]+2 );
 		}
 		else {
 			tstrncpy( fontpath, trypaths[i], PATH_MAX );
 		}
-		DIR *dir = opendir(trypaths[i]);
+		DIR *dir = opendir(fontpath);
 		if(  dir  ) {
 			int j = 0;
 			// look for subdirectories
