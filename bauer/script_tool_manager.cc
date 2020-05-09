@@ -1,6 +1,6 @@
 #include "script_tool_manager.h"
 #include "../simtool.h"
-#include "../simsys.h"
+#include "../sys/simsys.h"
 #include "../simdebug.h"
 #include "../gui/tool_selector.h"
 #include "../utils/searchfolder.h"

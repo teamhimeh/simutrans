@@ -4,7 +4,7 @@
  */
 
 #include "../simdebug.h"
-#include "../simsys.h"
+#include "../sys/simsys.h"
 
 #include "script_tool_frame.h"
 #include "messagebox.h"
