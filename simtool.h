@@ -653,11 +653,14 @@ private:
 	char menu_arg[PATH_MAX];
 	bool restart; // true -> the script vm is always scrapped when exit() is called.
 	void load_script(const char* path, player_t* player);
+	const char *call_function_intern(uint8 arg_num, const char*, player_t*, koord3d, koord3d, uint8&);
 protected:
 	char title[PATH_MAX];
 	void init_vm(const char* path, player_t* player);
 	bool call_function(const char*, player_t*);
 	const char *call_function(const char*, player_t*, koord3d);
+	const char *call_function(const char*, player_t*, koord3d, koord3d);
+	const char *call_function(const char*, player_t*, koord3d, koord3d, uint8&);
 public:
 	exec_script_base_t() : script(NULL), restart(false) {}
 	const char* get_menu_arg() const { return menu_arg; }
@@ -676,6 +679,17 @@ public:
 	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
 	const char *check_pos(player_t* pl, koord3d pos) OVERRIDE  { return call_function("check_pos", pl, pos); }
 	const char *get_tooltip(const player_t *) const OVERRIDE { return title; }
+};
+
+class tool_exec_two_click_script_t : public two_click_tool_t, public exec_script_base_t {
+public:
+	tool_exec_two_click_script_t() : 
+	two_click_tool_t(TOOL_EXEC_TWO_CLICK_SCRIPT | GENERAL_TOOL), exec_script_base_t() {}
+	bool is_init_network_save() const OVERRIDE { return true; }
+	const char *get_tooltip(const player_t *) const OVERRIDE { return title; }
+	uint8 is_valid_pos( player_t *, const koord3d &pos, const char *&error, const koord3d &start ) OVERRIDE;
+	const char *do_work( player_t *pl, const koord3d &start, const koord3d &end ) OVERRIDE { return call_function("do_work", pl, start, end); };
+	void mark_tiles( player_t *pl, const koord3d &start, const koord3d &end ) OVERRIDE { call_function("mark_tiles", pl, start, end); }
 };
 
 /********************* one click tools ****************************/
