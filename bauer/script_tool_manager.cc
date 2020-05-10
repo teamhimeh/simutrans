@@ -49,9 +49,10 @@ void script_tool_manager_t::load_scripts(char const* path) {
     tool->set_title(contents.get_string("title", tool->get_default_param()));
     tool->set_menu_arg(contents.get_string("menu", tool->get_default_param()));
     const char* cursor_name = contents.get_string("icon", "-");
-    const skin_desc_t * desc = skinverwaltung_t::get_extra(cursor_name, strlen(cursor_name));
+    const skin_desc_t * desc = skinverwaltung_t::get_extra(cursor_name, strlen(cursor_name), skinverwaltung_t::cursor);
 		if(  desc  ) {
-			tool->set_icon(desc->get_image_id(0));
+			tool->cursor = desc->get_image_id(0);
+			tool->set_icon(desc->get_image_id(1));
 		}
   }
 }
