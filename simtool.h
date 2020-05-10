@@ -647,31 +647,35 @@ public:
 };
 
 
-class tool_exec_script_t : public tool_t {
+class exec_script_base_t {
 private:
 	script_vm_t *script;
-	char title[PATH_MAX];
 	char menu_arg[PATH_MAX];
 	bool restart; // true -> the script vm is always scrapped when exit() is called.
-	
 	void load_script(const char* path, player_t* player);
-public:
-	tool_exec_script_t() : tool_t(TOOL_EXEC_SCRIPT | GENERAL_TOOL) {
-		script = NULL;
-		restart = false;
-	}
-	bool is_init_network_save() const OVERRIDE { return true; }
-	bool init(player_t*) OVERRIDE;
-	bool exit( player_t * ) OVERRIDE;
+protected:
+	char title[PATH_MAX];
+	void init_vm(const char* path, player_t* player);
 	bool call_function(const char*, player_t*);
 	const char *call_function(const char*, player_t*, koord3d);
-	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
-	const char *check_pos(player_t* pl, koord3d pos) OVERRIDE  { return call_function("check_pos", pl, pos); }
-	void set_title(const char* str) { strcpy(title, str); }
-	const char *get_tooltip(const player_t *) const OVERRIDE { return title; }
+public:
+	exec_script_base_t() : script(NULL), restart(false) {}
 	const char* get_menu_arg() const { return menu_arg; }
 	void set_menu_arg(const char* arg) { strcpy(menu_arg, arg); }
-	void enable_restart() { restart = true; }
+	void set_title(const char* str) { strcpy(title, str); }
+	void enable_restart(bool tf = true) { restart = tf; }
+};
+
+class tool_exec_script_t : public tool_t, public exec_script_base_t {
+public:
+	tool_exec_script_t() : tool_t(TOOL_EXEC_SCRIPT | GENERAL_TOOL), 
+		exec_script_base_t() {}
+	bool is_init_network_save() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit( player_t * player) OVERRIDE { return call_function("exit", player); }
+	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
+	const char *check_pos(player_t* pl, koord3d pos) OVERRIDE  { return call_function("check_pos", pl, pos); }
+	const char *get_tooltip(const player_t *) const OVERRIDE { return title; }
 };
 
 /********************* one click tools ****************************/

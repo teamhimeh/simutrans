@@ -6473,38 +6473,25 @@ const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_po
 
 
 bool tool_exec_script_t::init( player_t * p ) {
-	if(  !script  ) {
-		// default_param holds script path
-		load_script(get_default_param(), p);
-	}
-	// exec init() here
-	if(  script  ) {
-		return call_function("init", p);
-	} else {
-		dbg->error("tool_exec_script_t::init()", "failed to launch script vm!");
-		return false;
-	}
+	// default_param holds script path
+	// init script vm if required.
+	init_vm(get_default_param(), p);
+	return call_function("init", p);
 }
 
-bool tool_exec_script_t::exit( player_t* p ) {
-	if(  !script  ) {
-		dbg->warning("tool_exec_script_t::exit()", "script vm is not available");
-		return true;
+void exec_script_base_t::init_vm( const char* path, player_t* player ) {
+	if(  !script  ||  restart  ) {
+		load_script(path, player);
 	}
-	bool ret_val = call_function("exit", p);
-	if(  restart  ) {
-		delete script;
-		script = NULL;
-	}
-	return ret_val;
 }
 
 bool load_base_script(script_vm_t *script, const char* base); // scenario.cc
 
-void tool_exec_script_t::load_script( const char* path, player_t* player ) {
+void exec_script_base_t::load_script( const char* path, player_t* player ) {
 	cbuffer_t buf;
 	buf.printf("script-exec-%d.log", player->get_player_nr());
 	if(  script  ) {
+		// if vm already exists, delete it.
 		delete script;
 	}
 	script = new script_vm_t(path, buf);
@@ -6537,11 +6524,11 @@ void tool_exec_script_t::load_script( const char* path, player_t* player ) {
 	}
 }
 
-bool tool_exec_script_t::call_function(const char* func_name, player_t* player) {
+bool exec_script_base_t::call_function(const char* func_name, player_t* player) {
 	// exec script function that takes player and return bool
 	if(  !script  ) {
 		dbg->error("tool_exec_script_t::call_function", "script vm is not available.");
-		return "script vm internal error!";
+		return false;
 	}
 	
 	bool ret_val;
@@ -6556,7 +6543,7 @@ bool tool_exec_script_t::call_function(const char* func_name, player_t* player) 
 	return ret_val;
 }
 
-const char* tool_exec_script_t::call_function(const char* func_name, player_t* player, koord3d pos) {
+const char* exec_script_base_t::call_function(const char* func_name, player_t* player, koord3d pos) {
 	// exec script function that takes player and pos
 	plainstring* msg = new plainstring();
 	if(  !script  ) {
