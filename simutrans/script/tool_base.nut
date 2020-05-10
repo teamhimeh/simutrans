@@ -48,14 +48,6 @@ function exit(pl)
 /* For two-click tools */
 
 /**
- * no return value
- */
-function start_at(pos)
-{
-	
-}
-
-/**
  * return state number as integer
  */
 function is_valid_pos(pl, pos, start)
