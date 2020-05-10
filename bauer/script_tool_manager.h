@@ -13,6 +13,8 @@
 
 class tool_selector_t;
 class tool_exec_script_t;
+class tool_exec_two_click_script_t;
+class tool_t;
 
 /**
  * There's no need to construct an instance since everything is static here.
@@ -20,12 +22,17 @@ class tool_exec_script_t;
 class script_tool_manager_t
 {
 private:
-	static vector_tpl<tool_exec_script_t*> script_tools;  ///< All script tools
+	/// All one-click script tools
+	static vector_tpl<tool_exec_script_t*> one_click_script_tools;
+	/// All two-click script tools
+	static vector_tpl<tool_exec_two_click_script_t*> two_click_script_tools;
 
 public:
 	static void load_scripts(char const* path);
 	
 	static bool check_file(char const* path);
+	
+	static tool_t* load_tool(char const* fullpath, char const* name);
 	
 	static void fill_menu(tool_selector_t* tool_selector, char const* arg, sint16 sound_ok);
 };

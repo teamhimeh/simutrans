@@ -14,6 +14,8 @@
 #include "../simmenu.h"
 #include "../simtool.h"
 
+#include "../bauer/script_tool_manager.h"
+
 #include "../dataobj/environment.h"
 #include "../dataobj/translator.h"
 
@@ -48,9 +50,13 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
  */
 bool script_tool_frame_t::item_action(const char *fullpath)
 {
-	tool_exec_script_t* tool = static_cast<tool_exec_script_t*>(tool_t::general_tool[TOOL_EXEC_SCRIPT]);
+	tool_t* tool = script_tool_manager_t::load_tool(fullpath, fullpath);
+	if(  !tool  ) {
+		// failed to get tool.
+		dbg->message("script_tool_frame_t::item_action", "failed to get a tool from %s", fullpath);
+		return false;
+	}
 	tool->set_default_param(fullpath);
-	tool->enable_restart();
 	welt->set_tool( tool, welt->get_active_player() );
 	return true;
 }
