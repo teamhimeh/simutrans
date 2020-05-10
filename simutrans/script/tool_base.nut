@@ -56,12 +56,11 @@ function start_at(pos)
 }
 
 /**
- * return state number and error message as table object
+ * return state number as integer
  */
 function is_valid_pos(pl, pos, start)
 {
-	local ret = {state = 0, err = null}
-	return ret
+	return 3
 }
 
 /**
