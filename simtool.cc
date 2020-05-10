@@ -6473,14 +6473,13 @@ const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_po
 
 
 bool tool_exec_script_t::init( player_t * p ) {
-	player = p;
 	if(  !script  ) {
 		// default_param holds script path
-		load_script(get_default_param());
+		load_script(get_default_param(), p);
 	}
 	// exec init() here
 	if(  script  ) {
-		return call_function("init", player);
+		return call_function("init", p);
 	} else {
 		dbg->error("tool_exec_script_t::init()", "failed to launch script vm!");
 		return false;
@@ -6502,7 +6501,7 @@ bool tool_exec_script_t::exit( player_t* p ) {
 
 bool load_base_script(script_vm_t *script, const char* base); // scenario.cc
 
-void tool_exec_script_t::load_script( const char* path ) {
+void tool_exec_script_t::load_script( const char* path, player_t* player ) {
 	cbuffer_t buf;
 	buf.printf("script-exec-%d.log", player->get_player_nr());
 	if(  script  ) {

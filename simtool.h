@@ -650,16 +650,19 @@ public:
 class tool_exec_script_t : public tool_t {
 private:
 	script_vm_t *script;
-	player_t* player;
 	char title[PATH_MAX];
 	char menu_arg[PATH_MAX];
-	bool restart = false; // true -> the script vm is always scrapped when exit() is called.
+	bool restart; // true -> the script vm is always scrapped when exit() is called.
+	
+	void load_script(const char* path, player_t* player);
 public:
-	tool_exec_script_t() : tool_t(TOOL_EXEC_SCRIPT | GENERAL_TOOL) {}
+	tool_exec_script_t() : tool_t(TOOL_EXEC_SCRIPT | GENERAL_TOOL) {
+		script = NULL;
+		restart = false;
+	}
 	bool is_init_network_save() const OVERRIDE { return true; }
 	bool init(player_t*) OVERRIDE;
 	bool exit( player_t * ) OVERRIDE;
-	void load_script(const char* path);
 	bool call_function(const char*, player_t*);
 	const char *call_function(const char*, player_t*, koord3d);
 	const char *work(player_t* pl, koord3d pos) OVERRIDE { return call_function("work", pl, pos); }
