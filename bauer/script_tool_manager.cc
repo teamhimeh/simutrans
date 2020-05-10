@@ -48,6 +48,9 @@ void script_tool_manager_t::load_scripts(char const* path) {
     file.read( contents );
     tool->set_title(contents.get_string("title", tool->get_default_param()));
     tool->set_menu_arg(contents.get_string("menu", tool->get_default_param()));
+		if(  contents.get_int("restart", 1) > 0  ) {
+			tool->enable_restart();
+		}
     const char* cursor_name = contents.get_string("icon", "-");
     const skin_desc_t * desc = skinverwaltung_t::get_extra(cursor_name, strlen(cursor_name), skinverwaltung_t::cursor);
 		if(  desc  ) {
