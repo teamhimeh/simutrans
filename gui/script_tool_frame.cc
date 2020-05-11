@@ -24,6 +24,8 @@
 
 #include "../utils/cbuffer_t.h"
 
+char script_tool_frame_t::executed_script_name[PATH_MAX];
+
 script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, false)
 {
 	static cbuffer_t pakset_script_tool;
@@ -50,14 +52,24 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
  */
 bool script_tool_frame_t::item_action(const char *fullpath)
 {
-	tool_t* tool = script_tool_manager_t::load_tool(fullpath, fullpath);
-	if(  !tool  ) {
-		// failed to get tool.
-		dbg->message("script_tool_frame_t::item_action", "failed to get a tool from %s", fullpath);
-		return false;
+	strcpy(executed_script_name, fullpath);
+	if(  script_tool_manager_t::is_two_click_tool(executed_script_name)  ) {
+		tool_exec_two_click_script_t* tt = static_cast<tool_exec_two_click_script_t*>(tool_t::general_tool[TOOL_EXEC_TWO_CLICK_SCRIPT]);
+		if(  !tt  ) {
+			dbg->error("script_tool_frame_t::item_action", "cannot get tool object.");
+		}
+		script_tool_manager_t::load_tool(tt, tt, executed_script_name, executed_script_name);
+		tt->enable_restart();
+		welt->set_tool( tt, welt->get_active_player() );
+	} else {
+		tool_exec_script_t* ot = static_cast<tool_exec_script_t*>(tool_t::general_tool[TOOL_EXEC_SCRIPT]);
+		if(  !ot  ) {
+			dbg->error("script_tool_frame_t::item_action", "cannot get tool object.");
+		}
+		script_tool_manager_t::load_tool(ot, ot, executed_script_name, executed_script_name);
+		ot->enable_restart();
+		welt->set_tool( ot, welt->get_active_player() );
 	}
-	tool->set_default_param(fullpath);
-	welt->set_tool( tool, welt->get_active_player() );
 	return true;
 }
 

@@ -22,53 +22,48 @@ bool script_tool_manager_t::check_file( const char *filename )
 	return false;
 }
 
-tool_t* script_tool_manager_t::load_tool(char const* fullpath, char const* name) {
-	if(  !check_file(fullpath)  ) {
-		return NULL;
+bool script_tool_manager_t::is_two_click_tool( const char *filename ) {
+	// read description.tab
+	char buf[PATH_MAX];
+	sprintf( buf, "%s/description.tab", filename );
+	tabfile_t file;
+	if (  !file.open(buf)  ) {
+		// no description.tab -> handle as one_click script tool
+		return false;
 	}
+	tabfileobj_t contents;
+	file.read( contents );
+	return strcmp(contents.get_string("type", "one_click"), "two_click")==0;
+}
+
+void script_tool_manager_t::load_tool(tool_t* ttl, exec_script_base_t* etl, char const* fullpath, char const* name) {
 	// open description.tab and get more info
 	char buf[PATH_MAX];
 	sprintf( buf, "%s/description.tab", fullpath );
 	tabfile_t file;
 	if (  !file.open(buf)  ) {
 		// no description.tab -> handle as one_click script tool
-		tool_exec_script_t* tool = new tool_exec_script_t();
-		tool->set_default_param(fullpath);
-		tool->set_title(name);
-		one_click_script_tools.append(tool);
-		return tool;
+		// set only default_param and title
+		ttl->set_default_param(fullpath);
+		etl->set_title(name);
+		return;
 	}
 	
 	tabfileobj_t contents;
 	file.read( contents );
-	exec_script_base_t* et; // tool as exec_script_base_t
-	tool_t* tool; // tool as tool_t
-	// determine one_click tool or two_lick tool.
-	if(  strcmp(contents.get_string("type", "one_click"), "two_click")==0  ) {
-		// two click tool
-		tool_exec_two_click_script_t* tt = new tool_exec_two_click_script_t();
-		tool = tt;
-		et = tt;
-	} else {
-		// one click tool
-		tool_exec_script_t* ot = new tool_exec_script_t();
-		tool = ot;
-		et = ot;
-	}
-	
-	tool->set_default_param(fullpath);
-	et->set_title(contents.get_string("title", tool->get_default_param()));
-	et->set_menu_arg(contents.get_string("menu", tool->get_default_param()));
+	ttl->set_default_param(fullpath);
+	etl->set_title(contents.get_string("title", ttl->get_default_param()));
+	etl->set_menu_arg(contents.get_string("menu", ttl->get_default_param()));
 	if(  contents.get_int("restart", 1) > 0  ) {
-		et->enable_restart();
+		etl->enable_restart();
 	}
 	const char* cursor_name = contents.get_string("icon", "-");
 	const skin_desc_t * desc = skinverwaltung_t::get_extra(cursor_name, strlen(cursor_name), skinverwaltung_t::cursor);
 	if(  desc  ) {
-		tool->cursor = desc->get_image_id(0);
-		tool->set_icon(desc->get_image_id(1));
+		ttl->cursor = desc->get_image_id(0);
+		ttl->set_icon(desc->get_image_id(1));
 	}
-	return tool;
+	return;
 }
 
 void script_tool_manager_t::load_scripts(char const* path) {
@@ -79,11 +74,13 @@ void script_tool_manager_t::load_scripts(char const* path) {
     char* fullname = new char [strlen(path)+strlen(name)+1];
     sprintf(fullname,"%s%s",path,name);
 		
-		tool_t* tl = load_tool(fullname, name);
-		if(  tool_exec_two_click_script_t* tt = dynamic_cast<tool_exec_two_click_script_t*>(tl)  ) {
+		if(  is_two_click_tool(fullname)  ) {
+			tool_exec_two_click_script_t* tt = new tool_exec_two_click_script_t();
+			load_tool(tt, tt, fullname, name);
 			two_click_script_tools.append(tt);
-		}
-		else if(  tool_exec_script_t* ot = dynamic_cast<tool_exec_script_t*>(tl)  ) {
+		} else {
+			tool_exec_script_t* ot = new tool_exec_script_t();
+			load_tool(ot, ot, fullname, name);
 			one_click_script_tools.append(ot);
 		}
   }

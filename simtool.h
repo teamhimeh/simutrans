@@ -685,6 +685,7 @@ class tool_exec_two_click_script_t : public two_click_tool_t, public exec_script
 public:
 	tool_exec_two_click_script_t() : 
 	two_click_tool_t(TOOL_EXEC_TWO_CLICK_SCRIPT | GENERAL_TOOL), exec_script_base_t() {}
+	bool init(player_t* pl) OVERRIDE;
 	bool is_init_network_save() const OVERRIDE { return true; }
 	const char *get_tooltip(const player_t *) const OVERRIDE { return title; }
 	uint8 is_valid_pos( player_t *, const koord3d &pos, const char *&error, const koord3d &start ) OVERRIDE;

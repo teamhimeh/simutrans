@@ -15,6 +15,7 @@ class tool_selector_t;
 class tool_exec_script_t;
 class tool_exec_two_click_script_t;
 class tool_t;
+class exec_script_base_t;
 
 /**
  * There's no need to construct an instance since everything is static here.
@@ -32,7 +33,9 @@ public:
 	
 	static bool check_file(char const* path);
 	
-	static tool_t* load_tool(char const* fullpath, char const* name);
+	static bool is_two_click_tool(char const* path);
+	
+	static void load_tool(tool_t*, exec_script_base_t*, char const* fullpath, char const* name);
 	
 	static void fill_menu(tool_selector_t* tool_selector, char const* arg, sint16 sound_ok);
 };
