@@ -6590,6 +6590,7 @@ const char* exec_script_base_t::call_function_intern(uint8 arg_num, const char* 
 
 
 uint8 tool_exec_two_click_script_t::is_valid_pos( player_t *pl, const koord3d &pos, const char *&error, const koord3d &start ) {
+	init_vm(get_default_param(), pl);
 	error = NULL;
 	uint8 ret_val;
 	call_function("is_valid_pos", pl, pos, start, ret_val);
