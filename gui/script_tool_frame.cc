@@ -3,25 +3,14 @@
  * (see LICENSE.txt)
  */
 
-#include "../simdebug.h"
-#include "../sys/simsys.h"
-
 #include "script_tool_frame.h"
-#include "messagebox.h"
-
-#include "simwin.h"
-#include "../simworld.h"
-#include "../simmenu.h"
-#include "../simtool.h"
 
 #include "../bauer/script_tool_manager.h"
-
-#include "../dataobj/environment.h"
+#include "../dataobj/tabfile.h"
 #include "../dataobj/translator.h"
-
-#include "../network/network.h"
-#include "../network/network_cmd.h"
-
+#include "../simdebug.h"
+#include "../simtool.h"
+#include "../sys/simsys.h"
 #include "../utils/cbuffer_t.h"
 
 char script_tool_frame_t::executed_script_name[PATH_MAX];
@@ -42,7 +31,7 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
 	}
 	this->add_path(pakset_script_tool);
 
-	set_name(translator::translate("Load script_tool"));
+	set_name(translator::translate("Load script tool"));
 	set_focus(NULL);
 }
 
@@ -77,9 +66,21 @@ bool script_tool_frame_t::item_action(const char *fullpath)
 const char *script_tool_frame_t::get_info(const char *filename)
 {
 	static char info[PATH_MAX];
-
+	// try to get tool title from description.tab
+	sprintf( info, "%s/description.tab", filename );
+	tabfile_t file;
+	if (  file.open(info)  ) {
+		tabfileobj_t contents;
+		file.read( contents );
+		const char* title = contents.get_string("title", "");
+		if(  strcmp(title, "")!=0  ) {
+			// title is properly defined.
+			strcpy(info, title);
+			return info;
+		}
+	}
+	
 	sprintf(info,"%s",this->get_filename(filename, false).c_str());
-
 	return info;
 }
 
