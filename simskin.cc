@@ -127,6 +127,30 @@ static special_obj_tpl<skin_desc_t> const symbol_objekte[] = {
 	{ NULL, NULL }
 };
 
+// simutrans will work without those
+static special_obj_tpl<skin_desc_t> const fakultative_objekte[] = {
+	{ &skinverwaltung_t::biglogosymbol,      "BigLogo"        },
+	{ &skinverwaltung_t::mouse_cursor,       "Mouse"          },
+	{ &skinverwaltung_t::zughaltsymbol,      "TrainStop"      },
+	{ &skinverwaltung_t::autohaltsymbol,     "CarStop"        },
+	{ &skinverwaltung_t::schiffshaltsymbol,  "ShipStop"       },
+	{ &skinverwaltung_t::bushaltsymbol,      "BusStop"        },
+	{ &skinverwaltung_t::airhaltsymbol,      "AirStop"        },
+	{ &skinverwaltung_t::monorailhaltsymbol, "MonorailStop"   },
+	{ &skinverwaltung_t::maglevhaltsymbol,   "MaglevStop"     },
+	{ &skinverwaltung_t::narrowgaugehaltsymbol,"NarrowgaugeStop"},
+	{ &skinverwaltung_t::tramhaltsymbol,     "TramStop"       },
+	{ &skinverwaltung_t::networksymbol,      "networksym"     },
+	{ &skinverwaltung_t::timelinesymbol,     "timelinesym"    },
+	{ &skinverwaltung_t::fastforwardsymbol,  "fastforwardsym" },
+	{ &skinverwaltung_t::pausesymbol,        "pausesym"       },
+	{ &skinverwaltung_t::station_type,       "station_type"   },
+	{ &skinverwaltung_t::toolbar_background, "ToolsBackground"},
+	{ &skinverwaltung_t::compass_iso,        "CompassIso"     },
+	{ &skinverwaltung_t::compass_map,        "CompassMap"     },
+	{ NULL, NULL }
+};
+
 static special_obj_tpl<skin_desc_t> const cursor_objekte[] = {
 	// old cursors
 	{ &skinverwaltung_t::bauigelsymbol,  "Builder"      },
@@ -168,8 +192,13 @@ bool skinverwaltung_t::register_desc(skintyp_t type, const skin_desc_t* desc)
 		case nothing: return true;
 		default:      return false;
 	}
-	if(  ::register_desc(sd, desc)  ||  type==symbol  ) {
+	if(  ::register_desc(sd, desc)  ) {
 		return true;
+	}
+	else if(  type==cursor  ||  type==symbol  ) {
+		if(  ::register_desc( fakultative_objekte,  desc )  ) {
+			return true;
+		}
 	}
 	// currently no misc objects allowed ...
 	if(  type==cursor  ||  type==menu  ) {
