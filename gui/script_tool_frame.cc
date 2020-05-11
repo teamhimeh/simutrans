@@ -11,9 +11,6 @@
 #include "../simdebug.h"
 #include "../simtool.h"
 #include "../sys/simsys.h"
-#include "../utils/cbuffer_t.h"
-
-char script_tool_frame_t::executed_script_name[PATH_MAX];
 
 script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, false)
 {
@@ -35,6 +32,8 @@ script_tool_frame_t::script_tool_frame_t() : savegame_frame_t(NULL, true, NULL, 
 	set_focus(NULL);
 }
 
+
+static char executed_script_name[PATH_MAX];
 
 /**
  * Action, started after button pressing.

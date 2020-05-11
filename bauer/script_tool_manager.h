@@ -7,15 +7,13 @@
 #define BAUER_SCRIPT_TOOL_MANAGER_H
 
 
-#include "../dataobj/koord3d.h"
-#include "../simtypes.h"
 #include "../tpl/vector_tpl.h"
 
+class exec_script_base_t;
+class tool_t;
 class tool_selector_t;
 class tool_exec_script_t;
 class tool_exec_two_click_script_t;
-class tool_t;
-class exec_script_base_t;
 
 /**
  * There's no need to construct an instance since everything is static here.

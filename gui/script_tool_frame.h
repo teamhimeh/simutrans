@@ -11,13 +11,10 @@
 #include "../utils/cbuffer_t.h"
 
 
-class dynamic_string;
 class script_tool_frame_t : public savegame_frame_t
 {
 private:
 	cbuffer_t path;
-	
-	static char executed_script_name[PATH_MAX];
 
 protected:
 	/**

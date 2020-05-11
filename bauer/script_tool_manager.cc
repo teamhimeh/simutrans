@@ -1,12 +1,20 @@
+/*
+ * This file is part of the Simutrans project under the Artistic License.
+ * (see LICENSE.txt)
+ */
+
 #include "script_tool_manager.h"
-#include "../simtool.h"
-#include "../sys/simsys.h"
+
+#include "../dataobj/tabfile.h"
+
 #include "../simdebug.h"
+#include "../simtool.h"
+#include "../simskin.h"
+#include "../sys/simsys.h"
+
 #include "../gui/tool_selector.h"
 #include "../utils/searchfolder.h"
-#include "../dataobj/tabfile.h"
-#include "../simskin.h"
-#include "../descriptor/reader/obj_reader.h"
+
 
 vector_tpl<tool_exec_script_t*> script_tool_manager_t::one_click_script_tools;
 vector_tpl<tool_exec_two_click_script_t*> script_tool_manager_t::two_click_script_tools;
