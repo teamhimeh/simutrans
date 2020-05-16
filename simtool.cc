@@ -6533,7 +6533,7 @@ bool exec_script_base_t::call_function(const char* func_name, player_t* player) 
 	
 	bool ret_val;
 	const char* err;
-	err = script->call_function(script_vm_t::QUEUE, func_name, ret_val, player);
+	err = script->call_function(script_vm_t::FORCE, func_name, ret_val, player);
 	
 	if(  err  ) {
 		// script execution error
@@ -6543,36 +6543,37 @@ bool exec_script_base_t::call_function(const char* func_name, player_t* player) 
 	return ret_val;
 }
 
-const char* exec_script_base_t::call_function(const char* func_name, player_t* pl , koord3d pos) {
+const char* exec_script_base_t::call_function(const char* func_name, bool queued, player_t* pl , koord3d pos) {
 	uint8 dummy;
-	return call_function_intern(1, func_name, pl, pos, koord3d::invalid, dummy);
+	return call_function_intern(1, func_name, queued, pl, pos, koord3d::invalid, dummy);
 }
 
-const char* exec_script_base_t::call_function(const char* func_name, player_t* pl , koord3d pos1, koord3d pos2) {
+const char* exec_script_base_t::call_function(const char* func_name, bool queued, player_t* pl , koord3d pos1, koord3d pos2) {
 	uint8 dummy;
-	return call_function_intern(2, func_name, pl, pos1, pos2, dummy);
+	return call_function_intern(2, func_name, queued, pl, pos1, pos2, dummy);
 }
 
-const char* exec_script_base_t::call_function(const char* func_name, player_t* pl , koord3d pos1, koord3d pos2, uint8& num) {
-	return call_function_intern(3, func_name, pl, pos1, pos2, num);
+const char* exec_script_base_t::call_function(const char* func_name, bool queued, player_t* pl , koord3d pos1, koord3d pos2, uint8& num) {
+	return call_function_intern(3, func_name, queued, pl, pos1, pos2, num);
 }
 
-const char* exec_script_base_t::call_function_intern(uint8 arg_num, const char* func_name, player_t* player, koord3d pos1, koord3d pos2, uint8& num) {
+const char* exec_script_base_t::call_function_intern(uint8 arg_num, const char* func_name, bool queued, player_t* player, koord3d pos1, koord3d pos2, uint8& num) {
 	// exec script function that takes player and pos
-	plainstring* msg = new plainstring();
+	static plainstring msg;
+	script_vm_t::call_type_t priority = queued ? script_vm_t::QUEUE : script_vm_t::FORCE;
 	if(  !script  ) {
 		dbg->error("tool_exec_script_t::call_function", "script vm is not available.");
 		return "script vm internal error!";
 	}
 	const char* err;
 	if(  arg_num==1  ) {
-		err = script->call_function(script_vm_t::QUEUE, func_name, *msg, player, pos1);
+		err = script->call_function(priority, func_name, msg, player, pos1);
 	} else if(  arg_num==2  ) {
-		err = script->call_function(script_vm_t::QUEUE, func_name, *msg, player, pos1, pos2);
+		err = script->call_function(priority, func_name, msg, player, pos1, pos2);
 	} else {
 		// arg_num == 3
 		// TODO: error message by script function
-		err = script->call_function(script_vm_t::QUEUE, func_name, num, player, pos1, pos2);
+		err = script->call_function(priority, func_name, num, player, pos1, pos2);
 	}
 	if(  err  ) {
 		// script execution error
@@ -6580,12 +6581,7 @@ const char* exec_script_base_t::call_function_intern(uint8 arg_num, const char* 
 		return err;
 	}
 	// propagate error
-	if(  msg->c_str()==NULL  ) {
-		delete msg;
-		return NULL;
-	} else {
-		return msg->c_str();
-	}
+	return msg.c_str();
 }
 
 
@@ -6597,7 +6593,7 @@ bool tool_exec_two_click_script_t::init(player_t* pl) {
 uint8 tool_exec_two_click_script_t::is_valid_pos( player_t *pl, const koord3d &pos, const char *&error, const koord3d &start ) {
 	error = NULL;
 	uint8 ret_val;
-	call_function("is_valid_pos", pl, pos, start, ret_val);
+	call_function("is_valid_pos", false, pl, pos, start, ret_val);
 	return ret_val;
 }
 
