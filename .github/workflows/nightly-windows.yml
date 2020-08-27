@@ -17,26 +17,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Prepares NSIS plugins
-        run: ./.github/prepare-nsis.ps1
-        shell: powershell
-
-      - name: Create nsis installer
-        uses: joncloud/makensis-action@v2.0
-        with:
-          arguments: "/V3"
-          additional-plugin-paths: NSIS_Plugins/Plugins
-          script-file: Nsis/onlineupgrade.nsi
-
       - name: CI-Build
         run: sh ./.github/build32.sh
         shell: msys2 {0}
 
-      - name: Update binaries of Nightly Release
-        uses: svenstaro/upload-release-action@v1-release
+      - name: Upload sim.exe
+        uses: actions/upload-artifact@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./simuwin-gdi32-nightly.zip
-          asset_name: simuwin-gdi32-nightly.zip
-          tag: Nightly
-          overwrite: true
+          name: sim-WinGDI-OTRP.exe
+          path: ./sim-WinGDI-OTRP.exe
