@@ -14,8 +14,7 @@ jobs:
       run: |
         sudo apt-get -y update 
         sudo apt-get -ym install libsdl2-dev
-        sudo apt-get -ym install libfreetype-dev
-        sudo apt-get -ym install pkg-config
+        sudo apt-get -ym install libfreetype6-dev
         sudo apt-get -ym install libminiupnpc-dev
         sudo apt-get -ym install libbz2-dev
         sudo apt-get -ym install libzstd-dev
