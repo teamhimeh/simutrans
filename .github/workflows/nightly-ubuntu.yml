@@ -1,4 +1,4 @@
-name: Nightly built Ubuntu
+name: OTRP build Ubuntu
 
 on: [push]
 
@@ -17,6 +17,7 @@ jobs:
         sudo apt-get -ym install libfreetype6-dev
         sudo apt-get -ym install libminiupnpc-dev
         sudo apt-get -ym install libbz2-dev
+        sudo apt-get -ym install libzstd-dev
         sudo apt-get -ym install autoconf
         
     - name: setup
@@ -29,7 +30,7 @@ jobs:
         
     - name: make
       run: |
-        make -j2
+        make -j
       
     - name: Upload the executable
       uses: actions/upload-artifact@v2
