@@ -28,7 +28,7 @@ jobs:
         cd zstd-1.4.4
         make -j
         sudo make install
-        cd %GITHUB_WORKSPACE
+        cd $GITHUB_WORKSPACE
         
     - name: setup
       run: |
