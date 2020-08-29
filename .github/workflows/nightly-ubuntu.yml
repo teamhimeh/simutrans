@@ -19,7 +19,7 @@ jobs:
         sudo apt-get -ym install libbz2-dev
         sudo apt-get -ym install autoconf
         
-    -name: install zstd 1.4.4
+    - name: install zstd 1.4.4
       run: |
         cd $HOME
         wget https://github.com/facebook/zstd/releases/download/v1.4.4/zstd-1.4.4.tar.gz
