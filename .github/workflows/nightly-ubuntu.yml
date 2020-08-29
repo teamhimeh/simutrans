@@ -5,7 +5,7 @@ on: [push]
 jobs:
   build:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v1
@@ -17,8 +17,17 @@ jobs:
         sudo apt-get -ym install libfreetype6-dev
         sudo apt-get -ym install libminiupnpc-dev
         sudo apt-get -ym install libbz2-dev
-        sudo apt-get -ym install libzstd-dev
         sudo apt-get -ym install autoconf
+        
+    -name: install zstd 1.4.4
+      run: |
+        cd $HOME
+        wget https://github.com/facebook/zstd/releases/download/v1.4.4/zstd-1.4.4.tar.gz
+        tar -zxvf zstd-1.4.4.tar.gz
+        cd zstd-1.4.4
+        make -j
+        make install
+        cd %GITHUB_WORKSPACE
         
     - name: setup
       run: |
