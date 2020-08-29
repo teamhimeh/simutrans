@@ -1,10 +1,10 @@
 #!/bin/sh
-# builds 32bit GDI for windows
+# builds 64bit GDI for windows
 
 # libbrotli static is broken in MinGW for freetype2
 for f in libbrotlidec libbrotlienc libbrotlicommon; do
-	mv "/mingw32/lib/$f.dll.a" "/mingw32/lib/$f.dll._"
-	cp "/mingw32/lib/$f-static.a" "/mingw32/lib/$f.a"
+	mv "/mingw64/lib/$f.dll.a" "/mingw64/lib/$f.dll._"
+	cp "/mingw64/lib/$f-static.a" "/mingw64/lib/$f.a"
 done
 
 # normal build
