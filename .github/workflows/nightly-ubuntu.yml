@@ -5,7 +5,7 @@ on: [push]
 jobs:
   build:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v1
@@ -17,10 +17,20 @@ jobs:
         sudo apt-get -ym install libfreetype6-dev
         sudo apt-get -ym install libminiupnpc-dev
         sudo apt-get -ym install libbz2-dev
-        sudo apt-get -ym install libzstd-dev
-
-    - name: CI-Build
-      run: sh ./.github/build-ubuntu.sh
+        sudo apt-get -ym install autoconf
+        
+    - name: setup
+      run: |
+        autoconf 
+        ./configure
+        echo "FLAGS = -DREVISION=$(svn info --show-item revision svn://servers.simutrans.org/simutrans) " >>config.default
+        echo "STATIC = 1" >>config.default
+        cat config.default >>/dev/stderr
+        
+    - name: make
+      run: |
+        make -j2
+        mv build/default/sim sim-linux-OTRP
       
     - name: Upload the executable
       uses: actions/upload-artifact@v2
