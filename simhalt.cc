@@ -1258,7 +1258,7 @@ sint32 haltestelle_t::rebuild_connections()
 		// now we add the schedule to the connection array
 		uint16 aggregate_weight = WEIGHT_WAIT;
 		const schedule_entry_t start_entry = schedule->entries[start_index-1];
-		bool no_load_section = start_entry.is_no_load() || start_entry.is_unload_all();
+		bool no_load_section = start_entry.is_no_load();
 		unload_all_applied |= start_entry.is_unload_all();
 		for(  uint8 j=0;  j<schedule->get_count();  ++j  ) {
 
@@ -3034,6 +3034,11 @@ void haltestelle_t::rdwr(loadsave_t *file)
 				file->rdwr_long(d.arr_tick);
 				file->rdwr_long(d.dep_tick);
 				file->rdwr_long(d.exp_tick);
+				if(  file->get_OTRP_version()>=27  ) {
+					file->rdwr_byte(d.stop_index);
+				} else {
+					d.stop_index = 0;
+				}
 				convoi_t::rdwr_convoihandle_t(file, d.cnv);
 				if(  file->is_loading()  ) {
 					departure_slot_table[idx].append(d);
@@ -3736,8 +3741,9 @@ bool haltestelle_t::is_halt_covered(const halthandle_t &halt) const
 
 
 bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp_tick, convoihandle_t cnv) {
-	uint8 idx = dep_tick % DST_SIZE;
+	const uint8 idx = dep_tick % DST_SIZE;
 	slist_tpl<departure_t>::iterator i = departure_slot_table[idx].begin();
+	const uint8 stop_index = cnv->get_schedule()->get_current_stop_exluding_depot();
 	while(  i!=departure_slot_table[idx].end()  ) {
 		if(  welt->get_ticks()>i->exp_tick  ||  !i->cnv.is_bound()  ) {
 			// This entry is already obsolete. Just remove it.
@@ -3747,14 +3753,46 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 		if(  i->cnv==cnv  &&  i->arr_tick==arr_tick  ) {
 			// The requested slot is already reserved by this convoy.
 			return true;
-		} else if(  i->dep_tick==dep_tick  &&  (i->cnv==cnv  ||  i->cnv->get_line()==cnv->get_line())  ) {
+		} else if(  
+			i->dep_tick==dep_tick  &&  
+			(i->cnv==cnv  ||  i->cnv->get_line()==cnv->get_line())  &&
+			i->stop_index==stop_index
+		) {
 			// The slot is already reserved by other convoy.
 			return false;
 		}
 		i++;
 	}
 	// reserve the slot.
-	departure_t dep(arr_tick, dep_tick, exp_tick, cnv);
+	departure_t dep(arr_tick, dep_tick, exp_tick, stop_index, cnv);
 	departure_slot_table[idx].insert(departure_slot_table[idx].begin(), dep);
 	return true;
+}
+
+
+bool haltestelle_t::erase_departure(uint32 dep_tick, convoihandle_t cnv) {
+	const uint8 idx = dep_tick % DST_SIZE;
+	slist_tpl<departure_t>::iterator i = departure_slot_table[idx].begin();
+	// find and remove the requested departure slot
+	while(  i!=departure_slot_table[idx].end()  ) {
+		if(  i->cnv==cnv  &&  i->dep_tick==dep_tick  ) {
+			departure_slot_table[idx].erase(i);
+			return true;
+		}
+		i++;
+	}
+	return false; // we cannot find the requested departure slot.
+}
+
+
+bool haltestelle_t::is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const {
+	const uint8 idx = dep_tick % DST_SIZE;
+	slist_tpl<departure_t>::const_iterator i = departure_slot_table[idx].begin();
+	while(  i!=departure_slot_table[idx].end()  ) {
+		if(  i->dep_tick==dep_tick  &&  i->stop_index==stop_index  &&  i->cnv->get_line()==line  ) {
+			return true;
+		}
+		i++;
+	}
+	return false;
 }

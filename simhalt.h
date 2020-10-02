@@ -495,10 +495,11 @@ private:
 		uint32 arr_tick; // ticks of arrival
 		uint32 dep_tick; // ticks of departure
 		uint32 exp_tick; // expiration ticks of the slot. used only for table clean up.
+		uint8 stop_index; // stop index where the departure slot is requested.
 		convoihandle_t cnv;
 		
-		departure_t(uint32 a, uint32 d, uint32 e, convoihandle_t c) : 
-		arr_tick(a), dep_tick(d), exp_tick(e), cnv(c) {}
+		departure_t(uint32 a, uint32 d, uint32 e, uint8 i, convoihandle_t c) : 
+		arr_tick(a), dep_tick(d), exp_tick(e), stop_index(i), cnv(c) {}
 		departure_t() {};
 	};
 	
@@ -801,6 +802,10 @@ public:
 	 * exp_tick: expiration ticks of the slot
 	 */
 	bool book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp_tick, convoihandle_t cnv);
+	
+	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
+	
+	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
 	
 };
 

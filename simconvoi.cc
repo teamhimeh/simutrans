@@ -119,6 +119,7 @@ void convoi_t::init(player_t *player)
 	wait_lock = 0;
 	arrived_time = 0;
 	scheduled_departure_time = 0;
+	time_last_arrived = 0;
 
 	requested_change_lane = false;
 
@@ -177,7 +178,6 @@ void convoi_t::init(player_t *player)
 	longblock_signal_request.valid = false;
 	crossing_reservation_index.clear();
 	recalc_min_top_speed = true;
-	scheduled_departure_time_intern = 0;
 }
 
 
@@ -1401,6 +1401,12 @@ void convoi_t::step()
 						// go to next
 						state = ROUTING_1;
 					}
+					
+					// release departure slot if needed.
+					if(  h.is_bound()  &&  scheduled_departure_time>0  ) {
+						h->erase_departure(scheduled_departure_time, self);
+						scheduled_departure_time = 0;
+					}
 				}
 			}
 			break;
@@ -1417,7 +1423,8 @@ void convoi_t::step()
 					// check first, if we are already there:
 					assert( schedule->get_current_stop()<schedule->get_count()  );
 					if(  v->get_pos()==schedule->get_current_entry().pos  ) {
-						schedule->advance();
+						ziel_erreicht();
+						break;
 					}
 					// now calculate a new route
 					drive_to();
@@ -1779,7 +1786,7 @@ void convoi_t::ziel_erreicht()
 	}
 	
 	// reset departure time in case the variable is not reset.
-	scheduled_departure_time_intern = 0;
+	scheduled_departure_time = 0;
 	
 	const vehicle_t* v = fahr[0];
 
@@ -1803,7 +1810,7 @@ void convoi_t::ziel_erreicht()
 		return;
 	}
 	
-	register_arrival_time();
+	register_journey_time();
 	halthandle_t halt = haltestelle_t::get_halt(schedule->get_current_entry().pos,owner);
 	
 	// check for coupling
@@ -2972,7 +2979,7 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 	
 	if(  file->get_OTRP_version()>=24  ) {
-		file->rdwr_long( scheduled_departure_time_intern );
+		file->rdwr_long( scheduled_departure_time );
 	}
 
 	if(  file->is_loading()  ) {
@@ -3225,6 +3232,12 @@ void convoi_t::calc_gewinn()
 }
 
 
+// a helper function to compare two ticks considering ticks overflow
+bool is_first_ticks_bigger(uint32 v1, uint32 v2) {
+	return (v1 > v2)  &&  (v1 - v2 < (1<<30));
+}
+
+
 /*
  * a helper function of convoi_t::hat_gehalten()
  * This judges whether the convoy satisfies all departure conditions.
@@ -3256,12 +3269,12 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 	if(  current_entry.get_wait_for_time()  ) {
 		// consider spacing
 		// subtract wait_lock (time_to_load) from spacing_shift
-		const sint32 spacing_shift = current_entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor() - time_to_load;
+		const sint32 spacing_shift = (sint64)current_entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 		// NOTE: Treating spacing as int causes numerical error due to decimal amount.
 		// const sint32 spacing = world()->ticks_per_world_month / current_entry.spacing;
-		const uint32 delay_tolerance = current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
+		const uint32 delay_tolerance = (uint64)current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 		// slot = (arrived_time - delay_tolerance - spacing_shift) / spacing + 1
-		uint64 slot = ((arrived_time - delay_tolerance - spacing_shift) * (uint64)current_entry.spacing / world()->ticks_per_world_month + 1);
+		uint64 slot = ((arrived_time - delay_tolerance - spacing_shift + time_to_load) * (uint64)current_entry.spacing / world()->ticks_per_world_month + 1);
 		// go_on_ticks = slot * spacing + spacing_shift
 		go_on_ticks = slot * world()->ticks_per_world_month / current_entry.spacing + spacing_shift;
 		// book the departure slot.
@@ -3270,7 +3283,11 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 			slot++;
 			go_on_ticks = slot * world()->ticks_per_world_month / current_entry.spacing + spacing_shift;
 		}
-		return world()->get_ticks() >= go_on_ticks;
+		// avoid ticks overflow
+		if(  go_on_ticks > go_on_ticks + world()->ticks_per_world_month  ) {
+			go_on_ticks %= world()->ticks_per_world_month;
+		}
+		return is_first_ticks_bigger(world()->get_ticks(), go_on_ticks - time_to_load);
 	}
 	
 	c = cnv;
@@ -3481,13 +3498,13 @@ station_tile_search_ready: ;
 		coupling_convoi->hat_gehalten(halt);
 	}
 	
-	bool departure_cond = scheduled_departure_time_intern!=0  &&  welt->get_ticks() > scheduled_departure_time_intern;
+	bool departure_cond = scheduled_departure_time!=0  &&  is_first_ticks_bigger(welt->get_ticks(), scheduled_departure_time - time);
 	
-	if(  scheduled_departure_time_intern==0  ) {
+	if(  scheduled_departure_time==0  ) {
 		bool need_coupling_at_this_stop = false;
 		// departure judgement is done in a helper function.
 		departure_cond = can_depart(self, halt, arrived_time,
-			 time, need_coupling_at_this_stop, scheduled_departure_time_intern);
+			 time, need_coupling_at_this_stop, scheduled_departure_time);
 		
 		if(  need_coupling_at_this_stop  &&  next_initial_direction==ribi_t::none  ) {
 			// calc the initial direction to the next stop.
@@ -3500,11 +3517,6 @@ station_tile_search_ready: ;
 				next_initial_direction = ribi_type(r.at(0), r.at(1));
 			}
 		}
-	}
-
-	if(  scheduled_departure_time_intern>0  ) {
-		// departure time is set. we have to take wait_lock into account.
-		scheduled_departure_time = scheduled_departure_time_intern + time;
 	}
 
 	// loading is finished => maybe drive on
@@ -3524,7 +3536,7 @@ station_tile_search_ready: ;
 			loading_limit = 0;
 			coupling_done = false;
 			next_initial_direction = ribi_t::none;
-			scheduled_departure_time_intern = 0;
+			scheduled_departure_time = 0;
 			// Advance schedule of coupling convoy recursively.
 			convoihandle_t c_cnv = coupling_convoi;
 			while(  c_cnv.is_bound()  ) {
@@ -3535,16 +3547,13 @@ station_tile_search_ready: ;
 				c_cnv = c_cnv->get_coupling_convoi();
 			}
 		}
-		
-		// reset scheduled departure time
-		scheduled_departure_time = 0;
 	}
 
 	INT_CHECK( "convoi_t::hat_gehalten" );
 
 	// at least wait the minimum time for loading
-	if(  !is_coupled()  &&  scheduled_departure_time_intern>0  ) {
-		const sint32 ticks_remain = scheduled_departure_time_intern - welt->get_ticks();
+	if(  !is_coupled()  &&  scheduled_departure_time>0  ) {
+		const sint32 ticks_remain = scheduled_departure_time - time - welt->get_ticks();
 		if(  ticks_remain>0  &&  ticks_remain<(sint32)time  ) {
 			// this convoy is about to start. we don't want to wait for 2000 ms or more.
 			// just wait for ticks_remain
@@ -4791,18 +4800,25 @@ sint32 convoi_t::calc_min_top_speed() {
 	return min_top_speed;
 }
 
-void convoi_t::register_arrival_time() {
+void convoi_t::register_journey_time() {
+	if(  time_last_arrived==0  ||  time_last_arrived >= world()->get_ticks()  ) {
+		// time_last_arrived is not available.
+		time_last_arrived = world()->get_ticks();
+		return;
+	}
+	const uint32 journey_time = world()->get_ticks() - time_last_arrived;
 	convoihandle_t c = self;
 	while(  c.is_bound()  ) {
 		if(  c->get_line().is_bound()  ) {
 			// register journey time
-			c->get_line()->get_schedule()->entries[c->get_schedule()->get_current_stop()].push_arrival_time(world()->get_ticks());
+			c->get_line()->get_schedule()->access_corresponding_entry(c->get_schedule(), c->get_schedule()->get_current_stop())->push_journey_time(journey_time);
 			// update journey time window
 			gui_journey_time_info_t* window = dynamic_cast<gui_journey_time_info_t*>(win_get_magic((ptrdiff_t)c->get_line().get_rep()));
 			if(  window  ) {
 				window->update();
 			}
 		}
+		c->set_time_last_arrived(world()->get_ticks());
 		c = c->get_coupling_convoi();
 	}
 }

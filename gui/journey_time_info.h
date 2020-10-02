@@ -25,7 +25,7 @@ class gui_journey_time_stat_t : public gui_aligned_container_t {
 public:
   gui_journey_time_stat_t(schedule_t*, player_t*);
   
-  void update(schedule_t*, vector_tpl<uint32*>&);
+  void update(linehandle_t, vector_tpl<uint32*>&, bool&);
 };
 
 
@@ -35,9 +35,11 @@ private:
   gui_journey_time_stat_t stat;
 	gui_scrollpane_t scrolly;
   button_t bt_copy_names, bt_copy_stations, bt_copy_csv;
+  gui_label_t insufficient_cnv_label;
   
   player_t* player;
   schedule_t* schedule;
+  linehandle_t line;
   cbuffer_t* title_buf;
   vector_tpl<uint32*> journey_times; // in divisor time unit
   uint32 journey_time_sum;

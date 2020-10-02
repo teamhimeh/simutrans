@@ -1908,8 +1908,8 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 		calc_climate_map_region( 0, 0, new_size_x, new_size_y );
 	}
 	else {
-		calc_climate_map_region( old_x, 0, new_size_x, new_size_y );
 		calc_climate_map_region( 0, old_y, old_x, new_size_y );
+		calc_climate_map_region( old_x, 0, new_size_x, new_size_y );
 	}
 
 	if (  old_x == 0  &&  old_y == 0  ) {
@@ -6348,7 +6348,7 @@ void karte_t::reset_timer()
 	}
 	else if(step_mode==FIX_RATIO) {
 		last_frame_idx = 0;
-		fix_ratio_frame_time = 1000 / clamp(settings.get_frames_per_second(), 5, 100);
+		fix_ratio_frame_time = 1000 / clamp(settings.get_frames_per_second(), 5u, 100u);
 		next_step_time = last_tick_sync + fix_ratio_frame_time;
 		set_frame_time( fix_ratio_frame_time );
 		intr_disable();

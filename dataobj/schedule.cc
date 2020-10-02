@@ -168,27 +168,6 @@ void schedule_t::cleanup()
 	if(  entries.empty()  ) {
 		return; // nothing to check
 	}
-
-	// first and last must not be the same!
-	koord3d lastpos = entries.back().pos;
-	// now we have to check all entries ...
-	for(  uint8 i=0;  i<entries.get_count();  i++  ) {
-		if(  entries[i].pos == lastpos  ) {
-			// ignore double entries just one after the other
-			entries.remove_at(i);
-			if(  i<current_stop  ) {
-				current_stop --;
-			}
-			i--;
-		} else if(  entries[i].pos == koord3d::invalid  ) {
-			// ignore double entries just one after the other
-			entries.remove_at(i);
-		}
-		else {
-			// next pos for check
-			lastpos = entries[i].pos;
-		}
-	}
 	make_current_stop_valid();
 }
 
@@ -635,4 +614,49 @@ void schedule_t::set_delay_tolerance_for_all(uint16 v) {
 	for(uint8 i=0; i<entries.get_count(); i++) {
 		entries[i].delay_tolerance = v;
 	}
+}
+
+schedule_entry_t* schedule_t::access_corresponding_entry(schedule_t* other, uint8 n) {
+	if(  n >= other->get_count()  ) {
+		// out of range;
+		dbg->error("schedule_t::access_corresponding_entry", "index %d is out of range %d", n, other->get_count());
+		return NULL;
+	}
+	uint8 o_idx = n;
+	// count the number of depot entries
+	for(uint8 i=0; i<n; i++) {
+		grund_t* gr = world()->lookup(other->entries[i].pos);
+		if(  gr  &&  gr->get_depot()  ) {
+			// this entry is a depot entry
+			o_idx -= 1;
+		}
+	}
+	uint8 h = 0;
+	uint8 k = 0;
+	while(  h<get_count()  ) {
+		grund_t* gr = world()->lookup(entries[h].pos);
+		if(  !gr  ||  !gr->get_depot()  ) {
+			// this entry is not a depot entry
+			if(  k==o_idx  ) {
+				return &entries[h];
+			}
+			k++;
+		}
+		h++;
+	}
+	dbg->error("schedule_t::access_corresponding_entry", "corresponding entry not found.");
+	return NULL;
+}
+
+uint8 schedule_t::get_current_stop_exluding_depot() const {
+	uint8 idx = current_stop;
+	// count the number of depot entries
+	for(uint8 i=0; i<current_stop; i++) {
+		grund_t* gr = world()->lookup(entries[i].pos);
+		if(  gr  &&  gr->get_depot()  ) {
+			// this entry is a depot entry
+			idx -= 1;
+		}
+	}
+	return idx;
 }
