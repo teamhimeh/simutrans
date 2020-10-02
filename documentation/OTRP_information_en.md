@@ -19,7 +19,7 @@ You should try OTRP because...
 The thread in Simutrans International Forum: https://forum.simutrans.com/index.php?topic=16659.0  
 Twitter hashtag :  [#OTRPatch](https://twitter.com/hashtag/OTRPatch?src=hash)  
 
-As of version 27_1, OTRP is based on Simutrans Standard nightly r9186.
+As of version 27_2, OTRP is based on Simutrans Standard nightly r9186.
 
 # Download
 In addition to the executable binary, the ribi-arrow pak is required. Please download it from https://drive.google.com/open?id=0B_rSte9xAhLDanhta1ZsSVcwdzg and put it in your pakset folder.  
