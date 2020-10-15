@@ -24,7 +24,7 @@ version28_1現在，simutrans standard nightly r9281をベースにしていま�
 # ダウンロード
 実行には本体の他にribi-arrowアドオンが必要なので https://drive.google.com/open?id=0B_rSte9xAhLDanhta1ZsSVcwdzg からDLしてpakセットの中に突っ込んでください．  
 
-本体は下のリンクからどうぞ．**（2020年10月15日AM0時　ver28_1に更新）**  
+本体は下のリンクからどうぞ．**（2020年10月16日AM0時　ver28_1に更新）**  
 windows(GDI 64bit): https://osdn.net/projects/otrp/downloads/73812/sim-WinGDI64-OTRPv28_1.exe/  
 windows(GDI 32bit): https://osdn.net/projects/otrp/downloads/73812/sim-WinGDI-OTRPv28_1.exe/  
 mac: https://osdn.net/projects/otrp/downloads/73812/sim-mac-OTRPv28_1.zip/  
