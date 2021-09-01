@@ -5,6 +5,7 @@
 #include "../simworld.h"
 #include "../simline.h"
 #include "../sys/simsys.h"
+#include "../utils/thread_pool.h"
 #include "messagebox.h"
 #include "simwin.h"
 
@@ -211,29 +212,38 @@ void gui_journey_time_info_t::update() {
   }
   
   // calculate journey time and average time
-  journey_time_sum = 0;
-  for(uint8 i=0; i<schedule->entries.get_count(); i++) {
-    uint32 sum = 0;
-    uint8 cnt = 0;
-    const uint8 kc = (schedule->entries[i].at_index + NUM_ARRIVAL_TIME_STORED - 1) % NUM_ARRIVAL_TIME_STORED;
-    for(uint8 k=0; k<NUM_ARRIVAL_TIME_STORED; k++) {
-      uint32* ca = schedule->entries[i].journey_time;
-      uint8 ica = (kc + NUM_ARRIVAL_TIME_STORED - k) % NUM_ARRIVAL_TIME_STORED;
-      if(  ca[ica]>0  ) {
-        journey_times[i][k+1] = tick_to_divided_time(ca[ica]);
-        sum += journey_times[i][k+1];
-        cnt += 1;
-      } else {
-        journey_times[i][k+1] = 0;
+  dispatch_group_t<uint8, uint32> dg;
+  for(uint8 idx=0; idx<schedule->entries.get_count(); idx++) {
+    dg.add_task([&](uint8 i) -> uint32 {
+      uint32 sum = 0;
+      uint8 cnt = 0;
+      const uint8 kc = (schedule->entries[i].at_index + NUM_ARRIVAL_TIME_STORED - 1) % NUM_ARRIVAL_TIME_STORED;
+      const uint32* ca = schedule->entries[i].journey_time;
+      for(uint8 k=0; k<NUM_ARRIVAL_TIME_STORED; k++) {
+        uint8 ica = (kc + NUM_ARRIVAL_TIME_STORED - k) % NUM_ARRIVAL_TIME_STORED;
+        if(  ca[ica]>0  ) {
+          journey_times[i][k+1] = tick_to_divided_time(ca[ica]);
+          sum += journey_times[i][k+1];
+          cnt += 1;
+        } else {
+          journey_times[i][k+1] = 0;
+        }
       }
-    }
-    
-    if(  cnt>0  ) {
-      journey_times[i][0] = sum/cnt;
-      journey_time_sum += sum/cnt;
-    } else {
-      journey_times[i][0] = 0;
-    }
+      
+      if(  cnt>0  ) {
+        journey_times[i][0] = sum/cnt;
+        return sum/cnt;
+      } else {
+        journey_times[i][0] = 0;
+        return 0;
+      }
+    }, idx);
+  }
+
+  vector_tpl<uint32> time_averages = dg.get_results();
+  journey_time_sum = 0;
+  for(uint8 i=0; i<time_averages.get_count(); i++) {
+    journey_time_sum += time_averages[i];
   }
   
   // disable copy buttons if schedule is empty
