@@ -552,6 +552,7 @@ SOURCES += utils/sha1.cc
 SOURCES += utils/simrandom.cc
 SOURCES += utils/simstring.cc
 SOURCES += utils/simthread.cc
+SOURCES += utils/thread_pool.cc
 SOURCES += vehicle/movingobj.cc
 SOURCES += vehicle/simpeople.cc
 SOURCES += vehicle/simroadtraffic.cc
