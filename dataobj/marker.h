@@ -33,6 +33,11 @@ class marker_t {
 	/// hashtable to mark non-ground tiles (bridges, tunnels)
 	ptrhashtable_tpl <const grund_t *, bool> more;
 
+	/// the instance
+	static marker_t the_instance;
+	static marker_t second_instance;
+	
+public:
 	marker_t() : bits(NULL) { init(0, 0); }
 	~marker_t();
 
@@ -43,10 +48,6 @@ class marker_t {
 	 */
 	void init(int world_size_x, int world_size_y);
 
-	/// the instance
-	static marker_t the_instance;
-	static marker_t second_instance;
-public:
 	/**
 	 * Return handle to marker instance.
 	 * @param world_size_x x-size of map

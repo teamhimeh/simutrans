@@ -332,23 +332,19 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 	bool ziel_erreicht=false;
 
-	// memory in static list ...
-	if(  nodes == NULL  ) {
-		MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
-		nodes = new ANode[MAX_STEP + 4 + 2];
-	}
+	// initialize nodes
+	ANode* search_nodes = new ANode[welt->get_settings().get_max_route_steps() + 4 + 2];
 
 	INT_CHECK("route 347");
 
-	static binary_heap_tpl <ANode *> queue;
+	binary_heap_tpl <ANode *> queue;
 
-	GET_NODE();
 #ifdef USE_VALGRIND_MEMCHECK
 	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*MAX_STEP);
 #endif
 
 	uint32 step = 0;
-	ANode* tmp = &nodes[step];
+	ANode* tmp = &search_nodes[step];
 	step ++;
 
 	tmp->parent = NULL;
@@ -361,7 +357,9 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	tmp->jps_ribi  = ribi_t::all;
 
 	// nothing in lists
-	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	marker_t* marker_p = new marker_t();
+	marker_t& marker = *marker_p;
+	marker.init(welt->get_size().x, welt->get_size().y);
 
 	// clear the queue (should be empty anyhow)
 	queue.clear();
@@ -485,7 +483,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 				const uint32 new_f = new_g + dist + turns * 3 + costup;
 
 				// add new
-				ANode* k = &nodes[step];
+				ANode* k = &search_nodes[step];
 				step ++;
 
 				k->parent = tmp;
@@ -565,7 +563,8 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		ok = true;
 	}
 
-	RELEASE_NODE();
+	delete marker_p;
+	delete[] search_nodes;
 
 	return ok;
 }
