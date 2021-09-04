@@ -302,8 +302,9 @@ register_function("exit");
  *
  * @param pl player instance to use this tool.
  * @param pos tile clicked by user, here the work should be done.
+ * @param keys state of ctrl/shift keys.
  * @ingroup tool_skel
- * @typemask string(player_x, coord3d)
+ * @typemask string(player_x, coord3d, int)
  */
 register_function("work");
 
@@ -314,8 +315,9 @@ register_function("work");
  * @param pl player instance to use this tool.
  * @param start first tile clicked by user.
  * @param end second tile clicked by user.
+ * @param keys state of ctrl/shift keys.
  * @ingroup tool_skel
- * @typemask string(player_x, coord3d, coord3d)
+ * @typemask string(player_x, coord3d, coord3d, int)
  */
 register_function("do_work");
 
@@ -326,8 +328,9 @@ register_function("do_work");
  * @param pl player instance to use this tool.
  * @param start first tile clicked by user.
  * @param end second tile clicked by user.
+ * @param keys state of ctrl/shift keys.
  * @ingroup tool_skel
- * @typemask void(player_x, coord3d, coord3d)
+ * @typemask void(player_x, coord3d, coord3d, int)
  */
 register_function("mark_tiles");
 
