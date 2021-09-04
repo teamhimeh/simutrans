@@ -115,6 +115,7 @@ public:
   };
 
   // wait until all tasks are completed and return the results in vector_tpl type.
+  // Do not call this in an async function!
   vector_tpl<U> get_results() {
     pthread_mutex_lock(&task_left_count_mutex);
     while (task_left_count > 0)
@@ -131,6 +132,17 @@ public:
       }
     }
     return results;
+  };
+
+  // just wait until all tasks are completed.
+  // Do not call this in an async function!
+  void wait_completion() {
+    pthread_mutex_lock(&task_left_count_mutex);
+    while (task_left_count > 0)
+    {
+      pthread_cond_wait(&get_results_wait_cond, &task_left_count_mutex);
+    }
+    pthread_mutex_unlock(&task_left_count_mutex);
   };
 
   void decrement_count() {
