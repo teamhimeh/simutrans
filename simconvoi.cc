@@ -1579,6 +1579,19 @@ void convoi_t::step()
 }
 
 
+void convoi_t::threaded_step()
+{
+	switch( state ) {
+		// handled by routine
+		case ROUTING_1:
+			printf("%s: route searching.\n", get_name());
+			break;
+		default:
+			break;
+	}
+}
+
+
 void convoi_t::new_year()
 {
 	jahresgewinn = 0;

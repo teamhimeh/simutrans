@@ -86,6 +86,7 @@
 #include "utils/cbuffer_t.h"
 #include "utils/simrandom.h"
 #include "utils/simstring.h"
+#include "utils/thread_pool.h"
 
 #include "network/memory_rw.h"
 
@@ -4209,6 +4210,21 @@ void karte_t::step()
 
 	// to make sure the tick counter will be updated
 	INT_CHECK("karte_t::step");
+
+	// step convoy asynchronously
+	dispatch_group_t<convoihandle_t, bool> convoi_threaded_steps;
+	for (size_t i = convoi_array.get_count(); i-- != 0;) {
+		convoi_threaded_steps.add_task([&](convoihandle_t cnv) -> bool {
+			cnv->threaded_step();
+			return true; // has no special meaning.
+		}, convoi_array[i]);
+		if((i&1023)==0) {
+			INT_CHECK("simworld 1947");
+		}
+	}
+	// wait here for safer async process. 
+	// TODO: put this below the step() loop in the main thread.
+	convoi_threaded_steps.wait_completion();
 
 	DBG_DEBUG4("karte_t::step", "step convois");
 	// since convois will be deleted during stepping, we need to step backwards

@@ -77,6 +77,8 @@ public:
 		COUPLED,
 		COUPLED_LOADING,
 		WAITING_FOR_LEAVING_DEPOT,
+		ROUTING_2,
+		ROUTING_3,
 		MAX_STATES
 	};
 
@@ -642,6 +644,7 @@ public:
 	 * All things like route search or loading, that may take a little
 	 */
 	void step();
+	void threaded_step();
 
 	/**
 	* sets a new convoi in route
