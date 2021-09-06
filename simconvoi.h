@@ -361,6 +361,9 @@ private:
 	*/
 	bool drive_to();
 
+	void drive_to_threaded();
+	bool prepare_route_search();
+
 	/**
 	* Setup vehicles for moving in same direction than before
 	* if the direction is the same as before
