@@ -19,6 +19,7 @@
 #include "display/simview.h"
 
 #include "boden/wasser.h"
+#include "utils/simthread.h"
 
 static karte_t *welt_modell = NULL;
 static main_view_t *welt_ansicht = NULL;
@@ -89,14 +90,20 @@ void intr_refresh_display(bool dirty)
 	dr_flush();
 }
 
+static pthread_mutex_t interrupt_check_mutex =  PTHREAD_MUTEX_INITIALIZER;
 
 // debug version with caller information
 void interrupt_check(const char* caller_info)
 {
+	int ret = pthread_mutex_trylock(&interrupt_check_mutex);
+	if (  ret!=0  ) {
+		return;
+	}
 	DBG_DEBUG4("interrupt_check", "called from (%s)", caller_info);
 	(void)caller_info;
 
 	if(  !enabled  ) {
+		pthread_mutex_unlock(&interrupt_check_mutex);
 		return;
 	}
 
@@ -104,6 +111,7 @@ void interrupt_check(const char* caller_info)
 	if(  !welt_modell->is_fast_forward()  ||  welt_modell->get_ticks() != last_ms  ) {
 		const uint32 now = dr_time();
 		if((now-last_time)*FRAME_TIME_MULTI < frame_time) {
+			pthread_mutex_unlock(&interrupt_check_mutex);
 			return;
 		}
 
@@ -116,6 +124,7 @@ void interrupt_check(const char* caller_info)
 		}
 	}
 	last_ms = welt_modell->get_ticks();
+	pthread_mutex_unlock(&interrupt_check_mutex);
 }
 
 
