@@ -4103,6 +4103,7 @@ void karte_t::set_schedule_counter()
 	schedule_counter++;
 }
 
+#include <chrono>
 
 void karte_t::step()
 {
@@ -4212,6 +4213,7 @@ void karte_t::step()
 	INT_CHECK("karte_t::step");
 
 	// step convoy asynchronously
+	auto start = std::chrono::system_clock::now();
 	dispatch_group_t<convoihandle_t, bool> convoi_threaded_steps;
 	for (size_t i = convoi_array.get_count(); i-- != 0;) {
 		convoi_threaded_steps.add_task([&](convoihandle_t cnv) -> bool {
@@ -4225,6 +4227,13 @@ void karte_t::step()
 	// wait here for safer async process. 
 	// TODO: put this below the step() loop in the main thread.
 	convoi_threaded_steps.wait_completion();
+
+	auto end = std::chrono::system_clock::now();  
+	auto dur = end - start;
+	auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+	if (msec > 1) {
+		printf("threaded_step took %dms\n", msec);
+	}
 
 	DBG_DEBUG4("karte_t::step", "step convois");
 	// since convois will be deleted during stepping, we need to step backwards
