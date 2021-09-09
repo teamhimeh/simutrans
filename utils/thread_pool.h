@@ -12,12 +12,12 @@
 
 #include <functional>
 #include <deque>
-#include <semaphore.h>
 
 #include "../tpl/vector_tpl.h"
 #include "../simconst.h"
 #include "simthread.h"
 #include "thread_pool.h"
+#include "simsemaphore.h"
 #include "simthread.h"
 
 class runnable_t {
@@ -32,7 +32,7 @@ public:
 
 private:
   pthread_t threads[MAX_THREADS-1];
-  sem_t task_semaphore;
+  simsemaphore_t task_semaphore;
   std::deque<runnable_t *> task_queue;
   pthread_mutex_t task_queue_mutex;
 
