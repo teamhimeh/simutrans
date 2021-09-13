@@ -18,7 +18,9 @@
 #include "loadsave.h"
 #include "route.h"
 #include "environment.h"
+#include "../simconst.h"
 #include "../utils/simthread.h"
+#include "../utils/thread_pool.h"
 #include "../vehicle/simvehicle.h"
 
 // define USE_VALGRIND_MEMCHECK to make
@@ -801,4 +803,20 @@ void route_t::rdwr(loadsave_t *file)
 			route[i].rdwr(file);
 		}
 	}
+}
+
+
+void route_t::prepare_resource() {
+	dispatch_group_t<bool, bool> dg;
+	dg.add_task([&] (bool) -> bool {
+		vector_tpl<route_find_resource_t> resources;
+		printf("start resource allocation.\n");
+		for(uint8 i=0; i<MAX_THREADS-1; i++) {
+			resources.append(resource_provider_t::get_resource());
+		}
+		for(uint8 i=0; i<MAX_THREADS-1; i++) {
+			resource_provider_t::free_resource(resources[i]);
+		}
+		return true;
+	}, true);
 }

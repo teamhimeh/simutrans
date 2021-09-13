@@ -138,6 +138,11 @@ public:
 	 * Load/Save of the route.
 	 */
 	void rdwr(loadsave_t *file);
+
+	/**
+	 * Allocate memory used in search. Done asynchronously.
+	 */
+	static void prepare_resource();
 };
 
 #endif

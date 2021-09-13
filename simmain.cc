@@ -69,6 +69,7 @@
 #include "dataobj/settings.h"
 #include "dataobj/translator.h"
 #include "dataobj/repositioning.h"
+#include "dataobj/route.h"
 #include "network/pakset_info.h"
 #include "network/otrp_log_sender.h"
 
@@ -1476,6 +1477,8 @@ DBG_MESSAGE("simmain","loadgame file found at %s",path.c_str());
 		destroy_all_win(true);
 	}
 	env_t::restore_UI = old_restore_UI;
+
+	route_t::prepare_resource();
 
 	if(  !env_t::networkmode  &&  !env_t::server  &&  new_world  ) {
 		welt->get_message()->clear();
