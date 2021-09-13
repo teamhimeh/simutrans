@@ -4,21 +4,17 @@
 
 thread_pool_t thread_pool_t::the_instance;
 
-void *thread_worker(void *)
-{
-  while (true)
-  {
-    thread_pool_t::the_instance.get_task_from_queue()->run();
-  }
-  return NULL;
-};
+
 
 thread_pool_t::thread_pool_t()
 {
-  pthread_mutex_init(&task_queue_mutex, NULL);
-  for (uint8 i = 0; i < MAX_THREADS-1; i++)
+  for (uint8 i = 0; i < std::thread::hardware_concurrency()-1; i++)
   {
-    pthread_create(&threads[i], NULL, &thread_worker, NULL);
+    threads.push_back(std::thread([&] {
+      while (true) {
+        thread_pool_t::the_instance.get_task_from_queue()->run();
+      }
+    }));
   }
 };
 

@@ -36,7 +36,7 @@ public:
   static thread_pool_t the_instance;
 
 private:
-  pthread_t threads[MAX_THREADS-1];
+  std::vector<std::thread> threads;
   simsemaphore_t task_semaphore;
   std::deque<runnable_t *> task_queue;
   pthread_mutex_t task_queue_mutex;
