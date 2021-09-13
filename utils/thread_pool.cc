@@ -18,7 +18,7 @@ thread_pool_t::thread_pool_t()
   }
 };
 
-void thread_pool_t::add_task_to_queue(runnable_t *task)
+void thread_pool_t::add_task_to_queue(std::shared_ptr<runnable_t> task)
 {
   pthread_mutex_lock(&task_queue_mutex);
   task_queue.push_back(task);
@@ -26,11 +26,11 @@ void thread_pool_t::add_task_to_queue(runnable_t *task)
   task_semaphore.post();
 };
 
-runnable_t *thread_pool_t::get_task_from_queue()
+std::shared_ptr<runnable_t> thread_pool_t::get_task_from_queue()
 {
   task_semaphore.wait();
   pthread_mutex_lock(&task_queue_mutex);
-  runnable_t *task = task_queue.front();
+  std::shared_ptr<runnable_t> task = task_queue.front();
   task_queue.pop_front();
   pthread_mutex_unlock(&task_queue_mutex);
   return task;

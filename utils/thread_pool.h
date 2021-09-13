@@ -38,15 +38,15 @@ public:
 private:
   std::vector<std::thread> threads;
   simsemaphore_t task_semaphore;
-  std::deque<runnable_t *> task_queue;
+  std::deque<std::shared_ptr<runnable_t>> task_queue;
   pthread_mutex_t task_queue_mutex;
 
 public:
   thread_pool_t();
 
-  void add_task_to_queue(runnable_t *task);
+  void add_task_to_queue(std::shared_ptr<runnable_t> task);
 
-  runnable_t* get_task_from_queue();
+  std::shared_ptr<runnable_t> get_task_from_queue();
 };
 
 template<typename T, typename U> 
@@ -66,11 +66,11 @@ public:
     dispatched_from = df;
   }
 
-  virtual ~threaded_task_t() {};
-
   void run() override {
     result = func(parameter);
-    dispatched_from->decrement_count();
+    if (dispatched_from!=NULL) {
+      dispatched_from->decrement_count();
+    }
   };
 };
 
@@ -89,7 +89,7 @@ template<typename T, typename U>
 class dispatch_group_t
 {
 private:
-  vector_tpl<threaded_task_t<T, U>*> tasks;
+  std::vector<std::shared_ptr<threaded_task_t<T, U>>> tasks;
   sint32 task_left_count;
   pthread_mutex_t task_left_count_mutex;
   pthread_cond_t get_results_wait_cond;
@@ -101,19 +101,12 @@ public:
     pthread_cond_init(&get_results_wait_cond, NULL);
   };
 
-  ~dispatch_group_t() {
-    for (uint32 i = 0; i < tasks.get_count(); i++)
-    {
-      delete tasks[i];
-    }
-  };
-
   // The given functions will be executed asynchronously.
   // Lambda expression can be used to pass the function.
   void add_task(std::function<U(T)> func, T parameter) {
-    threaded_task_t<T, U> *task = new threaded_task_t<T, U>(func, parameter, this);
+    std::shared_ptr<threaded_task_t<T, U>> task(new threaded_task_t<T, U>(func, parameter, this));
     pthread_mutex_lock(&task_left_count_mutex);
-    tasks.append(task);
+    tasks.push_back(task);
     task_left_count++;
     pthread_mutex_unlock(&task_left_count_mutex);
     thread_pool_t::the_instance.add_task_to_queue(task);
@@ -129,7 +122,7 @@ public:
     }
     pthread_mutex_unlock(&task_left_count_mutex);
     vector_tpl<U> results;
-    for (uint32 i = 0; i < tasks.get_count(); i++)
+    for (uint32 i = 0; i < tasks.size(); i++)
     {
       if (tasks[i] && tasks[i]->result)
       {
