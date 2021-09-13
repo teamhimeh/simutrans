@@ -10,8 +10,13 @@
 #ifndef UTILS_THREAD_POOL_H
 #define UTILS_THREAD_POOL_H
 
+#include <condition_variable>
 #include <functional>
 #include <deque>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 #include "../tpl/vector_tpl.h"
 #include "../simconst.h"
