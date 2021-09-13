@@ -28,10 +28,9 @@ public:
   }
 
   void post() {
-    m.lock();
+    std::lock_guard<std::mutex> lock(m);
     cnt++;
     cv.notify_one();
-    m.unlock();
   }
 
   void wait() {
