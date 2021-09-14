@@ -39,7 +39,7 @@ private:
   std::vector<std::thread> threads;
   simsemaphore_t task_semaphore;
   std::deque<std::shared_ptr<runnable_t>> task_queue;
-  pthread_mutex_t task_queue_mutex;
+  std::mutex task_queue_mutex;
 
 public:
   thread_pool_t();
@@ -58,9 +58,9 @@ public:
   std::function<U(T)> func;
   T parameter;
   U result;
-  dispatch_group_t<T, U>* dispatched_from;
+  std::weak_ptr<dispatch_group_t<T, U>> dispatched_from;
 
-  threaded_task_t(std::function<U(T)> func, T parameter, dispatch_group_t<T, U>* df) {
+  threaded_task_t(std::function<U(T)> func, T parameter, std::shared_ptr<dispatch_group_t<T, U>> df) {
     this->func = func;
     this->parameter = parameter;
     dispatched_from = df;
@@ -68,15 +68,15 @@ public:
 
   void run() override {
     result = func(parameter);
-    if (dispatched_from!=NULL) {
-      dispatched_from->decrement_count();
+    if (std::shared_ptr<dispatch_group_t<T, U>> df = dispatched_from.lock()) {
+      df->decrement_count();
     }
   };
 };
 
 /*
  * Use this to execute parallel tasks in the thread pool.
- * Do not discard this object until all tasks registered to this are completed.
+ * Always manage the object with std::shared_ptr.
  * 
  * types
  * T: parameter type
@@ -86,41 +86,38 @@ public:
  */
 
 template<typename T, typename U> 
-class dispatch_group_t
+class dispatch_group_t : public std::enable_shared_from_this<dispatch_group_t<T, U>>
 {
 private:
   std::vector<std::shared_ptr<threaded_task_t<T, U>>> tasks;
   sint32 task_left_count;
-  pthread_mutex_t task_left_count_mutex;
-  pthread_cond_t get_results_wait_cond;
+  std::mutex task_left_count_mutex;
+  std::condition_variable get_results_wait_cond;
 
 public:
   dispatch_group_t() {
     task_left_count = 0;
-    pthread_mutex_init(&task_left_count_mutex, NULL);
-    pthread_cond_init(&get_results_wait_cond, NULL);
   };
 
   // The given functions will be executed asynchronously.
   // Lambda expression can be used to pass the function.
   void add_task(std::function<U(T)> func, T parameter) {
-    std::shared_ptr<threaded_task_t<T, U>> task(new threaded_task_t<T, U>(func, parameter, this));
-    pthread_mutex_lock(&task_left_count_mutex);
-    tasks.push_back(task);
-    task_left_count++;
-    pthread_mutex_unlock(&task_left_count_mutex);
+    std::shared_ptr<threaded_task_t<T, U>> task(new threaded_task_t<T, U>(func, parameter, this->shared_from_this()));
+    {
+      std::lock_guard<std::mutex> lock(task_left_count_mutex);
+      tasks.push_back(task);
+      task_left_count++;
+    }
     thread_pool_t::the_instance.add_task_to_queue(task);
   };
 
   // wait until all tasks are completed and return the results in vector_tpl type.
   // Do not call this in an async function!
   vector_tpl<U> get_results() {
-    pthread_mutex_lock(&task_left_count_mutex);
-    while (task_left_count > 0)
     {
-      pthread_cond_wait(&get_results_wait_cond, &task_left_count_mutex);
+      std::unique_lock<std::mutex> lk(task_left_count_mutex);
+      get_results_wait_cond.wait(lk, [this] { return task_left_count <= 0; });
     }
-    pthread_mutex_unlock(&task_left_count_mutex);
     vector_tpl<U> results;
     for (uint32 i = 0; i < tasks.size(); i++)
     {
@@ -135,23 +132,17 @@ public:
   // just wait until all tasks are completed.
   // Do not call this in an async function!
   void wait_completion() {
-    pthread_mutex_lock(&task_left_count_mutex);
-    while (task_left_count > 0)
-    {
-      pthread_cond_wait(&get_results_wait_cond, &task_left_count_mutex);
-    }
-    pthread_mutex_unlock(&task_left_count_mutex);
+    std::unique_lock<std::mutex> lk(task_left_count_mutex);
+    get_results_wait_cond.wait(lk, [this] { return task_left_count <= 0; });
   };
 
   void decrement_count() {
-    pthread_mutex_lock(&task_left_count_mutex);
+    std::lock_guard<std::mutex> lock(task_left_count_mutex);
     task_left_count--;
-    if (task_left_count <= 0)
-    {
-      pthread_cond_broadcast(&get_results_wait_cond);
+    if (task_left_count <= 0) {
+      get_results_wait_cond.notify_all();
     }
-    pthread_mutex_unlock(&task_left_count_mutex);
-    };
+  };
 };
 
 #endif

@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <memory>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -4214,9 +4215,10 @@ void karte_t::step()
 
 	// step convoy asynchronously
 	auto start = std::chrono::system_clock::now();
-	dispatch_group_t<convoihandle_t, bool> convoi_threaded_steps;
+	std::shared_ptr<dispatch_group_t<convoihandle_t, bool>> 
+		convoi_threaded_steps(new dispatch_group_t<convoihandle_t, bool>());
 	for (size_t i = convoi_array.get_count(); i-- != 0;) {
-		convoi_threaded_steps.add_task([&](convoihandle_t cnv) -> bool {
+		convoi_threaded_steps->add_task([&](convoihandle_t cnv) -> bool {
 			cnv->threaded_step();
 			return true; // has no special meaning.
 		}, convoi_array[i]);
@@ -4226,7 +4228,7 @@ void karte_t::step()
 	}
 	// wait here for safer async process. 
 	// TODO: put this below the step() loop in the main thread.
-	convoi_threaded_steps.wait_completion();
+	convoi_threaded_steps->wait_completion();
 
 	auto end = std::chrono::system_clock::now();  
 	auto dur = end - start;

@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <memory>
 
 #include "../simworld.h"
 #include "../simintr.h"
@@ -807,8 +808,8 @@ void route_t::rdwr(loadsave_t *file)
 
 
 void route_t::prepare_resource() {
-	dispatch_group_t<bool, bool> dg;
-	dg.add_task([&] (bool) -> bool {
+	std::shared_ptr<dispatch_group_t<bool, bool>> dg(new dispatch_group_t<bool, bool>());
+	dg->add_task([&] (bool) -> bool {
 		vector_tpl<route_find_resource_t> resources;
 		printf("start resource allocation.\n");
 		for(uint8 i=0; i<MAX_THREADS-1; i++) {

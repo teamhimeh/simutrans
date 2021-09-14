@@ -212,9 +212,9 @@ void gui_journey_time_info_t::update() {
   }
   
   // calculate journey time and average time
-  dispatch_group_t<uint8, uint32> dg;
+  std::shared_ptr<dispatch_group_t<uint8, uint32>> dg(new dispatch_group_t<uint8, uint32>());
   for(uint8 idx=0; idx<schedule->entries.get_count(); idx++) {
-    dg.add_task([&](uint8 i) -> uint32 {
+    dg->add_task([&](uint8 i) -> uint32 {
       uint32 sum = 0;
       uint8 cnt = 0;
       const uint8 kc = (schedule->entries[i].at_index + NUM_ARRIVAL_TIME_STORED - 1) % NUM_ARRIVAL_TIME_STORED;
@@ -240,7 +240,7 @@ void gui_journey_time_info_t::update() {
     }, idx);
   }
 
-  vector_tpl<uint32> time_averages = dg.get_results();
+  vector_tpl<uint32> time_averages = dg->get_results();
   journey_time_sum = 0;
   for(uint8 i=0; i<time_averages.get_count(); i++) {
     journey_time_sum += time_averages[i];
