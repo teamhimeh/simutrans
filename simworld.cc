@@ -4,7 +4,6 @@
  */
 
 #include <algorithm>
-#include <memory>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,7 +86,6 @@
 #include "utils/cbuffer_t.h"
 #include "utils/simrandom.h"
 #include "utils/simstring.h"
-#include "utils/thread_pool.h"
 
 #include "network/memory_rw.h"
 
@@ -4104,8 +4102,6 @@ void karte_t::set_schedule_counter()
 	schedule_counter++;
 }
 
-#include <chrono>
-
 void karte_t::step()
 {
 	DBG_DEBUG4("karte_t::step", "start step");
@@ -4184,6 +4180,14 @@ void karte_t::step()
 	// to make sure the tick counter will be updated
 	INT_CHECK("karte_t::step");
 
+	// wait completion of previous threaded_step()
+	FOR(vector_tpl<std::shared_ptr<dispatch_group_base_t>>, const dg, threaded_step_dispatch_groups) {
+		if (dg) {
+			dg->wait_completion();
+		}
+	}
+	threaded_step_dispatch_groups.clear();
+
 	// check for pending seasons change
 	const bool season_change = pending_season_change > 0;
 	const bool snowline_change = pending_snowline_change > 0;
@@ -4212,30 +4216,6 @@ void karte_t::step()
 
 	// to make sure the tick counter will be updated
 	INT_CHECK("karte_t::step");
-
-	// step convoy asynchronously
-	auto start = std::chrono::system_clock::now();
-	std::shared_ptr<dispatch_group_t<convoihandle_t, bool>> 
-		convoi_threaded_steps(new dispatch_group_t<convoihandle_t, bool>());
-	for (size_t i = convoi_array.get_count(); i-- != 0;) {
-		convoi_threaded_steps->add_task([&](convoihandle_t cnv) -> bool {
-			cnv->threaded_step();
-			return true; // has no special meaning.
-		}, convoi_array[i]);
-		if((i&1023)==0) {
-			INT_CHECK("simworld 1947");
-		}
-	}
-	// wait here for safer async process. 
-	// TODO: put this below the step() loop in the main thread.
-	convoi_threaded_steps->wait_completion();
-
-	auto end = std::chrono::system_clock::now();  
-	auto dur = end - start;
-	auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-	if (msec > 1) {
-		printf("threaded_step took %dms\n", msec);
-	}
 
 	DBG_DEBUG4("karte_t::step", "step convois");
 	// since convois will be deleted during stepping, we need to step backwards
@@ -4322,6 +4302,17 @@ void karte_t::step()
 			esb->step(get_active_player());
 		}
 	}
+
+	// step convoy asynchronously
+	std::shared_ptr<dispatch_group_t<convoihandle_t, bool>> 
+		convoi_threaded_steps(new dispatch_group_t<convoihandle_t, bool>());
+	for (size_t i = convoi_array.get_count(); i-- != 0;) {
+		convoi_threaded_steps->add_task([&](convoihandle_t cnv) -> bool {
+			cnv->threaded_step();
+			return true; // has no special meaning.
+		}, convoi_array[i]);
+	}
+	threaded_step_dispatch_groups.append(convoi_threaded_steps);
 
 	DBG_DEBUG4("karte_t::step", "end");
 }

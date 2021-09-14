@@ -6,6 +6,7 @@
 #ifndef SIMWORLD_H
 #define SIMWORLD_H
 
+#include <memory>
 
 #include "simconst.h"
 #include "simtypes.h"
@@ -23,6 +24,7 @@
 #include "network/pwd_hash.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/rect.h"
+#include "utils/thread_pool.h"
 
 #include "simplan.h"
 
@@ -322,6 +324,11 @@ private:
 	 * Event manager of this world.
 	 */
 	interaction_t *eventmanager;
+
+	/**
+	 * dispatch group objects for threaded_step
+	 */
+	vector_tpl<std::shared_ptr<dispatch_group_base_t>> threaded_step_dispatch_groups;
 
 	/**
 	 * Checks whether the heights of the corners of the tile at (@p x, @p y) can be raised.

@@ -74,6 +74,17 @@ public:
   };
 };
 
+
+
+/**
+ * An interface class to provide type independent functions of dispatch_group_t
+ */
+class dispatch_group_base_t {
+public:
+  virtual void wait_completion() = 0;
+};
+
+
 /*
  * Use this to execute parallel tasks in the thread pool.
  * Always manage the object with std::shared_ptr.
@@ -84,9 +95,8 @@ public:
  * 
  * TODO: make the object discardable even if all tasks are not completed.
  */
-
 template<typename T, typename U> 
-class dispatch_group_t : public std::enable_shared_from_this<dispatch_group_t<T, U>>
+class dispatch_group_t : public dispatch_group_base_t, public std::enable_shared_from_this<dispatch_group_t<T, U>>
 {
 private:
   std::vector<std::shared_ptr<threaded_task_t<T, U>>> tasks;
@@ -131,7 +141,7 @@ public:
 
   // just wait until all tasks are completed.
   // Do not call this in an async function!
-  void wait_completion() {
+  void wait_completion() override {
     std::unique_lock<std::mutex> lk(task_left_count_mutex);
     get_results_wait_cond.wait(lk, [this] { return task_left_count <= 0; });
   };
