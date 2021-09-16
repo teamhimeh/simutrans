@@ -812,11 +812,12 @@ void route_t::prepare_resource() {
 	std::shared_ptr<dispatch_group_t<bool, bool>> dg(new dispatch_group_t<bool, bool>());
 	dg->add_task([&] (bool) -> bool {
 		vector_tpl<route_find_resource_t> resources;
+		const uint8 thread_num = std::thread::hardware_concurrency();
 		printf("start resource allocation.\n");
-		for(uint8 i=0; i<MAX_THREADS-1; i++) {
+		for(uint8 i=0; i<thread_num; i++) {
 			resources.append(resource_provider_t::get_resource());
 		}
-		for(uint8 i=0; i<MAX_THREADS-1; i++) {
+		for(uint8 i=0; i<thread_num; i++) {
 			resource_provider_t::free_resource(resources[i]);
 		}
 		return true;
