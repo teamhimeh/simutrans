@@ -19,7 +19,6 @@
 #include "loadsave.h"
 #include "route.h"
 #include "environment.h"
-#include "../simconst.h"
 #include "../utils/simthread.h"
 #include "../utils/thread_pool.h"
 #include "../vehicle/simvehicle.h"
@@ -162,6 +161,7 @@ pthread_mutex_t resource_provider_t::mp = PTHREAD_MUTEX_INITIALIZER;
  */
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool coupling )
 {
+	const uint32 max_step = world()->get_settings().get_max_route_steps();
 	bool ok = false;
 
 	// check for existing koordinates
@@ -189,7 +189,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	}
 	
 #ifdef USE_VALGRIND_MEMCHECK
-	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*MAX_STEP);
+	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*max_step);
 #endif
 
 
@@ -288,14 +288,14 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			}
 		}
 
-	} while(  !queue.empty()  &&  step < MAX_STEP  &&  queue.get_count() < max_depth  );
+	} while(  !queue.empty()  &&  step < max_step  &&  queue.get_count() < max_depth  );
 
 	INT_CHECK("route 194");
 
 	// target reached?
-	if(!target_reached  ||  step >= MAX_STEP) {
-		if(  step >= MAX_STEP  ) {
-			dbg->warning("route_t::find_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,MAX_STEP);
+	if(!target_reached  ||  step >= max_step) {
+		if(  step >= max_step  ) {
+			dbg->warning("route_t::find_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,max_step);
 		}
 	}
 	else {
@@ -332,6 +332,7 @@ ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel, ribi_t::
 
 bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_speed, const uint32 max_cost)
 {
+	const uint32 max_step = world()->get_settings().get_max_route_steps();
 	bool ok = false;
 
 	// check for existing koordinates
@@ -376,7 +377,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	marker_t &marker = *search_resources.marker;
 
 #ifdef USE_VALGRIND_MEMCHECK
-	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*MAX_STEP);
+	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*max_step);
 #endif
 
 	uint32 step = 0;
@@ -556,19 +557,19 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 		}
 
-	} while (  (!queue.empty() ||  new_top)  &&  step < MAX_STEP  &&  tmp->g < max_cost  );
+	} while (  (!queue.empty() ||  new_top)  &&  step < max_step  &&  tmp->g < max_cost  );
 
 #ifdef DEBUG_ROUTES
 	// display marked route
 	// minimap_t::get_instance()->calc_map();
-	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,MAX_STEP,queue.get_count(),tmp->g,max_cost);
+	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,max_step,queue.get_count(),tmp->g,max_cost);
 #endif
 
 	INT_CHECK("route 194");
 	// target reached?
-	if(!ziel_erreicht  || step >= MAX_STEP  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
-		if(  step >= MAX_STEP  ) {
-			dbg->warning("route_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,MAX_STEP);
+	if(!ziel_erreicht  || step >= max_step  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
+		if(  step >= max_step  ) {
+			dbg->warning("route_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,max_step);
 		}
 	}
 	else {
