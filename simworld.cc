@@ -4307,12 +4307,14 @@ void karte_t::step()
 	std::shared_ptr<dispatch_group_t<convoihandle_t, bool>> 
 		convoi_threaded_steps(new dispatch_group_t<convoihandle_t, bool>());
 	for (size_t i = convoi_array.get_count(); i-- != 0;) {
-		convoi_threaded_steps->add_task([&](convoihandle_t cnv) -> bool {
-			cnv->threaded_step();
-			return true; // has no special meaning.
-		}, convoi_array[i]);
+		convoihandle_t cnv = convoi_array[i];
+		if (cnv->needs_threaded_step()) {
+				convoi_threaded_steps->add_task([&](convoihandle_t cnv) -> bool {
+				cnv->threaded_step();
+				return true; // has no special meaning.
+			}, cnv);
+		}
 	}
-	threaded_step_dispatch_groups.append(convoi_threaded_steps);
 
 	DBG_DEBUG4("karte_t::step", "end");
 }

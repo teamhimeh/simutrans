@@ -965,6 +965,8 @@ public:
 	// register journey time to the current schedule entry
 	void register_journey_time();
 	void set_time_last_arrived(uint32 t) { time_last_arrived = t; }
+
+	bool needs_threaded_step() const { return state==ROUTING_2; }
 };
 
 #endif
