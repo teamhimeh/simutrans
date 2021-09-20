@@ -8,6 +8,7 @@
 
 
 #include <string>
+#include <thread>
 #include "../simtypes.h"
 #include "../simconst.h"
 #include "../simcolor.h"
@@ -468,6 +469,9 @@ public:
 	/// show ribi arrow on twoway_mode road or not.
 	/// true -> oneway or halt mode only.
 	static bool show_oneway_ribi_only;
+
+	/// thread id of the main thread.
+	static std::thread::id main_thread_id;
 
 	/// initialize with default values
 	static void init();

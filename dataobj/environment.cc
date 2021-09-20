@@ -177,6 +177,8 @@ sint8   env_t::commandline_snapshot_zoom_factor = 3; // ZOOM_NEUTRAL (3)
 
 bool env_t::show_oneway_ribi_only;
 
+std::thread::id env_t::main_thread_id;
+
 // Define default settings.
 void env_t::init()
 {
@@ -306,6 +308,8 @@ void env_t::init()
 	
 	sprintf(otrp_statistics_log, "");
 	show_oneway_ribi_only = false;
+
+	main_thread_id = std::this_thread::get_id();
 }
 
 
