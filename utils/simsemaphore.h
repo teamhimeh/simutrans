@@ -11,6 +11,7 @@
 #ifndef UTILS_SIMSEMAPHORE_H
 #define UTILS_SIMSEMAPHORE_H
 
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 
@@ -21,10 +22,12 @@ private:
   std::mutex m;
   std::condition_variable cv;
   uint64 cnt;
+  std::atomic_bool canceled;
 
 public:
   simsemaphore_t() {
     cnt = 0;
+    canceled = false;
   }
 
   void post() {
@@ -35,8 +38,13 @@ public:
 
   void wait() {
     std::unique_lock<std::mutex> lk(m);
-    cv.wait(lk, [this] {return cnt>0;});
+    cv.wait(lk, [this] {return cnt>0 || canceled;});
     cnt--;
+  }
+
+  void cancel() {
+    canceled = true;
+    cv.notify_all();
   }
 };
 

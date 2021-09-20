@@ -1527,6 +1527,7 @@ DBG_MESSAGE("simmain","loadgame file found at %s",path.c_str());
 	intr_disable();
 	
 	log_sender.save_statistics();
+	thread_pool_t::the_instance.terminate_threads();
 
 	// save setting ...
 	dr_chdir( env_t::user_dir );

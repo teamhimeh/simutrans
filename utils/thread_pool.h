@@ -10,6 +10,7 @@
 #ifndef UTILS_THREAD_POOL_H
 #define UTILS_THREAD_POOL_H
 
+#include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <deque>
@@ -42,11 +43,12 @@ private:
   std::mutex task_queue_mutex;
 
 public:
+  std::atomic_bool quit_threads;
+
   thread_pool_t();
-
   void add_task_to_queue(std::shared_ptr<runnable_t> task);
-
   std::shared_ptr<runnable_t> get_task_from_queue();
+  void terminate_threads();
 };
 
 template<typename T, typename U> 
