@@ -6,11 +6,10 @@
 #ifndef DATAOBJ_ROUTE_H
 #define DATAOBJ_ROUTE_H
 
+#include <mutex>
 
 #include "../simdebug.h"
-
 #include "../dataobj/koord3d.h"
-
 #include "../tpl/vector_tpl.h"
 
 class karte_t;
@@ -29,6 +28,8 @@ private:
 	bool intern_calc_route(karte_t *w, koord3d start, koord3d ziel, test_driver_t *tdriver, const sint32 max_kmh, const uint32 max_cost);
 
 	koord3d_vector_t route;           // The coordinates for the vehicle route
+
+	std::recursive_mutex vector_mutex; // lock this when you touch the route vector.
 
 	void postprocess_water_route(karte_t *welt);
 

@@ -41,6 +41,7 @@
 
 void route_t::append(const route_t *r)
 {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	assert(r != NULL);
 	const uint32 hops = r->get_count()-1;
 	route.resize(hops+1+route.get_count());
@@ -58,11 +59,13 @@ void route_t::append(const route_t *r)
 
 void route_t::insert(koord3d k)
 {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	route.insert_at(0,k);
 }
 
 
 void route_t::remove_koord_from(uint32 i) {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	while(  i+1 < get_count()  ) {
 		route.pop_back();
 	}
@@ -76,6 +79,7 @@ void route_t::remove_koord_from(uint32 i) {
  */
 bool route_t::append_straight_route(karte_t *welt, koord3d dest )
 {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	const koord ziel=dest.get_2d();
 
 	if(  !welt->is_within_limits(ziel)  ) {
@@ -119,6 +123,7 @@ thread_local bool route_t::node_in_use=false;
  */
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool coupling )
 {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	bool ok = false;
 
 	// check for existing koordinates
@@ -572,7 +577,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	}
 
 	RELEASE_NODE();
-	
+
 	return ok;
 }
 
@@ -689,6 +694,7 @@ void route_t::postprocess_water_route(karte_t *welt)
  */
 route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_khm, sint32 max_len )
 {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	route.clear();
 
 	INT_CHECK("route 336");
@@ -761,6 +767,7 @@ route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, c
 
 void route_t::rdwr(loadsave_t *file)
 {
+	std::lock_guard<std::recursive_mutex> lock(vector_mutex);
 	xml_tag_t r( file, "route_t" );
 	sint32 max_n = route.get_count()-1;
 
