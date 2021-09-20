@@ -318,8 +318,6 @@ private:
 	// divide a month for departure spacing
 	uint16 spacing_shift_divisor;
 
-	bool use_threaded_step;
-
 public:
 	/* the big cost section */
 	sint32 maint_building; // normal building
@@ -657,7 +655,6 @@ public:
 	uint8 get_routecost_wait() const { return routecost_wait; }
 	
 	uint16 get_spacing_shift_divisor() const { return spacing_shift_divisor; }
-	bool get_use_threaded_step() const { return use_threaded_step; }
 };
 
 #endif

@@ -19,8 +19,6 @@
 #include "loadsave.h"
 #include "route.h"
 #include "environment.h"
-#include "../utils/simthread.h"
-#include "../utils/thread_pool.h"
 #include "../vehicle/simvehicle.h"
 
 // define USE_VALGRIND_MEMCHECK to make
@@ -574,6 +572,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	}
 
 	RELEASE_NODE();
+	
 	return ok;
 }
 

@@ -309,8 +309,6 @@ settings_t::settings_t() :
 	routecost_halt = 1;
 	
 	spacing_shift_divisor = 24*60;
-
-	use_threaded_step = true;
 }
 
 

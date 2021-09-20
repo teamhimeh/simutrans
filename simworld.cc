@@ -4102,6 +4102,7 @@ void karte_t::set_schedule_counter()
 	schedule_counter++;
 }
 
+
 void karte_t::step()
 {
 	DBG_DEBUG4("karte_t::step", "start step");
