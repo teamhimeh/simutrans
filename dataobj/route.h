@@ -58,11 +58,11 @@ public:
 		inline bool operator <= (const ANode &k) const { return f==k.f ? g<=k.g : f<=k.f; }
 	};
 
-	static ANode *nodes;
-	static uint32 MAX_STEP;
+	static thread_local ANode *nodes;
+	static thread_local uint32 MAX_STEP;
 #ifdef DEBUG
 	// a semaphore, since we only have a single version of the array in memory
-	static bool node_in_use;
+	static thread_local bool node_in_use;
 	static void GET_NODE() {if(node_in_use){ dbg->fatal("GET_NODE","called while list in use");} node_in_use =1; }
 	static void RELEASE_NODE() {if(!node_in_use){ dbg->fatal("RELEASE_NODE","called while list free");} node_in_use =0; }
 #else
@@ -138,11 +138,6 @@ public:
 	 * Load/Save of the route.
 	 */
 	void rdwr(loadsave_t *file);
-
-	/**
-	 * Allocate memory used in search. Done asynchronously.
-	 */
-	static void prepare_resource();
 };
 
 #endif

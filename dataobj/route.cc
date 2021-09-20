@@ -109,51 +109,11 @@ bool route_t::append_straight_route(karte_t *welt, koord3d dest )
 
 
 // node arrays
-route_t::ANode* route_t::nodes=NULL;
-uint32 route_t::MAX_STEP=0;
+thread_local route_t::ANode* route_t::nodes=NULL;
+thread_local uint32 route_t::MAX_STEP=0;
 #ifdef DEBUG
-bool route_t::node_in_use=false;
+thread_local bool route_t::node_in_use=false;
 #endif
-
-
-struct {
-	route_t::ANode* search_nodes;
-	binary_heap_tpl <route_t::ANode *> *queue;
-	marker_t* marker;
-} typedef route_find_resource_t;
-
-class resource_provider_t {
-private:
-	static vector_tpl<route_find_resource_t> available_resources;
-	static pthread_mutex_t mp;
-
-public:
-	static route_find_resource_t get_resource() {
-		route_find_resource_t r;
-		pthread_mutex_lock(&mp);
-		if (  available_resources.empty()  ) {
-			pthread_mutex_unlock(&mp);
-			// allocate memory
-			r.search_nodes = new route_t::ANode[world()->get_settings().get_max_route_steps() + 4 + 2];
-			r.queue = new binary_heap_tpl <route_t::ANode *>();
-			r.marker = new marker_t();
-		} else {
-			r = available_resources.pop_back();
-			pthread_mutex_unlock(&mp);
-		}
-		r.marker->init(world()->get_size().x, world()->get_size().y);
-		return r;
-	}
-
-	static void free_resource(route_find_resource_t r) {
-		pthread_mutex_lock(&mp);
-		available_resources.append(r);
-		pthread_mutex_unlock(&mp);
-	}
-};
-
-vector_tpl<route_find_resource_t> resource_provider_t::available_resources = vector_tpl<route_find_resource_t>();
-pthread_mutex_t resource_provider_t::mp = PTHREAD_MUTEX_INITIALIZER;
 
 
 /**
@@ -161,7 +121,6 @@ pthread_mutex_t resource_provider_t::mp = PTHREAD_MUTEX_INITIALIZER;
  */
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool coupling )
 {
-	const uint32 max_step = world()->get_settings().get_max_route_steps();
 	bool ok = false;
 
 	// check for existing koordinates
@@ -173,10 +132,11 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	// some thing for the search
 	const waytype_t wegtyp = tdriver->get_waytype();
 
-	route_find_resource_t search_resources = resource_provider_t::get_resource();
-	binary_heap_tpl <ANode *> &queue = *search_resources.queue;
-	ANode* search_nodes = search_resources.search_nodes;
-	marker_t &marker = *search_resources.marker;
+	// memory in static list ...
+	if(  nodes == NULL  ) {
+		MAX_STEP = welt->get_settings().get_max_route_steps();
+		nodes = new ANode[MAX_STEP];
+	}
 
 	INT_CHECK("route 347");
 
@@ -187,6 +147,9 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	if(  !tdriver->check_next_tile(g)  ) {
 		return false;
 	}
+
+	static thread_local binary_heap_tpl <ANode *> queue;
+	GET_NODE();
 	
 #ifdef USE_VALGRIND_MEMCHECK
 	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*max_step);
@@ -194,7 +157,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 
 	uint32 step = 0;
-	ANode* tmp = &search_nodes[step++];
+	ANode* tmp = &nodes[step++];
 	tmp->parent = NULL;
 	tmp->gr = g;
 	tmp->count = 0;
@@ -207,6 +170,11 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	tmp->ribi_from = ribi_t::reverse_single(start_dir) ^ 0x0f;
 	// assert that mask in first step is equal to start_dir
 	assert( (uint8)(~ribi_t::reverse_single(tmp->ribi_from)& 0xf)  == start_dir);
+
+	// nothing in lists
+	static thread_local std::unique_ptr<marker_t> mk = std::unique_ptr<marker_t>(new marker_t());
+	marker_t& marker = *mk;
+	marker.init(world()->get_size().x, world()->get_size().y);
 
 	queue.clear();
 	queue.insert(tmp);
@@ -257,7 +225,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			    && tdriver->check_next_tile(to, true) // can be driven on
 			) {
 				// not in there or taken out => add new
-				ANode* k = &search_nodes[step++];
+				ANode* k = &nodes[step++];
 
 				k->parent = tmp;
 				k->gr = to;
@@ -288,14 +256,14 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			}
 		}
 
-	} while(  !queue.empty()  &&  step < max_step  &&  queue.get_count() < max_depth  );
+	} while(  !queue.empty()  &&  step < MAX_STEP  &&  queue.get_count() < max_depth  );
 
 	INT_CHECK("route 194");
 
 	// target reached?
-	if(!target_reached  ||  step >= max_step) {
-		if(  step >= max_step  ) {
-			dbg->warning("route_t::find_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,max_step);
+	if(!target_reached  ||  step >= MAX_STEP) {
+		if(  step >= MAX_STEP  ) {
+			dbg->warning("route_t::find_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,MAX_STEP);
 		}
 	}
 	else {
@@ -308,7 +276,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		ok = !route.empty();
 	}
 
-	resource_provider_t::free_resource(search_resources);
+	RELEASE_NODE();
 	return ok;
 }
 
@@ -332,7 +300,6 @@ ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel, ribi_t::
 
 bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_speed, const uint32 max_cost)
 {
-	const uint32 max_step = world()->get_settings().get_max_route_steps();
 	bool ok = false;
 
 	// check for existing koordinates
@@ -369,19 +336,24 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 	bool ziel_erreicht=false;
 
+	// memory in static list ...
+	if(  nodes == NULL  ) {
+		MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
+		nodes = new ANode[MAX_STEP + 4 + 2];
+	}
+
 	INT_CHECK("route 347");
 
-	route_find_resource_t search_resources = resource_provider_t::get_resource();
-	binary_heap_tpl <ANode *> &queue = *search_resources.queue;
-	ANode* search_nodes = search_resources.search_nodes;
-	marker_t &marker = *search_resources.marker;
+	static thread_local binary_heap_tpl <ANode *> queue;
+
+	GET_NODE();
 
 #ifdef USE_VALGRIND_MEMCHECK
 	VALGRIND_MAKE_MEM_UNDEFINED(nodes, sizeof(ANode)*max_step);
 #endif
 
 	uint32 step = 0;
-	ANode* tmp = &search_nodes[step];
+	ANode* tmp = &nodes[step];
 	step ++;
 
 	tmp->parent = NULL;
@@ -392,6 +364,11 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	tmp->count = 0;
 	tmp->ribi_from = ribi_t::none;
 	tmp->jps_ribi  = ribi_t::all;
+
+	// nothing in lists
+	static thread_local std::unique_ptr<marker_t> mk = std::unique_ptr<marker_t>(new marker_t());
+	marker_t& marker = *mk;
+	marker.init(world()->get_size().x, world()->get_size().y);
 
 	// clear the queue (should be empty anyhow)
 	queue.clear();
@@ -516,7 +493,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 				const uint32 new_f = new_g + dist + turns * 3 + costup;
 
 				// add new
-				ANode* k = &search_nodes[step];
+				ANode* k = &nodes[step];
 				step ++;
 
 				k->parent = tmp;
@@ -557,19 +534,19 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 		}
 
-	} while (  (!queue.empty() ||  new_top)  &&  step < max_step  &&  tmp->g < max_cost  );
+	} while (  (!queue.empty() ||  new_top)  &&  step < MAX_STEP  &&  tmp->g < max_cost  );
 
 #ifdef DEBUG_ROUTES
 	// display marked route
 	// minimap_t::get_instance()->calc_map();
-	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,max_step,queue.get_count(),tmp->g,max_cost);
+	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,MAX_STEP,queue.get_count(),tmp->g,max_cost);
 #endif
 
 	INT_CHECK("route 194");
 	// target reached?
-	if(!ziel_erreicht  || step >= max_step  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
-		if(  step >= max_step  ) {
-			dbg->warning("route_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,max_step);
+	if(!ziel_erreicht  || step >= MAX_STEP  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
+		if(  step >= MAX_STEP  ) {
+			dbg->warning("route_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,MAX_STEP);
 		}
 	}
 	else {
@@ -596,8 +573,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		ok = true;
 	}
 
-	resource_provider_t::free_resource(search_resources);
-
+	RELEASE_NODE();
 	return ok;
 }
 
@@ -805,21 +781,4 @@ void route_t::rdwr(loadsave_t *file)
 			route[i].rdwr(file);
 		}
 	}
-}
-
-
-void route_t::prepare_resource() {
-	std::shared_ptr<dispatch_group_t<bool, bool>> dg(new dispatch_group_t<bool, bool>());
-	dg->add_task([&] (bool) -> bool {
-		vector_tpl<route_find_resource_t> resources;
-		const uint8 thread_num = std::thread::hardware_concurrency();
-		printf("start resource allocation.\n");
-		for(uint8 i=0; i<thread_num; i++) {
-			resources.append(resource_provider_t::get_resource());
-		}
-		for(uint8 i=0; i<thread_num; i++) {
-			resource_provider_t::free_resource(resources[i]);
-		}
-		return true;
-	}, true);
 }
