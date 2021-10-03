@@ -16,7 +16,7 @@
 #include "../../boden/wasser.h"
 
 #include "../../simconvoi.h"
-#include "../../vehicle/vehicle.h"
+#include "../../vehicle/simvehicle.h"
 
 namespace script_api {
 	declare_enum_param(grund_t::flag_values, uint8, "flags");
