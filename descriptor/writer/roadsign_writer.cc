@@ -15,6 +15,24 @@
 
 using std::string;
 
+void add_images(FILE* fp, obj_node_t& node, tabfileobj_t& obj, string prefix) {
+	slist_tpl<string> keys;
+	string str;
+
+	for (int i = 0; i < 32; i++) {
+		char buf[40];
+
+		sprintf(buf, "%simage[%i]", prefix.c_str(), i);
+		str = obj.get(buf);
+		// make sure, there are always 4, 8, 12, ... images (for all directions)
+		if (str.empty() && i % 4 == 0) {
+			break;
+		}
+		keys.append(str);
+	}
+	imagelist_writer_t::instance()->write_obj(fp, node, keys);
+}
+
 void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& obj)
 {
 	obj_node_t node(this, 16, &parent);
@@ -50,6 +68,21 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 			(obj.get_int("end_of_choose",      0) > 0 ? roadsign_desc_t::END_OF_CHOOSE_AREA    : roadsign_desc_t::NONE);
 	}
 	// this causes unused entries to give a warning that they are ignored
+	
+	// write driving_side
+	string direction_str(obj.get_string("driving_side", "both"));
+	if(  direction_str=="right"  ) {
+		flags |= roadsign_desc_t::NO_LEFT_SIDE_DRIVING;
+	}
+	else if(  direction_str=="left"  ) {
+		flags |= roadsign_desc_t::NO_RIGHT_SIDE_DRIVING;
+	}
+	
+	// check if front or back images are defined.
+	if(  !string(obj.get("frontimage[0]")).empty()  ||  !string(obj.get("backimage[0]")).empty()  ) {
+		// Use front and back image
+		flags |= roadsign_desc_t::HAS_FRONT_BACK_IMAGES;
+	}
 
 	// write version data
 	node.write_uint16(fp, 0x8005,      0); // version 5
@@ -70,21 +103,8 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 	write_head(fp, node, obj);
 
 	// add the images
-	slist_tpl<string> keys;
-	string str;
-
-	for (int i = 0; i < 32; i++) {
-		char buf[40];
-
-		sprintf(buf, "image[%i]", i);
-		str = obj.get(buf);
-		// make sure, there are always 4, 8, 12, ... images (for all directions)
-		if (str.empty() && i % 4 == 0) {
-			break;
-		}
-		keys.append(str);
-	}
-	imagelist_writer_t::instance()->write_obj(fp, node, keys);
+	const string prefix = flags & roadsign_desc_t::HAS_FRONT_BACK_IMAGES ? "back" : "";
+	add_images(fp, node, obj, prefix);
 
 	// probably add some icons, if defined
 	slist_tpl<string> cursorkeys;
@@ -92,8 +112,11 @@ void roadsign_writer_t::write_obj(FILE* fp, obj_node_t& parent, tabfileobj_t& ob
 	string c = string(obj.get("cursor")), i=string(obj.get("icon"));
 	cursorkeys.append(c);
 	cursorkeys.append(i);
-	if (!c.empty() || !i.empty()) {
-		cursorskin_writer_t::instance()->write_obj(fp, node, obj, cursorkeys);
+	cursorskin_writer_t::instance()->write_obj(fp, node, obj, cursorkeys);
+	
+	// write front images if needed.
+	if(  flags & roadsign_desc_t::HAS_FRONT_BACK_IMAGES  ) {
+		add_images(fp, node, obj, "front");
 	}
 
 	node.write(fp);

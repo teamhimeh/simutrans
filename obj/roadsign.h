@@ -22,8 +22,9 @@ class tool_selector_t;
 class roadsign_t : public obj_t, public sync_steppable
 {
 protected:
-	image_id image;
-	image_id foreground_image;
+	static const uint8 max_image_layer_num = 2;
+	image_id images[max_image_layer_num];
+	image_id foreground_images[max_image_layer_num];
 
 	enum {
 		SHOW_FONT        = 1,
@@ -142,13 +143,20 @@ public:
 	uint8 get_ticks_offset() const { return ticks_offset; }
 	void set_ticks_offset(uint8 offset) { ticks_offset = offset; }
 
-	inline void set_image( image_id b ) { image = b; }
-	image_id get_image() const OVERRIDE { return image; }
+	// TODO: These should be removed.
+	//inline void set_image( image_id b ) { images[0] = b; }
+	image_id get_image() const OVERRIDE { return images[0]; }
 
 	/**
 	* For the front image hiding vehicles
 	*/
-	image_id get_front_image() const OVERRIDE { return foreground_image; }
+	// TODO: This should be removed.
+	//image_id get_front_image() const OVERRIDE { return foreground_images[0]; }
+
+	/**
+	 * Draw background image of object
+	 */
+	void display(int xpos, int ypos  CLIP_NUM_DEF) const OVERRIDE;
 
 	/**
 	* draw the part overlapping the vehicles
@@ -178,6 +186,11 @@ private:
 
 protected:
 	static const roadsign_desc_t *default_signal;
+	
+	void set_back_image_id(uint8);
+	void set_front_image_id(uint8);
+	
+	void clear_all_images();
 
 public:
 	static bool register_desc(roadsign_desc_t *desc);

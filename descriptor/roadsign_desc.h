@@ -44,12 +44,30 @@ public:
 		ONLY_BACKIMAGE        = 1U << 5,
 		SIGN_LONGBLOCK_SIGNAL = 1U << 6,
 		END_OF_CHOOSE_AREA    = 1U << 7,
-		SIGN_PRIORITY_SIGNAL  = 1U << 8
+		SIGN_PRIORITY_SIGNAL  = 1U << 8,
+		HAS_FRONT_BACK_IMAGES = 1U << 9,
+		NO_RIGHT_SIDE_DRIVING = 1U << 10,
+		NO_LEFT_SIDE_DRIVING  = 1U << 11
 	};
 
 	image_id get_image_id(ribi_t::dir dir) const
 	{
+		assert(!has_front_back_images());
 		image_t const* const image = get_child<image_list_t>(2)->get_image(dir);
+		return image != NULL ? image->get_id() : IMG_EMPTY;
+	}
+	
+	image_id get_back_image_id(ribi_t::dir dir) const
+	{
+		assert(has_front_back_images());
+		image_t const* const image = get_child<image_list_t>(2)->get_image(dir);
+		return image != NULL ? image->get_id() : IMG_EMPTY;
+	}
+	
+	image_id get_front_image_id(ribi_t::dir dir) const
+	{
+		assert(has_front_back_images());
+		image_t const* const image = get_child<image_list_t>(4)->get_image(dir);
 		return image != NULL ? image->get_id() : IMG_EMPTY;
 	}
 
@@ -100,6 +118,8 @@ public:
 	uint16 get_flags() const { return flags; }
 
 	sint8 get_offset_left() const { return offset_left; }
+
+	bool has_front_back_images() const { return (flags & HAS_FRONT_BACK_IMAGES) != 0; }
 
 	void calc_checksum(checksum_t *chk) const
 	{

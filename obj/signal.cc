@@ -46,8 +46,7 @@ void signal_t::info(cbuffer_t & buf) const
 
 void signal_t::calc_image()
 {
-	foreground_image = IMG_EMPTY;
-	image_id image = IMG_EMPTY;
+	clear_all_images();
 
 	after_xoffset = 0;
 	after_yoffset = 0;
@@ -109,38 +108,38 @@ void signal_t::calc_image()
 				const sint16 YOFF = desc->get_offset_left();
 
 				if(temp_dir&ribi_t::east) {
-					image = desc->get_image_id(3+state*4+offset);
+					set_back_image_id(3+state*4+offset);
 					xoff += XOFF;
 					yoff += -YOFF;
 				}
 
 				if(temp_dir&ribi_t::north) {
-					if(image!=IMG_EMPTY) {
-						foreground_image = desc->get_image_id(0+state*4+offset);
+					if(temp_dir&ribi_t::east) {
+						set_front_image_id(0+state*4+offset);
 						after_xoffset += -XOFF;
 						after_yoffset += -YOFF;
 					}
 					else {
-						image = desc->get_image_id(0+state*4+offset);
+						set_back_image_id(0+state*4+offset);
 						xoff += -XOFF;
 						yoff += -YOFF;
 					}
 				}
 
 				if(temp_dir&ribi_t::west) {
-					foreground_image = desc->get_image_id(2+state*4+offset);
+					set_front_image_id(2+state*4+offset);
 					after_xoffset += -XOFF;
 					after_yoffset += YOFF;
 				}
 
 				if(temp_dir&ribi_t::south) {
-					if(foreground_image!=IMG_EMPTY) {
-						image = desc->get_image_id(1+state*4+offset);
+					if(temp_dir&ribi_t::west) {
+						set_back_image_id(1+state*4+offset);
 						xoff += XOFF;
 						yoff += YOFF;
 					}
 					else {
-						foreground_image = desc->get_image_id(1+state*4+offset);
+						set_front_image_id(1+state*4+offset);
 						after_xoffset += XOFF;
 						after_yoffset += YOFF;
 					}
@@ -148,28 +147,28 @@ void signal_t::calc_image()
 			}
 			else {
 				if(temp_dir&ribi_t::east) {
-					foreground_image = desc->get_image_id(3+state*4+offset);
+					set_front_image_id(3+state*4+offset);
 				}
 
 				if(temp_dir&ribi_t::north) {
-					if(foreground_image==IMG_EMPTY) {
-						foreground_image = desc->get_image_id(0+state*4+offset);
+					if(temp_dir&ribi_t::east) {
+						set_back_image_id(0+state*4+offset);
 					}
 					else {
-						image = desc->get_image_id(0+state*4+offset);
+						set_front_image_id(0+state*4+offset);
 					}
 				}
 
 				if(temp_dir&ribi_t::west) {
-					image = desc->get_image_id(2+state*4+offset);
+					set_back_image_id(2+state*4+offset);
 				}
 
 				if(temp_dir&ribi_t::south) {
-					if(image==IMG_EMPTY) {
-						image = desc->get_image_id(1+state*4+offset);
+					if(temp_dir&ribi_t::west) {
+						set_front_image_id(1+state*4+offset);
 					}
 					else {
-						foreground_image = desc->get_image_id(1+state*4+offset);
+						set_back_image_id(1+state*4+offset);
 					}
 				}
 			}
@@ -177,5 +176,4 @@ void signal_t::calc_image()
 	}
 	set_xoff( xoff );
 	set_yoff( yoff );
-	set_image(image);
 }
