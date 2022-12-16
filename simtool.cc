@@ -4880,7 +4880,25 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// find out orientation ...
 	uint32 layout = 0;
 	ribi_t::ribi ribi=ribi_t::none;
-	if(  desc->get_all_layouts()==2  ||  desc->get_all_layouts()==8  ||  desc->get_all_layouts()==16  ) {
+	if(  desc->get_all_layouts()==48  ) {
+		// through station supporting diagonal
+		bool is_diagonal = false;
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+			is_diagonal = bd->get_weg_nr(0)->is_diagonal()  &&  (bd->get_weg_nr(0)->get_ribi_unmasked()  ==  bd->get_weg_nr(1)->get_ribi_unmasked());
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			is_diagonal = bd->get_weg_nr(0)->is_diagonal();
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !is_diagonal  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==2  ||  desc->get_all_layouts()==8  ||  desc->get_all_layouts()==16  ) {
 		// through station
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -4917,7 +4935,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		dbg->fatal( "tool_station_t::tool_station_aux", "%s has wrong number of layouts (must be 2,4,8,16!)", desc->get_name() );
 	}
 
-	if(  desc->get_all_layouts() == 8  ||  desc->get_all_layouts() == 16  ) {
+	if(  desc->get_all_layouts() >= 8  &&  ribi_t::is_straight(ribi)  ) {
 		// through station - complex layout
 		// bits
 		// 1 = north south/east west (as simple layout)
@@ -5031,7 +5049,12 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		halt = haltestelle_t::create(k, player);
 	}
-	hausbauer_t::build_station_extension_depot(halt->get_owner(), bd->get_pos(), layout, desc, &halt);
+	if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
+		hausbauer_t::build_station_on_diagonal_way(halt->get_owner(), bd->get_pos(), desc, ribi, halt);
+	}
+	else {
+		hausbauer_t::build_station_extension_depot(halt->get_owner(), bd->get_pos(), layout, desc, &halt);
+	}
 	halt->recalc_station_type();
 
 	if(neu) {
