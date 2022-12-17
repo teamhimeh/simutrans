@@ -4882,15 +4882,12 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	ribi_t::ribi ribi=ribi_t::none;
 	if(  desc->get_all_layouts()==48  ) {
 		// through station supporting diagonal
-		bool is_diagonal = false;
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
-			is_diagonal = bd->get_weg_nr(0)->is_diagonal()  &&  (bd->get_weg_nr(0)->get_ribi_unmasked()  ==  bd->get_weg_nr(1)->get_ribi_unmasked());
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
-			is_diagonal = bd->get_weg_nr(0)->is_diagonal();
 		}
 		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
 			// cannot build here ...
