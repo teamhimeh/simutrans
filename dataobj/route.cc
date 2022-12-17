@@ -775,3 +775,43 @@ void route_t::rdwr(loadsave_t *file)
 		}
 	}
 }
+
+
+koord3d route_t::opposite_pos_of_route_starting(waytype_t waytype) const {
+	if(  get_count()<2  ) {
+		return koord3d::invalid;
+	}
+	const grund_t* gr = world()->lookup(route.front());
+	const weg_t* way = gr ? gr->get_weg(waytype) : NULL;
+	if(  !way  ) { return koord3d::invalid; }
+	
+	const ribi_t::ribi first_to_second_dir = ribi_type(route.front(), route[1]);
+	const ribi_t::ribi open_dir = way->get_ribi_unmasked() & (~first_to_second_dir);
+	if(  !ribi_t::is_single(open_dir)  ) {
+		// The way diverges here.
+		return koord3d::invalid; 
+	}
+	
+	const koord open_dir_coord = koord(open_dir);
+	return route.front() + koord3d(open_dir_coord.x, open_dir_coord.y, 0);
+}
+
+
+koord3d route_t::opposite_pos_of_route_ending(waytype_t waytype) const {
+	if(  get_count()<2  ) {
+		return koord3d::invalid;
+	}
+	const grund_t* gr = world()->lookup(route.back());
+	const weg_t* way = gr ? gr->get_weg(waytype) : NULL;
+	if(  !way  ) { return koord3d::invalid; }
+	
+	const ribi_t::ribi last_to_second_last_dir = ribi_type(route.back(), route[route.get_count()-2]);
+	const ribi_t::ribi open_dir = way->get_ribi_unmasked() & (~last_to_second_last_dir);
+	if(  !ribi_t::is_single(open_dir)  ) {
+		// The way diverges here.
+		return koord3d::invalid; 
+	}
+	
+	const koord open_dir_coord = koord(open_dir);
+	return route.back() + koord3d(open_dir_coord.x, open_dir_coord.y, 0);
+}

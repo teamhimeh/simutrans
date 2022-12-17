@@ -1180,6 +1180,11 @@ void vehicle_t::hop(grund_t* gr)
 	if(  route_index>=cnv->get_route()->get_count()-1  ||  coupling_index==route_index  ) {
 		route_index ++;
 		check_for_finish = true;
+		// estimate pos_next if possible
+		const koord3d estimated_pos_next = cnv->get_route()->opposite_pos_of_route_ending(get_waytype());
+		if(  estimated_pos_next != koord3d::invalid  ) {
+			pos_next = estimated_pos_next;
+		}
 	}
 	else {
 		route_index ++;
@@ -1252,7 +1257,7 @@ void vehicle_t::hop(grund_t* gr)
 			// since route_index is already incremented, this is coupling point.
 			steps_next = cnv->get_next_coupling_steps();
 		}
-		else if(  check_for_finish  &&  (direction==ribi_t::north  ||  direction==ribi_t::west)  ) {
+		else if(  check_for_finish  &&  direction!=ribi_t::south  &&  direction!=ribi_t::east  ) {
 			steps_next = (steps_next/2)+1;
 		}
 		cnv->must_recalc_data_front();

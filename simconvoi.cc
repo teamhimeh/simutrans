@@ -2301,7 +2301,14 @@ bool convoi_t::can_go_alte_richtung()
 
 					// check direction
 					uint8 richtung = v->get_direction();
-					uint8 neu_richtung = v->calc_direction( route.at(max(idx-1,0)), v->get_pos_next());
+					koord3d vehicle_prev_pos;
+					if(  idx==0  ) {
+						const koord3d estimated_prev_pos = route.opposite_pos_of_route_starting(v->get_waytype());
+						vehicle_prev_pos = estimated_prev_pos==koord3d::invalid ? route.at(0) : estimated_prev_pos;
+					} else {
+						vehicle_prev_pos = route.at(idx-1);
+					}
+					uint8 neu_richtung = v->calc_direction( vehicle_prev_pos, v->get_pos_next());
 					// we need to move to this place ...
 					if(neu_richtung!=richtung  &&  (i!=0  ||  anz_vehikel==1  ||  ribi_t::is_bend(neu_richtung)) ) {
 						// 90 deg bend!
