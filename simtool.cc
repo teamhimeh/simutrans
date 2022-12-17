@@ -4892,7 +4892,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
 			is_diagonal = bd->get_weg_nr(0)->is_diagonal();
 		}
-		if(  !ribi_t::is_straight(ribi)  &&  !is_diagonal  ) {
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
 			// cannot build here ...
 			return p_error;
 		}

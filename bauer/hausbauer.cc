@@ -743,20 +743,20 @@ gebaeude_t* hausbauer_t::build_station_on_diagonal_way(player_t* player, koord3d
 	
 	// calculate (1<<1), (1<<2), (1<<3)
 	// check connected direction
-	const uint8 up_left_directions = (diagonal_direction_bits == 0x10) ? ribi_t::northeast: ribi_t::southeast;
-	uint8 corner_bits = 3; // (1<<1), (1<<2)
+	const uint8 up_left_directions = (diagonal_direction_bits == 0x10) ? ribi_t::northwest: ribi_t::southwest;
+	uint8 corner_bits = 3; // (1<<1), (1<<2), will be left shifted. Use the isolated image by default.
 	uint8 front_back_bit = 0; // (1<<3)
 	for(  unsigned i=0;  i<4;  i++  ) {
 		if(  (ribi_t::nesw[i] & way_connection) == 0  ) { continue; }
 		gebaeude_t* gb = neighbour_diagonal_stops[i];
 		if(  !gb  ) { continue; }
 		const bool is_up_left_dir = (up_left_directions & ribi_t::nesw[i]) > 0;
-		corner_bits &= ~(is_up_left_dir ? 2 : 1);
+		corner_bits &= ~(is_up_left_dir ? 1 : 2);
 		
 		// clear far bit on neighbour
 		koord xy = gb->get_tile()->get_offset();
 		uint8 layoutbase = gb->get_tile()->get_layout();
-		layoutbase &= ~(is_up_left_dir ? 1 : 2);
+		layoutbase &= ~(is_up_left_dir ? 4 : 2);
 		gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
 		front_back_bit = layoutbase & (1<<3);
 	}
