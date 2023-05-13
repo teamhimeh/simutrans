@@ -33,6 +33,10 @@ class schedule_t
 	// operational maximum speed of this schedule. 0 => no limit.
 	uint16 max_speed;
 
+	// the id of the departure slot group.
+	// defined in sint64 since uint64 value cannot be handled with rdwr_longlong
+	sint64 departure_slot_group_id;
+
 	static schedule_entry_t dummy_entry;
 
 	/**
@@ -49,7 +53,9 @@ class schedule_t
 	}
 
 protected:
-	schedule_t() : editing_finished(false), current_stop(0), flags(0), max_speed(0) {}
+	schedule_t() : editing_finished(false), current_stop(0), flags(0), max_speed(0) {
+		set_new_departure_slot_group_id();
+	}
 
 public:
 	enum schedule_type {
@@ -133,6 +139,9 @@ public:
 	void set_full_load_acceleration(bool y) { y ? flags |= FULL_LOAD_ACCELERATION : flags &= ~FULL_LOAD_ACCELERATION; }
 	uint16 get_max_speed() const { return max_speed; }
 	void set_max_speed(uint16 v) { max_speed = v; }
+	sint64 get_departure_slot_group_id() const { return departure_slot_group_id; }
+	void set_departure_slot_group_id(sint64 id) { departure_slot_group_id = id; }
+	void set_new_departure_slot_group_id();
 
 	bool is_full_load_time() const { return (flags&FULL_LOAD_TIME)>0; }
 	void set_full_load_time(bool y) { y ? flags |= FULL_LOAD_TIME : flags &= ~FULL_LOAD_TIME; }
@@ -221,6 +230,8 @@ public:
 	uint8 get_current_stop_exluding_depot() const;
 
 	static void get_schedule_flag_text(cbuffer_t& buf, schedule_t* schedule);
+
+	static sint64 issue_new_departure_slot_group_id();
 };
 
 

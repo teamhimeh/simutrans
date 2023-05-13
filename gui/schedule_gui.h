@@ -48,7 +48,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// only active with lines
 	button_t bt_promote_to_line;
-	gui_combobox_t line_selector;
+	gui_combobox_t line_selector, departure_slot_group_selector;
 	gui_label_buf_t lb_waitlevel;
 
 	// always needed
@@ -56,7 +56,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	button_t bt_revert, bt_return;
 	button_t bt_wait_load;
 
-	gui_label_t lb_wait, lb_load;
+	gui_label_t lb_wait, lb_load, lb_departure_slot_group;
 	gui_numberinput_t numimp_load, numimp_wait_load;
 	
 	// for advanced settings
@@ -108,6 +108,7 @@ public:
 
 	// for updating info ...
 	void init_line_selector();
+	void init_departure_slot_group_selector();
 
 	bool infowin_event(event_t const*) OVERRIDE;
 

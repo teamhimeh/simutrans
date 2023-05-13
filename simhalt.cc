@@ -3830,7 +3830,7 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 			return true;
 		} else if(
 			i->dep_tick==dep_tick  &&
-			(i->cnv==cnv  ||  i->cnv->get_line()==cnv->get_line())  &&
+			i->cnv->get_schedule()->get_departure_slot_group_id()==cnv->get_schedule()->get_departure_slot_group_id()  &&
 			i->stop_index==stop_index
 		) {
 			// The slot is already reserved by other convoy.
