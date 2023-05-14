@@ -153,6 +153,12 @@ Do not load cargos until the departure time comes.
 発車時刻になるまで積載しません．
 hlf_chk_include_public
 公共駅を含める
+Departure slot group
+発車枠グループ
+Shares the departure time slot with the selected line here.
+選択された路線と発車枠を共有します。
+<new departure slot group>
+<新しい発車枠グループ>
 #------円表記------
 $
  円
