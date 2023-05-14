@@ -4,7 +4,6 @@
  */
 
 #include <stdio.h>
-#include <cmath>
 
 #include "../simdebug.h"
 #include "../gui/simwin.h"
