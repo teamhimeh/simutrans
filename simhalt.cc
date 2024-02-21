@@ -2213,10 +2213,16 @@ void haltestelle_t::fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *go
 	if(  !warray  ||  warray->empty()  ) {
 		return;
 	}
-	if(  world()->get_settings().get_first_come_first_serve()  ) {
-		fetch_goods_FIFO(load, warray, requested_amount, destination_halts);
-	} else {
+	if(  world()->get_settings().get_goods_routing_policy()==GRP_NF_RC  ) {
 		fetch_goods_nearest_first(load, warray, requested_amount, destination_halts);
+	}
+	else if(  world()->get_settings().get_goods_routing_policy()==GRP_FIFO_RC  ) {
+		fetch_goods_FIFO(load, warray, requested_amount, destination_halts);
+	}
+	else {
+		// goods_routing_policy is GRP_FIFO_ET
+		// TODO: implement for GRP_FIFO_ET
+		fetch_goods_FIFO(load, warray, requested_amount, destination_halts);
 	}
 }
 
@@ -2269,7 +2275,7 @@ bool haltestelle_t::vereinige_waren(const ware_t &ware)
 {
 	// merge cargos only when "load nearest first" policy is applied.
 	const settings_t &settings = world()->get_settings();
-	if(  settings.get_first_come_first_serve()  &&  
+	if(  settings.get_goods_routing_policy()!=GRP_NF_RC  &&  
   		get_ware_summe(ware.get_desc()) <= settings.get_waiting_limit_for_first_come_first_serve()  ) {
 		return false;
 	}
