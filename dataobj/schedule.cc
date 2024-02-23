@@ -298,6 +298,12 @@ void schedule_t::rdwr(loadsave_t *file)
 				entries[i].spacing = 1;
 				entries[i].spacing_shift = entries[i].delay_tolerance = 0;
 			}
+			if(file->get_OTRP_version()>=36) {
+				// read and write journey times
+				for(uint8 j=0; j<NUM_ARRIVAL_TIME_STORED; j++) {
+					file->rdwr_long(entries[i].journey_time[j]);
+				}
+			}
 		}
 	}
 	if(file->is_loading()) {
