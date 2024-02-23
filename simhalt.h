@@ -14,6 +14,7 @@
 #include "obj/simobj.h"
 #include "display/simgraph.h"
 #include "simtypes.h"
+#include "simware.h"
 
 #include "bauer/goods_manager.h"
 
@@ -53,7 +54,6 @@ class koord3d;
 class loadsave_t;
 class schedule_t;
 class player_t;
-class ware_t;
 template<class T> class bucket_heap_tpl;
 
 // -------------------------- Haltestelle ----------------------------
@@ -303,9 +303,21 @@ private:
 	 */
 	void fill_connected_component(uint8 catg, uint16 comp);
 
+	#define INVALID_CARGO_ARRIVED_TIME 0
+
+	// The goods info which is waiting at this stop
+	struct waiting_goods_t {
+		ware_t goods;
+
+		// The time when the cargo arrived at this stop.
+		// When this is INVALID_CARGO_ARRIVED_TIME, arrived_time is not available.
+		uint32 arrived_time;
+
+		waiting_goods_t(const ware_t &w, uint32 t) : goods(w), arrived_time(t) {}
+	};
 
 	// Array with different categories that contains all waiting goods at this stop
-	slist_tpl<ware_t> **cargo;
+	slist_tpl<waiting_goods_t> **cargo;
 
 	/**
 	 * Liste der angeschlossenen Fabriken
@@ -338,8 +350,8 @@ private:
 	 */
 	bool vereinige_waren(const ware_t &ware);
 
-	// add the ware to the internal storage, called only internally
-	void add_ware_to_halt(ware_t ware);
+	// add the goods to the internal storage, called only internally
+	void add_goods_to_halt(waiting_goods_t);
 
 	/**
 	 * liefert wartende ware an eine Fabrik
@@ -352,9 +364,9 @@ private:
 	void transfer_goods(halthandle_t halt);
 	
 	
-	void fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<ware_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
+	void fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<waiting_goods_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
 	
-	void fetch_goods_nearest_first( slist_tpl<ware_t> &load, slist_tpl<ware_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
+	void fetch_goods_nearest_first( slist_tpl<ware_t> &load, slist_tpl<waiting_goods_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
 
 	/**
 	* parameter to ease sorting
@@ -831,7 +843,7 @@ public:
 	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
 	
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
-	
+
 };
 
 ENUM_BITSET(haltestelle_t::stationtyp)
