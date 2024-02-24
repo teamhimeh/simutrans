@@ -36,6 +36,17 @@ class schedule_t;
 class cbuffer_t;
 class signal_t;
 
+// A struct to represent the directly reachable halts
+struct convoi_reachable_halt_t {
+	halthandle_t halt;
+
+	// The estimated time to reach the halt from the current stop
+	uint32 journey_time;
+
+	convoi_reachable_halt_t(halthandle_t h, uint32 t): halt(h), journey_time(t) {}
+	convoi_reachable_halt_t(): halt(halthandle_t()), journey_time(0) {}
+};
+
 /**
  * Base class for all vehicle consists. Convoys can be referenced by handles, see halthandle_t.
  */
@@ -457,6 +468,10 @@ private:
 	bool next_cross_lane;
 	// When this convoy requested lane crossing...
 	uint32 request_cross_ticks;
+
+	// returns the destination halts that are directly reachable from the current stop,
+	// considering the current state
+	vector_tpl<convoi_reachable_halt_t> calc_reachable_halts();
 
 public:
 	/**

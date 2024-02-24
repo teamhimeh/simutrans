@@ -19,6 +19,7 @@
 #include "../tpl/ptrhashtable_tpl.h"
 
 class convoi_t;
+struct convoi_reachable_halt_t;
 class schedule_t;
 class signal_t;
 class ware_t;
@@ -438,7 +439,7 @@ public:
 	 * Load freight from halt
 	 * @return amount loaded
 	 */
-	uint16 load_cargo(halthandle_t halt, const vector_tpl<halthandle_t>& destination_halts);
+	uint16 load_cargo(halthandle_t halt, const vector_tpl<convoi_reachable_halt_t> destinations);
 
 	/**
 	* Remove freight that no longer can reach it's destination

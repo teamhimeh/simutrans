@@ -3473,47 +3473,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		vehicles_loading += 1;
 	}
 
+	const grund_t *next_gr = welt->lookup( schedule->get_next_entry().pos );
 	// next stop in schedule will be a depot
-	bool next_depot = false;
-
-	// prepare a list of all destination halts in the schedule
-	vector_tpl<halthandle_t> destination_halts(schedule->get_count());
-	if (  !no_load  &&  !schedule->get_current_entry().is_no_load()  ) {
-		const uint8 count = schedule->get_count();
-		uint8 interval = 0;
-		for(  uint8 i=1;  i<count;  i++  ) {
-			const uint8 wrap_i = (i + schedule->get_current_stop()) % count;
-
-			const halthandle_t plan_halt = haltestelle_t::get_halt(schedule->entries[wrap_i].pos, owner);
-			if(plan_halt == halt) {
-				// we will come later here again ...
-				break;
-			}
-			else if(  !plan_halt.is_bound()  ||  schedule->entries[wrap_i].is_no_unload()  ) {
-				// not a halt or set no_unload. no_unload -> we cannot unload the cargo there.
-				if(  grund_t *gr = welt->lookup( schedule->entries[wrap_i].pos )  ) {
-					if(  gr->get_depot()  ) {
-
-						next_depot = i==1;
-						// do not load for stops after a depot
-						break;
-					}
-				}
-				continue;
-			}
-			destination_halts.append(plan_halt);
-			if(  schedule->entries[wrap_i].is_unload_all()  ) {
-				// passengers/cargos cannot keep boarding beyond this stop.
-				break;
-			}
-			else if( schedule->entries[wrap_i].is_transfer_interval() ){
-				if(interval == 1){
-					break;
-				}
-				++interval;
-			}
-		}
-	}
+	const bool next_depot = next_gr ? next_gr->get_depot()!=NULL : false;
 
 	// only load vehicles in station
 	// don't load when vehicle is being withdrawn
@@ -3531,6 +3493,8 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	else if(schedule->get_current_entry().waiting_time_shift > 0  &&  schedule->get_current_entry().is_load_before_departure() ){
 		loading_needed &= (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time >= welt->ticks_per_world_month / schedule->get_current_entry().waiting_time_shift);
 	}
+
+	const vector_tpl<convoi_reachable_halt_t> destinations = calc_reachable_halts();
 
 	for(unsigned i=0; i<vehicles_loading; i++) {
 		vehicle_t* v = fahr[i];
@@ -3550,7 +3514,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			// load if: unloaded something (might go back) or previous non-filled car requested different cargo type
 			if (amount>0  ||  cargo_type_prev==NULL  ||  !cargo_type_prev->is_interchangeable(v->get_cargo_type())) {
 				// load
-				amount += v->load_cargo(halt, destination_halts);
+				amount += v->load_cargo(halt, destinations);
 			}
 			if (v->get_total_cargo() < v->get_cargo_max()) {
 				// not full
@@ -4953,6 +4917,7 @@ void convoi_t::register_journey_time() {
 		time_last_arrived = world()->get_ticks();
 		return;
 	}
+	// TODO: consider overflow of ticks
 	const uint32 journey_time = world()->get_ticks() - time_last_arrived;
 	convoihandle_t c = self;
 	while(  c.is_bound()  ) {
@@ -5002,4 +4967,80 @@ void convoi_t::calc_sum_friction_weight() {
 		c->reset_recalc_friction_weight();
 		c = c->get_coupling_convoi();
 	}
+}
+
+
+uint32 get_median_journey_time(schedule_entry_t schedule_entry) {
+	uint8 valid_record_count = 0;
+	uint32 valid_records[NUM_ARRIVAL_TIME_STORED];
+	for(  uint8 i=0;  i<NUM_ARRIVAL_TIME_STORED;  i++  ) {
+		if(  schedule_entry.journey_time[i] > 0  ) {
+			valid_records[i] = schedule_entry.journey_time[i];
+			valid_record_count++;
+		}
+	}
+	if(  valid_record_count==0  ) {
+		// no valid records
+		return 0;
+	}
+	// get the median value by a simple bubble sort
+	for(  uint8 i=0;  i<valid_record_count-1;  i++  ) {
+		for(  uint8 j=i+1;  j<valid_record_count;  j++  ) {
+			if(  valid_records[i] > valid_records[j]  ) {
+				uint32 temp = valid_records[i];
+				valid_records[i] = valid_records[j];
+				valid_records[j] = temp;
+			}
+		}
+	}
+	return valid_records[valid_record_count/2];
+}
+
+
+vector_tpl<convoi_reachable_halt_t> convoi_t::calc_reachable_halts() {
+	vector_tpl<convoi_reachable_halt_t> reachable_halts;
+	if (  no_load  ||  schedule->get_current_entry().is_no_load()  ) {
+		// Nothing is allowed to load here.
+		return reachable_halts;
+	}
+
+	const halthandle_t current_halt = haltestelle_t::get_halt(schedule->get_current_entry().pos, owner);
+	const uint8 count = schedule->get_count();
+	uint32 journey_time = 0; // The estimated journey time from the current stop
+	uint8 interval = 0;
+	for(  uint8 i=1;  i<count;  i++  ) {
+		const uint8 wrap_i = (i + schedule->get_current_stop()) % count;
+
+		const halthandle_t plan_halt = haltestelle_t::get_halt(schedule->entries[wrap_i].pos, owner);
+		if(plan_halt == current_halt) {
+			// we will come later here again ...
+			break;
+		}
+		else if(  !plan_halt.is_bound()  ||  schedule->entries[wrap_i].is_no_unload()  ) {
+			// not a halt or set no_unload. no_unload -> we cannot unload the cargo there.
+			if(  grund_t *gr = welt->lookup( schedule->entries[wrap_i].pos )  ) {
+				if(  gr->get_depot()  ) {
+					// do not load for stops after a depot
+					break;
+				}
+			}
+			continue;
+		}
+		// Use the median of the journey time history to stabilize the estimated value
+		// when something irregular happens on a single convoy.
+		journey_time += get_median_journey_time(schedule->entries[wrap_i]);
+		reachable_halts.append(convoi_reachable_halt_t(plan_halt, journey_time));
+		if(  schedule->entries[wrap_i].is_unload_all()  ) {
+			// passengers/cargos cannot keep boarding beyond this stop.
+			break;
+		}
+		else if( schedule->entries[wrap_i].is_transfer_interval() ){
+			if(interval == 1){
+				break;
+			}
+			++interval;
+		}
+	}
+
+	return reachable_halts;
 }

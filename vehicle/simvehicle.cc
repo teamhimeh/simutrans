@@ -805,7 +805,7 @@ uint16 vehicle_t::unload_cargo(halthandle_t halt, bool unload_all )
  * Load freight from halt
  * @return amount loaded
  */
-uint16 vehicle_t::load_cargo(halthandle_t halt, const vector_tpl<halthandle_t>& destination_halts)
+uint16 vehicle_t::load_cargo(halthandle_t halt, const vector_tpl<convoi_reachable_halt_t> destinations)
 {
 	if(  !halt.is_bound()  ||  !halt->gibt_ab(desc->get_freight_type())  ) {
 		return 0;
@@ -816,7 +816,7 @@ uint16 vehicle_t::load_cargo(halthandle_t halt, const vector_tpl<halthandle_t>& 
 	if (capacity_left > 0) {
 
 		slist_tpl<ware_t> freight_add;
-		halt->fetch_goods( freight_add, desc->get_freight_type(), capacity_left, destination_halts);
+		halt->fetch_goods( freight_add, desc->get_freight_type(), capacity_left, destinations);
 
 		if(  freight_add.empty()  ) {
 			// now empty, but usually, we can get it here ...

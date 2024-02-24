@@ -2211,12 +2211,19 @@ void haltestelle_t::fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<waiting
 }
 
 
-void haltestelle_t::fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts)
+void haltestelle_t::fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<convoi_reachable_halt_t> destinations)
 {
 	slist_tpl<waiting_goods_t> *warray = cargo[good_category->get_catg_index()];
 	if(  !warray  ||  warray->empty()  ) {
 		return;
 	}
+
+	// generate destination_halts from destinations
+	vector_tpl<halthandle_t> destination_halts;
+	FOR(const vector_tpl<convoi_reachable_halt_t>, const& d, destinations) {
+		destination_halts.append( d.halt );
+	}
+
 	if(  world()->get_settings().get_goods_routing_policy()==GRP_NF_RC  ) {
 		fetch_goods_nearest_first(load, warray, requested_amount, destination_halts);
 	}

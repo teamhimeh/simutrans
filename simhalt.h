@@ -46,6 +46,7 @@
 #define DST_SIZE 101 // size of departure_slot_table
 
 class cbuffer_t;
+struct convoi_reachable_halt_t;
 class grund_t;
 class fabrik_t;
 class karte_t;
@@ -675,7 +676,7 @@ public:
 	 * @param good_category Specifies the kind of good (or compatible goods) we are requesting to fetch from this stop.
 	 * @param requested_amount How many units of the cargo we can fetch.
 	 */
-	void fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
+	void fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<convoi_reachable_halt_t> destinations);
 
 	/**
 	 * Delivers goods (ware_t) to this halt.
