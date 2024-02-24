@@ -17,7 +17,6 @@ struct schedule_entry_t
 {
 public:
 	schedule_entry_t() {
-		// journey time is not loaded or saved.
 		init_journey_time();
 		at_index = 0;
 	}
@@ -66,9 +65,8 @@ public:
 	uint16 spacing, spacing_shift, delay_tolerance;
 	
 	/*
-	 * store last 3 journey time of this stop.
+	 * store last 5 journey time of this stop.
 	 * time = 0 means that journey time is not registered.
-	 * journey times are not saved to reduce save/load time.
 	 */
 	uint32 journey_time[NUM_ARRIVAL_TIME_STORED];
 	uint8 at_index; // which index of journey_time should be overwritten next.
