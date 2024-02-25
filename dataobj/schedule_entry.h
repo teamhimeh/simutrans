@@ -7,6 +7,7 @@
 #define DATAOBJ_SCHEDULE_ENTRY_H
 
 #define NUM_ARRIVAL_TIME_STORED 5
+#define NUM_WAITING_TIME_STORED 5
 
 #include "koord3d.h"
 
@@ -18,7 +19,7 @@ struct schedule_entry_t
 public:
 	schedule_entry_t() {
 		init_journey_time();
-		at_index = 0;
+		init_waiting_time();
 	}
 
 	schedule_entry_t(koord3d const& pos, uint const minimum_loading, uint16 const waiting_time_shift, uint8 const stop_flags) :
@@ -30,7 +31,7 @@ public:
 		spacing = 1;
 		spacing_shift = delay_tolerance = 0;
 		init_journey_time();
-		at_index = 0;
+		init_waiting_time();
 	}
 
 	enum {
@@ -69,14 +70,29 @@ public:
 	 * time = 0 means that journey time is not registered.
 	 */
 	uint32 journey_time[NUM_ARRIVAL_TIME_STORED];
-	uint8 at_index; // which index of journey_time should be overwritten next.
+	uint8 jt_at_index; // which index of journey_time should be overwritten next.
+
+	/*
+	 * store last 5 average waiting times of goods to be loaded at this stop.
+	 * time = 0 means that waiting time is not registered.
+	 */
+	uint32 waiting_time[NUM_WAITING_TIME_STORED];
+	uint8 wt_at_index; // which index of waiting_time should be overwritten next.
 	
 private:
 	uint8 stop_flags;
 	
 	void init_journey_time() {
-		for(uint8 i=0; i<NUM_ARRIVAL_TIME_STORED; i++) {
+		jt_at_index = 0;
+		for(uint8 i = 0; i < NUM_ARRIVAL_TIME_STORED; i++) {
 			journey_time[i] = 0;
+		}
+	}
+
+	void init_waiting_time() {
+		wt_at_index = 0;
+		for(uint8 i = 0; i < NUM_WAITING_TIME_STORED; i++) {
+			waiting_time[i] = 0;
 		}
 	}
 	
@@ -107,8 +123,13 @@ public:
 	}
 	
 	void push_journey_time(uint32 t) {
-		journey_time[at_index] = t;
-		at_index = (at_index+1)%NUM_ARRIVAL_TIME_STORED;
+		journey_time[jt_at_index] = t;
+		jt_at_index = (jt_at_index+1)%NUM_ARRIVAL_TIME_STORED;
+	}
+
+	void push_waiting_time(uint32 t) {
+		waiting_time[wt_at_index] = t;
+		wt_at_index = (wt_at_index+1)%NUM_WAITING_TIME_STORED;
 	}
 	
 	bool operator ==(const schedule_entry_t &a) {

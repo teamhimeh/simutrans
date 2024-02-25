@@ -300,8 +300,14 @@ void schedule_t::rdwr(loadsave_t *file)
 			}
 			if(file->get_OTRP_version()>=36) {
 				// read and write journey times
+				file->rdwr_byte(entries[i].jt_at_index);
 				for(uint8 j=0; j<NUM_ARRIVAL_TIME_STORED; j++) {
 					file->rdwr_long(entries[i].journey_time[j]);
+				}
+				// read and write waiting times
+				file->rdwr_byte(entries[i].wt_at_index);
+				for(uint8 j=0; j<NUM_WAITING_TIME_STORED; j++) {
+					file->rdwr_long(entries[i].waiting_time[j]);
 				}
 			}
 		}

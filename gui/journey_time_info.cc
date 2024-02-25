@@ -226,7 +226,7 @@ void gui_journey_time_info_t::update() {
   for(uint8 i=0; i<schedule->entries.get_count(); i++) {
     uint32 sum = 0;
     uint8 cnt = 0;
-    const uint8 kc = (schedule->entries[i].at_index + NUM_ARRIVAL_TIME_STORED - 1) % NUM_ARRIVAL_TIME_STORED;
+    const uint8 kc = (schedule->entries[i].jt_at_index + NUM_ARRIVAL_TIME_STORED - 1) % NUM_ARRIVAL_TIME_STORED;
     for(uint8 k=0; k<NUM_ARRIVAL_TIME_STORED; k++) {
       uint32* ca = schedule->entries[i].journey_time;
       uint8 ica = (kc + NUM_ARRIVAL_TIME_STORED - k) % NUM_ARRIVAL_TIME_STORED;
