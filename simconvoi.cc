@@ -3508,13 +3508,18 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			v->last_stop_pos = v->get_pos();
 		}
 
+		// The total amount of goods which are loaded and unloaded
 		uint16 amount = v->unload_cargo(halt, next_depot  );
 
-		if(  loading_needed  &&  v->get_total_cargo() < v->get_cargo_max()  ) {
+		const uint16 capacity_left = v->get_cargo_max() - v->get_total_cargo();
+
+		if(  loading_needed  &&  capacity_left > 0  &&  halt->gibt_ab(v->get_cargo_type())  ) {
 			// load if: unloaded something (might go back) or previous non-filled car requested different cargo type
 			if (amount>0  ||  cargo_type_prev==NULL  ||  !cargo_type_prev->is_interchangeable(v->get_cargo_type())) {
 				// load
-				amount += v->load_cargo(halt, destinations);
+				slist_tpl<ware_t> fetched_goods;
+				halt->fetch_goods(fetched_goods, v->get_cargo_type(), capacity_left, destinations);
+				amount += v->load_cargo(fetched_goods);
 			}
 			if (v->get_total_cargo() < v->get_cargo_max()) {
 				// not full

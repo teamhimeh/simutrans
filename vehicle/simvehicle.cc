@@ -802,57 +802,46 @@ uint16 vehicle_t::unload_cargo(halthandle_t halt, bool unload_all )
 
 
 /**
- * Load freight from halt
+ * Load the given goods
  * @return amount loaded
  */
-uint16 vehicle_t::load_cargo(halthandle_t halt, const vector_tpl<convoi_reachable_halt_t> destinations)
+uint16 vehicle_t::load_cargo(slist_tpl<ware_t>& freight_add)
 {
-	if(  !halt.is_bound()  ||  !halt->gibt_ab(desc->get_freight_type())  ) {
+	if(  freight_add.empty()  ) {
+		// now empty, but usually, we can get it here ...
 		return 0;
 	}
 
 	const uint16 total_freight_start = total_freight;
-	const uint16 capacity_left = desc->get_capacity() - total_freight;
-	if (capacity_left > 0) {
+	for(  slist_tpl<ware_t>::iterator iter_z = freight_add.begin();  iter_z != freight_add.end();  ) {
+		ware_t &ware = *iter_z;
 
-		slist_tpl<ware_t> freight_add;
-		halt->fetch_goods( freight_add, desc->get_freight_type(), capacity_left, destinations);
+		total_freight += ware.menge;
+		sum_weight += ware.menge * ware.get_desc()->get_weight_per_unit();
 
-		if(  freight_add.empty()  ) {
-			// now empty, but usually, we can get it here ...
-			return 0;
-		}
-
-		for(  slist_tpl<ware_t>::iterator iter_z = freight_add.begin();  iter_z != freight_add.end();  ) {
-			ware_t &ware = *iter_z;
-
-			total_freight += ware.menge;
-			sum_weight += ware.menge * ware.get_desc()->get_weight_per_unit();
-
-			// could this be joined with existing freight?
-			FOR( slist_tpl<ware_t>, & tmp, fracht ) {
-				// for pax: join according next stop
-				// for all others we *must* use target coordinates
-				if(  ware.same_destination(tmp)  ) {
-					tmp.menge += ware.menge;
-					ware.menge = 0;
-					break;
-				}
-			}
-
-			// if != 0 we could not join it to existing => load it
-			if(  ware.menge != 0  ) {
-				++iter_z;
-				// we add list directly
-			}
-			else {
-				iter_z = freight_add.erase(iter_z);
+		// could this be joined with existing freight?
+		FOR( slist_tpl<ware_t>, & tmp, fracht ) {
+			// for pax: join according next stop
+			// for all others we *must* use target coordinates
+			if(  ware.same_destination(tmp)  ) {
+				tmp.menge += ware.menge;
+				ware.menge = 0;
+				break;
 			}
 		}
 
-		if(  !freight_add.empty()  ) {
-			fracht.append_list(freight_add);
+		// if != 0 we could not join it to existing => load it
+		if(  ware.menge != 0  ) {
+			++iter_z;
+			// we add list directly
 		}
+		else {
+			iter_z = freight_add.erase(iter_z);
+		}
+	}
+
+	if(  !freight_add.empty()  ) {
+		fracht.append_list(freight_add);
 	}
 	return total_freight - total_freight_start;
 }
