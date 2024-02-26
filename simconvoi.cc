@@ -59,7 +59,6 @@
 #include "utils/simstring.h"
 #include "utils/cbuffer_t.h"
 
-
 /*
  * Waiting time for loading (ms)
  */
@@ -3320,6 +3319,25 @@ bool is_first_ticks_bigger(uint32 v1, uint32 v2) {
 }
 
 
+// a helper function to calculate v1 - v2 considering ticks overflow
+sint32 subtract_ticks(uint32 v1, uint32 v2) {
+	const sint64 v1e = (sint64)v1;
+	const sint64 v2e = (sint64)v2;
+	if(  v2e-v1e>(1<<31)  ) {
+		// assume v1 is over flow
+		return (sint32)(v1e+(1<<32)-v2e);
+	}
+	else if(  v1e-v2e>(1<<31)  ) {
+		// assume v2 is over flow
+		return (sint32)(v1e-v2e-(1<<32));
+	}
+	else {
+		// normal case
+		return (sint32)(v1e-v2e);
+	}
+}
+
+
 /*
  * a helper function of convoi_t::hat_gehalten()
  * This judges whether the convoy satisfies all departure conditions.
@@ -3517,9 +3535,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			// load if: unloaded something (might go back) or previous non-filled car requested different cargo type
 			if (amount>0  ||  cargo_type_prev==NULL  ||  !cargo_type_prev->is_interchangeable(v->get_cargo_type())) {
 				// load
-				slist_tpl<ware_t> fetched_goods;
-				halt->fetch_goods(fetched_goods, v->get_cargo_type(), capacity_left, destinations);
-				amount += v->load_cargo(fetched_goods);
+				amount += fetch_goods_and_load(v, halt, destinations, capacity_left);
 			}
 			if (v->get_total_cargo() < v->get_cargo_max()) {
 				// not full
@@ -3646,6 +3662,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 		// Advance schedule
 		if(  !is_coupled()  ) {
+			push_goods_waiting_time_if_needed();
 			schedule->advance();
 			state = ROUTING_1;
 			loading_limit = 0;
@@ -3654,6 +3671,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			// Advance schedule of coupling convoy recursively.
 			convoihandle_t c_cnv = coupling_convoi;
 			while(  c_cnv.is_bound()  ) {
+				c_cnv->push_goods_waiting_time_if_needed();
 				c_cnv->get_schedule()->advance();
 				c_cnv->set_state(COUPLED);
 				c_cnv->set_coupling_done(false);
@@ -3674,6 +3692,54 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 	}
 	wait_lock = time;
+}
+
+
+uint16 convoi_t::fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<convoi_reachable_halt_t> reachable_halts, uint32 requested_amount) {
+	slist_tpl<ware_t> fetched_goods;
+	slist_tpl<halt_waiting_goods_t> fetched_waiting_goods;
+	const goods_routing_policy_t goods_routing_policy = welt->get_settings().get_goods_routing_policy();
+	switch (goods_routing_policy) {
+		case GRP_FIFO_ET:
+			halt->fetch_goods_if_fastest(fetched_waiting_goods, vehicle->get_cargo_type(), requested_amount, reachable_halts);
+			FOR(slist_tpl<halt_waiting_goods_t>, const& g, fetched_waiting_goods) {
+				fetched_goods.append(g.goods);
+				loaded_goods.append(g);
+			}
+			break;
+		// TODO: directly call fetch_goods_nearest_first
+		case GRP_NF_RC:
+		case GRP_FIFO_RC:
+			halt->fetch_goods(fetched_goods, vehicle->get_cargo_type(), requested_amount, reachable_halts);
+			break;
+		default:
+			dbg->error("convoi_t::fetch_goods_and_load", "Unknown goods routing policy %d", goods_routing_policy);
+			return 0;
+	}
+	return vehicle->load_cargo(fetched_goods);;
+}
+
+
+void convoi_t::push_goods_waiting_time_if_needed() {
+	if(  welt->get_settings().get_goods_routing_policy()!=GRP_FIFO_ET  ||  loaded_goods.empty() ) {
+		// No need to calculate and push the goods waiting time.
+		return;
+	}
+	
+	const uint32 current_ticks = welt->get_ticks();
+	uint64 weighed_sum_waiting_time = 0;
+	uint64 total_goods_amount = 0;
+	FOR(vector_tpl<halt_waiting_goods_t>, const& g, loaded_goods) {
+		const sint32 waiting_time = subtract_ticks(current_ticks, g.arrived_time);
+		if(  g.arrived_time==INVALID_CARGO_ARRIVED_TIME  ||  waiting_time<=0  ) {
+			continue;
+		}
+		weighed_sum_waiting_time += g.goods.menge * (uint32)waiting_time;
+		total_goods_amount += g.goods.menge;
+	}
+
+	uint32 average_waiting_time = weighed_sum_waiting_time / total_goods_amount;
+	schedule->entries[schedule->get_current_stop()].push_waiting_time(average_waiting_time);
 }
 
 
@@ -4922,8 +4988,7 @@ void convoi_t::register_journey_time() {
 		time_last_arrived = world()->get_ticks();
 		return;
 	}
-	// TODO: consider overflow of ticks
-	const uint32 journey_time = world()->get_ticks() - time_last_arrived;
+	const uint32 journey_time = subtract_ticks( world()->get_ticks(), time_last_arrived );
 	convoihandle_t c = self;
 	while(  c.is_bound()  ) {
 		if(  c->get_line().is_bound()  ) {
