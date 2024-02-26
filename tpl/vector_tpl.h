@@ -6,7 +6,7 @@
 #ifndef TPL_VECTOR_TPL_H
 #define TPL_VECTOR_TPL_H
 
-
+#include <functional>
 #include <typeinfo>
 
 #include "../macros.h"
@@ -73,6 +73,19 @@ public:
 	{
 		for (uint32 i = 0; i < count; i++) {
 			if (data[i] == elem) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Checks if a element that satisfies the given condition is contained in the vector.
+	*/
+	bool is_contained(std::function<bool(T&)> cond) const
+	{
+		for (uint32 i = 0; i < count; i++) {
+			if (cond(data[i])) {
 				return true;
 			}
 		}
