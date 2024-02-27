@@ -121,16 +121,12 @@ public:
 		spacing_shift = b;
 		delay_tolerance = c;
 	}
-	
-	void push_journey_time(uint32 t) {
-		journey_time[jt_at_index] = t;
-		jt_at_index = (jt_at_index+1)%NUM_ARRIVAL_TIME_STORED;
-	}
 
-	void push_waiting_time(uint32 t) {
-		waiting_time[wt_at_index] = t;
-		wt_at_index = (wt_at_index+1)%NUM_WAITING_TIME_STORED;
-	}
+	void push_journey_time(uint32 time);
+	void push_waiting_time(uint32 time);
+	
+	uint32 get_median_journey_time() const;
+	uint32 get_average_waiting_time() const;
 	
 	bool operator ==(const schedule_entry_t &a) {
 		return a.pos == this->pos

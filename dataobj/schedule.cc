@@ -743,3 +743,20 @@ sint64 schedule_t::issue_new_departure_slot_group_id() {
 	const sint64 num_2 = ++departure_slot_group_id_random;
 	return ((num_2 & 0x7FFFFFFF) << 32) | num_1;
 }
+
+
+uint32 schedule_t::get_median_journey_time(uint8 index, uint32 max_speed_kmh) const {
+	const uint32 entry_journey_time = entries[index].get_median_journey_time();
+	if(  entry_journey_time>0  ) {
+		return entry_journey_time;
+	}
+	// No journey time record is available. Calculate Euclid distance / max_speed.
+	const koord3d pos = entries[index].pos;
+	const koord3d prev_pos = entries[(index+entries.get_count()-1)%entries.get_count()].pos;
+
+	/* calculate the time needed:
+	 *   tiles << (8+12) / (kmh_to_speed(max_kmh) = ticks
+	 * (derived from gui_departure_board_t::calc_ticks_until_arrival())
+	 */
+	return (koord_distance(pos, prev_pos) << 20) / kmh_to_speed(max_speed_kmh);
+}

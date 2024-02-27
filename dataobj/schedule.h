@@ -230,6 +230,10 @@ public:
 	static void get_schedule_flag_text(cbuffer_t& buf, schedule_t* schedule);
 
 	static sint64 issue_new_departure_slot_group_id();
+
+	// Returns the median journey time ticks between the given index halt and the previous halt (or waypoint).
+	// Returns Euclid distance / max_speed if no journey time record is available.
+	uint32 get_median_journey_time(uint8 index, uint32 max_speed_kmh) const;
 };
 
 
