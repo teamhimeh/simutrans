@@ -244,12 +244,12 @@ public:
 		/// directly reachable halt
 		halthandle_t halt;
 		/// best connection weight to reach this destination
-		uint16 weight:15;
+		uint32 weight:31;
 		/// is halt a transfer halt
 		bool is_transfer:1;
 
 		connection_t() : weight(0), is_transfer(false) { }
-		connection_t(halthandle_t _halt, uint16 _weight=0) : halt(_halt), weight(_weight), is_transfer(false) { }
+		connection_t(halthandle_t _halt, uint32 _weight=0) : halt(_halt), weight(_weight), is_transfer(false) { }
 
 		bool operator == (const connection_t &other) const { return halt == other.halt; }
 		bool operator != (const connection_t &other) const { return halt != other.halt; }
@@ -482,13 +482,13 @@ private:
 	struct route_node_t
 	{
 		halthandle_t halt;
-		uint16       aggregate_weight;
+		uint32       aggregate_weight;
 
 		route_node_t() : aggregate_weight(0) {}
-		route_node_t(halthandle_t h, uint16 w) : halt(h), aggregate_weight(w) {}
+		route_node_t(halthandle_t h, uint32 w) : halt(h), aggregate_weight(w) {}
 
 		// dereferencing to be used in binary_heap_tpl
-		inline uint16 operator * () const { return aggregate_weight; }
+		inline uint32 operator * () const { return aggregate_weight; }
 	};
 
 	// open_list needs access to route_node_t
@@ -501,7 +501,7 @@ private:
 		// in static function search_route():  previous transfer halt (to track back route)
 		// in member function search_route_resumable(): first transfer halt to get there
 		halthandle_t transfer;
-		uint16 best_weight;
+		uint32 best_weight;
 		uint16 depth:14;
 		bool destination:1;
 		bool overcrowded:1;

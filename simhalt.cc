@@ -74,6 +74,9 @@ uint8 haltestelle_t::reconnect_counter = 0;
 static vector_tpl<convoihandle_t>stale_convois;
 static vector_tpl<linehandle_t>stale_lines;
 
+#ifndef UINT32_MAX
+#define UINT32_MAX 4294967295u // (1<<32)-1
+#endif
 
 void haltestelle_t::reset_routing()
 {
@@ -1249,7 +1252,7 @@ sint32 haltestelle_t::rebuild_connections()
 		minivec_tpl<halthandle_t> no_unload_halts;
 
 		// now we add the schedule to the connection array
-		uint16 aggregate_weight = WEIGHT_WAIT;
+		uint32 aggregate_weight = WEIGHT_WAIT;
 		const schedule_entry_t start_entry = schedule->entries[start_index-1];
 		bool no_load_section = start_entry.is_no_load();
 		force_transfer_search |= (start_entry.is_unload_all()  ||  start_entry.is_no_load()  ||  start_entry.is_no_unload());
@@ -1593,7 +1596,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 	// initialisations for end halts => save some checking inside search loop
 	FOR(vector_tpl<halthandle_t>, const e, end_halts) {
 		uint16 const halt_id = e.get_id();
-		halt_data[ halt_id ].best_weight = 65535u;
+		halt_data[ halt_id ].best_weight = UINT32_MAX;
 		halt_data[ halt_id ].destination = 1u;
 		halt_data[ halt_id ].depth       = 1u; // to distinct them from start halts
 		markers[ halt_id ] = current_marker;
@@ -1602,7 +1605,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 	uint16 const max_transfers = welt->get_settings().get_max_transfers();
 	uint16 const max_hops      = welt->get_settings().get_max_hops();
 	uint16 allocation_pointer = 0;
-	uint16 best_destination_weight = 65535u; // best weight among all destinations
+	uint32 best_destination_weight = UINT32_MAX; // best weight among all destinations
 
 	open_list.clear();
 
@@ -1620,7 +1623,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 		open_list.insert( route_node_t(start_halt, 0) );
 
 		halt_data_t & start_data = halt_data[ start_halt.get_id() ];
-		start_data.best_weight = 65535u;
+		start_data.best_weight = UINT32_MAX;
 		start_data.destination = 0;
 		start_data.depth       = 0;
 		start_data.overcrowded = false; // start halt overcrowding is handled by routines calling this one
@@ -1711,7 +1714,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 				if(  current_conn.halt.is_bound()  &&  current_conn.is_transfer  &&  allocation_pointer<max_hops  ) {
 					// Case : transfer halt
-					const uint16 total_weight = current_halt_data.best_weight + current_conn.weight;
+					const uint32 total_weight = current_halt_data.best_weight + current_conn.weight;
 
 					if(  total_weight < best_destination_weight  ) {
 						const bool overcrowded_transfer = no_routing_over_overcrowding  &&  ( current_halt_data.overcrowded  ||  current_conn.halt->is_overcrowded( ware_idx ) );
@@ -1743,7 +1746,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 				//        --> can only be destination halt or transfer halt
 				//        or start halt (filter the latter out with the condition depth>0)
 
-				uint16 total_weight = current_halt_data.best_weight + current_conn.weight;
+				uint32 total_weight = current_halt_data.best_weight + current_conn.weight;
 
 				if(  total_weight<halt_data[ reachable_halt_id ].best_weight  &&  total_weight<best_destination_weight  &&  allocation_pointer<max_hops  ) {
 					// new weight is lower than lowest weight --> create new node and update halt data
@@ -1808,7 +1811,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 	static vector_tpl<uint16> dest_indices(16);
 	dest_indices.clear();
 
-	uint16 best_destination_weight = 65535u;
+	uint32 best_destination_weight = UINT32_MAX;
 
 	// reset next transfer and destination halt to null -> if they remain null after search, no route can be found
 	ware.set_ziel( halthandle_t() );
@@ -1837,9 +1840,9 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 			}
 		}
 		// for all halts with halt_data.weight < explored_weight one of the best routes is found
-		const uint16 explored_weight = open_list.empty()  ? 65535u : open_list.front().aggregate_weight;
+		const uint32 explored_weight = open_list.empty()  ? UINT32_MAX : open_list.front().aggregate_weight;
 
-		if (best_destination_weight <= explored_weight  &&  best_destination_weight < 65535u) {
+		if (best_destination_weight <= explored_weight  &&  best_destination_weight < UINT32_MAX) {
 			// we explored best route to this destination in last run
 			// (any other not yet explored connection will have larger weight)
 			// no need to search route for this ware
@@ -1864,7 +1867,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 			if(  markers[ halt.get_id() ]!=current_marker  ) {
 				// first time -> initialise marker and all halt data
 				markers[ halt.get_id() ] = current_marker;
-				halt_data[ halt.get_id() ].best_weight = 65535u;
+				halt_data[ halt.get_id() ].best_weight = UINT32_MAX;
 				halt_data[ halt.get_id() ].destination = true;
 			}
 			else {
@@ -1908,7 +1911,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		route_node_t current_node = open_list.pop();
 
 		const uint16 current_halt_id = current_node.halt.get_id();
-		const uint16 current_weight = current_node.aggregate_weight;
+		const uint32 current_weight = current_node.aggregate_weight;
 		halt_data_t & current_halt_data = halt_data[ current_halt_id ];
 
 		// check if the current halt is already in closed list (or removed)
@@ -1950,7 +1953,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		FOR(vector_tpl<connection_t>, const& current_conn, current_node.halt->all_links[ware_catg_idx].connections) {
 			const uint16 reachable_halt_id = current_conn.halt.get_id();
 
-			const uint16 total_weight = current_weight + current_conn.weight;
+			const uint32 total_weight = current_weight + current_conn.weight;
 
 			if(  !current_conn.halt.is_bound()  ) {
 				// Case: halt removed -> make sure we never visit it again
@@ -1998,7 +2001,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 	// clear destinations since we may want to do another search with the same current_marker
 	FOR(vector_tpl<uint16>, const i, dest_indices) {
 		halt_data[i].destination = false;
-		if (halt_data[i].best_weight == 65535u) {
+		if (halt_data[i].best_weight == UINT32_MAX) {
 			// not processed -> reset marker
 			--markers[i];
 		}
