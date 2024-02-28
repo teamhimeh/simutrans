@@ -1149,15 +1149,19 @@ void haltestelle_t::remove_fabriken(fabrik_t *fab)
 #define WEIGHT_MIN (WEIGHT_WAIT+WEIGHT_HALT)
 sint32 haltestelle_t::rebuild_connections()
 {
+	// These variables are for calculating is_transfer.
 	// halts which either immediately precede or succeed self halt in serving schedules
-	static vector_tpl<halthandle_t> consecutive_halts[256];
+	vector_tpl<halthandle_t> consecutive_halts[256];
 	// halts which either immediately precede or succeed self halt in currently processed schedule
-	static vector_tpl<halthandle_t> consecutive_halts_schedule[256];
+	vector_tpl<halthandle_t> consecutive_halts_schedule[256];
 	// remember max number of consecutive halts for one schedule
 	uint8 max_consecutive_halts_schedule[256];
 	MEMZERON(max_consecutive_halts_schedule, goods_manager_t::get_max_catg_index());
 	// previous halt supporting the ware categories of the serving line
-	static halthandle_t previous_halt[256];
+	halthandle_t previous_halt[256];
+
+	// true if the estimated time based goods routing is enabled. false if we use route cost calculation.
+	const bool is_tbgr_enabled = welt->get_settings().get_goods_routing_policy() == goods_routing_policy_t::GRP_FIFO_ET;
 
 	// first, remove all old entries
 	for(  uint8 i=0;  i<goods_manager_t::get_max_catg_index();  i++  ){
@@ -1174,6 +1178,7 @@ sint32 haltestelle_t::rebuild_connections()
 	const player_t *owner;
 	schedule_t *schedule;
 	const minivec_tpl<uint8> *goods_catg_index;
+	sint32 speedbonus_kmh;
 
 	minivec_tpl<uint8> supported_catg_index(32);
 
@@ -1205,6 +1210,7 @@ sint32 haltestelle_t::rebuild_connections()
 			owner = line->get_owner();
 			schedule = line->get_schedule();
 			goods_catg_index = &line->get_goods_catg_index();
+			speedbonus_kmh = max(line->get_finance_history(0, LINE_MAXSPEED), 10); // To avoid zero division
 		}
 		else {
 			const convoihandle_t cnv = registered_convoys[current_index];
@@ -1213,6 +1219,7 @@ sint32 haltestelle_t::rebuild_connections()
 			owner = cnv->get_owner();
 			schedule = cnv->get_schedule();
 			goods_catg_index = &cnv->get_goods_catg_index();
+			speedbonus_kmh = max(cnv->get_speedbonus_kmh(), 10); // To avoid zero division
 		}
 
 		if(  schedule->is_temporary()  ) {
@@ -1252,17 +1259,31 @@ sint32 haltestelle_t::rebuild_connections()
 		minivec_tpl<halthandle_t> no_unload_halts;
 
 		// now we add the schedule to the connection array
-		uint32 aggregate_weight = WEIGHT_WAIT;
 		const schedule_entry_t start_entry = schedule->entries[start_index-1];
+
+		// aggregate_weight: When TBGR is enabled, (average goods waiting time) + (median journey time)
+		// When TBGR is disabled, it is route cost. e.g. WEIGHT_HALT + WEIGHT_WAIT * (stops count)
+		uint32 aggregate_weight;
+		if(  is_tbgr_enabled  ) {
+			aggregate_weight = start_entry.get_average_waiting_time();
+		}
+		else {
+			aggregate_weight = WEIGHT_WAIT;
+		}
+
 		bool no_load_section = start_entry.is_no_load();
 		force_transfer_search |= (start_entry.is_unload_all()  ||  start_entry.is_no_load()  ||  start_entry.is_no_unload());
 		uint8 interval = 0;
 		for(  uint8 j=0;  j<schedule->get_count();  ++j  ) {
-
-			const schedule_entry_t current_entry = schedule->entries[(start_index+j)%schedule->get_count()];
+			const uint8 current_entry_index = (start_index+j)%schedule->get_count();
+			const schedule_entry_t current_entry = schedule->entries[current_entry_index];
 			halthandle_t current_halt = get_halt(current_entry.pos, owner );
 			if(  !current_halt.is_bound()  ) {
-				// ignore way points
+				// ignore way points.
+				// just count the journey time
+				if(  is_tbgr_enabled  ) {
+					aggregate_weight += schedule->get_median_journey_time(current_entry_index, speedbonus_kmh);
+				}
 				continue;
 			}
 			if(  current_halt == self  ) {
@@ -1275,7 +1296,7 @@ sint32 haltestelle_t::rebuild_connections()
 					}
 				}
 				// reset aggregate weight and no_load_section
-				aggregate_weight = WEIGHT_WAIT;
+				aggregate_weight = is_tbgr_enabled ? current_entry.get_average_waiting_time() : WEIGHT_WAIT;
 			 	force_transfer_search |= (current_entry.is_unload_all()  ||  current_entry.is_no_load()  ||  current_entry.is_no_unload());
 				no_load_section = current_entry.is_no_load();
 				no_unload_halts.clear();
@@ -1291,7 +1312,12 @@ sint32 haltestelle_t::rebuild_connections()
 				continue;
 			}
 
-			aggregate_weight += WEIGHT_HALT;
+			// Add weight
+			if(  is_tbgr_enabled  ) {
+				aggregate_weight += schedule->get_median_journey_time(current_entry_index, (uint32)speedbonus_kmh);
+			} else {
+				aggregate_weight += WEIGHT_HALT;
+			}
 			no_load_section |= current_entry.is_unload_all();
 			
 			if(current_entry.is_transfer_interval()){
