@@ -470,10 +470,6 @@ private:
 	// When this convoy requested lane crossing...
 	uint32 request_cross_ticks;
 
-	// returns the destination halts that are directly reachable from the current stop,
-	// considering the current state
-	vector_tpl<convoi_reachable_halt_t> calc_reachable_halts();
-
 	// The goods loaded at the stopping halt.
 	// Used for calculating the average goods waiting time at the halt.
 	// Valid only when journey time based goods routing is enabled and the convoy is in the loading status.
@@ -481,7 +477,7 @@ private:
 
 	// A sub routine of hat_gehalten()
 	// Returns the amount of the loaded goods
-	uint16 fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<convoi_reachable_halt_t> reachable_halts, uint32 requested_amount);
+	uint16 fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<halthandle_t> destination_halts, uint32 requested_amount);
 
 	// A sub routine of hat_gehalten()
 	// Pushes the weighed average goods waiting time to the schedule

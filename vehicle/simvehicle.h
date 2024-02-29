@@ -19,7 +19,6 @@
 #include "../tpl/ptrhashtable_tpl.h"
 
 class convoi_t;
-struct convoi_reachable_halt_t;
 class schedule_t;
 class signal_t;
 class ware_t;

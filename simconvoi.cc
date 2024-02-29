@@ -3472,6 +3472,59 @@ uint32 convoi_t::calc_available_halt_length_in_vehicle_steps(koord3d front_vehic
 }
 
 
+// A sub routine of hat_gehalten()
+// Calculate the reachable halts from the current stop of the given convoy, considering the convoy state.
+// Results are stored in reachable_halts.
+void calc_reachable_halts(vector_tpl<haltestelle_t::reachable_halt_t>& reachable_halts, convoihandle_t cnv) {
+	reachable_halts.clear();
+	const schedule_t* schedule = cnv->get_schedule();
+	const player_t* owner = cnv->get_owner();
+	if (  cnv->get_no_load()  ||  schedule->get_current_entry().is_no_load()  ) {
+		// Nothing is allowed to load here.
+		return;
+	}
+
+	const halthandle_t current_halt = haltestelle_t::get_halt(schedule->get_current_entry().pos, owner);
+	const uint8 count = schedule->get_count();
+	uint32 journey_time = 0; // The estimated journey time from the current stop
+	uint8 interval = 0;
+	for(  uint8 i=1;  i<count;  i++  ) {
+		const uint8 wrap_i = (i + schedule->get_current_stop()) % count;
+
+		const halthandle_t plan_halt = haltestelle_t::get_halt(schedule->entries[wrap_i].pos, owner);
+		if(plan_halt == current_halt) {
+			// we will come later here again ...
+			break;
+		}
+		else if(  !plan_halt.is_bound()  ||  schedule->entries[wrap_i].is_no_unload()  ) {
+			// not a halt or set no_unload. no_unload -> we cannot unload the cargo there.
+			if(  grund_t *gr = world()->lookup( schedule->entries[wrap_i].pos )  ) {
+				if(  gr->get_depot()  ) {
+					// do not load for stops after a depot
+					break;
+				}
+			}
+			continue;
+		}
+		// Use the median of the journey time history to stabilize the estimated value
+		// when something irregular happens on a single convoy.
+		journey_time += schedule->get_median_journey_time(wrap_i, cnv->get_speedbonus_kmh());
+		reachable_halts.append(haltestelle_t::reachable_halt_t(plan_halt, journey_time));
+		if(  schedule->entries[wrap_i].is_unload_all()  ) {
+			// passengers/cargos cannot keep boarding beyond this stop.
+			break;
+		}
+		else if( schedule->entries[wrap_i].is_transfer_interval() ){
+			if(interval == 1){
+				break;
+			}
+			++interval;
+		}
+	}
+	return;
+}
+
+
 /**
  * convoi an haltestelle anhalten
  *
@@ -3512,7 +3565,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		loading_needed &= (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time >= welt->ticks_per_world_month / schedule->get_current_entry().waiting_time_shift);
 	}
 
-	const vector_tpl<convoi_reachable_halt_t> destinations = calc_reachable_halts();
+	vector_tpl<haltestelle_t::reachable_halt_t> reachable_halts;
+	calc_reachable_halts(reachable_halts, self);
+	inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
+	halt->calc_destination_halt(destination_halts, reachable_halts, goods_catg_index, self);
 
 	for(unsigned i=0; i<vehicles_loading; i++) {
 		vehicle_t* v = fahr[i];
@@ -3535,6 +3591,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			// load if: unloaded something (might go back) or previous non-filled car requested different cargo type
 			if (amount>0  ||  cargo_type_prev==NULL  ||  !cargo_type_prev->is_interchangeable(v->get_cargo_type())) {
 				// load
+				const vector_tpl<halthandle_t> &destinations = destination_halts.get(v->get_cargo_type()->get_catg_index());
 				amount += fetch_goods_and_load(v, halt, destinations, capacity_left);
 			}
 			if (v->get_total_cargo() < v->get_cargo_max()) {
@@ -3695,28 +3752,20 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 }
 
 
-uint16 convoi_t::fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<convoi_reachable_halt_t> reachable_halts, uint32 requested_amount) {
+uint16 convoi_t::fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<halthandle_t> destination_halts, uint32 requested_amount) {
 	slist_tpl<ware_t> fetched_goods;
 	slist_tpl<halt_waiting_goods_t> fetched_waiting_goods;
 	const goods_routing_policy_t goods_routing_policy = welt->get_settings().get_goods_routing_policy();
-	switch (goods_routing_policy) {
-		case GRP_FIFO_ET:
-			halt->fetch_goods_if_fastest(fetched_waiting_goods, vehicle->get_cargo_type(), requested_amount, reachable_halts);
-			FOR(slist_tpl<halt_waiting_goods_t>, const& g, fetched_waiting_goods) {
-				fetched_goods.append(g.goods);
-				loaded_goods.append(g);
-			}
-			break;
-		// TODO: directly call fetch_goods_nearest_first
-		case GRP_NF_RC:
-		case GRP_FIFO_RC:
-			halt->fetch_goods(fetched_goods, vehicle->get_cargo_type(), requested_amount, reachable_halts);
-			break;
-		default:
-			dbg->error("convoi_t::fetch_goods_and_load", "Unknown goods routing policy %d", goods_routing_policy);
-			return 0;
+	if(  goods_routing_policy==goods_routing_policy_t::GRP_NF_RC  ) {
+		halt->fetch_goods_nearest_first(fetched_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
+	} else {
+		// GRP_FIFO_ET or GRP_FIFO_RC
+		halt->fetch_goods_FIFO(fetched_waiting_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
+		FOR(slist_tpl<halt_waiting_goods_t>, const& g, fetched_waiting_goods) {
+			fetched_goods.append(g.goods);
+		}
 	}
-	return vehicle->load_cargo(fetched_goods);;
+	return vehicle->load_cargo(fetched_goods);
 }
 
 
@@ -5037,53 +5086,4 @@ void convoi_t::calc_sum_friction_weight() {
 		c->reset_recalc_friction_weight();
 		c = c->get_coupling_convoi();
 	}
-}
-
-
-vector_tpl<convoi_reachable_halt_t> convoi_t::calc_reachable_halts() {
-	vector_tpl<convoi_reachable_halt_t> reachable_halts;
-	if (  no_load  ||  schedule->get_current_entry().is_no_load()  ) {
-		// Nothing is allowed to load here.
-		return reachable_halts;
-	}
-
-	const halthandle_t current_halt = haltestelle_t::get_halt(schedule->get_current_entry().pos, owner);
-	const uint8 count = schedule->get_count();
-	uint32 journey_time = 0; // The estimated journey time from the current stop
-	uint8 interval = 0;
-	for(  uint8 i=1;  i<count;  i++  ) {
-		const uint8 wrap_i = (i + schedule->get_current_stop()) % count;
-
-		const halthandle_t plan_halt = haltestelle_t::get_halt(schedule->entries[wrap_i].pos, owner);
-		if(plan_halt == current_halt) {
-			// we will come later here again ...
-			break;
-		}
-		else if(  !plan_halt.is_bound()  ||  schedule->entries[wrap_i].is_no_unload()  ) {
-			// not a halt or set no_unload. no_unload -> we cannot unload the cargo there.
-			if(  grund_t *gr = welt->lookup( schedule->entries[wrap_i].pos )  ) {
-				if(  gr->get_depot()  ) {
-					// do not load for stops after a depot
-					break;
-				}
-			}
-			continue;
-		}
-		// Use the median of the journey time history to stabilize the estimated value
-		// when something irregular happens on a single convoy.
-		journey_time += schedule->get_median_journey_time(wrap_i, get_speedbonus_kmh());
-		reachable_halts.append(convoi_reachable_halt_t(plan_halt, journey_time));
-		if(  schedule->entries[wrap_i].is_unload_all()  ) {
-			// passengers/cargos cannot keep boarding beyond this stop.
-			break;
-		}
-		else if( schedule->entries[wrap_i].is_transfer_interval() ){
-			if(interval == 1){
-				break;
-			}
-			++interval;
-		}
-	}
-
-	return reachable_halts;
 }

@@ -1193,6 +1193,7 @@ sint32 haltestelle_t::rebuild_connections()
 	schedule_t *schedule;
 	const minivec_tpl<uint8> *goods_catg_index;
 	sint32 speedbonus_kmh;
+	traveler_t traveler;
 
 	minivec_tpl<uint8> supported_catg_index(32);
 
@@ -1225,6 +1226,7 @@ sint32 haltestelle_t::rebuild_connections()
 			schedule = line->get_schedule();
 			goods_catg_index = &line->get_goods_catg_index();
 			speedbonus_kmh = max(line->get_finance_history(0, LINE_MAXSPEED), 10); // To avoid zero division
+			traveler = line;
 		}
 		else {
 			const convoihandle_t cnv = registered_convoys[current_index];
@@ -1234,6 +1236,7 @@ sint32 haltestelle_t::rebuild_connections()
 			schedule = cnv->get_schedule();
 			goods_catg_index = &cnv->get_goods_catg_index();
 			speedbonus_kmh = max(cnv->get_speedbonus_kmh(), 10); // To avoid zero division
+			traveler = cnv;
 		}
 
 		if(  schedule->is_temporary()  ) {
@@ -1351,7 +1354,7 @@ sint32 haltestelle_t::rebuild_connections()
 					previous_halt[catg_index] = current_halt;
 
 					// either add a new connection or update the weight of an existing connection where necessary
-					connection_t *const existing_connection = all_links[catg_index].connections.insert_unique_ordered( connection_t( current_halt, aggregate_weight ), connection_t::compare );
+					connection_t *const existing_connection = all_links[catg_index].connections.insert_unique_ordered( connection_t( current_halt, aggregate_weight, traveler ), connection_t::compare );
 					if(  existing_connection  &&  aggregate_weight<existing_connection->weight  ) {
 						existing_connection->weight = aggregate_weight;
 					}
@@ -2134,7 +2137,11 @@ bool haltestelle_t::recall_ware( ware_t& w, uint32 menge )
 }
 
 
-void haltestelle_t::fetch_goods_nearest_first( slist_tpl<ware_t> &load, slist_tpl<halt_waiting_goods_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts) {
+void haltestelle_t::fetch_goods_nearest_first(slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts) {
+	slist_tpl<halt_waiting_goods_t> *wares = cargo[good_category->get_catg_index()];
+	if(  !wares  ||  wares->empty()  ) {
+		return;
+	}
 	// first iterate over the next stop, then over the ware
 	// might be a little slower, but ensures that passengers to nearest stop are served first
 	// this allows for separate high speed and normal service
@@ -2197,7 +2204,11 @@ void haltestelle_t::fetch_goods_nearest_first( slist_tpl<ware_t> &load, slist_tp
 }
 
 
-void haltestelle_t::fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<halt_waiting_goods_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts) {
+void haltestelle_t::fetch_goods_FIFO(slist_tpl<halt_waiting_goods_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts) {
+	slist_tpl<halt_waiting_goods_t> *wares = cargo[good_category->get_catg_index()];
+	if(  !wares  ||  wares->empty()  ) {
+		return;
+	}
 	for(  slist_tpl<halt_waiting_goods_t>::iterator ware = wares->begin();  ware!=wares->end();  ) {
 		ware_t& goods = ware->goods;
 		// empty entry -> remove
@@ -2229,10 +2240,10 @@ void haltestelle_t::fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<halt_wa
 		}
 
 		// not too much?
-		ware_t neu(goods);
+		halt_waiting_goods_t neu(goods, ware->arrived_time);
 		if(  goods.menge > requested_amount  ) {
 			// not all can be loaded
-			neu.menge = requested_amount;
+			neu.goods.menge = requested_amount;
 			goods.menge -= requested_amount;
 			requested_amount = 0;
 		}
@@ -2244,106 +2255,12 @@ void haltestelle_t::fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<halt_wa
 		}
 		load.insert(neu);
 
-		book(neu.menge, HALT_DEPARTED);
+		book(neu.goods.menge, HALT_DEPARTED);
 		resort_freight_info = true;
 
 		if (requested_amount==0) {
 			return;
 		}
-	}
-}
-
-
-void haltestelle_t::fetch_goods_if_fastest( slist_tpl<halt_waiting_goods_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<convoi_reachable_halt_t>& reachable_halts) {
-	slist_tpl<halt_waiting_goods_t> *warray = cargo[good_category->get_catg_index()];
-	if(  !warray  ||  warray->empty()  ) {
-		return;
-	}
-	for(  slist_tpl<halt_waiting_goods_t>::iterator ware = warray->begin();  ware!=warray->end();  ) {
-		ware_t& goods = ware->goods;
-		// empty entry -> remove
-		if(goods.menge==0) {
-			ware = warray->erase(ware);
-			continue;
-		}
-
-		// goods without route -> returning passengers/mail
-		if(  !goods.get_zwischenziel().is_bound()  ) {
-			search_route_resumable(goods);
-			if (!goods.get_ziel().is_bound()) {
-				// no route anymore
-				ware = warray->erase(ware);
-				continue;
-			}
-		}
-
-		// right target stop, and not overcrowding?
-		// do not go for transfer to overcrowded transfer stop
-		if(
-			!reachable_halts.is_contained([&](auto rh){ return rh.halt == goods.get_zwischenziel(); })  ||
-			(welt->get_settings().is_avoid_overcrowding()  &&
-				goods.get_zwischenziel()->is_overcrowded( goods.get_index() )  &&
-				goods.get_ziel() != goods.get_zwischenziel())
-		) {
-			ware++;
-			continue;
-		}
-
-		// check estimated journey time < fastest (waiting time + journey time)
-
-		const uint32 loaded_goods_arrived_time = ware->arrived_time;
-
-		// not too much?
-		halt_waiting_goods_t neu(goods, loaded_goods_arrived_time);
-		if(  goods.menge > requested_amount  ) {
-			// not all can be loaded
-			neu.goods.menge = requested_amount;
-			goods.menge -= requested_amount;
-			requested_amount = 0;
-			// journey time comparison should be disabled
-		}
-		else {
-			requested_amount -= goods.menge;
-			// leave an empty entry => joining will more often work
-			goods.menge = 0;
-			ware = warray->erase(ware);
-			// journey time comparison should be enabled
-		}
-		load.insert(neu);
-
-		book(neu.goods.menge, HALT_DEPARTED);
-		resort_freight_info = true;
-
-		if (requested_amount==0) {
-			break;
-		}
-	}
-}
-
-
-void haltestelle_t::fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<convoi_reachable_halt_t> destinations)
-{
-	slist_tpl<halt_waiting_goods_t> *warray = cargo[good_category->get_catg_index()];
-	if(  !warray  ||  warray->empty()  ) {
-		return;
-	}
-
-	// generate destination_halts from destinations
-	vector_tpl<halthandle_t> destination_halts;
-	FOR(const vector_tpl<convoi_reachable_halt_t>, const& d, destinations) {
-		destination_halts.append( d.halt );
-	}
-
-	if(  world()->get_settings().get_goods_routing_policy()==GRP_NF_RC  ) {
-		fetch_goods_nearest_first(load, warray, requested_amount, destination_halts);
-	}
-	else if(  world()->get_settings().get_goods_routing_policy()==GRP_FIFO_RC  ) {
-		fetch_goods_FIFO(load, warray, requested_amount, destination_halts);
-	}
-	else {
-		// goods_routing_policy is GRP_FIFO_ET
-		// TODO: implement for GRP_FIFO_ET
-		fetch_goods_FIFO(load, warray, requested_amount, destination_halts);
 	}
 }
 
@@ -4015,4 +3932,59 @@ bool haltestelle_t::is_departure_booked(uint32 dep_tick, uint8 stop_index, lineh
 		i++;
 	}
 	return false;
+}
+
+
+#define JOURNEY_TIME_COMPARE_MARGIN_TICKS 4000u
+
+void haltestelle_t::calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const minivec_tpl<uint8> &goods_category_indexes, convoihandle_t cnv) {
+	// initialize destination_halts
+	destination_halts.clear();
+	FOR(const minivec_tpl<uint8>, const& i, goods_category_indexes) {
+		destination_halts.put(i);
+	}
+
+	const bool is_tbgr_enabled = welt->get_settings().get_goods_routing_policy()==goods_routing_policy_t::GRP_FIFO_ET;
+	if(  !is_tbgr_enabled  ) {
+		// We accept all halts in reachable_halts
+		FOR(const minivec_tpl<uint8>, const& i, goods_category_indexes) {
+			FOR(const vector_tpl<reachable_halt_t>, const& rh, reachable_halts) {
+				destination_halts.access(i)->append(rh.halt);
+			}
+		}
+		return;
+	}
+
+	FOR(const minivec_tpl<uint8>, const& g_index, goods_category_indexes) {
+		FOR(const vector_tpl<reachable_halt_t>, const& rh, reachable_halts) {
+			connection_t connection;
+			FOR(const vector_tpl<connection_t>, const& j, all_links[g_index].connections) {
+				if(  j.halt==rh.halt  ) {
+					connection = j;
+					break;
+				}
+			}
+			if(  !connection.halt.is_bound()  ) {
+				// We cannot find the connection. We have to skip this halt.
+				continue;
+			}
+
+			traveler_t traveler;
+			if(  cnv->get_line().is_bound()  ) {
+				traveler = cnv->get_line();
+			} else {
+				traveler = cnv;
+			}
+			if(  connection.best_weight_traveler==traveler  ) {
+				// This convoy is already calculated as the fastest traveler to the halt.
+				destination_halts.access(g_index)->append(rh.halt);
+				break;
+			}
+
+			if(  rh.journey_time < connection.weight + JOURNEY_TIME_COMPARE_MARGIN_TICKS  ) {
+				// The journey time is shorter than (wait time + journey time) of the fastest route.
+				destination_halts.access(g_index)->append(rh.halt);
+			}
+		}
+	}
 }

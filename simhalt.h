@@ -26,6 +26,8 @@
 
 #include "tpl/slist_tpl.h"
 #include "tpl/vector_tpl.h"
+#include "tpl/minivec_tpl.h"
+#include <variant>
 
 
 #define RECONNECTING (1)
@@ -47,7 +49,6 @@
 #define DST_SIZE 101 // size of departure_slot_table
 
 class cbuffer_t;
-struct convoi_reachable_halt_t;
 class grund_t;
 class fabrik_t;
 class karte_t;
@@ -237,6 +238,8 @@ public:
 
 	const slist_tpl<tile_t> &get_tiles() const { return tiles; }
 
+	typedef std::variant<linehandle_t, convoihandle_t> traveler_t;
+
 	/**
 	 * directly reachable halt with its connection weight
 	 */
@@ -248,9 +251,11 @@ public:
 		uint32 weight:31;
 		/// is halt a transfer halt
 		bool is_transfer:1;
+		/// the line or convoy which has the schedule to get to the halt with the best weight
+		traveler_t best_weight_traveler;
 
-		connection_t() : weight(0), is_transfer(false) { }
-		connection_t(halthandle_t _halt, uint32 _weight=0) : halt(_halt), weight(_weight), is_transfer(false) { }
+		connection_t() : weight(0), is_transfer(false), best_weight_traveler(linehandle_t()) { }
+		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), best_weight_traveler(_best_weight_traveler) { }
 
 		bool operator == (const connection_t &other) const { return halt == other.halt; }
 		bool operator != (const connection_t &other) const { return halt != other.halt; }
@@ -365,10 +370,6 @@ private:
 	 * transfers all goods to given station
 	 */
 	void transfer_goods(halthandle_t halt);
-	
-	void fetch_goods_FIFO( slist_tpl<ware_t> &load, slist_tpl<halt_waiting_goods_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
-	
-	void fetch_goods_nearest_first( slist_tpl<ware_t> &load, slist_tpl<halt_waiting_goods_t> *wares, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
 
 	/**
 	* parameter to ease sorting
@@ -672,14 +673,38 @@ public:
 	bool recall_ware( ware_t& w, uint32 menge );
 
 	/**
-	 * Fetches goods from this halt
+	 * Fetches goods from this halt. The goods which arrived to the halt first will be fetched first.
+	 * @param load Output parameter. Goods info will be put into this list, the vehicle has to load them.
+	 * @param good_category Specifies the kind of good (or compatible goods) we are requesting to fetch from this stop.
+	 * @param requested_amount How many units of the cargo we can fetch.
+	 */
+	void fetch_goods_FIFO(slist_tpl<halt_waiting_goods_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
+
+	/**
+	 * Fetches goods from this halt. 
+	 * The goods to the halt which is in the first of destination_halts will be fetched first.
 	 * @param load Output parameter. Goods will be put into this list, the vehicle has to load them.
 	 * @param good_category Specifies the kind of good (or compatible goods) we are requesting to fetch from this stop.
 	 * @param requested_amount How many units of the cargo we can fetch.
 	 */
-	void fetch_goods( slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<convoi_reachable_halt_t> destinations);
+	void fetch_goods_nearest_first(slist_tpl<ware_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<halthandle_t>& destination_halts);
 
-	void fetch_goods_if_fastest( slist_tpl<halt_waiting_goods_t> &load, const goods_desc_t *good_category, uint32 requested_amount, const vector_tpl<convoi_reachable_halt_t>& reachable_halts);
+	struct reachable_halt_t {
+		halthandle_t halt;
+		uint32 journey_time;
+
+		reachable_halt_t(halthandle_t h, uint32 t) : halt(h), journey_time(t) {}
+		reachable_halt_t() : journey_time(0) {}
+	};
+
+	/**
+	 * Calculates the destination halts for which the goods can be loaded to the convoy.
+	 * @param destination_halts Output parameter. The destination halts will be put into this table. The key is the goods category index.
+	 * @param reachable_halts The halts reachable with the convoy.
+	 * @param goods_category_indexes The list of goods category indexes.
+	 * @param cnv The convoy which is requesting the destination halts.
+	 */
+	void calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const minivec_tpl<uint8> &goods_category_indexes, convoihandle_t cnv);
 
 	/**
 	 * Delivers goods (ware_t) to this halt.
