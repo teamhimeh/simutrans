@@ -84,6 +84,8 @@ void haltestelle_t::reset_routing()
 }
 
 
+#define WEIGHT_UPDATE_INTERVAL_TICKS 5000
+
 void haltestelle_t::step_all()
 {
 	// tell all stale convois to reroute their goods
@@ -105,12 +107,20 @@ void haltestelle_t::step_all()
 	if (alle_haltestellen.empty()) {
 		return;
 	}
+	static uint32 last_reconnection_started_ticks = 0;
 	const uint8 schedule_counter = welt->get_schedule_counter();
 	if (reconnect_counter != schedule_counter) {
 		// always start with reconnection, re-routing will happen after complete reconnection
 		status_step = RECONNECTING;
 		reconnect_counter = schedule_counter;
 		iter = alle_haltestellen.begin();
+		last_reconnection_started_ticks = welt->get_ticks();
+	}
+
+	const bool is_tgbr_enabled = welt->get_settings().get_goods_routing_policy()==GRP_FIFO_ET;
+	if(  status_step==0  &&  is_tgbr_enabled  &&  welt->get_ticks() > last_reconnection_started_ticks + WEIGHT_UPDATE_INTERVAL_TICKS  ) {
+		status_step = WEIGHT_UPDATE;
+		last_reconnection_started_ticks = welt->get_ticks();
 	}
 
 	sint16 units_remaining = 128;
@@ -124,13 +134,16 @@ void haltestelle_t::step_all()
 		}
 	}
 
-	if (status_step == RECONNECTING) {
+	if (status_step == RECONNECTING || status_step == WEIGHT_UPDATE) {
 		// reconnecting finished, compute connected components in one sweep
 		rebuild_connected_components();
+	}
+
+	if (status_step == RECONNECTING) {
 		// reroute in next call
 		status_step = REROUTING;
 	}
-	else if (status_step == REROUTING) {
+	else if (status_step == REROUTING  ||  status_step == WEIGHT_UPDATE) {
 		status_step = 0;
 	}
 	iter = alle_haltestellen.begin();
@@ -976,6 +989,7 @@ bool haltestelle_t::step(uint8 what, sint16 &units_remaining)
 {
 	switch(what) {
 		case RECONNECTING:
+		case WEIGHT_UPDATE:
 			units_remaining -= (rebuild_connections()/256)+2;
 			break;
 		case REROUTING:
@@ -2245,8 +2259,6 @@ void haltestelle_t::fetch_goods_if_fastest( slist_tpl<halt_waiting_goods_t> &loa
 	if(  !warray  ||  warray->empty()  ) {
 		return;
 	}
-	// TODO: get from the parameter
-	const convoihandle_t requesting_convoi = convoihandle_t();
 	for(  slist_tpl<halt_waiting_goods_t>::iterator ware = warray->begin();  ware!=warray->end();  ) {
 		ware_t& goods = ware->goods;
 		// empty entry -> remove

@@ -30,6 +30,7 @@
 
 #define RECONNECTING (1)
 #define REROUTING (2)
+#define WEIGHT_UPDATE (3) // Reconnect the network to update weight, but do not cause rerouting
 
 #define MAX_HALT_COST   8 // Total number of cost items
 #define MAX_MONTHS     12 // Max history
