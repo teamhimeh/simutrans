@@ -421,6 +421,7 @@ SOURCES += gui/factorylist_frame_t.cc
 SOURCES += gui/factorylist_stats_t.cc
 SOURCES += gui/goods_frame_t.cc
 SOURCES += gui/goods_stats_t.cc
+SOURCES += gui/goods_waiting_time.cc
 SOURCES += gui/ground_info.cc
 SOURCES += gui/groundobj_edit.cc
 SOURCES += gui/gui_frame.cc

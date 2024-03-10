@@ -31,6 +31,7 @@
 #include "gui/messagebox.h"
 #include "gui/convoi_detail_t.h"
 #include "gui/journey_time_info.h"
+#include "gui/goods_waiting_time.h"
 #include "boden/grund.h"
 #include "boden/wege/schiene.h"	// for railblocks
 #include "boden/wege/strasse.h"
@@ -3789,6 +3790,12 @@ void convoi_t::push_goods_waiting_time_if_needed() {
 
 	uint32 average_waiting_time = weighed_sum_waiting_time / total_goods_amount;
 	schedule->entries[schedule->get_current_stop()].push_waiting_time(average_waiting_time);
+
+	// update journey time window
+	gui_goods_waiting_time_t* window = dynamic_cast<gui_goods_waiting_time_t*>(win_get_magic((ptrdiff_t)line.get_rep()));
+	if(  window  ) {
+		window->update();
+	}
 }
 
 
