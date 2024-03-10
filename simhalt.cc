@@ -3975,14 +3975,13 @@ void haltestelle_t::calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<hal
 			} else {
 				traveler = cnv;
 			}
-			if(  connection.best_weight_traveler==traveler  ) {
-				// This convoy is already calculated as the fastest traveler to the halt.
-				destination_halts.access(g_index)->append(rh.halt);
-				break;
-			}
 
-			if(  rh.journey_time < connection.weight + JOURNEY_TIME_COMPARE_MARGIN_TICKS  ) {
-				// The journey time is shorter than (wait time + journey time) of the fastest route.
+			// This convoy is already calculated as the fastest traveler to the halt.
+			const bool is_fastest_traveler = connection.best_weight_traveler==traveler;
+			// The journey time is shorter than (wait time + journey time) of the fastest route.
+			const bool is_shortest_journey = rh.journey_time < connection.weight + JOURNEY_TIME_COMPARE_MARGIN_TICKS;
+			
+			if(  is_fastest_traveler  ||  is_shortest_journey  ) {
 				destination_halts.access(g_index)->append(rh.halt);
 			}
 		}

@@ -3324,13 +3324,14 @@ bool is_first_ticks_bigger(uint32 v1, uint32 v2) {
 sint32 subtract_ticks(uint32 v1, uint32 v2) {
 	const sint64 v1e = (sint64)v1;
 	const sint64 v2e = (sint64)v2;
+	const sint64 uint32_width = UINT32_MAX+1;
 	if(  v2e-v1e>(1<<31)  ) {
 		// assume v1 is over flow
-		return (sint32)(v1e+(1<<32)-v2e);
+		return (sint32)(v1e+uint32_width-v2e);
 	}
 	else if(  v1e-v2e>(1<<31)  ) {
 		// assume v2 is over flow
-		return (sint32)(v1e-v2e-(1<<32));
+		return (sint32)(v1e-v2e-uint32_width);
 	}
 	else {
 		// normal case
@@ -3764,6 +3765,7 @@ uint16 convoi_t::fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t hal
 		halt->fetch_goods_FIFO(fetched_waiting_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
 		FOR(slist_tpl<halt_waiting_goods_t>, const& g, fetched_waiting_goods) {
 			fetched_goods.append(g.goods);
+			loaded_goods.append(g);
 		}
 	}
 	return vehicle->load_cargo(fetched_goods);
@@ -3787,9 +3789,15 @@ void convoi_t::push_goods_waiting_time_if_needed() {
 		weighed_sum_waiting_time += g.goods.menge * (uint32)waiting_time;
 		total_goods_amount += g.goods.menge;
 	}
+	loaded_goods.clear();
 
+	if(  total_goods_amount==0  ) {
+		return;
+	}
 	uint32 average_waiting_time = weighed_sum_waiting_time / total_goods_amount;
-	schedule->entries[schedule->get_current_stop()].push_waiting_time(average_waiting_time);
+	const linehandle_t line = get_line();
+	schedule_t* schedule_to_push = line.is_bound() ? line->get_schedule() : schedule;
+	schedule_to_push->entries[schedule->get_current_stop()].push_waiting_time(average_waiting_time);
 
 	// update journey time window
 	gui_goods_waiting_time_t* window = dynamic_cast<gui_goods_waiting_time_t*>(win_get_magic((ptrdiff_t)line.get_rep()));
