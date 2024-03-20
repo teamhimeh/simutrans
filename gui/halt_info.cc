@@ -647,6 +647,7 @@ void gui_halt_detail_t::update_connections( halthandle_t halt )
 	new_component_span<gui_label_t>("Direkt erreichbare Haltestellen", 2);
 
 	bool has_stops = false;
+	const bool is_tgbr_enabled = world()->get_settings().get_goods_routing_policy() == goods_routing_policy_t::GRP_FIFO_ET;
 
 	for (uint i=0; i<goods_manager_t::get_max_catg_index(); i++){
 		vector_tpl<haltestelle_t::connection_t> const& connections = halt->get_connections(i);
@@ -680,7 +681,15 @@ void gui_halt_detail_t::update_connections( halthandle_t halt )
 				pb->set_targetpos3d( conn.halt->get_basis_pos3d() );
 
 				gui_label_buf_t *lb = new_component<gui_label_buf_t>();
-				lb->buf().printf("%s <%u>", conn.halt->get_name(), conn.weight);
+				if(  is_tgbr_enabled  ) {
+					// Show the estimated journey time in the divided time units
+    				const uint16 weight = world()->tick_to_divided_time(conn.weight);
+					std::visit([&](const auto& t) {
+						lb->buf().printf("%s <%u> - %s", conn.halt->get_name(), weight, t.is_bound() ? t->get_name() : "Unavailable");
+					}, conn.best_weight_traveler);
+				} else {
+					lb->buf().printf("%s <%u>", conn.halt->get_name(), conn.weight);
+				}
 				lb->update();
 			}
 		}

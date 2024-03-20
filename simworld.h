@@ -1040,6 +1040,12 @@ public:
 
 	uint32 get_next_month_ticks() const { return next_month_ticks; }
 
+	// convert the time in ticks to time in the spacing shift divisor.
+	uint16 tick_to_divided_time(uint32 tick) const {
+    	const uint16 divisor = get_settings().get_spacing_shift_divisor();
+    	return (uint16)((uint64)tick * divisor / ticks_per_world_month);
+	}
+
 	/**
 	 * Absolute month (count start year zero).
 	 */
