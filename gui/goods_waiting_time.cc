@@ -56,7 +56,7 @@ void gui_goods_waiting_time_stat_t::update()
         title_lb->update();
 
         gui_label_buf_t *average_lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
-        average_lb->buf().printf("%d", tick_to_divided_time(entry.get_average_waiting_time()));
+        average_lb->buf().printf("%d", world()->tick_to_divided_time(entry.get_average_waiting_time()));
         average_lb->update();
         for(uint8 j=0; j<NUM_WAITING_TIME_STORED; j++) {
             gui_label_buf_t *lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
@@ -64,7 +64,7 @@ void gui_goods_waiting_time_stat_t::update()
             if(  t==0  ) {
                 lb->buf().printf("-");
             } else {
-                lb->buf().printf("%d", tick_to_divided_time(t));
+                lb->buf().printf("%d", world()->tick_to_divided_time(t));
             }
             lb->update();
         }
@@ -72,10 +72,4 @@ void gui_goods_waiting_time_stat_t::update()
 
     const scr_size min_size = get_min_size();
 	set_size(scr_size(max(size.w, min_size.w), min_size.h) );
-}
-
-
-uint16 gui_goods_waiting_time_stat_t::tick_to_divided_time(uint32 tick) const {
-    const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
-    return (uint16)((uint64)tick * divisor / world()->ticks_per_world_month);
 }

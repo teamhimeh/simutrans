@@ -20,9 +20,6 @@ private:
 public:
     gui_goods_waiting_time_stat_t(player_t* player, schedule_t* schedule): player(player), schedule(schedule) {};
     void update();
-
-private:
-    uint16 tick_to_divided_time(uint32 tick) const;
 };
 
 class gui_goods_waiting_time_t : public gui_frame_t
