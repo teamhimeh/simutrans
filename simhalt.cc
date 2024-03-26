@@ -1771,6 +1771,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 						allocation_pointer++;
 						// as the next halt is not a destination add WEIGHT_MIN
+						// TODO: (TBGR) use estimated time. Should include waiting time
 						open_list.insert( route_node_t(current_conn.halt, total_weight + WEIGHT_MIN) );
 					}
 					else {
@@ -1807,6 +1808,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 					}
 					else {
 						// as the next halt is not a destination add WEIGHT_MIN
+						// TODO: (TBGR) use estimated time. Should include waiting time
 						total_weight += WEIGHT_MIN;
 					}
 
