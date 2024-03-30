@@ -421,6 +421,7 @@ haltestelle_t::haltestelle_t(loadsave_t* file)
 
 	cargo = (slist_tpl<halt_waiting_goods_t> **)calloc( goods_manager_t::get_max_catg_index(), sizeof(slist_tpl<halt_waiting_goods_t> *) );
 	all_links = new link_t[ goods_manager_t::get_max_catg_index() ];
+	staged_all_links = NULL;
 
 	status_color = SYSCOL_TEXT_UNUSED;
 	last_status_color = color_idx_to_rgb(COL_PURPLE);
@@ -461,6 +462,7 @@ haltestelle_t::haltestelle_t(koord k, player_t* player)
 
 	cargo = (slist_tpl<halt_waiting_goods_t> **)calloc( goods_manager_t::get_max_catg_index(), sizeof(slist_tpl<halt_waiting_goods_t> *) );
 	all_links = new link_t[ goods_manager_t::get_max_catg_index() ];
+	staged_all_links = NULL;
 
 	status_color = SYSCOL_TEXT_UNUSED;
 	last_status_color = color_idx_to_rgb(COL_PURPLE);
@@ -532,6 +534,9 @@ haltestelle_t::~haltestelle_t()
 	}
 	free( cargo );
 	delete[] all_links;
+	if(  staged_all_links  ) {
+		delete[] staged_all_links;
+	}
 
 	// routes may have changed without this station ...
 	verbinde_fabriken();
@@ -1178,10 +1183,11 @@ sint32 haltestelle_t::rebuild_connections()
 	const bool is_tbgr_enabled = welt->get_settings().get_goods_routing_policy() == goods_routing_policy_t::GRP_FIFO_ET;
 
 	// first, remove all old entries
-	for(  uint8 i=0;  i<goods_manager_t::get_max_catg_index();  i++  ){
-		all_links[i].clear();
-		consecutive_halts[i].clear();
+	if(  staged_all_links  ) {
+		// rebuild_connections() is called before the staged links are commited.
+		delete[] staged_all_links;
 	}
+	staged_all_links = new link_t[ goods_manager_t::get_max_catg_index() ];
 	resort_freight_info = true; // might result in error in routing
 
 	last_catg_index = 255; // must reroute everything
@@ -1354,7 +1360,7 @@ sint32 haltestelle_t::rebuild_connections()
 					previous_halt[catg_index] = current_halt;
 
 					// either add a new connection or update the weight of an existing connection where necessary
-					connection_t *const existing_connection = all_links[catg_index].connections.insert_unique_ordered( connection_t( current_halt, aggregate_weight, traveler ), connection_t::compare );
+					connection_t *const existing_connection = staged_all_links[catg_index].connections.insert_unique_ordered( connection_t( current_halt, aggregate_weight, traveler ), connection_t::compare );
 					if(  existing_connection  &&  aggregate_weight<existing_connection->weight  ) {
 						existing_connection->weight = aggregate_weight;
 					}
@@ -1371,7 +1377,7 @@ sint32 haltestelle_t::rebuild_connections()
 	}
 	for(  uint8 i=0;  i<goods_manager_t::get_max_catg_index();  i++  ){
 		// one schedule reaches all consecutive halts -> this is not transfer halt
-		all_links[i].is_transfer = !consecutive_halts[i].empty()  &&
+		staged_all_links[i].is_transfer = !consecutive_halts[i].empty()  &&
 			(consecutive_halts[i].get_count() != max_consecutive_halts_schedule[i]  ||
 			force_transfer_search);
 	}
@@ -1413,6 +1419,15 @@ void haltestelle_t::fill_connected_component(uint8 catg_idx, uint16 comp)
 
 void haltestelle_t::rebuild_connected_components()
 {
+	// commit staged_all_links of all halts
+	FOR(vector_tpl<halthandle_t>, halt, alle_haltestellen) {
+		if(  halt->staged_all_links  ) {
+			delete[] halt->all_links;
+			halt->all_links = halt->staged_all_links;
+			halt->staged_all_links = NULL;
+		}
+	}
+	// calculate catg_connected_component
 	for(uint8 catg_idx = 0; catg_idx<goods_manager_t::get_max_catg_index(); catg_idx++) {
 		FOR(vector_tpl<halthandle_t>, halt, alle_haltestellen) {
 			if (halt->all_links[catg_idx].catg_connected_component == UNDECIDED_CONNECTED_COMPONENT) {

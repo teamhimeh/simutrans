@@ -309,6 +309,11 @@ private:
 	/// All links to networks of all freight categories, filled by rebuild_connected_components.
 	link_t* all_links;
 
+	/// Links to be commited to all_links by rebuild_connected_components.
+	/// Since the links are calculated by rebuild_connections for one halt one by one, 
+	/// we need to store the calculated links and commit them for all hals at once.
+	link_t* staged_all_links;
+
 	/**
 	 * Fills in catg_connected_component values for all halts and all categories.
 	 * Uses depth-first search.
