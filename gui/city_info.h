@@ -35,6 +35,8 @@ private:
 
 	gui_textinput_t name_input;    ///< Input field where the name of the city can be changed
 	button_t allow_growth;         ///< Checkbox to enable/disable city growth
+	button_t highlight;			   ///< highlight button
+	bool highlighted = false;      ///< is currently highlighted
 	gui_label_buf_t lb_size, lb_buildings, lb_border, lb_unemployed, lb_homeless;
 
 	gui_tab_panel_t year_month_tabs;
@@ -76,6 +78,15 @@ public:
 	bool infowin_event(event_t const*) OVERRIDE;
 
 	void update_data();
+
+	// update pointer to this->city
+	void update(stadt_t*& c) { c = city; };
+
+	// get city pointer
+	stadt_t* get_city() { return city; };
+	
+	// is highlighted?
+	bool get_highlight() { return highlighted; };
 
 	/**
 	 * Does this window need a min size button in the title bar?

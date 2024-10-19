@@ -197,6 +197,16 @@ void city_info_t::init()
 		allow_growth.pressed = city->get_citygrowth();
 		allow_growth.add_listener( this );
 		add_component(&allow_growth);
+
+		// add "change highlight button" based on active player
+		if (welt->get_active_player_nr() == 1) {
+			highlight.init( button_t::box_state_automatic | button_t::flexible, "Make building belong to");
+		} else {
+			highlight.init( button_t::box_state_automatic | button_t::flexible, "Highlight");
+		}
+		highlight.pressed = false;
+		highlight.add_listener( this );
+		add_component(&highlight);
 		end_table();
 
 		pax_map = new_component<gui_city_minimap_t>(city);
@@ -271,6 +281,9 @@ city_info_t::~city_info_t()
 		}
 	}
 	city->stadtinfo_options = flags;
+
+	welt->set_dirty();
+	welt->set_tool( tool_t::general_tool[TOOL_QUERY], welt->get_public_player());
 }
 
 
@@ -374,6 +387,12 @@ void city_info_t::update_labels()
 
 	lb_unemployed.buf().printf("%s: %d", translator::translate("Unemployed"), c->get_unemployed()); lb_unemployed.update();
 	lb_homeless.buf().printf("%s: %d", translator::translate("Homeless"), c->get_homeless());       lb_homeless.update();
+
+	if (welt->get_active_player_nr() == 1) {
+		highlight.set_text("Make building belong to");
+	} else {
+		highlight.set_text("Highlight");
+	}
 }
 
 
@@ -383,6 +402,11 @@ void city_info_t::draw(scr_coord pos, scr_size size)
 	chart.set_seed(welt->get_last_year());
 	update_labels();
 	gui_frame_t::draw(pos, size);
+
+	// update pressed and highlight based on if on top
+	city_info_t* w_city = dynamic_cast<city_info_t*>(win_get_top());
+	highlight.pressed = (highlighted && (w_city == this)) ? true : false;
+	highlighted = highlight.pressed;
 }
 
 
@@ -398,6 +422,32 @@ bool city_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	if(  comp==&name_input  ) {
 		// send rename command if necessary
 		rename_city();
+	}
+	if(  comp==&highlight && highlight.pressed  ) {
+
+		// make sure highlighted is true and button is pressed
+		highlighted = true;
+		highlight.pressed = true;
+
+		// set display dirty and select tool
+		welt->set_dirty();
+		welt->set_background_dirty();
+		welt->set_tool( tool_t::general_tool[TOOL_CHANGE_CITY_OF_BUILDING], welt->get_public_player());
+
+		return true;
+	}
+	else if (	comp==&highlight && !highlight.pressed	) {
+
+		// make sure highlighted is false and button is not pressed
+		highlighted = false;
+		highlight.pressed = false;
+
+		// set display dirty and deselect tool
+		welt->set_dirty();
+		welt->set_background_dirty();
+		welt->set_tool( tool_t::general_tool[TOOL_QUERY], welt->get_public_player());
+
+		return true;
 	}
 	return false;
 }
