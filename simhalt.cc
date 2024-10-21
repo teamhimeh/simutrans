@@ -2590,7 +2590,7 @@ void haltestelle_t::get_short_freight_info(cbuffer_t & buf) const
 					buf.append(", ");
 				}
 
-				int max = get_capacity( i>2?2:i );
+				int max = get_capacity( min(i, 2) );
 				buf.printf("%d(%d)%s %s", summe, max, translator::translate(wtyp->get_mass()), translator::translate(wtyp->get_name()));
 
 				got_one = true;
@@ -2609,6 +2609,51 @@ void haltestelle_t::get_short_freight_info(cbuffer_t & buf) const
 	}
 }
 
+
+void haltestelle_t::get_throughput_info(cbuffer_t& buf) const
+{
+	// check if more than 1 month of history
+	int month = get_finance_history( 1, HALT_ARRIVED) == 0 ||
+		get_finance_history( 1, HALT_DEPARTED) == 0 ? 0 : 1;
+	
+	// get throughput of this month (either this or previous month)
+	auto transfers = get_finance_history( month, HALT_ARRIVED) <
+		get_finance_history( month, HALT_DEPARTED) ?
+		get_finance_history( month, HALT_ARRIVED) :
+		get_finance_history( month, HALT_DEPARTED);
+
+	// add info to buffer
+	buf.printf("%d ", transfers);
+	buf.append(translator::translate("transfers"));
+	buf.append("\n");
+}
+
+void haltestelle_t::get_waiting_occupancy_info(cbuffer_t& buf) const
+{
+	bool got_one = false;
+	sint64 sum = 0;
+	for(unsigned int i=0; i<goods_manager_t::get_count(); i++) {
+		const goods_desc_t *wtyp = goods_manager_t::get_info(i);
+		if(gibt_ab(wtyp)) {
+			sum += get_capacity( min(i, 2) );
+		}
+	}
+	if (sum > 0) {
+		got_one = true;
+	}
+
+	if(got_one) {
+		auto per = (double) get_finance_history( 0, HALT_WAITING )/sum * 100;
+		buf.printf("%.2f%%", per);
+		buf.append(" ");
+		buf.append(translator::translate("waiting"));
+		buf.append("\n");
+	}
+	else {
+		buf.append(translator::translate("no goods waiting"));
+		buf.append("\n");
+	}
+}
 
 
 void haltestelle_t::open_info_window()

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <string.h>
+#include <cmath>
 
 #include "halt_list_frame.h"
 #include "halt_list_filter_frame.h"
@@ -83,7 +84,9 @@ slist_tpl<const goods_desc_t *> halt_list_frame_t::waren_filter_an;
 const char *halt_list_frame_t::sort_text[SORT_MODES] = {
 	"hl_btn_sort_name",
 	"hl_btn_sort_waiting",
-	"hl_btn_sort_type"
+	"hl_btn_sort_type",
+	"hl_btn_sort_throughput",
+	"hl_btn_sort_waiting_percentage"
 };
 
 
@@ -94,7 +97,7 @@ const char *halt_list_frame_t::sort_text[SORT_MODES] = {
 */
 bool halt_list_frame_t::compare_halts(halthandle_t const halt1, halthandle_t const halt2)
 {
-	int order;
+	int order = 0;
 
 	/***********************************
 	* Compare station 1 and station 2
@@ -110,6 +113,54 @@ bool halt_list_frame_t::compare_halts(halthandle_t const halt1, halthandle_t con
 		case nach_typ: // sort by station type
 			order = halt1->get_station_type() - halt2->get_station_type();
 			break;
+		case nach_throughput: // sort by no of throughput in previous month
+		{
+			// check if more than 1 month of history
+			int month1 = halt1->get_finance_history( 1, HALT_ARRIVED) == 0 ||
+				halt1->get_finance_history( 1, HALT_DEPARTED) == 0 ? 0 : 1;
+			int month2 = halt2->get_finance_history( 1, HALT_ARRIVED) == 0 ||
+				halt2->get_finance_history( 1, HALT_DEPARTED) == 0 ? 0 : 1;
+			
+			// get throughput of this month (either this or previous month)
+			auto halt1_throughput = 
+				min(halt1->get_finance_history(month1, HALT_ARRIVED),
+					halt1->get_finance_history(month1, HALT_DEPARTED));
+			auto halt2_throughput = 
+				min(halt2->get_finance_history(month2, HALT_ARRIVED),
+					halt2->get_finance_history(month2, HALT_DEPARTED));
+			
+			// check throughput order
+			order = halt1_throughput > halt2_throughput ? 1 :
+				halt1_throughput < halt2_throughput ? -1 : 0;
+			break;
+		}
+		case nach_wartend_percent: // sort by waiting goods percentage
+		{
+			sint64 sum1 = 0;
+			sint64 sum2 = 0;
+			for(unsigned int i=0; i<goods_manager_t::get_count(); i++) {
+				const goods_desc_t *wtyp = goods_manager_t::get_info(i);
+				if(halt1->gibt_ab(wtyp)) {
+					sum1 += halt1->get_capacity( min(i, 2) );
+				}
+				if(halt2->gibt_ab(wtyp)) {
+					sum2 += halt2->get_capacity( min(i, 2) );
+				}
+			}
+
+			if (sum1 == 0 && sum2 != 0) {
+    			order = -1; // Halt2 has non-zero sum, so it comes first
+			} else if (sum1 != 0 && sum2 == 0) {
+				order = 1; // Halt1 has non-zero sum, so it comes first
+			} else if (sum1 != 0 && sum2 != 0) {
+				double per1 = (double) halt1->get_finance_history( 0, HALT_WAITING ) * sum2;
+				double per2 = (double) halt2->get_finance_history( 0, HALT_WAITING ) * sum1;
+				order = per1 > per2 ? 1 : (per1 < per2 ? -1 : 0);
+			} else {
+				order = 0;
+			}
+			break;
+		}
 	}
 	/**
 	 * use name as an additional sort, to make sort more stable.
@@ -361,7 +412,7 @@ bool halt_list_frame_t::infowin_event(const event_t *ev)
 bool halt_list_frame_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 {
 	if (  comp == &sortedby  ) {
-		set_sortierung((sort_mode_t)((get_sortierung() + 1) % SORT_MODES));
+		set_sortierung((sort_mode_t)((sortedby.get_selection()) % SORT_MODES));
 		sort_list();
 	}
 	else if (comp == &tabs) {
