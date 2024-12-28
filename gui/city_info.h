@@ -84,9 +84,6 @@ public:
 
 	void update_data();
 
-	// update pointer to this->city
-	void update(stadt_t*& c) { c = city; };
-
 	// get city pointer
 	stadt_t* get_city() { return city; };
 	

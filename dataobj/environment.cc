@@ -111,6 +111,7 @@ bool env_t::hide_trees;
 uint8 env_t::hide_buildings;
 bool env_t::hide_under_cursor;
 uint16 env_t::cursor_hide_range;
+stadt_t* env_t::highlighted_city;
 bool env_t::use_transparency_station_coverage;
 uint8 env_t::station_coverage_show;
 sint32 env_t::show_names;
@@ -228,6 +229,8 @@ void env_t::init()
 	hide_buildings = env_t::NOT_HIDE;
 	hide_under_cursor = false;
 	cursor_hide_range = 5;
+
+	highlighted_city = nullptr;
 
 	scroll_infinite = false;
 

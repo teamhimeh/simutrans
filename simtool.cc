@@ -7155,14 +7155,16 @@ const char *tool_stop_mover_t::do_work( player_t *player, const koord3d &last_po
 
 bool tool_change_city_of_building_t::init(player_t* player) {
 
-	// convert default_param to city and update highlight_city
+	if ( !env_t::highlighted_city ) return false;
+
+	// convert default_param to city and update highlighted_city
 	sint16 p1(-100), p2(-100);
 
 	if ( !default_param || sscanf(default_param, "c%hi,%hi", &p1, &p2) != 2 ) {
 		return false;
 	}
 
-	if ( p1 < 0 || p2 < 0 ) {
+	if ( p1 < 0 && p2 < 0 ) {
 		return false;
 	}
 
@@ -7170,14 +7172,10 @@ bool tool_change_city_of_building_t::init(player_t* player) {
 	bool coord_check = false;
 
 	for( int i = 0; i < welt->get_cities().get_count(); i++) {
-		city_info_t* w = dynamic_cast<city_info_t*>(win_get_top());
-		if ( !w ) {
-			continue;
-		}
-		coord_check = (w->get_city()->get_pos() == default_koord) && \
-			(w->get_city()->get_pos() == welt->get_cities()[i]->get_pos());
-		if( w  &&  coord_check ) {
-			w->update(highlight_city);
+		coord_check = (default_koord == welt->get_cities()[i]->get_pos() && \
+			default_koord == env_t::highlighted_city->get_pos());
+		if ( coord_check ) {
+			highlight_city = env_t::highlighted_city;
 		}
 	}
 	
@@ -7309,7 +7307,7 @@ void tool_change_city_of_building_t::rdwr_custom_data(memory_rw_t *packet)
 	} else {
 		p1 = highlight_city->get_pos().x;
 		p2 = highlight_city->get_pos().y;
-		if ( p1 >= 0 || p2 >= 0 ) {
+		if ( p1 >= 0 && p2 >= 0 ) {
 			packet->rdwr_short(p1);
 			packet->rdwr_short(p2);
 		}

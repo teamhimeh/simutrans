@@ -407,10 +407,8 @@ void city_info_t::draw(scr_coord pos, scr_size size)
 	update_labels();
 	gui_frame_t::draw(pos, size);
 
-	// update pressed and highlight based on if on top
-	city_info_t* w_city = dynamic_cast<city_info_t*>(win_get_top());
-	highlight.pressed = (highlighted && (w_city == this)) ? true : false;
-	highlighted = highlight.pressed;
+	// update pressed if hightlighted city is this->city
+	highlight.pressed = env_t::highlighted_city  &&  (env_t::highlighted_city == city);
 }
 
 
@@ -430,8 +428,7 @@ bool city_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	if(  comp==&highlight && highlight.pressed  ) {
 
 		// make sure highlighted is true and button is pressed
-		highlighted = true;
-		highlight.pressed = true;
+		env_t::highlighted_city = city;
 
 		param_str.clear();
 		param_str.printf("c%hi,%hi", city->get_pos().x, city->get_pos().y);
@@ -447,8 +444,7 @@ bool city_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	else if (  comp==&highlight && !highlight.pressed  ) {
 
 		// make sure highlighted is false and button is not pressed
-		highlighted = false;
-		highlight.pressed = false;
+		env_t::highlighted_city = nullptr;
 
 		// set display dirty and deselect tool
 		welt->set_dirty();
