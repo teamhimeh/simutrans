@@ -7153,41 +7153,6 @@ const char *tool_stop_mover_t::do_work( player_t *player, const koord3d &last_po
 	return NULL;
 }
 
-bool tool_change_city_of_building_t::init(player_t* player) {
-
-	if ( !env_t::highlighted_city ) return false;
-
-	// convert default_param to city and update highlighted_city
-	sint16 p1(-100), p2(-100);
-
-	if ( !default_param || sscanf(default_param, "c%hi,%hi", &p1, &p2) != 2 ) {
-		return false;
-	}
-
-	if ( p1 < 0 && p2 < 0 ) {
-		return false;
-	}
-
-	koord default_koord(p1, p2);
-	bool coord_check = false;
-
-	for( int i = 0; i < welt->get_cities().get_count(); i++) {
-		coord_check = (default_koord == welt->get_cities()[i]->get_pos() && \
-			default_koord == env_t::highlighted_city->get_pos());
-		if ( coord_check ) {
-			highlight_city = env_t::highlighted_city;
-		}
-	}
-	
-	one_click = true;
-
-	if (!highlight_city) {
-		return false;
-	}
-
-	return two_click_tool_t::init(player);
-}
-
 const char* tool_change_city_of_building_t::work_on_ground( player_t* player, koord k, stadt_t* new_city ) {
 	grund_t* gr = welt->lookup_kartenboden( k );
 
@@ -7228,12 +7193,16 @@ const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d co
 	}
 	one_click = true;
 
+	stadt_t* const new_city = get_highlighted_city();
+	if(  !new_city  ) {
+		return "No new city found!";
+	}
 	koord k;
 
 	if ( end == koord3d::invalid) {
 		k.x = start.x;
 		k.y = start.y;
-		return work_on_ground(player, k, highlight_city);
+		return work_on_ground(player, k, new_city);
 	} else {
 		koord k1, k2;
 		k1.x = start.x < end.x ? start.x : end.x;
@@ -7244,7 +7213,7 @@ const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d co
 
 		for(  k.x = k1.x;  k.x <= k2.x;  k.x++  ) {
 			for(  k.y = k1.y;  k.y <= k2.y;  k.y++  ) {
-				const char* err = work_on_ground(player, k, highlight_city);
+				const char* err = work_on_ground(player, k, new_city);
 				if (  msg == NULL || strcmp(msg,"") == 0) {
 					msg = err;
 				}
@@ -7286,33 +7255,25 @@ void tool_change_city_of_building_t::mark_tiles(player_t*, koord3d const &start,
 	}
 }
 
-
-void tool_change_city_of_building_t::rdwr_custom_data(memory_rw_t *packet)
-{
-	two_click_tool_t::rdwr_custom_data(packet);
-
+stadt_t* tool_change_city_of_building_t::get_highlighted_city() const {
+	// convert default_param to city and update highlighted_city
 	sint16 p1(-100), p2(-100);
-	if(  packet->is_loading()  ) {
-		packet->rdwr_short(p1);
-		packet->rdwr_short(p2);
-		if ( p1 >= 0 && p2 >= 0 ) {
-			koord city_koord(p1, p2);
 
-			for( int i = 0; i < welt->get_cities().get_count(); i++) {
-				if ( city_koord == welt->get_cities()[i]->get_pos() ) {
-					highlight_city = welt->get_cities()[i];
-				}
-			}
-		}
-	} else {
-		p1 = highlight_city->get_pos().x;
-		p2 = highlight_city->get_pos().y;
-		if ( p1 >= 0 && p2 >= 0 ) {
-			packet->rdwr_short(p1);
-			packet->rdwr_short(p2);
+	if (  !default_param  ||  sscanf(default_param, "c%hi,%hi", &p1, &p2) != 2  ||  p1 < 0  ||  p2 < 0  ) {
+		return nullptr;
+	}
+
+	const koord default_koord(p1, p2);
+
+	for( int i = 0; i < welt->get_cities().get_count(); i++) {
+		stadt_t* const city = welt->get_cities()[i];
+		if(  city->get_pos()==default_koord  ) {
+			return city;
 		}
 	}
+	return nullptr;
 }
+
 
 char const* tool_daynight_level_t::get_tooltip(player_t const*) const
 {
