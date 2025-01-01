@@ -306,6 +306,7 @@ settings_t::settings_t() :
 	citycar_route_weight_speed = 0;
 	
 	advance_to_end = true;
+	MEMZERON(is_time_based_routing_enabled, 256);
 	goods_routing_policy = GRP_NF_RC;
 	waiting_limit_for_first_come_first_serve = 500000;
 	
@@ -943,15 +944,21 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_byte(routecost_halt);
 			file->rdwr_short(spacing_shift_divisor);
 		}
-		if(  file->get_OTRP_version() >= 36  ) {
-			uint8 dummy = goods_routing_policy;
+		if(  file->get_OTRP_version() >= 43  ) {
+			file->rdwr_bool(first_come_first_serve);
+		}
+		if(  file->get_OTRP_version() >= 36  &&  file->get_OTRP_version() < 43  ) {
+			uint8 dummy;
 			file->rdwr_byte(dummy);
-			goods_routing_policy = (goods_routing_policy_t)dummy;
+			first_come_first_serve = dummy > 0;
+			if(  dummy==2  ) {
+				// Time based goods routing has to be enabled for all goods categories.
+				for(uint16 i=0; i<256; i++) {
+					is_time_based_routing_enabled[i] = true;
+				}
+			}
 		} else if(  file->get_OTRP_version() >= 28  ) {
-			// previously, only GRP_FIFO_RC or GRP_NF_RC were possible
-			bool dummy = goods_routing_policy == GRP_FIFO_RC;
-			file->rdwr_bool(dummy);
-			goods_routing_policy = dummy ? GRP_FIFO_RC : GRP_NF_RC;
+			file->rdwr_bool(first_come_first_serve);
 		}
 		if(  file->get_OTRP_version() >= 31  ) {
 			file->rdwr_long(waiting_limit_for_first_come_first_serve);
@@ -961,6 +968,11 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_long(base_waiting_ticks_for_road_convoi);
 			file->rdwr_long(base_waiting_ticks_for_ship_convoi);
 			file->rdwr_long(base_waiting_ticks_for_air_convoi);
+		}
+		if(  file->get_OTRP_version() >= 43  ) {
+			for(uint16 i=0; i<256; i++) {
+				file->rdwr_bool(is_time_based_routing_enabled[i]);
+			}
 		}
 		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);

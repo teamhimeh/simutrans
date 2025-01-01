@@ -341,6 +341,11 @@ private:
 	// only for trains. If true, trains advance to the end of the platform.
 	bool advance_to_end;
 
+	bool first_come_first_serve;
+
+	// The flag whether the time based goods routing is enabled for the goods.
+	// The array index is the goods category index.
+	bool is_time_based_routing_enabled[256];
 	goods_routing_policy_t goods_routing_policy;
 	
 	// When the amount of waiting goods/passengers exceeds this value,
@@ -719,6 +724,10 @@ public:
 	uint16 get_spacing_shift_divisor() const { return spacing_shift_divisor; }
 
 	uint32 get_base_waiting_ticks(waytype_t waytype) const;
+	bool get_time_based_routing_enabled(uint8 goods_catg_index) const { return is_time_based_routing_enabled[goods_catg_index]; }
+	void set_time_based_routing_enabled(uint8 goods_catg_index, bool is_on) {
+		is_time_based_routing_enabled[goods_catg_index] = is_on; 
+	}
 };
 
 #endif

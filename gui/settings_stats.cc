@@ -252,6 +252,7 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_NUM( "routecost_halt", sets->routecost_halt, 1, 250, 1, false );
 	SEPERATOR
 	INIT_BOOL( "advance_to_end", sets->get_advance_to_end() );
+	INIT_BOOL( "first_come_first_serve", sets->first_come_first_serve );
 	// combobox for trees generator
 	goods_routing_policy.clear_elements();
 	for(  uint32 i=0;  i<lengthof(goods_routing_policy_string);  i++  ) {
@@ -300,6 +301,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->routecost_wait );
 	READ_NUM_VALUE( sets->routecost_halt );
 	READ_BOOL_VALUE( sets->advance_to_end );
+	READ_BOOL_VALUE( sets->first_come_first_serve );
 	sets->goods_routing_policy = (goods_routing_policy_t)::clamp(goods_routing_policy.get_selection(), (int)GRP_NF_RC, (int)GRP_FIFO_ET );
 	READ_NUM_VALUE( sets->waiting_limit_for_first_come_first_serve );
 
