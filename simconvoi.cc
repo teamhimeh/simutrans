@@ -3871,19 +3871,17 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 uint16 convoi_t::fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<halthandle_t> destination_halts, uint32 requested_amount) {
 	slist_tpl<ware_t> fetched_goods;
-	const goods_routing_policy_t goods_routing_policy = welt->get_settings().get_goods_routing_policy();
-	if(  goods_routing_policy==goods_routing_policy_t::GRP_NF_RC  ) {
-		halt->fetch_goods_nearest_first(fetched_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
-	} else {
-		// GRP_FIFO_ET or GRP_FIFO_RC
+	if(  welt->get_settings().get_first_come_first_serve()  ) {
 		halt->fetch_goods_FIFO(fetched_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
+	} else {
+		halt->fetch_goods_nearest_first(fetched_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
 	}
 	return vehicle->load_cargo(fetched_goods);
 }
 
 
 void convoi_t::push_goods_waiting_time_if_needed() {
-	if(  welt->get_settings().get_goods_routing_policy()!=GRP_FIFO_ET  ||  fetched_fresh_goods.empty() ) {
+	if(  fetched_fresh_goods.empty()  ) {
 		// No need to calculate and push the goods waiting time.
 		return;
 	}

@@ -306,8 +306,8 @@ settings_t::settings_t() :
 	citycar_route_weight_speed = 0;
 	
 	advance_to_end = true;
+	first_come_first_serve = false;
 	MEMZERON(is_time_based_routing_enabled, 256);
-	goods_routing_policy = GRP_NF_RC;
 	waiting_limit_for_first_come_first_serve = 500000;
 	
 	routecost_wait = 8;
@@ -1658,7 +1658,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	citycar_route_weight_speed = contents.get_int("citycar_route_weight_speed", citycar_route_weight_speed);
 	
 	advance_to_end = contents.get_int("advance_to_end", advance_to_end);
-	goods_routing_policy = (goods_routing_policy_t)contents.get_int("goods_routing_policy", goods_routing_policy);
+	first_come_first_serve = contents.get_int("first_come_first_serve", first_come_first_serve);
 	waiting_limit_for_first_come_first_serve 
 		= contents.get_int("waiting_limit_for_first_come_first_serve", waiting_limit_for_first_come_first_serve);
 	
