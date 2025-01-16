@@ -92,7 +92,7 @@ static const char * state_names[convoi_t::MAX_STATES] =
 	"ENTERING_DEPOT",
 	"COUPLED",
 	"COUPLED_LOADING",
-	"WAITING_FOR_LEAVING_DEPOT"
+	"WAITING_FOR_LEAVING_DEPOT",
 };
 
 
@@ -1169,7 +1169,7 @@ koord3d convoi_t::calc_first_pos_of_route() const {
 	if(
 		!get_coupling_convoi().is_bound()
 		||  !gr
-		||  !ribi_t::is_single(front_vehicle_dir)
+		||  ( !ribi_t::is_single(front_vehicle_dir) && !ribi_t::is_bend(front_vehicle_dir) )
 		||  !gr->get_neighbour(ngr, front_vehicle->get_waytype(), front_vehicle_dir)
 	) {
 		// There is not the coupling convoy in front.
@@ -1181,7 +1181,7 @@ koord3d convoi_t::calc_first_pos_of_route() const {
 		return front_vehicle->get_pos();
 	}
 	// There is the child coupling convoy in front and we need to reverse the direction.
-	if(  heading_child_convoy_vehicle->get_direction()==ribi_t::backward(front_vehicle_dir)  ) {
+	if(  ( heading_child_convoy_vehicle->get_direction() & ribi_t::backward(front_vehicle_dir) ) > 0  ) {
 		// The child coupling convoy is already in reversed direction.
 		// Use the last vehicle pos of the child as the first pos of the new route.
 		convoihandle_t c = heading_child_convoy_vehicle->get_convoi()->self;
@@ -1399,6 +1399,7 @@ void convoi_t::step()
 			break;
 
 		case EDIT_SCHEDULE:
+			unset_coupling_now();
 			// schedule window closed?
 			if(schedule!=NULL  &&  schedule->is_editing_finished()) {
 
@@ -1483,6 +1484,7 @@ void convoi_t::step()
 			break;
 
 		case NO_ROUTE:
+			unset_coupling_now();
 			// stuck vehicles
 			if (schedule->empty()) {
 				// no entries => no route ...
@@ -1549,6 +1551,7 @@ void convoi_t::step()
 
 		// must be here; may otherwise confuse window management
 		case SELF_DESTRUCT:
+			unset_coupling_now();
 			welt->set_dirty();
 			destroy();
 			return; // must not continue method after deleting this object
@@ -1890,17 +1893,25 @@ void convoi_t::ziel_erreicht()
 				if(  !v  ||  !can_start_coupling(v->get_convoi())  ||  !v->get_convoi()->is_loading()  ) {
 					continue;
 				}
+				// if there are many convoys in the same tile, the coupled convoy is the front or end convoy!
+				if(  (   (v->get_direction()&self->front()->get_direction())==0  &&  v->get_convoi()->is_coupled()  )  ||  (  (v->get_direction()&self->front()->get_direction())!=0  &&  v->get_convoi()->get_coupling_convoi().is_bound()  )  ) {
+					continue;
+				}
 				// there is a suitable waiting convoy for coupling -> this is coupling point.
 				akt_speed = 0;
 				if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 					halt->book(1, HALT_CONVOIS_ARRIVED);
 				}
+				// the direction of the waiting vehicle is same? opposite?
+				// reference direction to detect leading or following
+				ribi_t::ribi ribi_reference_direction = (  ( v->get_convoi()->get_next_initial_direction()  &  v->get_convoi()->front()->get_direction() ) > 0  ) ? ribi_reference_direction = v->get_direction(): ribi_reference_direction = ribi_t::backward(v->get_direction());
+				bool coupling_is_leading = !( ( self->front()->get_direction() & ribi_reference_direction ) > 0 );
 				// when the waiting couvoi is child of other convoi or the coupling convoi already has child convoi,
 				// to avoid duplication, the coupling convoi is set as a child of waiting convoi firstly.
 				if(  v->get_convoi()->is_coupled()  ){
 					v->get_convoi()->couple_convoi(self);
 					// if the direction is different, reverse the parents_children order.
-					if(  ribi_t::backward(front()->get_direction())==v->get_convoi()->get_next_initial_direction()  ){
+					if(  coupling_is_leading  ){
 						find_most_parent_convoi()->reverse_convoy_coupling();
 					}
 				}
@@ -1909,12 +1920,12 @@ void convoi_t::ziel_erreicht()
 					reverse_convoy_coupling();
 					couple_convoi(v->get_convoi()->self);
 					// if the direction is different, change order
-					if(  ribi_t::backward(front()->get_direction())!=v->get_convoi()->get_next_initial_direction()  ){
+					if(  !coupling_is_leading  ){
 						find_most_parent_convoi()->reverse_convoy_coupling();
 					}
 				}
 				// the waiting convoi and coupling convoi are single convoi
-				else if(  ribi_t::backward(front()->get_direction())==v->get_convoi()->get_next_initial_direction()  ) {
+				else if(  coupling_is_leading  ) {
 					// this convoy leads the other.
 					couple_convoi(v->get_convoi()->self);
 				} else {
@@ -3127,6 +3138,11 @@ void convoi_t::rdwr(loadsave_t *file)
 		reserve_route();
 		recalc_catg_index();
 	}
+
+	
+	if(  file->get_OTRP_version()>=44  ) {
+		rdwr_convoihandle_t( file, will_coupling_convoi );
+	}
 }
 
 
@@ -3405,11 +3421,21 @@ sint32 subtract_ticks(uint32 v1, uint32 v2) {
  */
 bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint32 time_to_load, bool &coupling_cond, uint32 &go_on_ticks) {
 	convoihandle_t c = cnv;
+	bool now_coupling = false;
 	// First, check whether we have to wait for coupling at this stop.
 	coupling_cond = false;
 	while(  c.is_bound()  ) {
 		const schedule_entry_t e = c->get_schedule()->get_current_entry();
 		coupling_cond |= (e.get_coupling_point()==1  &&  !c->is_coupling_done()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled()));
+		now_coupling |= c->get_will_coupling_convoi().is_bound();
+		if (  c->is_coupling_done()  ||  !c->get_will_coupling_convoi().is_bound()  ||  c->get_will_coupling_convoi()->get_will_coupling_convoi()!=c  ) {
+			// This will_conpling_convoi() flag is too strong. 
+			// So if there are some happens such as
+			// coupling convoi is removed or
+			// forget to remove the flag after coupling done,
+			// this flag should be NONE! 
+			c->unset_coupling_now();
+		}
 		c = c->get_coupling_convoi();
 	}
 
@@ -3769,12 +3795,17 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	bool coupling_cond = (self->get_schedule()->get_current_entry().get_coupling_point()==1  &&  !self->is_coupling_done()  &&  !(self->get_coupling_convoi().is_bound()  &&  self->is_coupled()));
 	bool departure_cond = false;
 	scheduled_coupling_delay_tolerance = (uint64)self->get_schedule()->get_current_entry().delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
-
+	c = self;
+	bool now_coupling_so_wait = false;
+	while (  c.is_bound()  ) {
+		now_coupling_so_wait |= c->get_will_coupling_convoi().is_bound();
+		c = c->get_coupling_convoi();
+	}
 	if ( coupling_cond ){
-		departure_cond = scheduled_departure_time!=0  &&  is_first_ticks_bigger(welt->get_ticks(), scheduled_departure_time + scheduled_coupling_delay_tolerance - time);
+		departure_cond = (  scheduled_departure_time!=0  &&  is_first_ticks_bigger(welt->get_ticks(), scheduled_departure_time + scheduled_coupling_delay_tolerance - time)  )  &&  !now_coupling_so_wait;
 	}
 	else{
-		departure_cond = scheduled_departure_time!=0  &&  is_first_ticks_bigger(welt->get_ticks(), scheduled_departure_time - time);
+		departure_cond = (  scheduled_departure_time!=0  &&  is_first_ticks_bigger(welt->get_ticks(), scheduled_departure_time - time)  )  &&  !now_coupling_so_wait;
 	}
 
 	// reverse convoi
@@ -3823,7 +3854,6 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 	// loading is finished => maybe drive on
 	if(  is_coupled()  ||  departure_cond  ) {
-
 		calc_speedbonus_kmh();
 
 		// add available capacity after loading(!) to statistics
@@ -5052,6 +5082,28 @@ void convoi_t::calc_crossing_reservation() {
 	}
 }
 
+void convoi_t::set_coupling_now(convoihandle_t coupling_now) {
+	if( coupling_now.is_bound() ) {
+		will_coupling_convoi=coupling_now;
+		dbg->message( "convoi_t::set_coupling_now()","%i and %i convoys will be coupling soon", self.get_id(), coupling_now->self.get_id() );
+		return;
+	} else {
+		dbg->message( "convoi_t::set_coupling_now()","%i cannot find the coupling convoi!", self.get_id());
+		return;
+	}
+}
+
+void convoi_t::unset_coupling_now() {
+	if (get_will_coupling_convoi().is_bound()) {
+		convoihandle_t c = get_will_coupling_convoi();
+		c->delete_will_coupling_convoi();
+		self->delete_will_coupling_convoi();
+		dbg->message( "convoi_t::unset_coupling_now()","%i and %i convoys are now coupling or canceling couple", self.get_id(), c->self.get_id() );
+		return;
+	} else {
+		return;
+	}
+}
 
 bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupled->set_state(COUPLED_LOADING);
@@ -5062,6 +5114,7 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
 	must_recalc_min_top_speed();
+	unset_coupling_now();
 	return true;
 }
 
@@ -5108,6 +5161,7 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 	* 1) next schedule entries have the same position.
 	* 2) current schedule entries have the same position.
 	* 3) current schedule entry has appropriate coupling_point for both convoys.
+	* 4) check the coupled couvoi has a free coupler. if both front and back sides are already coupled, false.
 	*/
 	// Since current schedule entry of this convoy can be waypoint, we proceed to a genuine stop point.
 	sint16 t_idx = schedule->get_current_stop();
@@ -5136,6 +5190,11 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 	if(  t_c.pos!=p_c.pos  ||  t_n.pos!=p_n.pos  ) {
 		return false;
 	}
+	// If the coupled convoy cannot be coupled, return false.
+	// If the coupled convoy is already coupling with two convoy, this convoy cannot be coupled!
+	if(  parent->self->get_coupling_convoi().is_bound()  &&  parent->is_coupled()  ) {
+		return false;
+	}
 	return true;
 }
 
@@ -5143,7 +5202,7 @@ bool convoi_t::is_waiting_for_coupling() const {
 	convoihandle_t c = self;
 	bool waiting_for_coupling = false;
 	while(  c.is_bound()  ) {
-		waiting_for_coupling |= (!c->get_coupling_convoi().is_bound()  &&  c->get_schedule()->get_current_entry().get_coupling_point()==1);
+		waiting_for_coupling |= (  !(c->get_coupling_convoi().is_bound()&&c->is_coupled())  &&  c->get_schedule()->get_current_entry().get_coupling_point()==1);
 		c = c->get_coupling_convoi();
 	}
 	return waiting_for_coupling;
