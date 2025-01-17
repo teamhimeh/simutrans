@@ -5390,6 +5390,9 @@ void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled()  ) {
 		return;
 	}
+	if( self->is_coupling_done() ) {
+		self->set_coupling_done(false);
+	}
 	convoihandle_t c = self;
 	while( c.is_bound() ) {
 		schedule_t *schedule = c->get_schedule();
