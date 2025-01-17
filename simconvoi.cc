@@ -1399,7 +1399,7 @@ void convoi_t::step()
 			break;
 
 		case EDIT_SCHEDULE:
-			unset_coupling_now();
+			unset_will_coupling_convoi();
 			// schedule window closed?
 			if(schedule!=NULL  &&  schedule->is_editing_finished()) {
 
@@ -1484,7 +1484,7 @@ void convoi_t::step()
 			break;
 
 		case NO_ROUTE:
-			unset_coupling_now();
+			unset_will_coupling_convoi();
 			// stuck vehicles
 			if (schedule->empty()) {
 				// no entries => no route ...
@@ -1551,7 +1551,7 @@ void convoi_t::step()
 
 		// must be here; may otherwise confuse window management
 		case SELF_DESTRUCT:
-			unset_coupling_now();
+			unset_will_coupling_convoi();
 			welt->set_dirty();
 			destroy();
 			return; // must not continue method after deleting this object
@@ -3434,7 +3434,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 			// coupling convoi is removed or
 			// forget to remove the flag after coupling done,
 			// this flag should be NONE! 
-			c->unset_coupling_now();
+			c->unset_will_coupling_convoi();
 		}
 		c = c->get_coupling_convoi();
 	}
@@ -5082,23 +5082,23 @@ void convoi_t::calc_crossing_reservation() {
 	}
 }
 
-void convoi_t::set_coupling_now(convoihandle_t coupling_now) {
-	if( coupling_now.is_bound() ) {
-		will_coupling_convoi=coupling_now;
-		dbg->message( "convoi_t::set_coupling_now()","%i and %i convoys will be coupling soon", self.get_id(), coupling_now->self.get_id() );
+void convoi_t::set_will_coupling_convoi(convoihandle_t convoi_coupling_undergo) {
+	if( convoi_coupling_undergo.is_bound() ) {
+		will_coupling_convoi=convoi_coupling_undergo;
+		dbg->message( "convoi_t::set_will_coupling_convoi()","%i and %i convoys will be coupling soon", self.get_id(), will_coupling_convoi->self.get_id() );
 		return;
 	} else {
-		dbg->message( "convoi_t::set_coupling_now()","%i cannot find the coupling convoi!", self.get_id());
+		dbg->message( "convoi_t::set_will_coupling_convoi()","%i cannot find the coupling convoi!", self.get_id());
 		return;
 	}
 }
 
-void convoi_t::unset_coupling_now() {
+void convoi_t::unset_will_coupling_convoi() {
 	if (get_will_coupling_convoi().is_bound()) {
 		convoihandle_t c = get_will_coupling_convoi();
 		c->delete_will_coupling_convoi();
 		self->delete_will_coupling_convoi();
-		dbg->message( "convoi_t::unset_coupling_now()","%i and %i convoys are now coupling or canceling couple", self.get_id(), c->self.get_id() );
+		dbg->message( "convoi_t::unset_will_coupling_convoi()","%i and %i convoys are now coupling or canceling couple", self.get_id(), c->self.get_id() );
 		return;
 	} else {
 		return;
@@ -5114,7 +5114,7 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
 	must_recalc_min_top_speed();
-	unset_coupling_now();
+	unset_will_coupling_convoi();
 	return true;
 }
 
@@ -5384,4 +5384,27 @@ convoihandle_t convoi_t::find_most_parent_convoi() const {
 		}
 	}
 	return tc;
+}
+
+void convoi_t::next_stop_button_pressed() {
+	if(  self->is_coupled()  ) {
+		return;
+	}
+	convoihandle_t c = self;
+	while( c.is_bound() ) {
+		schedule_t *schedule = c->get_schedule();
+		convoihandle_t const temp_c = c->get_coupling_convoi();
+		if( !c->can_continue_coupling() ) {
+			c->uncouple_convoi();
+		}
+		if( schedule->get_current_stop() == schedule->entries.get_count() - 1 ) {
+			schedule->set_current_stop( 0 );
+		} else {
+			schedule->set_current_stop( schedule->get_current_stop() + 1 ); 
+		}
+		if( !c->is_coupled() ) {
+			c->set_schedule(schedule);
+		}
+		c = temp_c;
+	}
 }

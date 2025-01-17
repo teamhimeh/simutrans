@@ -144,6 +144,9 @@ private:
 	sint32 akt_speed;         // current speed
 	// 64 bytes
 
+	// to calculate next_stop_button_pressed
+	// we store how many stops the convoi will skip
+	uint8 the_number_of_skip_stops;
 	/**
 	 * this give the index of the next signal or the end of the route
 	 * convois will slow down before it, if this is not a waypoint or the cannot pass
@@ -1026,9 +1029,9 @@ public:
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;
-	void set_coupling_now(convoihandle_t coupling_now);
+	void set_will_coupling_convoi(convoihandle_t convoi_coupling_undergo);
 	convoihandle_t get_will_coupling_convoi() const { return will_coupling_convoi; }
-	void unset_coupling_now();
+	void unset_will_coupling_convoi();
 
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
@@ -1067,6 +1070,11 @@ public:
 	// Returns the root parent convoi of this convoy. Returns this convoy if not coupled.
 	// Warning: The calculation cost is O(n) where n is the number of convoys in the world.
 	convoihandle_t find_most_parent_convoi() const;
+
+	// go to next stop (skip one stops)
+	// only called by tool_change_convoi_t
+	void next_stop_button_pressed();
+
 };
 
 #endif
