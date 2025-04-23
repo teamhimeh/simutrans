@@ -146,6 +146,8 @@ public:
 		spacing_shift = b;
 		delay_tolerance = c;
 	}
+	void set_minimum_loading(uint8 a) {minimum_loading = a;}
+	void set_waiting_time_shift(uint16 a) {waiting_time_shift = a;}
 
 	void push_journey_time(uint32 time);
 	void push_waiting_time(uint32 time);

@@ -27,6 +27,8 @@ class schedule_t
 {
 	bool  editing_finished;
 	uint8 current_stop;
+
+	minivec_tpl<schedule_entry_t> entries;
 	
 	uint8 flags;
 	
@@ -80,7 +82,10 @@ public:
 		FULL_LOAD_TIME         = 1U << 3,
 	};
 
-	minivec_tpl<schedule_entry_t> entries;
+	const minivec_tpl<schedule_entry_t>& get_entries() const;
+	// for editing entry (in schedule_gui_t)
+	schedule_entry_t get_entry(const uint8 i); 
+	void clear_entries() {entries.clear();}
 
 	/**
 	 * Returns error message if stops are not allowed

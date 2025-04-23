@@ -669,6 +669,18 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 	}
 }
 
+const minivec_tpl<schedule_entry_t>& schedule_t::get_entries() const {
+	return entries;
+}
+
+schedule_entry_t schedule_t::get_entry(const uint8 i){
+	if( i<entries.get_count() ) {
+		return entries[i];
+	} else {
+		return dummy_entry;
+	}
+}
+
 schedule_entry_t const& schedule_t::get_next_entry() const {
 	if(  entries.empty()  ) {
 		return dummy_entry;
