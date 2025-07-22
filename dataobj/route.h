@@ -12,6 +12,7 @@
 #include "../dataobj/koord3d.h"
 
 #include "../tpl/vector_tpl.h"
+#include "../tpl/binary_heap_tpl.h"
 
 
 class karte_t;
@@ -26,6 +27,9 @@ class route_t
 {
 public:
 	static const uint16 INVALID_INDEX = 0xFFFA;
+
+	route_t();
+	~route_t();
 
 private:
 	/**
@@ -67,16 +71,17 @@ public:
 		inline bool operator <= (const ANode &k) const { return f==k.f ? g<=k.g : f<=k.f; }
 	};
 
-	static ANode *nodes;
-	static uint32 MAX_STEP;
+	ANode *nodes;
+	uint32 MAX_STEP;
+	binary_heap_tpl<ANode *> queue;
 #ifdef DEBUG
 	// a semaphore, since we only have a single version of the array in memory
-	static bool node_in_use;
-	static void GET_NODE() {if(node_in_use){ dbg->fatal("GET_NODE","called while list in use");} node_in_use =1; }
-	static void RELEASE_NODE() {if(!node_in_use){ dbg->fatal("RELEASE_NODE","called while list free");} node_in_use =0; }
+	bool node_in_use;
+	void GET_NODE() {if(node_in_use){ dbg->fatal("GET_NODE","called while list in use");} node_in_use =1; }
+	void RELEASE_NODE() {if(!node_in_use){ dbg->fatal("RELEASE_NODE","called while list free");} node_in_use =0; }
 #else
-	static void GET_NODE() {}
-	static void RELEASE_NODE() {}
+	void GET_NODE() {}
+	void RELEASE_NODE() {}
 #endif
 
 	const koord3d_vector_t &get_route() const { return route; }

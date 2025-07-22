@@ -1282,19 +1282,18 @@ sint32 way_builder_t::intern_calc_route(const vector_tpl<koord3d> &start, const 
 	koord3d mini, maxi;
 	get_mini_maxi( ziel, mini, maxi );
 
-	// memory in static list ...
-	if(route_t::nodes==NULL) {
-		route_t::MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
-		route_t::nodes = new route_t::ANode[route_t::MAX_STEP+4+1];
+	// Create route instance for thread-safe routing
+	route_t route_instance;
+	if(route_instance.nodes==NULL) {
+		route_instance.MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
+		route_instance.nodes = new route_t::ANode[route_instance.MAX_STEP+4+1];
 	}
-
-	static binary_heap_tpl <route_t::ANode *> queue;
 
 	// initialize marker field
 	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
 
 	// clear the queue (should be empty anyhow)
-	queue.clear();
+	route_instance.queue.clear();
 
 	// some thing for the search
 	grund_t *to;
@@ -1312,7 +1311,7 @@ sint32 way_builder_t::intern_calc_route(const vector_tpl<koord3d> &start, const 
 			// DBG_MESSAGE("way_builder_t::intern_calc_route()","cannot start on (%i,%i,%i)",start.x,start.y,start.z);
 			continue;
 		}
-		tmp = &(route_t::nodes[step]);
+		tmp = &(route_instance.nodes[step]);
 		step ++;
 
 		tmp->parent = NULL;
@@ -1322,10 +1321,10 @@ sint32 way_builder_t::intern_calc_route(const vector_tpl<koord3d> &start, const 
 		tmp->dir = 0;
 		tmp->count = 0;
 
-		queue.insert(tmp);
+		route_instance.queue.insert(tmp);
 	}
 
-	if( queue.empty() ) {
+	if( route_instance.queue.empty() ) {
 		// no valid ground to start.
 		return -1;
 	}
@@ -1333,14 +1332,14 @@ sint32 way_builder_t::intern_calc_route(const vector_tpl<koord3d> &start, const 
 	INT_CHECK("wegbauer 347");
 
 	// get exclusively the tile list
-	route_t::GET_NODE();
+	route_instance.GET_NODE();
 
 	// to speed up search, but may not find all shortest ways
 	uint32 min_dist = 99999999;
 
 //DBG_MESSAGE("route_t::itern_calc_route()","calc route from %d,%d,%d to %d,%d,%d",ziel.x, ziel.y, ziel.z, start.x, start.y, start.z);
 	do {
-		route_t::ANode *test_tmp = queue.pop();
+		route_t::ANode *test_tmp = route_instance.queue.pop();
 
 		if(marker.test_and_mark(test_tmp->gr)) {
 			// we were already here on a faster route, thus ignore this branch
@@ -1500,7 +1499,7 @@ DBG_DEBUG("insert to close","(%i,%i,%i)  f=%i",gr->get_pos().x,gr->get_pos().y,g
 			}
 
 			// not in there or taken out => add new
-			route_t::ANode *k=&(route_t::nodes[step]);
+			route_t::ANode *k=&(route_instance.nodes[step]);
 			step++;
 
 			k->parent = tmp;
@@ -1511,26 +1510,26 @@ DBG_DEBUG("insert to close","(%i,%i,%i)  f=%i",gr->get_pos().x,gr->get_pos().y,g
 			// count is unused here, use it as flag-variable instead
 			k->count = r.flag;
 
-			queue.insert( k );
+			route_instance.queue.insert( k );
 
 #ifdef DEBUG_ROUTES
 DBG_DEBUG("insert to open","(%i,%i,%i)  f=%i",to->get_pos().x,to->get_pos().y,to->get_pos().z,k->f);
 #endif
 		}
 
-	} while (!queue.empty() && step < route_t::MAX_STEP);
+	} while (!route_instance.queue.empty() && step < route_instance.MAX_STEP);
 
 #ifdef DEBUG_ROUTES
-DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u",step,route_t::MAX_STEP,queue.get_count(),tmp->g);
+DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u",step,route_instance.MAX_STEP,route_instance.queue.get_count(),tmp->g);
 #endif
 	INT_CHECK("wegbauer 194");
 
-	route_t::RELEASE_NODE();
+	route_instance.RELEASE_NODE();
 
 	// target reached?
-	if(  !ziel.is_contained(gr->get_pos())  ||  step>=route_t::MAX_STEP  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
-		if (step>=route_t::MAX_STEP) {
-			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,route_t::MAX_STEP);
+	if(  !ziel.is_contained(gr->get_pos())  ||  step>=route_instance.MAX_STEP  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
+		if (step>=route_instance.MAX_STEP) {
+			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,route_instance.MAX_STEP);
 		}
 		return -1;
 	}
@@ -1747,20 +1746,19 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 	}
 
 
-	// memory in static list ...
-	if(route_t::nodes==NULL) {
-		route_t::MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
-		route_t::nodes = new route_t::ANode[route_t::MAX_STEP+4+1];
+	// Create route instance for thread-safe routing
+	route_t route_instance;
+	if(route_instance.nodes==NULL) {
+		route_instance.MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
+		route_instance.nodes = new route_t::ANode[route_instance.MAX_STEP+4+1];
 	}
-
-	static binary_heap_tpl <route_t::ANode *> queue;
 
 	// initialize marker field
 	marker_t& markerbelow = marker_t::instance(welt->get_size().x, welt->get_size().y);
 	marker_t& markerabove = marker_t::instance_second(welt->get_size().x, welt->get_size().y);
 
 	// clear the queue (should be empty anyhow)
-	queue.clear();
+	route_instance.queue.clear();
 
 	// some thing for the search
 	grund_t *to;
@@ -1774,7 +1772,7 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 	sint32 dummy;
 	if( gr && is_allowed_step(gr,gr,&dummy) ) {
 		// DBG_MESSAGE("way_builder_t::intern_calc_route()","cannot start on (%i,%i,%i)",start.x,start.y,start.z);
-		tmp = &(route_t::nodes[step]);
+		tmp = &(route_instance.nodes[step]);
 		step ++;
 		tmp->parent = NULL;
 		tmp->gr = gr;
@@ -1784,13 +1782,13 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 
 		tmp->count = 0;
 
-		queue.insert(tmp);
+		route_instance.queue.insert(tmp);
 	}
 
 	gu = welt->lookup(start + koordup);
 	if( gu && is_allowed_step(gu,gu,&dummy, true) ) {
 		// DBG_MESSAGE("way_builder_t::intern_calc_route()","cannot start on (%i,%i,%i)",start.x,start.y,start.z);
-		tmp = &(route_t::nodes[step]);
+		tmp = &(route_instance.nodes[step]);
 		step ++;
 		tmp->parent = NULL;
 		tmp->gr = gu;
@@ -1800,11 +1798,11 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 
 		tmp->count = is_upperlayer;
 
-		queue.insert(tmp);
+		route_instance.queue.insert(tmp);
 	}
 
 
-	if( queue.empty() ) {
+	if( route_instance.queue.empty() ) {
 		// no valid ground to start.
 		return -1;
 	}
@@ -1812,14 +1810,14 @@ sint32 way_builder_t::intern_calc_route_elevated(const koord3d start, const koor
 	INT_CHECK("wegbauer 347");
 
 	// get exclusively the tile list
-	route_t::GET_NODE();
+	route_instance.GET_NODE();
 
 	// to speed up search, but may not find all shortest ways
 	uint32 min_dist = 99999999;
 
 //DBG_MESSAGE("route_t::itern_calc_route()","calc route from %d,%d,%d to %d,%d,%d",ziel.x, ziel.y, ziel.z, start.x, start.y, start.z);
 	do {
-		route_t::ANode *test_tmp = queue.pop();
+		route_t::ANode *test_tmp = route_instance.queue.pop();
 
 		if(  (test_tmp->count&is_upperlayer?markerabove:markerbelow).test_and_mark(test_tmp->gr)  ) {
 			// we were already here on a faster route, thus ignore this branch
@@ -2007,7 +2005,7 @@ DBG_DEBUG("insert to close","(%i,%i,%i)  f=%i",gr->get_pos().x,gr->get_pos().y,g
 			}
 
 			// not in there or taken out => add new
-			route_t::ANode *k=&(route_t::nodes[step]);
+			route_t::ANode *k=&(route_instance.nodes[step]);
 			step++;
 
 			k->parent = tmp;
@@ -2018,26 +2016,26 @@ DBG_DEBUG("insert to close","(%i,%i,%i)  f=%i",gr->get_pos().x,gr->get_pos().y,g
 			// count is unused here, use it as flag-variable instead
 			k->count = r.flag;
 
-			queue.insert( k );
+			route_instance.queue.insert( k );
 
 #ifdef DEBUG_ROUTES
 DBG_DEBUG("insert to open","(%i,%i,%i)  f=%i",to->get_pos().x,to->get_pos().y,to->get_pos().z,k->f);
 #endif
 		}
 
-	} while (!queue.empty() && step < route_t::MAX_STEP);
+	} while (!route_instance.queue.empty() && step < route_instance.MAX_STEP);
 
 #ifdef DEBUG_ROUTES
-DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u",step,route_t::MAX_STEP,queue.get_count(),tmp->g);
+DBG_DEBUG("way_builder_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u",step,route_instance.MAX_STEP,route_instance.queue.get_count(),tmp->g);
 #endif
 	INT_CHECK("wegbauer 194");
 
-	route_t::RELEASE_NODE();
+	route_instance.RELEASE_NODE();
 
 	// target reached?
-	if(  !(ziel == gr_pos)  ||  step>=route_t::MAX_STEP  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
-		if (step>=route_t::MAX_STEP) {
-			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,route_t::MAX_STEP);
+	if(  !(ziel == gr_pos)  ||  step>=route_instance.MAX_STEP  ||  tmp->parent==NULL  ||  tmp->g > maximum  ) {
+		if (step>=route_instance.MAX_STEP) {
+			dbg->warning("way_builder_t::intern_calc_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,route_instance.MAX_STEP);
 		}
 		return -1;
 	}

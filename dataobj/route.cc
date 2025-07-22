@@ -29,8 +29,6 @@
 // if defined, print some profiling informations into the file
 //#define DEBUG_ROUTES
 
-// binary heap, the fastest
-#include "../tpl/binary_heap_tpl.h"
 
 
 #ifdef DEBUG_ROUTES
@@ -105,12 +103,21 @@ bool route_t::append_straight_route(karte_t *welt, koord3d dest )
 
 
 
-// node arrays
-route_t::ANode* route_t::nodes=NULL;
-uint32 route_t::MAX_STEP=0;
+route_t::route_t() : nodes(NULL), MAX_STEP(0)
 #ifdef DEBUG
-bool route_t::node_in_use=false;
+	, node_in_use(false)
 #endif
+{
+}
+
+
+route_t::~route_t()
+{
+	if(  nodes  ) {
+		delete [] nodes;
+		nodes = NULL;
+	}
+}
 
 /**
  * find the route to an unknown location
@@ -144,7 +151,6 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		return false;
 	}
 
-	static binary_heap_tpl <ANode *> queue;
 
 	GET_NODE();
 #ifdef USE_VALGRIND_MEMCHECK
@@ -339,7 +345,6 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 	INT_CHECK("route 347");
 
-	static binary_heap_tpl <ANode *> queue;
 
 	GET_NODE();
 #ifdef USE_VALGRIND_MEMCHECK
