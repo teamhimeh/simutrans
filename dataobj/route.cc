@@ -103,7 +103,7 @@ bool route_t::append_straight_route(karte_t *welt, koord3d dest )
 
 
 
-route_t::route_t() : nodes(NULL), MAX_STEP(0)
+route_t::route_t() : nodes(NULL), MAX_STEP(0), marker(NULL)
 #ifdef DEBUG
 	, node_in_use(false)
 #endif
@@ -116,6 +116,10 @@ route_t::~route_t()
 	if(  nodes  ) {
 		delete [] nodes;
 		nodes = NULL;
+	}
+	if(  marker  ) {
+		delete marker;
+		marker = NULL;
 	}
 }
 
@@ -174,7 +178,10 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	assert( (uint8)(~ribi_t::reverse_single(tmp->ribi_from)& 0xf)  == start_dir);
 
 	// nothing in lists
-	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	if(  !marker  ) {
+		marker = new marker_t();
+	}
+	marker->init(welt->get_size().x, welt->get_size().y);
 
 	queue.clear();
 	queue.insert(tmp);
@@ -189,7 +196,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		tmp = queue.pop();
 		const grund_t* gr = tmp->gr;
 
-		if(  marker.test_and_mark(gr)  ) {
+		if(  marker->test_and_mark(gr)  ) {
 			// we were already here on a faster route, thus ignore this branch
 			// (trading speed against memory consumption)
 			continue;
@@ -220,7 +227,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			if(  (ribi & ribi_t::nesw[r] )!=0 // do not go backwards
 			    && koord_distance(start, gr->get_pos() + koord::nesw[r])<max_depth // not too far away
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
-			    && !marker.is_marked(to) // not already tested
+			    && !marker->is_marked(to) // not already tested
 			    && tdriver->check_next_tile(to, true) // can be driven on
 			) {
 				// not in there or taken out => add new
@@ -281,20 +288,19 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 
 
-ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel)
+ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel, ribi_t::ribi* next_ribi_buffer)
 {
-	static ribi_t::ribi next_ribi[4];
 	if( abs(gr_pos.x-ziel.x)>abs(gr_pos.y-ziel.y) ) {
-		next_ribi[0] = (ziel.x>gr_pos.x) ? ribi_t::east : ribi_t::west;
-		next_ribi[1] = (ziel.y>gr_pos.y) ? ribi_t::south : ribi_t::north;
+		next_ribi_buffer[0] = (ziel.x>gr_pos.x) ? ribi_t::east : ribi_t::west;
+		next_ribi_buffer[1] = (ziel.y>gr_pos.y) ? ribi_t::south : ribi_t::north;
 	}
 	else {
-		next_ribi[0] = (ziel.y>gr_pos.y) ? ribi_t::south : ribi_t::north;
-		next_ribi[1] = (ziel.x>gr_pos.x) ? ribi_t::east : ribi_t::west;
+		next_ribi_buffer[0] = (ziel.y>gr_pos.y) ? ribi_t::south : ribi_t::north;
+		next_ribi_buffer[1] = (ziel.x>gr_pos.x) ? ribi_t::east : ribi_t::west;
 	}
-	next_ribi[2] = ribi_t::reverse_single( next_ribi[1] );
-	next_ribi[3] = ribi_t::reverse_single( next_ribi[0] );
-	return next_ribi;
+	next_ribi_buffer[2] = ribi_t::reverse_single( next_ribi_buffer[1] );
+	next_ribi_buffer[3] = ribi_t::reverse_single( next_ribi_buffer[0] );
+	return next_ribi_buffer;
 }
 
 
@@ -343,8 +349,6 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		nodes = new ANode[MAX_STEP + 4 + 2];
 	}
 
-	INT_CHECK("route 347");
-
 
 	GET_NODE();
 #ifdef USE_VALGRIND_MEMCHECK
@@ -365,7 +369,10 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	tmp->jps_ribi  = ribi_t::all;
 
 	// nothing in lists
-	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	if(  !marker  ) {
+		marker = new marker_t();
+	}
+	marker->init(welt->get_size().x, welt->get_size().y);
 
 	// clear the queue (should be empty anyhow)
 	queue.clear();
@@ -374,22 +381,17 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 	uint32 beat=1;
 	do {
-		// this is too expensive to be called each step
-		if((beat++ & 4095) == 0) {
-			INT_CHECK("route 161");
-		}
-
 		if (new_top) {
 			// this is not in closed list, no check necessary
 			tmp = new_top;
 			new_top = NULL;
 			gr = tmp->gr;
-			marker.mark(gr);
+			marker->mark(gr);
 		}
 		else {
 			tmp = queue.pop();
 			gr = tmp->gr;
-			if(marker.test_and_mark(gr)) {
+			if(marker->test_and_mark(gr)) {
 				// we were already here on a faster route, thus ignore this branch
 				// (trading speed against memory consumption)
 				continue;
@@ -409,7 +411,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		// mask direction we came from
 		const ribi_t::ribi ribi =  way_ribi  &  ( ~ribi_t::reverse_single(tmp->ribi_from) )  &  tmp->jps_ribi;
 
-		const ribi_t::ribi *next_ribi = get_next_dirs(gr->get_pos(), ziel);
+		const ribi_t::ribi *next_ribi = get_next_dirs(gr->get_pos(), ziel, next_ribi_buffer);
 		for(int r=0; r<4; r++) {
 
 			// a way in our direction?
@@ -423,7 +425,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 
 			// a way goes here, and it is not marked (i.e. in the closed list)
-			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to)  &&  !marker.is_marked(to)) {
+			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to)  &&  !marker->is_marked(to)) {
 
 				weg_t *w = to->get_weg(wegtyp);
 				// Do not go on a tile, where a oneway sign forbids going.
@@ -538,7 +540,6 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,MAX_STEP,queue.get_count(),tmp->g,max_cost);
 #endif
 
-	INT_CHECK("route 194");
 	// target reached?
 	if(!ziel_erreicht  || step >= MAX_STEP  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
 		if(  step >= MAX_STEP  ) {
@@ -695,8 +696,6 @@ route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, c
 {
 	route.clear();
 
-	INT_CHECK("route 336");
-
 #ifdef DEBUG_ROUTES
 	const uint32 ms = dr_time();
 #endif
@@ -706,8 +705,6 @@ route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, c
 		DBG_DEBUG("route_t::calc_route()", "route from %d,%d to %d,%d with %i steps in %u ms found.", start.x, start.y, ziel.x, ziel.y, route.get_count()-1, dr_time()-ms );
 	}
 #endif
-
-	INT_CHECK("route 343");
 	
 	if( !ok ) {
 		DBG_MESSAGE("route_t::calc_route()","No route from %d,%d to %d,%d found",start.x, start.y, ziel.x, ziel.y);

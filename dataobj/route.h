@@ -18,6 +18,7 @@
 class karte_t;
 class test_driver_t;
 class grund_t;
+class marker_t;
 
 
 /**
@@ -74,6 +75,8 @@ public:
 	ANode *nodes;
 	uint32 MAX_STEP;
 	binary_heap_tpl<ANode *> queue;
+	marker_t *marker;
+	ribi_t::ribi next_ribi_buffer[4];  // Thread-safe buffer for direction calculations
 #ifdef DEBUG
 	// a semaphore, since we only have a single version of the array in memory
 	bool node_in_use;

@@ -1022,6 +1022,8 @@ sync_result convoi_t::sync_step(uint32 delta_t)
 
 		case EDIT_SCHEDULE:
 		case ROUTING_1:
+		case ROUTING_CALC:
+		case ROUTING_2:
 		case DUMMY4:
 		case DUMMY5:
 		case NO_ROUTE:
@@ -1447,13 +1449,53 @@ void convoi_t::step()
 						ziel_erreicht();
 						break;
 					}
-					// now calculate a new route
-					drive_to();
-					// finally, was there a record last time?
-					if(max_record_speed>welt->get_record_speed(fahr[0]->get_waytype())) {
-						welt->notify_record(self, max_record_speed, record_pos);
+					
+					// unreserve all tiles that are covered by the train but do not contain one of the wagons,
+					// otherwise repositioning of the train drive_to may lead to stray reserved tiles
+					if (dynamic_cast<rail_vehicle_t*>(fahr[0])!=NULL  &&  anz_vehikel > 1) {
+						// route-index points to next position in route
+						// it is completely off when convoi leaves depot
+						uint16 index0 = min(fahr[0]->get_route_index()-1, route.get_count());
+						for(uint8 i=1; i<anz_vehikel; i++) {
+							uint16 index1 = fahr[i]->get_route_index();
+							for(uint16 j = index1; j<index0; j++) {
+								// unreserve track on tiles between wagons
+								grund_t *gr = welt->lookup(route.at(j));
+								if (schiene_t *track = (schiene_t *)gr->get_weg( front()->get_waytype() ) ) {
+									track->unreserve(self);
+								}
+							}
+							index0 = min(index1-1, route.get_count());
+						}
 					}
+					// Also for road vehicles, unreserve tiles.
+					else if(road_vehicle_t* r = dynamic_cast<road_vehicle_t*>(fahr[0])) {
+						r->unreserve_all_tiles();
+					}
+					
+					// start threaded route calculation
+					state = ROUTING_CALC;
 				}
+			}
+			break;
+
+		case ROUTING_CALC:
+			// route calculation is done in threaded_step()
+			// this state will transition to ROUTING_2 once route is calculated
+			break;
+
+		case ROUTING_2:
+			// route calculation completed, finish the process
+			if(  anz_vehikel > 0  ) {
+				vorfahren();
+				reversing_needed = false;
+
+				// finally, was there a record last time?
+				if(max_record_speed>welt->get_record_speed(fahr[0]->get_waytype())) {
+					welt->notify_record(self, max_record_speed, record_pos);
+				}
+
+				state = DRIVING;
 			}
 			break;
 
@@ -5664,14 +5706,127 @@ void convoi_t::unset_convoi_coupling_in_progress() {
 
 bool convoi_t::needs_threaded_step() const
 {
-	// TODO: implement logic to determine if threaded processing is needed
-	// For now, always return false as requested
-	return false;
+	// threaded processing needed for route calculation
+	return state == ROUTING_CALC;
 }
 
 
 void convoi_t::threaded_step()
 {
-	// TODO: implement threaded operations from step()
-	// This will be called after all convoys have completed their regular step()
+	if(  state == ROUTING_CALC  ) {
+		// perform only route calculation in parallel
+		if(  anz_vehikel > 0  ) {
+			koord3d start = front()->get_pos();
+			koord3d ziel = schedule->get_current_entry().pos;
+
+			// avoid stopping mid-halt
+			if(  start==ziel  ) {
+				halthandle_t halt = haltestelle_t::get_stoppable_halt(ziel,get_owner());
+				if(  halt.is_bound()  &&  route.is_contained(start)  ) {
+					for(  uint32 i=route.index_of(start);  i<route.get_count();  i++  ) {
+						grund_t *gr = welt->lookup(route.at(i));
+						if(  gr  && gr->get_halt()==halt  ) {
+							ziel = gr->get_pos();
+						}
+						else {
+							break;
+						}
+					}
+				}
+			}
+
+			if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route )  ) {
+				state = NO_ROUTE;
+				get_owner()->report_vehicle_problem( self, ziel );
+				// wait 25s before next attempt
+				wait_lock = 25000;
+			}
+			else {
+				bool route_ok = true;
+				const uint8 current_stop = schedule->get_current_stop();
+				if(  fahr[0]->get_waytype() != water_wt  ) {
+					air_vehicle_t *const plane = dynamic_cast<air_vehicle_t *>(fahr[0]);
+					uint32 takeoff = 0, search = 0, landing = 0;
+					air_vehicle_t::flight_state plane_state = air_vehicle_t::taxiing;
+					if(  plane  ) {
+						// due to the complex state system of aircrafts, we have to save index and state
+						plane->get_event_index( plane_state, takeoff, search, landing );
+					}
+
+					// set next schedule target position if next is a waypoint
+					if(  is_waypoint(ziel)  ) {
+						schedule_target = ziel;
+					}
+
+					// continue route search until the destination is a station
+					while(  is_waypoint(ziel)  ) {
+						start = ziel;
+						schedule->advance();
+						ziel = schedule->get_current_entry().pos;
+
+						if(  schedule->get_current_stop() == current_stop  ) {
+							// looped around without finding a halt => entire schedule is waypoints.
+							break;
+						}
+
+						route_t next_segment;
+						if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment )  ) {
+							// do we still have a valid route to proceed => then go until there
+							if(  route.get_count()>1  ) {
+								break;
+							}
+							// we are stuck on our first routing attempt => give up
+							state = NO_ROUTE;
+							get_owner()->report_vehicle_problem( self, ziel );
+							// wait 25s before next attempt
+							wait_lock = 25000;
+							route_ok = false;
+							break;
+						}
+						else {
+							bool looped = false;
+							if(  fahr[0]->get_waytype() != air_wt  ) {
+								 // check if the route circles back on itself (only check the first tile, should be enough)
+								looped = route.is_contained(next_segment.at(1));
+							}
+
+							if(  looped  ) {
+								// proceed upto the waypoint before the loop. Will pause there for a new route search.
+								break;
+							}
+							else {
+								uint32 count_offset = route.get_count()-1;
+								route.append( &next_segment);
+								if(  plane  ) {
+									// maybe we need to restore index
+									air_vehicle_t::flight_state dummy1;
+									uint32 new_takeoff, new_search, new_landing;
+									plane->get_event_index( dummy1, new_takeoff, new_search, new_landing );
+									if(  takeoff == 0x7FFFFFFF  &&  new_takeoff != 0x7FFFFFFF  ) {
+										takeoff = new_takeoff + count_offset;
+									}
+									if(  landing == 0x7FFFFFFF  &&  new_landing != 0x7FFFFFFF  ) {
+										landing = new_landing + count_offset;
+									}
+									if(  search == 0x7FFFFFFF  &&  new_search != 0x7FFFFFFF ) {
+										search = new_search + count_offset;
+									}
+								}
+							}
+						}
+					}
+
+					if(  plane  ) {
+						// due to the complex state system of aircrafts, we have to restore index and state
+						plane->set_event_index( plane_state, takeoff, search, landing );
+					}
+				}
+
+				schedule->set_current_stop(current_stop);
+				if(  route_ok  ) {
+					state = ROUTING_2;
+				}
+			}
+		}
+	}
 }
