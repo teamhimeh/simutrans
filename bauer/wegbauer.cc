@@ -2174,6 +2174,8 @@ uint32 ms = dr_time();
 #endif
 	INT_CHECK("simbau 740");
 
+	assert(0);
+
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
 		assert( start.get_count() == 1  &&  ziel.get_count() == 1 );
 		intern_calc_route_runways(start[0], ziel[0]);
