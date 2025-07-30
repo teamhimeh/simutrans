@@ -232,6 +232,13 @@ ifdef MULTI_THREAD
   endif
 endif
 
+ifdef MINGW_EXCHNDL
+  ifeq ($(shell expr $(MINGW_EXCHNDL) \>= 1), 1)
+    CFLAGS  += -DMINGW_EXCHNDL
+    LIBS    += -lexchndl
+  endif
+endif
+
 ifdef WITH_REVISION
   ifeq ($(shell expr $(WITH_REVISION) \>= 1), 1)
     ifeq ($(shell expr $(WITH_REVISION) \>= 2), 1)

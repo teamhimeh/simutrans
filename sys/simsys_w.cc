@@ -17,6 +17,10 @@
 #include <imm.h>
 #include <commdlg.h>
 
+#ifdef MINGW_EXCHNDL
+#include <exchndl.h>
+#endif
+
 #ifdef __CYGWIN__
 extern int __argc;
 extern char **__argv;
@@ -130,6 +134,10 @@ sint16 dr_get_screen_scale()
  */
 bool dr_os_init(int const* /*parameter*/)
 {
+#ifdef MINGW_EXCHNDL
+	ExcHndlInit();
+#endif
+
 	// prepare for next event
 	sys_event.type = SIM_NOEVENT;
 	sys_event.code = 0;
