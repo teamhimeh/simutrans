@@ -29,6 +29,10 @@
 // if defined, print some profiling informations into the file
 //#define DEBUG_ROUTES
 
+// Thread-local marker for route finding to avoid memory allocation overhead
+// and ensure thread safety
+static thread_local marker_t local_marker;
+
 
 
 #ifdef DEBUG_ROUTES
@@ -103,7 +107,7 @@ bool route_t::append_straight_route(karte_t *welt, koord3d dest )
 
 
 
-route_t::route_t() : nodes(NULL), MAX_STEP(0), marker(NULL)
+route_t::route_t() : nodes(NULL), MAX_STEP(0)
 #ifdef DEBUG
 	, node_in_use(false)
 #endif
@@ -116,10 +120,6 @@ route_t::~route_t()
 	if(  nodes  ) {
 		delete [] nodes;
 		nodes = NULL;
-	}
-	if(  marker  ) {
-		delete marker;
-		marker = NULL;
 	}
 }
 
@@ -177,11 +177,8 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	// assert that mask in first step is equal to start_dir
 	assert( (uint8)(~ribi_t::reverse_single(tmp->ribi_from)& 0xf)  == start_dir);
 
-	// nothing in lists
-	if(  !marker  ) {
-		marker = new marker_t();
-	}
-	marker->init(welt->get_size().x, welt->get_size().y);
+	// Initialize thread-local marker
+	local_marker.init(welt->get_size().x, welt->get_size().y);
 
 	queue.clear();
 	queue.insert(tmp);
@@ -196,7 +193,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		tmp = queue.pop();
 		const grund_t* gr = tmp->gr;
 
-		if(  marker->test_and_mark(gr)  ) {
+		if(  local_marker.test_and_mark(gr)  ) {
 			// we were already here on a faster route, thus ignore this branch
 			// (trading speed against memory consumption)
 			continue;
@@ -227,7 +224,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			if(  (ribi & ribi_t::nesw[r] )!=0 // do not go backwards
 			    && koord_distance(start, gr->get_pos() + koord::nesw[r])<max_depth // not too far away
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
-			    && !marker->is_marked(to) // not already tested
+			    && !local_marker.is_marked(to) // not already tested
 			    && tdriver->check_next_tile(to, true) // can be driven on
 			) {
 				// not in there or taken out => add new
@@ -368,11 +365,8 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	tmp->ribi_from = ribi_t::none;
 	tmp->jps_ribi  = ribi_t::all;
 
-	// nothing in lists
-	if(  !marker  ) {
-		marker = new marker_t();
-	}
-	marker->init(welt->get_size().x, welt->get_size().y);
+	// Initialize thread-local marker
+	local_marker.init(welt->get_size().x, welt->get_size().y);
 
 	// clear the queue (should be empty anyhow)
 	queue.clear();
@@ -386,12 +380,12 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			tmp = new_top;
 			new_top = NULL;
 			gr = tmp->gr;
-			marker->mark(gr);
+			local_marker.mark(gr);
 		}
 		else {
 			tmp = queue.pop();
 			gr = tmp->gr;
-			if(marker->test_and_mark(gr)) {
+			if(local_marker.test_and_mark(gr)) {
 				// we were already here on a faster route, thus ignore this branch
 				// (trading speed against memory consumption)
 				continue;
@@ -425,7 +419,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 
 			// a way goes here, and it is not marked (i.e. in the closed list)
-			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to)  &&  !marker->is_marked(to)) {
+			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to)  &&  !local_marker.is_marked(to)) {
 
 				weg_t *w = to->get_weg(wegtyp);
 				// Do not go on a tile, where a oneway sign forbids going.
