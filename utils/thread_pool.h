@@ -62,6 +62,13 @@ public:
 	void wait_for_all();
 
 	/**
+	 * Wait for all submitted tasks to complete with interrupt support
+	 * @param interrupt_func Function to check if sync is needed, returns true if sync should happen
+	 * @param sync_func Function to call for sync
+	 */
+	void wait_for_all_with_interrupt(std::function<bool()> interrupt_func, std::function<void()> sync_func);
+
+	/**
 	 * Get the number of worker threads
 	 */
 	int get_thread_count() const { return workers.size(); }
@@ -81,6 +88,10 @@ public:
 	}
 	
 	void wait_for_all() {
+		// Nothing to wait for in single-threaded mode
+	}
+	
+	void wait_for_all_with_interrupt(std::function<bool()> interrupt_func, std::function<void()> sync_func) {
 		// Nothing to wait for in single-threaded mode
 	}
 	

@@ -6,6 +6,7 @@
 #include "thread_pool.h"
 
 #ifdef MULTI_THREAD
+#include <unistd.h>
 
 thread_pool_t::thread_pool_t(int thread_count) : stop(false), active_tasks(0), pending_tasks(0)
 {
@@ -108,6 +109,37 @@ void thread_pool_t::wait_for_all()
 	
 	while (active_tasks > 0 || pending_tasks > 0) {
 		pthread_cond_wait(&finished_condition, &queue_mutex);
+	}
+	
+	pthread_mutex_unlock(&queue_mutex);
+}
+
+void thread_pool_t::wait_for_all_with_interrupt(std::function<bool()> interrupt_func, std::function<void()> sync_func)
+{
+	pthread_mutex_lock(&queue_mutex);
+	
+	while (active_tasks > 0 || pending_tasks > 0) {
+		pthread_mutex_unlock(&queue_mutex);
+		
+		// Check if we need to interrupt for sync
+		if (interrupt_func()) {
+			pthread_mutex_lock(&queue_mutex);
+			
+			// Wait for all currently active tasks to complete before sync
+			while (active_tasks > 0) {
+				pthread_cond_wait(&finished_condition, &queue_mutex);
+			}
+			
+			pthread_mutex_unlock(&queue_mutex);
+			
+			// Perform sync
+			sync_func();
+		}
+		
+		// Wait a bit before next check
+		usleep(1000); // 1ms
+		
+		pthread_mutex_lock(&queue_mutex);
 	}
 	
 	pthread_mutex_unlock(&queue_mutex);

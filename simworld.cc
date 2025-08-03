@@ -4244,6 +4244,13 @@ void karte_t::step()
 	// multithreaded step for convois
 	DBG_DEBUG4("karte_t::step", "threaded step convois");
 	static thread_pool_t thread_pool(4); // TODO: make thread count configurable
+	static uint32 last_interrupt_time = 0;
+	static uint32 last_ticks = 0;
+	
+	// Initialize interrupt time on first call
+	if (last_interrupt_time == 0) {
+		last_interrupt_time = dr_time();
+	}
 	
 	// collect convoys that need threaded processing
 	for (size_t i = 0; i < convoi_array.get_count(); i++) {
@@ -4255,8 +4262,27 @@ void karte_t::step()
 		}
 	}
 	
-	// wait for all threaded operations to complete
-	thread_pool.wait_for_all();
+	// wait for all threaded operations to complete with interrupt support
+	thread_pool.wait_for_all_with_interrupt(
+		[&]() -> bool {
+			// Check if we need to interrupt for sync (exactly like simintr.cc logic)
+			if (!is_fast_forward() || get_ticks() != last_ticks) {
+				const uint32 now = dr_time();
+				const uint32 frame_time = get_frame_time() * 16; // FRAME_TIME_MULTI = 16
+				if ((now - last_interrupt_time) * 16 >= frame_time) {
+					return true;
+				}
+			}
+			return false;
+		},
+		[&]() {
+			// Perform display update only (do not advance game logic)
+			const uint32 now = dr_time();
+			last_interrupt_time = now;
+			sync_step(0, false, true); // diff=0, do_sync_step=false, display=true
+			last_ticks = get_ticks(); // Update last_ticks like simintr.cc does with last_ms
+		}
+	);
 
 	// now step all towns (to generate passengers)
 	DBG_DEBUG4("karte_t::step", "step cities");
