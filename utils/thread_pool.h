@@ -22,8 +22,8 @@ class thread_pool_t
 {
 private:
 	struct task_t {
-		std::function<void()> func;
-		task_t(std::function<void()> f) : func(f) {}
+		std::function<void(std::function<void()>)> func;
+		task_t(std::function<void(std::function<void()>)> f) : func(f) {}
 	};
 
 	std::vector<pthread_t> workers;
@@ -31,9 +31,13 @@ private:
 	pthread_mutex_t queue_mutex;
 	pthread_cond_t condition;
 	pthread_cond_t finished_condition;
+	pthread_cond_t suspend_condition;
+	pthread_cond_t all_suspended_condition;
 	bool stop;
 	int active_tasks;
 	int pending_tasks;
+	int suspended_tasks;
+	bool sync_requested;
 
 	static void* worker_thread(void* arg);
 	void worker_loop();
@@ -52,9 +56,9 @@ public:
 
 	/**
 	 * Submit a lambda function for parallel execution
-	 * @param func Lambda function to execute
+	 * @param func Lambda function to execute, receives suspend function as parameter
 	 */
-	void enqueue(std::function<void()> func);
+	void enqueue(std::function<void(std::function<void()>)> func);
 
 	/**
 	 * Wait for all submitted tasks to complete
@@ -83,8 +87,8 @@ public:
 	thread_pool_t(int /*thread_count*/) {}
 	~thread_pool_t() {}
 	
-	void enqueue(std::function<void()> func) {
-		func(); // Execute immediately in single-threaded mode
+	void enqueue(std::function<void(std::function<void()>)> func) {
+		func([](){}); // Execute immediately with dummy suspend function
 	}
 	
 	void wait_for_all() {
