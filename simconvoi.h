@@ -747,7 +747,7 @@ public:
 	 * Multithreaded version of some operations from step()
 	 * This is called after all convoys have completed their regular step()
 	 */
-	void threaded_step();
+	void threaded_step(std::function<void()> int_check);
 
 	/**
 	* sets a new convoi in route

@@ -1032,7 +1032,7 @@ void karte_t::distribute_cities(int new_city_count, sint32 new_mean_citizen_coun
 				// valid connection?
 				if(  conn.x >= 0  ) {
 					// is there a connection already
-					const bool connected = (  phase==1  &&  verbindung.calc_route( this, k[conn.x], k[conn.y], test_driver, 0, 0 )  );
+					const bool connected = (  phase==1  &&  verbindung.calc_route( this, k[conn.x], k[conn.y], test_driver, 0, 0, []{ INT_CHECK(); } )  );
 					// build this connection?
 					bool build = false;
 					// set appropriate max length for way builder
@@ -4256,8 +4256,8 @@ void karte_t::step()
 	for (size_t i = 0; i < convoi_array.get_count(); i++) {
 		convoihandle_t cnv = convoi_array[i];
 		if(  cnv.is_bound()  &&  cnv->needs_threaded_step()  ) {
-			thread_pool.enqueue([cnv]() {
-				cnv->threaded_step();
+			thread_pool.enqueue([cnv](std::function<void()> int_check) {
+				cnv->threaded_step(int_check);
 			});
 		}
 	}

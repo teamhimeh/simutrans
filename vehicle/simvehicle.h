@@ -313,7 +313,7 @@ public:
 
 	void get_smoke(bool yesno ) { smoke = yesno;}
 
-	virtual bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route);
+	virtual bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route, std::function<void()> int_check);
 	uint16 get_route_index() const {return route_index;}
 
 	/**
@@ -527,7 +527,7 @@ public:
 
 	uint32 get_cost_upslope() const OVERRIDE { return 15; }
 
-	bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route) OVERRIDE;
+	bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route, std::function<void()> int_check) OVERRIDE;
 
 	bool can_enter_tile(const grund_t *gr_next, sint32 &restart_speed, uint8 second_check_count) OVERRIDE;
 
@@ -580,7 +580,7 @@ public:
 	waytype_t get_waytype() const OVERRIDE { return track_wt; }
 
 	// since we might need to un-reserve previously used blocks, we must do this before calculation a new route
-	bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route) OVERRIDE;
+	bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route, std::function<void()> int_check) OVERRIDE;
 
 	// how expensive to go here (for way search)
 	int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const OVERRIDE;
@@ -795,7 +795,7 @@ public:
 
 	void set_convoi(convoi_t *c) OVERRIDE;
 
-	bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route) OVERRIDE;
+	bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route, std::function<void()> int_check) OVERRIDE;
 
 	typ get_typ() const OVERRIDE { return air_vehicle; }
 

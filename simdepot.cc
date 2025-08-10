@@ -16,6 +16,7 @@
 #include "simline.h"
 #include "simlinemgmt.h"
 #include "simmenu.h"
+#include "simintr.h"
 
 #include "gui/depot_frame.h"
 #include "gui/messagebox.h"
@@ -542,7 +543,7 @@ bool depot_t::can_start_convoi(convoihandle_t cnv, bool local_execution)
 				create_win( new news_img("Diese Zusammenstellung kann nicht fahren!\n"), w_time_delete, magic_none);
 			}
 		}
-		else if(  !front_cnv->front()->calc_route(this->get_pos(), cur_pos, speed_to_kmh(front_cnv->calc_min_top_speed()), cnv->access_route())  ) {
+		else if(  !front_cnv->front()->calc_route(this->get_pos(), cur_pos, speed_to_kmh(front_cnv->calc_min_top_speed()), cnv->access_route(), []{ INT_CHECK(); })  ) {
 			// no route to go ...
 			if(local_execution) {
 				static cbuffer_t buf;

@@ -302,7 +302,7 @@ ribi_t::ribi *get_next_dirs(const koord3d& gr_pos, const koord3d& ziel, ribi_t::
 
 
 
-bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_speed, const uint32 max_cost)
+bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_speed, const uint32 max_cost, std::function<void()> int_check)
 {
 	bool ok = false;
 
@@ -345,7 +345,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		MAX_STEP = welt->get_settings().get_max_route_steps(); // may need very much memory => configurable
 		nodes = new ANode[MAX_STEP + 4 + 2];
 	}
-
+	int_check();
 
 	GET_NODE();
 #ifdef USE_VALGRIND_MEMCHECK
@@ -375,6 +375,10 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 	uint32 beat=1;
 	do {
+		// this is too expensive to be called each step
+		if((beat++ & 4095) == 0) {
+			int_check();
+		}
 		if (new_top) {
 			// this is not in closed list, no check necessary
 			tmp = new_top;
@@ -534,6 +538,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	DBG_DEBUG("route_t::intern_calc_route()","steps=%i  (max %i) in route, open %i, cost %u (max %u)",step,MAX_STEP,queue.get_count(),tmp->g,max_cost);
 #endif
 
+	int_check();
 	// target reached?
 	if(!ziel_erreicht  || step >= MAX_STEP  ||  tmp->g >= max_cost  ||  tmp->parent==NULL) {
 		if(  step >= MAX_STEP  ) {
@@ -686,20 +691,23 @@ bool is_way_bend(koord3d pos, waytype_t waytype) {
  * searches route, uses intern_calc_route() for distance between stations
  * handles only driving in stations by itself
  */
-route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_khm, sint32 max_len )
+route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_khm, sint32 max_len, std::function<void()> int_check)
 {
 	route.clear();
+	int_check();
 
 #ifdef DEBUG_ROUTES
 	const uint32 ms = dr_time();
 #endif
-	const bool ok = intern_calc_route(welt, start, ziel, tdriver, max_khm, 0xFFFFFFFFul );
+	const bool ok = intern_calc_route(welt, start, ziel, tdriver, max_khm, 0xFFFFFFFFul, int_check);
 #ifdef DEBUG_ROUTES
 	if(tdriver->get_waytype()==water_wt) {
 		DBG_DEBUG("route_t::calc_route()", "route from %d,%d to %d,%d with %i steps in %u ms found.", start.x, start.y, ziel.x, ziel.y, route.get_count()-1, dr_time()-ms );
 	}
 #endif
-	
+
+	int_check();
+
 	if( !ok ) {
 		DBG_MESSAGE("route_t::calc_route()","No route from %d,%d to %d,%d found",start.x, start.y, ziel.x, ziel.y);
 		// no route found

@@ -3014,7 +3014,7 @@ void way_builder_t::build_river()
 		// unless weare the first and there is no lake on the way.
 		route_t to_the_sea;
 		fluss_test_driver_t river_tester;
-		if (to_the_sea.calc_route(welt, welt->lookup_kartenboden(route[last_common_water_tile].get_2d())->get_pos(), welt->lookup_kartenboden(route[0].get_2d())->get_pos(), &river_tester, 0, 0x7FFFFFFF)) {
+		if (to_the_sea.calc_route(welt, welt->lookup_kartenboden(route[last_common_water_tile].get_2d())->get_pos(), welt->lookup_kartenboden(route[0].get_2d())->get_pos(), &river_tester, 0, 0x7FFFFFFF, []{ INT_CHECK(); })) {
 			FOR(koord3d_vector_t, const& i, to_the_sea.get_route()) {
 				if (weg_t* const w = welt->lookup(i)->get_weg(water_wt)) {
 					int type;

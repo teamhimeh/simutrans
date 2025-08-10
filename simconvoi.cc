@@ -1221,7 +1221,7 @@ bool convoi_t::drive_to()
 			}
 		}
 
-		if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route )  ) {
+		if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route, []{ INT_CHECK(); } )  ) {
 			if(  state != NO_ROUTE  ) {
 				state = NO_ROUTE;
 				get_owner()->report_vehicle_problem( self, ziel );
@@ -1258,7 +1258,7 @@ bool convoi_t::drive_to()
 					}
 
 					route_t next_segment;
-					if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment )  ) {
+					if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment, []{ INT_CHECK(); })  ) {
 						// do we still have a valid route to proceed => then go until there
 						if(  route.get_count()>1  ) {
 							break;
@@ -3988,7 +3988,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		if(  need_coupling_at_this_stop  &&  next_initial_direction==ribi_t::none  ) {
 			// calc the initial direction to the next stop.
 			route_t r;
-			route_t::route_result_t res = r.calc_route(welt, front()->get_pos(), schedule->get_next_entry().pos, front(), speed_to_kmh(min_top_speed), 8888);
+			route_t::route_result_t res = r.calc_route(welt, front()->get_pos(), schedule->get_next_entry().pos, front(), speed_to_kmh(min_top_speed), 8888, []{ INT_CHECK(); });
 			if(  res==route_t::no_route  ||  r.get_count()<2  ) {
 				// assume we do not turn here
 				next_initial_direction = front()->get_direction();
@@ -5022,7 +5022,7 @@ const char* convoi_t::send_to_depot(bool local)
 			// the current route is already shorter, no need to search further
 			continue;
 		}
-		if (v->calc_route(get_pos(), pos, 50, route)) { // do not care about speed
+		if (v->calc_route(get_pos(), pos, 50, route, []{ INT_CHECK(); })) { // do not care about speed
 			if(  route->get_count() < shortest_route->get_count()  ||  shortest_route->empty()  ) {
 				// just swap the pointers
 				sim::swap(shortest_route, route);
@@ -5087,7 +5087,7 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 				// the current route is already shorter, no need to search further
 				continue;
 			}
-			if (v->calc_route(get_pos(), pos, 50, route)) { // do not care about speed
+			if (v->calc_route(get_pos(), pos, 50, route, []{ INT_CHECK(); })) { // do not care about speed
 				if(  route->get_count() < shortest_route->get_count()  ||  shortest_route->empty()  ) {
 					// just swap the pointers
 					sim::swap(shortest_route, route);
@@ -5711,7 +5711,7 @@ bool convoi_t::needs_threaded_step() const
 }
 
 
-void convoi_t::threaded_step()
+void convoi_t::threaded_step(std::function<void()> int_check)
 {
 	if(  state == ROUTING_CALC  ) {
 		// perform only route calculation in parallel
@@ -5735,7 +5735,7 @@ void convoi_t::threaded_step()
 				}
 			}
 
-			if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route )  ) {
+			if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route, int_check)  ) {
 				state = NO_ROUTE;
 				get_owner()->report_vehicle_problem( self, ziel );
 				// wait 25s before next attempt
@@ -5770,7 +5770,7 @@ void convoi_t::threaded_step()
 						}
 
 						route_t next_segment;
-						if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment )  ) {
+						if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment, int_check)  ) {
 							// do we still have a valid route to proceed => then go until there
 							if(  route.get_count()>1  ) {
 								break;

@@ -13,6 +13,7 @@
 
 #include "../tpl/vector_tpl.h"
 #include "../tpl/binary_heap_tpl.h"
+#include <functional>
 
 
 class karte_t;
@@ -36,7 +37,7 @@ private:
 	/**
 	 * The actual route search
 	 */
-	bool intern_calc_route(karte_t *w, koord3d start, koord3d ziel, test_driver_t *tdriver, const sint32 max_kmh, const uint32 max_cost);
+	bool intern_calc_route(karte_t *w, koord3d start, koord3d ziel, test_driver_t *tdriver, const sint32 max_kmh, const uint32 max_cost, std::function<void()> int_check);
 
 	koord3d_vector_t route;           // The coordinates for the vehicle route
 
@@ -149,7 +150,7 @@ public:
 	 * Calculates the route from @p start to @p target
 	 * @param for max_len, 16 is one tile
 	 */
-	route_result_t calc_route(karte_t *welt, koord3d start, koord3d target, test_driver_t *tdriver, const sint32 max_speed_kmh, sint32 max_len );
+	route_result_t calc_route(karte_t *welt, koord3d start, koord3d target, test_driver_t *tdriver, const sint32 max_speed_kmh, sint32 max_len, std::function<void()> int_check);
 
 	/**
 	 * Load/Save of the route.
