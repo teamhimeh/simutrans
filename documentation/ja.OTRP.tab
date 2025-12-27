@@ -425,6 +425,16 @@ no close this factory
 この産業を閉鎖しない
 close_old_factory
 古い産業を閉鎖する
+Factory %s is retired! Close soon!
+%sは古い産業です!まもなく閉業します!
+Factory %s has closed.
+%sは閉業しました．
+** This Factory Will Close Soon! **
+** この産業はまもなく閉業します **
+shipment size:
+出荷単位:
+Set shipment size.(default:10)
+出荷1回あたりに出荷する貨物量を指定します(デフォルト:10)
 No Supply
 消費しない産業のみ
 No Product
