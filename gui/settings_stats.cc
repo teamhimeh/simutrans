@@ -326,6 +326,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 
 	INIT_NUM( "just_in_time", sets->get_just_in_time(), 0, 2, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "maximum_intransit_percentage", sets->get_factory_maximum_intransit_percentage(), 0, 32767, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_BOOL( "close_old_factory", sets->is_close_old_factory() );
 	INIT_BOOL( "crossconnect_factories", sets->is_crossconnect_factories() );
 	INIT_NUM( "crossconnect_factories_percentage", sets->get_crossconnect_factor(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "industry_increase_every", sets->get_industry_increase_every(), 0, 100000, 100, false );
@@ -338,6 +339,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	SEPERATOR
 
 	INIT_NUM( "passenger_factor",  sets->get_passenger_factor(), 0, 16, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "passenger_factor_float",  sets->get_passenger_factor_float(), 0, sets->max_passenger_factor_float()-1, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "minimum_city_distance", sets->get_minimum_city_distance(), 1, 20000, 10, false );
 	INIT_NUM( "special_building_distance", sets->get_special_building_distance(), 1, 150, 1, false );
 	INIT_NUM( "factory_worker_radius", sets->get_factory_worker_radius(), 0, 32767, gui_numberinput_t::AUTOLINEAR, false );
@@ -418,6 +420,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( env_t::just_in_time );
 	sets->just_in_time = env_t::just_in_time;
 	READ_NUM_VALUE( sets->factory_maximum_intransit_percentage );
+	READ_BOOL_VALUE( sets->close_old_factory );
 	READ_BOOL_VALUE( sets->crossconnect_factories );
 	READ_NUM_VALUE( sets->crossconnect_factor );
 	READ_NUM_VALUE( sets->industry_increase );
@@ -429,6 +432,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->way_height_clearance );
 
 	READ_NUM_VALUE( sets->passenger_factor );
+	READ_NUM_VALUE( sets->passenger_factor_float );
 	READ_NUM_VALUE( sets->minimum_city_distance );
 	READ_NUM_VALUE( sets->special_building_distance );
 	READ_NUM_VALUE( sets->factory_worker_radius );

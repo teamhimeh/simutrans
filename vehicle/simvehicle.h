@@ -167,7 +167,9 @@ public:
 
 	ribi_t::ribi get_90direction() const {return ribi_type(get_pos(), get_pos_next());}
 
-	koord3d get_pos_next() const {return pos_next;}
+	koord3d get_pos_next() const {return pos_next;}	
+	
+	void set_pos_next(koord3d pn) { pos_next = pn; }
 
 	waytype_t get_waytype() const OVERRIDE = 0;
 
@@ -272,6 +274,7 @@ protected:
 public:
 	void calc_image() OVERRIDE;
 
+
 	// the coordinates, where the vehicle was loaded the last time
 	koord3d last_stop_pos;
 
@@ -331,7 +334,7 @@ public:
 	/**
 	* @return die running_cost in Cr/100Km
 	*/
-	int get_operating_cost() const { return desc->get_running_cost(); }
+	sint64 get_operating_cost() const { return desc->get_running_cost(); }
 
 	/**
 	* Play sound, when the vehicle is visible on screen
@@ -562,16 +565,15 @@ public:
 class rail_vehicle_t : public vehicle_t
 {
 protected:
-	bool check_next_tile(const grund_t *bd, bool coupling) const OVERRIDE;
-	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd,false); }
+	bool check_next_tile(const grund_t *bd, bool find_route, bool coupling) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd, false, false); }
 
 	void enter_tile(grund_t*) OVERRIDE;
 
-	bool is_signal_clear(uint16 start_index, sint32 &restart_speed);
-	bool is_pre_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed);
-	bool is_priority_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed);
-	bool is_longblock_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed);
-	bool is_choose_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed);
+	bool is_pre_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
+	bool is_priority_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
+	bool is_longblock_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
+	bool is_choose_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
 
 public:
 	waytype_t get_waytype() const OVERRIDE { return track_wt; }
@@ -593,7 +595,7 @@ public:
 
 	// reserves or un-reserves all blocks and returns the handle to the next block (if there)
 	// returns true on successful reservation
-	bool block_reserver(const route_t *route, uint16 start_index, uint16 &next_signal, uint16 &next_crossing, int signal_count, bool reserve, bool force_unreserve, bool use_vector = false ) const;
+	bool block_reserver(const route_t *route, uint16 start_index, uint16 &next_signal, uint16 &next_crossing, int signal_count, bool reserve, bool force_unreserve, bool use_vector = false, bool signal_index_must_return = false ) const;
 
 	bool can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps, bool ignore_signals = false);
 
@@ -611,9 +613,8 @@ public:
 
 	// step() routine called by convoy
 	bool check_longblock_signal(signal_t *sig, uint16 start_index, sint32 &restart_speed);
+	bool is_signal_clear(uint16 start_index, sint32 &restart_speed, bool const call_by_step);
 };
-
-
 
 /**
  * very similar to normal railroad, so we can implement it here completely ...
@@ -726,7 +727,6 @@ public:
 		circling            = 5,
 		taxiing_to_halt     = 6
 	};
-
 private:
 	// only used for is_target() (do not need saving)
 	ribi_t::ribi approach_dir;
@@ -767,6 +767,7 @@ protected:
 	bool find_route_to_stop_position();
 
 public:
+	void increment_route_index(sint16 i){route_index+=i;}
 	air_vehicle_t(loadsave_t *file, bool is_first, bool is_last);
 	air_vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player, convoi_t* cnv); // start and schedule
 
@@ -801,6 +802,7 @@ public:
 	void rdwr_from_convoi(loadsave_t *file) OVERRIDE;
 
 	int get_flyingheight() const {return flying_height-get_hoff()-2;}
+	int get_targetheight() const {return target_height-get_hoff()-2;}
 
 	// image: when flying empty, on ground the plane
 	image_id get_image() const OVERRIDE {return !is_on_ground() ? IMG_EMPTY : image;}

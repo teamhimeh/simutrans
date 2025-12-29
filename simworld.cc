@@ -15,6 +15,7 @@
 #include "simcity.h"
 #include "simcolor.h"
 #include "simconvoi.h"
+#include "utils/thread_pool.h"
 #include "simdebug.h"
 #include "simdepot.h"
 #include "simfab.h"
@@ -1834,11 +1835,11 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	setsimrand(0xFFFFFFFF, settings.get_map_number());
 	clear_random_mode( 0xFFFF );
 	set_random_mode( MAP_CREATE_RANDOM );
-
-	if(  old_x == 0  &&  !settings.heightfield.empty()  ) {
+	dbg->message("karte_t::enlarge_map()","heightfield name is %s",settings.heightfield.c_str());
+	if(  !settings.heightfield.empty()  ) {
 		// init from file
-		for(int y=0; y<cached_grid_size.y; y++) {
-			for(int x=0; x<cached_grid_size.x; x++) {
+		for(  sint16 y = 0;  y<=new_size_y;  y++  ) {
+			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<=new_size_x;  x++  ) {
 				grid_hgts[x + y*(cached_grid_size.x+1)] = h_field[x+(y*(sint32)cached_grid_size.x)]+1;
 			}
 			grid_hgts[cached_grid_size.x + y*(cached_grid_size.x+1)] = grid_hgts[cached_grid_size.x-1 + y*(cached_grid_size.x+1)];
@@ -3870,8 +3871,41 @@ void karte_t::new_month()
 	INT_CHECK( "simworld 1701" );
 
 //	DBG_MESSAGE("karte_t::new_month()","factories");
-	FOR(slist_tpl<fabrik_t*>, const fab, fab_list) {
-		fab->new_month();
+	uint32 total_electric_demand = 1;
+	uint32 electric_productivity = 0;
+	closed_factories_this_month.clear();
+	uint32 closed_factories_count = 0;
+	FOR(slist_tpl<fabrik_t*>, const fab, fab_list)
+	{
+		if(!closed_factories_this_month.is_contained(fab))
+		{
+			fab->new_month();
+			// Check to see whether the factory has closed down - if so, the pointer will be dud.
+			if(closed_factories_count == closed_factories_this_month.get_count())
+			{
+				if(fab->get_desc()->is_electricity_producer())
+				{
+					electric_productivity += fab->get_scaled_electric_demand();
+				}
+				else
+				{
+					total_electric_demand += fab->get_scaled_electric_demand();
+				}
+			}
+			else
+			{
+				closed_factories_count = closed_factories_this_month.get_count();
+			}
+		}
+	}
+
+	FOR(vector_tpl<fabrik_t*>, const fab, closed_factories_this_month)
+	{
+		if(fab_list.is_contained(fab))
+		{
+			gebaeude_t* gb = lookup_kartenboden( fab->get_pos().get_2d() )->find<gebaeude_t>();
+			hausbauer_t::remove(get_public_player(), gb);
+		}
 	}
 	INT_CHECK("simworld 1278");
 
@@ -4239,6 +4273,23 @@ void karte_t::step()
 			INT_CHECK("simworld 1947");
 		}
 	}
+
+	// multithreaded step for convois
+	DBG_DEBUG4("karte_t::step", "threaded step convois");
+	static thread_pool_t thread_pool(4); // TODO: make thread count configurable
+	
+	// collect convoys that need threaded processing
+	for (size_t i = 0; i < convoi_array.get_count(); i++) {
+		convoihandle_t cnv = convoi_array[i];
+		if(  cnv.is_bound()  &&  cnv->needs_threaded_step()  ) {
+			thread_pool.enqueue([cnv]() {
+				cnv->threaded_step();
+			});
+		}
+	}
+	
+	// wait for all threaded operations to complete
+	thread_pool.wait_for_all();
 
 	// now step all towns (to generate passengers)
 	DBG_DEBUG4("karte_t::step", "step cities");
@@ -5502,7 +5553,21 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 
 	file->set_buffered(false);
-	clear_random_mode(LOAD_RANDOM);
+	clear_random_mode(LOAD_RANDOM);	
+
+	// (Workaround) Sometimes, building tile placement is broken. Remove such buildings.
+	koord k;
+	for(k.y=0;k.y<get_size().y;k.y++) {
+		for(k.x=0;k.x<get_size().x;k.x++) {
+			const grund_t* gr = lookup_kartenboden(k);
+			gebaeude_t* gb = gr ? gr->find<gebaeude_t>() : NULL;
+			const bool is_broken = gb ? gb->is_broken_building() : false;
+			if( is_broken ) {
+				dbg->warning("karte_t::load()","building at (%u,%u) is broken. Removed.",k.x,k.y);
+				hausbauer_t::remove( get_public_player(), gb );
+			}
+		}
+	}
 
 	// loading finished, reset savegame version to current
 	load_version = loadsave_t::int_version( env_t::savegame_version_str, NULL ).version;
@@ -5948,6 +6013,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 		}
 
 		char buf[80];
+		vector_tpl<convoi_t*> loading_convoi_array;
 		while(  convoi_nr-->0  ) {
 			if(  file->is_version_less(101, 0)  ) {
 				file->rd_obj_id(buf, 79);
@@ -5956,8 +6022,13 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				}
 			}
 			convoi_t *cnv = new convoi_t(file);
+			loading_convoi_array.append(cnv);
 			convoi_array.append(cnv->self);
-
+			if(  (convoi_array.get_count()&7) == 0  ) {
+				ls->set_progress( get_size().y+(get_size().y*convoi_array.get_count())/(2*max_convoi)+128 );
+			}
+		}
+		FOR( vector_tpl<convoi_t*>, cnv, loading_convoi_array ) {
 			if(cnv->in_depot()) {
 				grund_t * gr = lookup(cnv->get_pos());
 				depot_t *dep = gr ? gr->get_depot() : 0;
@@ -5971,9 +6042,6 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 			}
 			else {
 				sync.add( cnv );
-			}
-			if(  (convoi_array.get_count()&7) == 0  ) {
-				ls->set_progress( get_size().y+(get_size().y*convoi_array.get_count())/(2*max_convoi)+128 );
 			}
 		}
 	DBG_MESSAGE("karte_t::rdwr_gamestate()", "%d convois/trains loaded", convoi_array.get_count());
@@ -6666,7 +6734,7 @@ uint8 karte_t::sp2num(player_t *player)
 }
 
 
-void karte_t::load_heightfield(settings_t* const sets)
+void karte_t::load_heightfield(settings_t* const sets, bool is_new_map)
 {
 	sint16 w, h;
 	sint8 *h_field = NULL;
@@ -6677,9 +6745,24 @@ void karte_t::load_heightfield(settings_t* const sets)
 
 	if(hml.get_height_data_from_file(sets->heightfield.c_str(), (sint8)(sets->get_groundwater()), h_field, w, h, false )) {
 		sets->set_size(w,h);
-		// create map
-		init(sets,h_field);
-		free(h_field);
+		// create new map or enlarge this map
+		if(  is_new_map  ) {
+			// create map
+			init(sets,h_field);
+			free(h_field);
+		} else {
+			if (cached_grid_size.x>w || cached_grid_size.y>h) {
+				// the loaded data is too small
+				dbg->error("karte_t::load_heightfield()","The size of heightfield file '%s' is too small! The size must be larger than (%i,%i).", sets->heightfield.c_str(),cached_grid_size.x,cached_grid_size.y);
+				create_win( new news_img("\nThe size of heightfield file is wrong.\n"), w_info, magic_none );
+				return;
+			}
+			dbg->message("karte_t::load_heightfield()","enlarge with heightfield file '%s'",sets->heightfield.c_str());
+			// enlarge map from this data
+			settings = *sets;
+			enlarge_map(&settings, h_field);
+			free(h_field);
+		}
 	}
 	else {
 		dbg->error("karte_t::load_heightfield()","Cant open file '%s'", sets->heightfield.c_str());

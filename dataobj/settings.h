@@ -202,6 +202,8 @@ private:
 	sint16 origin_x, origin_y;
 
 	sint32 passenger_factor;
+	// passenger factor float value(passenger factor = float/100)
+	uint16 passenger_factor_float;
 
 	sint16 min_factory_spacing;
 	sint16 max_factory_spacing;
@@ -215,6 +217,10 @@ private:
 
 	/* crossconnect all factories (like OTTD and similar games) */
 	sint16 crossconnect_factor;
+
+	/* close old factory randomly (like extended)*/
+	bool close_old_factory;
+	uint16 factory_max_years_obsolete;
 
 	/**
 	* Generate random pedestrians in the cities?
@@ -479,10 +485,10 @@ public:
 	uint8 get_max_ship_convoi_length() const {return max_ship_convoi_length;}
 	uint8 get_max_air_convoi_length() const {return max_air_convoi_length;}
 
-	void set_allow_player_change(char n) {allow_player_change=n;}
+	void set_allow_player_change(char n) {allow_player_change=(uint8)(n);}
 	uint8 get_allow_player_change() const {return allow_player_change;}
 
-	void set_use_timeline(char n) {use_timeline=n;}
+	void set_use_timeline(char n) {use_timeline=(uint8)(n);}
 	uint8 get_use_timeline() const {return use_timeline;}
 
 	void set_starting_year( sint16 n ) { starting_year = n; }
@@ -533,6 +539,8 @@ public:
 	sint16 get_max_factory_spacing_percent() const { return max_factory_spacing_percentage; }
 	sint16 get_crossconnect_factor() const { return crossconnect_factor; }
 	bool is_crossconnect_factories() const { return crossconnect_factories; }
+	bool is_close_old_factory() const { return close_old_factory; }
+	uint16 get_factory_max_years_obsolete() const { return factory_max_years_obsolete; }
 
 	bool get_numbered_stations() const { return numbered_stations; }
 
@@ -581,6 +589,8 @@ public:
 	bool get_with_private_paks() const { return with_private_paks; }
 
 	sint32 get_passenger_factor() const { return passenger_factor; }
+	uint16 get_passenger_factor_float() const { return passenger_factor_float; }
+	uint16 max_passenger_factor_float() const { return (uint16)100; }
 
 	// town growth stuff
 	sint32 get_passenger_multiplier() const { return passenger_multiplier; }
@@ -598,15 +608,15 @@ public:
 	sint16 get_tourist_percentage() const { return tourist_percentage; }
 
 	// radius from factories to get workers from towns (usually set to 77 but 1/8 of map size may be meaningful too)
-	uint16 get_factory_worker_radius() const { return factory_worker_radius; }
+	uint16 get_factory_worker_radius() const { return (uint16)(factory_worker_radius); }
 
 	// any factory will be connected to at least this number of next cities
-	uint32 get_factory_worker_minimum_towns() const { return factory_worker_minimum_towns; }
-	void set_factory_worker_minimum_towns(uint32 n) { factory_worker_minimum_towns = n; }
+	sint32 get_factory_worker_minimum_towns() const { return factory_worker_minimum_towns; }
+	void set_factory_worker_minimum_towns(sint32 n) { factory_worker_minimum_towns = n; }
 
 	// any factory will be connected to not more than this number of next cities
-	uint32 get_factory_worker_maximum_towns() const { return factory_worker_maximum_towns; }
-	void set_factory_worker_maximum_towns(uint32 n) { factory_worker_maximum_towns = n; }
+	uint32 get_factory_worker_maximum_towns() const { return (uint32)(factory_worker_maximum_towns); }
+	void set_factory_worker_maximum_towns(uint32 n) { factory_worker_maximum_towns = (sint32)(n); }
 
 	// number of periods for averaging the amount of arrived pax/mail at factories
 	uint16 get_factory_arrival_periods() const { return factory_arrival_periods; }
