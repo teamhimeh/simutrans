@@ -169,6 +169,10 @@ Temporary schedule
 臨時系統
 This schedule does not affect the route cost calculation.
 このスケジュールはルートコストの計算に寄与しません．
+Pass this stop
+この駅を通過(P)
+Pass this stop even if there is a platform.
+この駅は、ホームがあっても通過します(中継点と同様の扱いとなります)．
 No Load
 乗車不可(L)
 The convoy does not load goods and passengers at this stop.
@@ -181,6 +185,18 @@ Unload All
 全員降車(A)
 All passengers once get off at this stop.
 この停留所ですべての積載物を一旦降ろします．
+load temporary
+臨時乗車(l)
+unload temporary
+臨時降車(u)
+unload all temporary
+臨時全員降車(a)
+Can load but not use for goods routing
+旅客ルート計算上は乗車不可(乗車予定の客が既に待機している場合は乗車できます)．
+Can unload but not use for goods routing
+旅客ルート計算上は降車不可(降車予定の客が既に乗車している場合は降車できます)．
+Terminate goods routing (can continue boarding).
+旅客ルート計算上はこの駅を跨ぐ客が生じません(既に乗車している客は継続乗車できます)．
 Wait for time
 発車時刻まで待機
 Spacing cnv/month, shift
@@ -221,6 +237,10 @@ Shares the departure time slot with the selected line here.
 選択された路線と発車枠を共有します。
 <new departure slot group>
 <新しい発車枠グループ>
+not go if no users
+乗降客がいない場合経由しない(G)
+If there are no users, this convoy will not go to this stop
+乗降客がいない場合、この駅を無視して次の駅に向かいます．
 reverse convoy
 編成を反転する(R)
 Reverses the direction of convoy.
