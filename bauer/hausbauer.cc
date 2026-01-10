@@ -472,6 +472,10 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 						// there is already a ground here!
 						dbg->error("hausbauer_t::build","Will create new ground at (%s) where there is ground above!", pos.get_str() );
 					}
+					if( welt->get_settings().get_way_height_clearance()>1 && welt->lookup(  koord3d(pos+k, base_h+1) ) ) {
+						//there are bridge above this tile
+						return NULL;
+					}
 				}
 				else {
 					return NULL;
@@ -483,6 +487,10 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 		// single tile
 		grund_t* gr = welt->lookup_kartenboden( pos + k );
 		base_h = gr->get_hoehe() + +slope_t::max_diff( gr->get_grund_hang() );
+		if( welt->get_settings().get_way_height_clearance()>1 && welt->lookup(  koord3d(pos+k, base_h+1) ) ) {
+			// there are bridge above this tile
+			return NULL;
+		}
 
 	}
 	// now we must raise all grounds to base_h during construction
