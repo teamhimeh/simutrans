@@ -140,7 +140,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	route.clear();
 
 	// first tile is not valid?!?
-	if(  !tdriver->check_next_tile(g, need_electric, true, coupling)  ) {
+	if(  !tdriver->check_next_tile(g, max_khm!=0, need_electric, true, coupling)  ) {
 		return false;
 	}
 
@@ -215,7 +215,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			    && koord_distance(start, gr->get_pos() + koord::nesw[r])<max_depth // not too far away
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
 			    && !marker.is_marked(to) // not already tested
-			    && tdriver->check_next_tile(to, need_electric, true, coupling) // can be driven on
+			    && tdriver->check_next_tile(to, max_khm!=0,need_electric, true, coupling) // can be driven on
 			) {
 				// not in there or taken out => add new
 				ANode* k = &nodes[step++];
@@ -307,7 +307,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 	route.clear();
 
 	// first tile is not valid?!?
-	if(  !tdriver->check_next_tile(gr,need_electric)  ) {
+	if(  !tdriver->check_next_tile(gr, max_speed!=0,need_electric)  ) {
 		return false;
 	}
 
@@ -418,7 +418,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 
 			// a way goes here, and it is not marked (i.e. in the closed list)
-			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to,need_electric)  &&  !marker.is_marked(to)) {
+			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to,max_speed!=0,need_electric)  &&  !marker.is_marked(to)) {
 
 				weg_t *w = to->get_weg(wegtyp);
 				// Do not go on a tile, where a oneway sign forbids going.
@@ -742,7 +742,7 @@ route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, c
 			if(  !ribi_t::is_single(open_dir)  ||
 			  !gr_loop->get_neighbour(gr_loop, waytype, open_dir)  ||
 				gr_loop->get_halt() != halt  ||
-				!tdriver->check_next_tile(gr_loop,need_electric)
+				!tdriver->check_next_tile(gr_loop,max_khm!=0,need_electric)
 		    ) 
 			{ 
 				// We cannot go foward anymore.

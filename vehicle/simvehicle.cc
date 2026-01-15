@@ -1090,7 +1090,7 @@ grund_t* vehicle_t::hop_check()
 
 		// now check, if we can go here
 		grund_t *bd = welt->lookup(pos_next);
-		if(bd==NULL  ||  !check_next_tile(bd, cnv->needs_electrification())  ||  cnv->get_route()->empty()) {
+		if(bd==NULL  ||  !check_next_tile(bd, true, cnv->needs_electrification())  ||  cnv->get_route()->empty()) {
 			// way (weg) not existent (likely destroyed) or no route ...
 			cnv->suche_neue_route();
 			return NULL;
@@ -2201,10 +2201,10 @@ bool road_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 }
 
 
-bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric) const
+bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_speed,const bool need_electric) const
 {
 	strasse_t *str=(strasse_t *)bd->get_weg(road_wt);
-	if(str==NULL  ||  str->get_max_speed()==0) {
+	if(str==NULL  ||  (str->get_max_speed()==0&&need_speed)) {
 		return false;
 	}
 	if(need_electric  &&  !str->is_electrified()) {
@@ -3413,7 +3413,7 @@ bool rail_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 }
 
 
-bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const
+bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_speed,const bool need_electric, bool find_route, bool coupling) const
 {
 	schiene_t const* const sch = obj_cast<schiene_t>(bd->get_weg(get_waytype()));
 	if(  !sch  ) {
@@ -3422,7 +3422,7 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 
 	// diesel and steam engines can use electrified track as well.
 	// also allow driving on foreign tracks ...
-	if(  (need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  ) {
+	if(  (need_electric  &&  !sch->is_electrified())  ||  (sch->get_max_speed() == 0 && need_speed)  ) {
 		return false;
 	}
 
@@ -4610,7 +4610,7 @@ void water_vehicle_t::enter_tile(grund_t* gr)
 }
 
 
-bool water_vehicle_t::check_next_tile(const grund_t *bd,const bool) const
+bool water_vehicle_t::check_next_tile(const grund_t *bd,const bool need_speed,const bool) const
 {
 	if(  bd->is_water()  ) {
 		return true;
@@ -4632,7 +4632,7 @@ bool water_vehicle_t::check_next_tile(const grund_t *bd,const bool) const
 		}
 	}
 #endif
-	return (w  &&  w->get_max_speed()>0);
+	return (w  &&  (w->get_max_speed()>0||!need_speed));
 }
 
 
@@ -4768,14 +4768,14 @@ int air_vehicle_t::get_cost(const grund_t *, const weg_t *w, const sint32, ribi_
 
 
 // whether the ground is drivable or not depends on the current state of the airplane
-bool air_vehicle_t::check_next_tile(const grund_t *bd, const bool) const
+bool air_vehicle_t::check_next_tile(const grund_t *bd, const bool need_speed, const bool) const
 {
 	switch (state) {
 		case taxiing:
 		case taxiing_to_halt:
 		case looking_for_parking:
 //DBG_MESSAGE("check_next_tile()","at %i,%i",bd->get_pos().x,bd->get_pos().y);
-			return (bd->hat_weg(air_wt)  &&  bd->get_weg(air_wt)->get_max_speed()>0);
+			return (bd->hat_weg(air_wt)  &&  (bd->get_weg(air_wt)->get_max_speed()>0||!need_speed));
 
 		case landing:
 		case departing:
