@@ -583,7 +583,8 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 				*costs += 4;
 			}
 			// absolutely nothing allowed here for set which want double clearance
-			if(  welt->get_settings().get_way_height_clearance()==2  &&  welt->lookup( to->get_pos()+koord3d(0,0,1+height_offset) )  ) {
+			// we only check clearance at the top -> check above when height_offset = -1
+			if(  welt->get_settings().get_way_height_clearance()==2  &&  welt->lookup( to->get_pos()+koord3d(0,0,1+max(height_offset,0)) )  ) {
 				return false;
 			}
 			// up to now 'to' and 'from' referred to the ground one height step below the elevated way
@@ -628,12 +629,14 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 
 	if(  welt->get_settings().get_way_height_clearance()==2  ) {
 		// cannot build if conversion factor 2, we aren't powerline and way with maximum speed > 0 or powerline 1 tile below
-		grund_t *to2 = welt->lookup( to->get_pos() + koord3d(0, 0, -1+height_offset) );
+		// if height_offset=-1, we check 1 tile below.
+		grund_t *to2 = welt->lookup( to->get_pos() + koord3d(0, 0, -1+max(height_offset,0)) );
 		if(  to2 && (((bautyp&bautyp_mask)!=leitung  &&  to2->get_weg_nr(0)  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0) || to2->get_leitung())  ) {
 			return false;
 		}
 		// tile above cannot have way unless we are a way (not powerline) with a maximum speed of 0, or be surface if we are underground
-		to2 = welt->lookup( to->get_pos() + koord3d(0, 0, 1+height_offset) );
+		// if height_offset=-1, we check 1 tile above.
+		to2 = welt->lookup( to->get_pos() + koord3d(0, 0, 1+max(height_offset,0)) );
 		if(  to2  &&  ((to2->get_weg_nr(0)  &&  (desc->get_topspeed()>0  ||  (bautyp&bautyp_mask)==leitung))  ||  (bautyp & tunnel_flag) != 0)  ) {
 			return false;
 		}
@@ -755,17 +758,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			// roads are checked in check_crossing
 			// if no way there: check for right ground type, otherwise check owner
 			ok = sch==NULL  ?  (!fundament  &&  !to->is_water())  :  check_owner(sch->get_owner(),player_builder);
-			// tram track allowed in road tunnels, but only along existing roads / tracks
-			if(from!=to) {
-				if(from->ist_tunnel()) {
-					const ribi_t::ribi ribi = from->get_weg_ribi_unmasked(road_wt)  |  from->get_weg_ribi_unmasked(track_wt)  |  from->get_weg_ribi_unmasked(monorail_wt)  |  from->get_weg_ribi_unmasked(maglev_wt)  |  from->get_weg_ribi_unmasked(narrowgauge_wt)  |  ribi_t::doubles(ribi_type(from->get_grund_hang()));
-					ok = ok && ((ribi & ribi_type(zv))==ribi_type(zv));
-				}
-				if(to->ist_tunnel()) {
-					const ribi_t::ribi ribi = to->get_weg_ribi_unmasked(road_wt)  |  to->get_weg_ribi_unmasked(track_wt)  |  to->get_weg_ribi_unmasked(monorail_wt)  |  to->get_weg_ribi_unmasked(maglev_wt)  |  to->get_weg_ribi_unmasked(narrowgauge_wt)  |  ribi_t::doubles(ribi_type(to->get_grund_hang()));
-					ok = ok && ((ribi & ribi_type(-zv))==ribi_type(-zv));
-				}
-			}
+			// tram track allowed in road and tracks tunnels
 			if(ok) {
 				// calculate costs
 				*costs = s.way_count_straight;

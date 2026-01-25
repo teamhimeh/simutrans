@@ -13,6 +13,7 @@
 #include "simunits.h"
 #include "simcolor.h"
 #include "linehandle_t.h"
+#include "dataobj/schedule_entry.h"
 
 #include "ifc/sync_steppable.h"
 
@@ -129,6 +130,8 @@ private:
 	 * Used in movement calculations.
 	 */
 	sint32 sum_gear_and_power;
+	sint32 sum_gear_and_power_electric;
+	bool use_electric;
 
 	// 40 bytes
 	/**
@@ -273,6 +276,8 @@ private:
 
 	// true, if there is at least one engine that requires catenary
 	bool is_electric;
+	// true, if it can not run without catenary
+	bool need_electric;
 
 	/**
 	* the convoi caches its freight info; it is only recalculation after loading or resorting
@@ -282,7 +287,7 @@ private:
 	/*
 	 * caches the running costs
 	 */
-	sint64 sum_running_costs;
+	sint64 base_sum_running_costs;
 	sint64 sum_fixed_costs;
 
 	/**
@@ -383,6 +388,8 @@ private:
 
 	bool reversed; // true when the vehicles are in the reversed order.
 	bool reversing_needed;// Whether this convoy's vehicles will be arranged in reverse order.
+	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
+	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
 
 	/**
 	 * The temporary speed limit for this convoy.
@@ -560,8 +567,11 @@ public:
 	linehandle_t get_line() const {return line;}
 
 	/* true, if electrification needed for this convoi */
-	bool needs_electrification() const { return is_electric; }
-	bool check_electrification();
+	bool needs_electrification() const { return need_electric; }
+	bool is_electrification() const {return is_electric;}
+	void check_electrification();
+	void set_use_electric(bool y);
+	bool get_use_electric() const {return use_electric;}
 
 	/**
 	* set line
@@ -572,7 +582,7 @@ public:
 	void check_pending_updates();
 
 	// true if this is a waypoint
-	bool is_waypoint( koord3d ) const;
+	bool is_waypoint( schedule_entry_t ) const;
 
 	/* changes the state of a convoi via tool_t; mandatory for networkmode!
 	 * for list of commands and parameter see tool_t::tool_change_convoi_t
@@ -620,7 +630,7 @@ public:
 	/**
 	 * returns the total running cost for all vehicles in convoi
 	 */
-	sint32 get_running_cost() const { return -sum_running_costs; }
+	sint32 get_running_cost() const { return -base_sum_running_costs; }
 
 	/**
 	 * returns the total new purchase cost for all vehicles in convoy
@@ -646,7 +656,7 @@ public:
 	 */
 	static void rdwr_convoihandle_t(loadsave_t *file, convoihandle_t &cnv);
 
-	void finish_rd();
+	void finish_rd( const uint8 loaded_OTRP_version );
 
 	void rotate90( const sint16 y_size );
 
@@ -700,7 +710,7 @@ public:
 	 * @return total power of this convoi
 	 */
 	const uint32 & get_sum_power() const {return sum_power;}
-	const sint32 & get_sum_gear_and_power() const {return sum_gear_and_power;}
+	const sint32 get_sum_gear_and_power() const {return use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric;}
 	const sint32 & get_min_top_speed() const {return min_top_speed;}
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
@@ -736,6 +746,8 @@ public:
 	 * Add the costs for travelling one tile
 	 */
 	void add_running_cost( const weg_t *weg );
+
+	bool is_users_at_next_stop() const;
 
 	/**
 	 * moving the vehicles of a convoi and acceleration/deceleration
@@ -981,7 +993,7 @@ public:
 	 * @author THLeaderH
 	 */
 	void unreserve_pos(koord3d pos) { reserved_tiles.remove(pos); }
-	void reserve_pos(koord3d pos) {reserved_tiles.append_unique(pos); }
+	void reserve_pos(koord3d pos) {reserved_tiles.append(pos); }
 	bool is_reservation_empty() const { return reserved_tiles.empty(); }
 	vector_tpl<koord3d>& get_reserved_tiles() { return reserved_tiles; }
 	void clear_reserved_tiles();
@@ -1104,11 +1116,11 @@ public:
 
 	// returns the available halt length for the given convoy position.
 	// The returned steps includes the entire tile length on which the front vehicle is.
-	static uint32 calc_available_halt_length_in_vehicle_steps(koord3d front_vehicle_pos, ribi_t::ribi front_vehicle_dir, const waytype_t waytype);
+	static uint32 calc_available_halt_length_in_vehicle_steps(koord3d front_vehicle_pos, ribi_t::ribi front_vehicle_dir, const waytype_t waytype, const bool use_electric=false);
 	uint32 calc_available_halt_length_in_vehicle_steps(koord3d front_vehicle_pos, ribi_t::ribi front_vehicle_dir) const;
 
 	// Returns the parent and root parent convoi of this convoy. Returns this convoy if not coupled.
-	convoihandle_t get_parent_convoi() const {return parent_convoi.is_bound()? parent_convoi: self;}
+	convoihandle_t get_parent_convoi() const {return parent_convoi;}
 	convoihandle_t get_most_parent_convoi() const;
 
 	// Returns the most child convoi of this convoy.

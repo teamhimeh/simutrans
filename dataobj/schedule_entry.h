@@ -24,8 +24,7 @@ public:
 		init_convoy_stopping_time();
 	}
 
-	schedule_entry_t(koord3d const& pos, uint8 const minimum_loading, uint16 const waiting_time_shift, uint16 const stop_flags, uint16 max_speed_kmh_of_convoi, uint16 const length_coupling_done, uint8 const maximum_loading) :
-
+	schedule_entry_t(koord3d const& pos, uint8 const minimum_loading, uint16 const waiting_time_shift, uint32 const stop_flags, uint16 max_speed_kmh_of_convoi, uint16 const length_coupling_done, uint8 const maximum_loading) :
 		pos(pos),
 		minimum_loading(minimum_loading),
 		waiting_time_shift(waiting_time_shift),
@@ -57,7 +56,12 @@ public:
 		WAIT_COUPLING_DONE= 1U << 10,// Do not reserve departure slot until coupling done.
 		MAX_SPEED_KMH_OF_CONVOI= 1U << 11,// Overwrite max speed of convoy here.
 		NO_OVERTAKE       = 1U << 12,// Do not overtake(for road)
-		UNCOUPLE_CHILD    = 1U << 13 // The convoy uncouple its child convoy (only its child: this convoy will be the most child convoy).
+		UNCOUPLE_CHILD    = 1U << 13,// The convoy uncouple its child convoy (only its child: this convoy will be the most child convoy).
+		PASS_STOP		  = 1U << 14,// pass this stop even if halt is.
+		NO_GO_NO_USERS	  = 1U << 15,// do not go to this stop if no users
+		TEMP_LOAD         = 1U << 16,// load temporary(not use for goods routing)
+		TEMP_UNLOAD       = 1U << 17,// unload temporary(not use for goods routing)
+		TEMP_UNLOAD_ALL   = 1U << 18 // unload all only for goods routing
 	};
 
 	/**
@@ -116,7 +120,7 @@ public:
 	uint8 cs_at_index; // which index of convoy_stopping_time should be overwritten next.
 	
 private:
-	uint16 stop_flags;
+	uint32 stop_flags;
 	
 	void init_journey_time() {
 		jt_at_index = 0;
@@ -140,7 +144,7 @@ private:
 	}
 	
 public:
-	uint16 get_coupling_point() const { return (stop_flags&0x0003); }
+	uint32 get_coupling_point() const { return (stop_flags&0x0003); }
 	void set_wait_for_coupling(bool y=true) { y? stop_flags|=WAIT_FOR_COUPLING : stop_flags &= ~WAIT_FOR_COUPLING; }
 	void set_try_coupling(bool y=true) { y? stop_flags |= TRY_COUPLING : stop_flags &= ~TRY_COUPLING; }
 	bool is_wait_for_coupling() const { return stop_flags&WAIT_FOR_COUPLING; }
@@ -166,12 +170,23 @@ public:
 	bool is_wait_coupling_done() const {return (stop_flags&WAIT_COUPLING_DONE) ; }
 	void set_uncouple_child( bool y ) { y ? stop_flags |= UNCOUPLE_CHILD : stop_flags &= ~UNCOUPLE_CHILD; }
 	bool is_uncouple_child() const { return (stop_flags & UNCOUPLE_CHILD) > 0; }
-	void set_stop_flags(uint16 f) { stop_flags = f; }
-	uint16 get_stop_flags() const { return stop_flags; }
 	void set_overwrite_max_speed_kmh_of_convoi(bool y) { y ? stop_flags |= MAX_SPEED_KMH_OF_CONVOI : stop_flags &= ~MAX_SPEED_KMH_OF_CONVOI; }
 	bool is_overwrite_max_speed_kmh_of_convoi() const {return (stop_flags&MAX_SPEED_KMH_OF_CONVOI) ; }
+	uint32 get_stop_flags() const { return stop_flags; }
+	void set_stop_flags(uint32 f) { stop_flags = f; }
 	bool is_no_overtake() const {return (stop_flags&NO_OVERTAKE)>0 ;}
 	void set_no_overtake(bool y) { y? stop_flags|=NO_OVERTAKE : stop_flags &= ~NO_OVERTAKE;}
+	bool is_pass_stop() const { return (stop_flags&PASS_STOP)>0; }
+	void set_pass_stop( bool y ) { y? stop_flags|=(PASS_STOP+NO_LOAD+NO_UNLOAD) : stop_flags &= ~PASS_STOP; }
+	bool is_no_go_no_users() const {return (stop_flags&NO_GO_NO_USERS)>0;}
+	void set_no_go_no_users(bool y) {y? stop_flags|=NO_GO_NO_USERS: stop_flags &= ~NO_GO_NO_USERS; }
+	bool is_temp_load() const {return (stop_flags&TEMP_LOAD)>0;}
+	bool is_temp_unload() const {return (stop_flags&TEMP_UNLOAD)>0;}
+	void set_temp_load(bool y) {y? stop_flags|=TEMP_LOAD: stop_flags&= ~TEMP_LOAD;}
+	void set_temp_unload(bool y) {y? stop_flags|=TEMP_UNLOAD: stop_flags&= ~TEMP_UNLOAD;}
+	bool is_temp_unload_all() const {return (stop_flags&TEMP_UNLOAD_ALL)>0;}
+	void set_temp_unload_all(bool y) {y? stop_flags|=TEMP_UNLOAD_ALL: stop_flags&= ~TEMP_UNLOAD_ALL;}
+
 
 	void set_spacing(uint16 a, uint16 b, uint16 c) {
 		spacing = a;
