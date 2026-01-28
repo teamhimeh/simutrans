@@ -105,8 +105,8 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 		}
 
 		uint16 wait = 0;
-        get_slot(vm, "base_waiting_time", wait, index);
-        sched->set_additional_base_waiting_time(wait);
+		get_slot(vm, "base_waiting_time", wait, index);
+		sched->set_additional_base_waiting_time(wait);
 	}
 	return sched;
 }
