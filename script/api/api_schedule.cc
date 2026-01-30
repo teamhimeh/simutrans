@@ -122,6 +122,22 @@ void export_schedule(HSQUIRRELVM vm)
 	 * Schedule entries
 	 */
 	begin_class(vm, "schedule_entry_x", "coord3d");
+
+#ifdef SQAPI_DOC //document members
+	/**
+	 * X-coordinate of entry position
+	 */
+	integer x;
+	/**
+	 * Y-coordinate of entry position
+	 */
+	integer y;
+	/**
+	 * Z-coordinate of entry position
+	 */
+	integer z;
+#endif
+
 	create_slot(vm, "x", 0);
 	create_slot(vm, "y", 0);
 	create_slot(vm, "z", 0);
@@ -170,6 +186,10 @@ void export_schedule(HSQUIRRELVM vm)
 	 */
 	way_types waytype;
 	
+	/**
+	 * Additional base waiting time for this schedule.
+	 * 
+	 */
 	integer base_waiting_time;
 #else
 	create_slot(vm, "entries", 0);

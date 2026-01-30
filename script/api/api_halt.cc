@@ -51,6 +51,27 @@ namespace script_api {
 	}
 };
 
+#ifdef SQAPI_DOC
+	/**
+	 * Connectoin returned by @ref halt_x::get_connections
+	 */
+	class connection {
+		public:
+			/**
+			 * Halt to which the connection goes.
+			 */
+			halt_x halt;
+			/**
+			 * Weight of this connection.
+			 */
+			integer weight;
+			/**
+			 * Line that is used for this connection.
+			 */
+			line_x line;
+	};
+#endif
+
 
 using namespace script_api;
 
