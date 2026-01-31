@@ -121,6 +121,9 @@ settings_t::settings_t() :
 	growthfactor_medium = 200;
 	growthfactor_large = 100;
 
+	growthfactor_small_limit = 1000;
+	growthfactor_medium_limit = 10000;
+
 	minimum_city_distance = 16;
 	industry_increase = 2000;
 
@@ -147,6 +150,8 @@ settings_t::settings_t() :
 	factory_maximum_intransit_percentage = 0;
 
 	electric_promille = 330;
+
+	credit_per_MWs = 2;
 
 #ifdef OTTD_LIKE
 	// crossconnect all factories (like OTTD and similar games)
@@ -331,6 +336,8 @@ settings_t::settings_t() :
 	base_waiting_ticks_for_air_convoi = 200000;
 
 	default_reverse=false;
+	allow_unload_longer_convoy=false;
+	allow_higher_flight = true;
 }
 
 
@@ -1014,6 +1021,18 @@ void settings_t::rdwr(loadsave_t *file)
 			overloading_runningcost_increase = true;
 			default_reverse = false;
 		}
+		if(  file->get_OTRP_version() >= 51  ) {
+			file->rdwr_bool(env_t::use_old_friction);
+			file->rdwr_long( credit_per_MWs );
+			file->rdwr_bool(allow_unload_longer_convoy);
+			file->rdwr_bool(allow_higher_flight);
+			file->rdwr_long(growthfactor_small_limit);
+			file->rdwr_long(growthfactor_medium_limit);
+		} else {
+			env_t::use_old_friction = false;
+			allow_unload_longer_convoy = false;
+			allow_higher_flight=true;
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
@@ -1177,6 +1196,9 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// setting default reverse or not when next direction is opposite
 	default_reverse = contents.get_int( "reverse_by_default", default_reverse )!=0;
 
+	// allow unload even if stop length is too short
+	allow_unload_longer_convoy = contents.get_int( "allow_unload_longer_convoy", allow_unload_longer_convoy )!=0;
+
 	// setting driving left and overtaking offsets
 	// a tile has the internal size of
 	const sint8 default_xoff = 12;
@@ -1211,6 +1233,24 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 			}
 		}
 	}
+	const char* waytype_list[17] = {"ignore","road","track","water","electric","monorail_track","maglev_track","tram_track","narrowgauge_track","none","none","none","none","none","none","none","air"};
+	for(uint8 wtp_idx = 0; wtp_idx < waytype_t::air_wt + 1; wtp_idx++) {
+		for(uint8 d_idx = 0; d_idx < 8; d_idx++) {
+			char buf[64];
+			sprintf(buf, "vehicle_base_offset_%s[%s]", directions[d_idx], waytype_list[wtp_idx]);
+			vector_tpl<int> temp_offset = contents.get_ints(buf);
+			if (temp_offset.get_count()>=2) {
+				for(uint8 i=0; i<2; i++) {
+					env_t::vehicle_base_offsets[d_idx][i][wtp_idx] = temp_offset[i];
+				}
+			} else {
+				// if not defined, it should be same as driveleft base offset.
+				for(uint8 i=0; i<2; i++) {
+					env_t::vehicle_base_offsets[d_idx][i][wtp_idx] = 0;
+				}
+			}
+		}
+	}	
 
 	// network stuff
 	env_t::server_frames_ahead              = contents.get_int_clamped( "server_frames_ahead",             env_t::server_frames_ahead,              0, INT_MAX );
@@ -1290,6 +1330,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	signals_on_left                = contents.get_int( "signals_on_left",                signals_on_left ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
+
+	env_t::use_old_friction		   = contents.get_int( "use_old_friction",				 env_t::use_old_friction ) != 0;
 
 	// up to ten rivers are possible
 	for( int i = 0; i < 10; i++ ) {
@@ -1455,6 +1497,14 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	growthfactor_small  = contents.get_int_clamped( "growthfactor_villages", growthfactor_small,  1, 10000 );
 	growthfactor_medium = contents.get_int_clamped( "growthfactor_cities",   growthfactor_medium, 1, 10000 );
 	growthfactor_large  = contents.get_int_clamped( "growthfactor_capitals", growthfactor_large,  1, 10000 );
+
+	growthfactor_small_limit = contents.get_int_clamped( "maximum_village_size", growthfactor_small_limit, 1, 0x7FFFFFFF);
+	growthfactor_medium_limit = contents.get_int_clamped( "maximum_city_size", growthfactor_medium_limit, 1, 0x7FFFFFFF);
+	if(  growthfactor_small_limit>growthfactor_medium_limit  ) {
+		// inverse order -> fix: city size limit is 10 times of village size limit
+		dbg->error("settings_t::parse_simconf","maximum village size is larger than maximum city size. maximum village size is set as maximum city size/10.");
+		growthfactor_small_limit = max(growthfactor_medium_limit/10,1);
+	}
 
 	random_pedestrians = contents.get_int( "random_pedestrians", random_pedestrians ) != 0;
 	show_pax           = contents.get_int( "stop_pedestrians",   show_pax           ) != 0;
@@ -1653,6 +1703,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	close_old_factory			   = contents.get_int("close_old_factory", close_old_factory) != 0;
 	factory_max_years_obsolete = contents.get_int("max_years_obsolete", factory_max_years_obsolete);
 
+	credit_per_MWs		   = contents.get_int_clamped( "credit_per_MWs", credit_per_MWs, 1, 10000);
+
 	env_t::just_in_time = contents.get_int_clamped("just_in_time", env_t::just_in_time, 0, 2);
 	just_in_time = env_t::just_in_time;
 
@@ -1792,6 +1844,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	waiting_limit_for_first_come_first_serve 
 		= contents.get_int("waiting_limit_for_first_come_first_serve", waiting_limit_for_first_come_first_serve);
 	
+	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
+
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);
 	

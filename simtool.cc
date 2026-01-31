@@ -8083,6 +8083,69 @@ const char* tool_extinguish_waiting_goods_t::work(player_t* player, koord3d pos)
 	return NULL;
 }
 
+// recreate selected halt name tool
+const char* tool_recreate_halt_name_t::work(player_t* player, koord3d pos) {
+	const grund_t *gr = welt->lookup(pos);
+	if (!gr) {
+		return "No stop found!";
+	}
+
+	const halthandle_t halt = gr->get_halt();
+	if(  !halt.is_bound()  ) {
+		return "No stop found!";
+	} 
+	
+	if (  player != halt->get_owner()  ) {
+		return "Different player's stop!";
+	}
+
+		const char *type;
+		const gebaeude_t* gb = gr->find<gebaeude_t>();
+
+	if (  gr->is_water()  ) {
+		const building_desc_t::btype gt = gb->get_tile()->get_desc()->get_type();
+		if (  gt==building_desc_t::factory  ) {
+			return NULL;
+		}
+		else {
+			type = "Dock";
+		}
+	}
+	else {
+		waytype_t wt;
+		if(  !gr->get_weg_nr(0)==NULL  ) {
+			wt = gr->get_weg_nr(0)->get_desc()->get_wtyp();
+		}
+		else if(  gb->get_tile()->get_desc()->get_type()==building_desc_t::dock  ) {
+			wt = water_wt;
+		}
+		else {
+			wt = gb->get_waytype();
+		}
+
+		if(wt==air_wt) {
+			type = "Airport";
+		}
+		else if(wt==water_wt) {
+			type = "Dock";
+		}
+		else if(wt==track_wt||wt==monorail_wt||wt==maglev_wt||wt==narrowgauge_wt) {
+			type = "BF";
+		}
+		else if(wt==road_wt||wt==tram_wt) {
+			type = "H";
+		}
+		else {
+			return NULL;
+		}
+	}
+
+	const char *name;
+	name = halt->create_name( pos.get_2d(), type );
+	
+	halt->set_name( name );
+	return NULL;
+}
 
 bool tool_show_trees_t::init( player_t * )
 {
@@ -9378,6 +9441,7 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * a:set advance to end state for signal
  * c:set end of choose signal
  * g:set end of guide signal
+ * m:set margin of the stoplength of choose signal
  * 
  */
 bool tool_change_roadsign_t::init( player_t* )
@@ -9469,6 +9533,20 @@ bool tool_change_roadsign_t::init( player_t* )
 		}
 		break;
 
+		case 'm':
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+					rs->set_margin_length((uint8)inst);
+					end_of_choose_info_t* signal_info_win = (end_of_choose_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
 
 		default:
 		// do nothing
@@ -9516,6 +9594,7 @@ bool tool_change_city_t::init( player_t *player )
  * 'p' : no_handle_pax
  * 'm' : no_handle_post
  * 'w' : no_handle_ware
+ * 'l' : allow_unload_longer_convoy
  */
 bool tool_change_halt_t::init(player_t *player) {
 	char tool=0;
@@ -9552,6 +9631,9 @@ bool tool_change_halt_t::init(player_t *player) {
 			break;
 		case 'w':
 			halt->set_no_handle_ware(!halt->is_no_handle_ware());
+			break;
+		case 'l':
+			halt->set_allow_unload_longer_convoy(!halt->is_allow_unload_longer_convoy());
 			break;
 		
 		default:

@@ -187,6 +187,7 @@ uint32 env_t::default_ai_construction_speed;
 
 
 bool env_t::previous_OTRP_data;
+bool env_t::use_old_friction;
 char env_t::otrp_statistics_log[PATH_MAX];
 
 bool  env_t::commandline_snapshot = false;
@@ -341,6 +342,7 @@ void env_t::init()
 	listen.append_unique("0.0.0.0");
 
 	previous_OTRP_data = false;
+	use_old_friction = false;
 	show_money_message = 0;
 	
 	sprintf(otrp_statistics_log, "");
@@ -680,6 +682,9 @@ void env_t::rdwr(loadsave_t *file)
 	// and could be different on different servers on the same computers
 }
 
+// Graphical offsets for all vehicles
+// the reading method is in setting_t, and these parameters are used in vehicle_t.
+sint8 env_t::vehicle_base_offsets[8][2][waytype_t::air_wt+1];
 // Graphical offsets for cars driving left
 // the reading method is in setting_t, and these parameters are used in vehicle_t.
 sint8 env_t::driveleft_base_offsets[8][2];
