@@ -31,6 +31,8 @@ can branch cityroad
 市道の分岐を許可
 Cityroad allow branch from this road
 この道路からの市道の分岐を許可する
+pedestrians do not enter 
+歩行者通行禁止
 Overtaking:
 追越設定:
 Can be cityroad:
@@ -51,8 +53,12 @@ intersection
 交差点
 Citycars are excluded.
 自家用車進入禁止
+Pedestrias are excluded.
+歩行者通行禁止
 Road Configuration
 道路の設定
+Way Configuration
+敷設時の設定
 citycars do not enter
 自家用車進入禁止
 set wayobj spacing
@@ -65,6 +71,8 @@ height offset
 高度のオフセット
 Waiting for schedule. %i left!
 発車時刻待ち（残り %i）
+Loading (%i->%i%%)! %i left!
+(%i->%i%%)積載中 (残り %i)
 line name tooltips
 系統名を表示
 line name and states tooltips
@@ -99,6 +107,10 @@ Choose signal
 振分信号を有効化(空いているホームに進入を許可)
 end of choose signal
 振分信号による進入禁止
+Margin
+停車余白
+tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)
+振分使用時に、停車する際にこのタイル分の余裕を空けて停車します．「ホーム終端まで進む」がオンのときは奥側に，オフの時は手前側に停車余白をとります．
 try coupling convoy not enter here
 連結試行時の進入禁止
 remove signal
@@ -153,6 +165,16 @@ Copy station names and journey time to clipboard in csv format.
 クリップボードに駅名と所要時間をcsv形式でコピーします．
 The latest departure slots were not used.
 直近の発車枠が使われませんでした．
+Copy Halt Data
+駅の詳細をコピー
+Copy the data of the halt labels.
+クリップボードに駅名と駅のデータをコピーします．
+Halt data was copied to clipboard.\n
+駅のデータをクリップボードにコピーしました．\n
+up this entry
+この駅を上へ移動
+down this entry
+この駅を下へ移動
 #------Schedule window related stuff------
 #------スケジュールウィンドウ関連のエントリ------
 Please click on the map to add\nwaypoints or stops to this\nschedule.
@@ -233,6 +255,14 @@ Max load
 最大乗車率
 set maximum loading ratio
 最大乗車率を設定します
+wait for full load
+全て積むまで待機
+wait for full load (100% or max loading value)
+積載可能な最大量まで積むまで待機します(通常は100%ですが、最大乗車率が設定されている場合はその値になります)
+reset full load setting
+積むまで待機を解除
+reset full load (set 0%)
+積むまで待機を解除します(値を0%にします)
 for all stops
 全駅に適用
 hlf_chk_include_public
@@ -249,6 +279,10 @@ If there are no users, this convoy will not go to this stop
 乗降客がいない場合、この駅を無視して次の駅に向かいます．
 reverse convoy
 編成を反転する(R)
+Reverse by Default
+折り返し時に自動で反転
+When the next destination is in the opposite direction, it will automatically reverse.
+折り返し運転する際、車両の向きを自動で反転します．
 Reverses the direction of convoy.
 編成の向きを反転します．
 reverse convoy coupling
@@ -283,6 +317,10 @@ Overwrite max speed of convoy
 編成最高速度を上書きする
 Overwrite max speed of convoy here.
 この地点に到達した編成の最高速度を設定した値で上書きします．
+Overwrite balance speed of convoy
+加速度設定を上書きする
+Overwrite balance speed of convoy here. This value define acceleration. The actual acceleration is determined by whichever is lower: this value or the vehicle's performance limit.
+この地点に到達した編成の最大加速度を上書きします．終端速度で加速度を定義します．実際の加速度は車両性能とこの値の遅いほうに基づきます．
 No overtake
 追い越し禁止
 Do not overtake other cars until this stop.
@@ -320,7 +358,7 @@ Show finances for transport type
 輸送タイプごとに表示する
 #------乗車区間------
 transfer interval
-乗車区間を区切る(I)
+乗車区間を区切る(V)
 Passengers who boarded outside the section get off at this stop.
 区間外からの乗客はこの停留所で降車します
 #------編成情報ウィンドウ------
@@ -414,6 +452,20 @@ Vehicle %s will couple with vehicle %s, but the next stop positions are differen
 %sと%sは連結して発車する予定ですが、次の駅の座標が異なるため連結できません!
 %s is not front convoy.
 %sは先頭の編成ではありません。
+Copy the selected convoi and its schedule or line (ctrl pressed: copy to clipboard)
+編成とスケジュール/所属路線を複製します(ctrlキーを押すと編成の情報のみをクリップボードにコピーしてほかの車庫に貼り付けられます)
+Uncouple
+連結解除
+uncouple child convoy
+後ろの編成を連結解除します
+remove all vehicles
+全ての車両を片付ける
+remove all vehicles.
+この編成の全ての車両を片付けます
+Sell all vehicles
+車庫の全車両売却
+Sell all vehicles stored here.
+車庫に格納された全車両を売却します
 #------編成最高速度機能------
 Set Max Speed
 編成最高速度を設定
@@ -423,6 +475,10 @@ Max speed of convoi: UNLIMIT
 編成最高速度：UNLIMIT(制限無し)
 Max speed of convoi: %i km/h
 編成最高速度： %i km/h
+Set Balance Speed
+加速度を設定
+Set acceleratable speed of this convoi
+加速度を設定します。入力値は終端速度です。
 #------ルート計算方法------
 route by route cost
 ルートコスト法で計算
@@ -446,6 +502,12 @@ Player color
 プレイヤーカラー
 Line color
 路線の色
+Line Colour
+路線の色
+Line Colour:
+路線の色
+Change colour of the line
+路線の色を変更
 Citizens
 人口
 CityGrowth
@@ -467,6 +529,37 @@ reverse_by_default
 折り返し時に車両を自動で反転(reverse_by_default)
 first_come_first_serve
 到着順に乗車する(first_come_first_serve)
+use_old_friction
+古い勾配の摩擦係数を使用(use_old_friction)
+allow_unload_longer_convoy
+有効長不足の車両からの下車を許可(allow_unload_longer_convoy)
+allow_higher_flight
+高高度の飛行を許可(allow_higher_flight)
+credit_per_MWs
+1MWあたりの収入(credit_per_MWs)
+maximum_village_size
+村の人口上限:これ以上の人口の町は「都市city」となります(maximum_village_size)
+maximum_city_size
+都市の人口上限:これ以上の人口の町は「首都capital」となります(maximum_city_size)
+Show line colors
+路線の色を表示
+Show convoy loading level
+編成の乗車率を表示
+#------車両オフセット機能------
+\nVehicle offset: 
+車両オフセット量: 
+Offset mode:
+モード:
+Direction
+進行方向
+Absolute
+絶対値
+vehicle offset
+車両オフセット量
+Offset mode: Absolute
+モード:絶対値
+set offset value and mode: On->Absolute(same offset for N&S),OFF->Direction(offset different based on Difference)
+車両のオフセット量とモードの設定: ONなら対向車も同じ向きにオフセットされます．OFFなら対向車は進行方向に応じてオフセットされます．
 #------その他の翻訳------
 Remove all waiting goods and pax
 この駅のすべての待機中の旅客と貨物を除去します
@@ -546,9 +639,15 @@ No stop found!
 停車場がありません!
 Different player's stop!
 他社の停車場です!
+Unload from longer convoy
+ホーム長が足りなくても下車可能
+Allow unloading when convoy length is longer than this station length
+ホーム長が編成長より短くても下車できるようになります(ホーム不足分の車両への乗車はできません)
 Pipette
 ピペットツール
 Readable by standard
 Standard用データに変換して保存(OTRP機能は失われます)
 Recreate halt name
 停車場名を再生成します
+ Locked
+ゲーム速度固定

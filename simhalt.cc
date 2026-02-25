@@ -1696,8 +1696,8 @@ sint32 haltestelle_t::rebuild_connections()
 		aggregate_weight_jt = estimated_waiting_ticks(schedule, start_index-1) - start_entry.get_median_convoy_stopping_time();
 		aggregate_weight_rc = WEIGHT_WAIT;
 
-		bool no_load_section = start_entry.is_no_load();
-		force_transfer_search |= (start_entry.is_unload_all()  ||  start_entry.is_no_load()  ||  start_entry.is_no_unload());
+		bool no_load_section = start_entry.is_no_load() || start_entry.is_temp_load();
+		force_transfer_search |= (start_entry.is_unload_all()  ||  start_entry.is_no_load()  ||  start_entry.is_no_unload()  ||  start_entry.is_temp_load()  ||  start_entry.is_temp_unload_all());
 		uint8 interval = 0;
 		for(  uint8 j=0;  j<schedule->get_count();  ++j  ) {
 			const uint8 current_entry_index = (start_index+j)%schedule->get_count();
@@ -1721,7 +1721,7 @@ sint32 haltestelle_t::rebuild_connections()
 				// reset aggregate weight
 				aggregate_weight_jt = estimated_waiting_ticks(schedule, current_entry_index) - current_entry.get_median_convoy_stopping_time();
 				aggregate_weight_rc = WEIGHT_WAIT;
-			 	force_transfer_search |= (current_entry.is_unload_all()  ||  current_entry.is_no_load()  ||  current_entry.is_no_unload());
+			 	force_transfer_search |= (current_entry.is_unload_all()  ||  current_entry.is_no_load()  ||  current_entry.is_no_unload()  ||  current_entry.is_temp_load()  ||  current_entry.is_temp_unload_all());
 				// If loading is allowed at somewhere by here, we still need to connect the further halts.
 				// Reset no_load_section to false in case that we can load here.
 				no_load_section &= (current_entry.is_no_load()||current_entry.is_temp_load());
@@ -2043,35 +2043,58 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 	// if one target halt is undefined, we have to start search from all halts
 	bool end_conn_comp_undefined = false;
 
-	for( uint32 h=0;  h<plan->get_haltlist_count();  ++h ) {
-		halthandle_t halt = halt_list[h];
-		if(  halt.is_bound()  &&  halt->is_enabled(ware_catg_idx)  ) {
-			// check if this is present in the list of start halts
-			for(  uint16 s=0;  s<start_halt_count;  ++s  ) {
-				if(  halt==start_halts[s]  ) {
-					// destination halt is also a start halt -> within walking distance
-					ware.set_ziel( start_halts[s] );
-					ware.clear_transit_halts();
-					if(  return_ware  ) {
-						return_ware->set_ziel( start_halts[s] );
+	if(  ware.menge>0  ||  !ware.get_ziel().is_bound()  ) {
+		// usual searching of target halt
+		for( uint32 h=0;  h<plan->get_haltlist_count();  ++h ) {
+			halthandle_t halt = halt_list[h];
+			if(  halt.is_bound()  &&  halt->is_enabled(ware_catg_idx)  ) {
+				// check if this is present in the list of start halts
+				for(  uint16 s=0;  s<start_halt_count;  ++s  ) {
+					if(  halt==start_halts[s]  ) {
+						// destination halt is also a start halt -> within walking distance
+						ware.set_ziel( start_halts[s] );
 						ware.clear_transit_halts();
+						if(  return_ware  ) {
+							return_ware->set_ziel( start_halts[s] );
+							ware.clear_transit_halts();
+						}
+						return ROUTE_WALK;
 					}
-					return ROUTE_WALK;
 				}
-			}
-			end_halts.append(halt);
+				end_halts.append(halt);
 
-			// check connected component of target halt
-			uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
-			if (endhalt_conn_comp == UNDECIDED_CONNECTED_COMPONENT) {
-				// undefined: all start halts are probably connected to this target
-				end_conn_comp_undefined = true;
-			}
-			else {
-				// store connected component
-				if (!end_conn_comp_undefined) {
-					end_conn_comp.append_unique( endhalt_conn_comp );
+				// check connected component of target halt
+				uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
+				if (endhalt_conn_comp == UNDECIDED_CONNECTED_COMPONENT) {
+					// undefined: all start halts are probably connected to this target
+					end_conn_comp_undefined = true;
 				}
+				else {
+					// store connected component
+					if (!end_conn_comp_undefined) {
+						end_conn_comp.append_unique( endhalt_conn_comp );
+					}
+				}
+			}
+		}
+	}
+	else {
+		// goods menge==0 and target halt is already set.
+		// we already set getoff stop (because this goods is dummy!)
+		// e.g. called by route_search_frame_t
+		halthandle_t halt = ware.get_ziel();
+				end_halts.append(halt);
+
+		// check connected component of target halt
+		uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
+		if (endhalt_conn_comp == UNDECIDED_CONNECTED_COMPONENT) {
+			// undefined: all start halts are probably connected to this target
+			end_conn_comp_undefined = true;
+		}
+		else {
+			// store connected component
+			if (!end_conn_comp_undefined) {
+				end_conn_comp.append_unique( endhalt_conn_comp );
 			}
 		}
 	}
@@ -3255,6 +3278,12 @@ void haltestelle_t::merge_halt( halthandle_t halt_merged )
 		return;
 	}
 
+	if(  owner!=halt_merged->get_owner()  ) {
+		// we merge different owner's stop
+		// we set allow other player access because other convoy can connect here!
+		flags|=HS_ALLOW_OTHER_PLAYER_CONNECTION;
+	}
+
 	halt_merged->change_owner( owner, false );
 
 	// add statistics
@@ -3350,6 +3379,10 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 			}
 		}
 	}
+
+	// set allow other player access.
+	// because this stop could be access other player before change owner.
+	flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
 
 	// transfer ownership
 	owner = player;
@@ -3550,6 +3583,41 @@ void haltestelle_t::recalc_station_type()
 	recalc_status();
 }
 
+haltestelle_t::stationtyp haltestelle_t::get_connected_station_type() const
+{
+	stationtyp typ = invalid;
+	for(uint32 i=registered_lines.get_count(); i-->0;) {
+		waytype_t wt = registered_lines[i]->get_schedule()->get_waytype();
+		switch (wt)
+		{
+			case road_wt:	 	 typ |= busstop; 		 break;
+			case water_wt:       typ |= dock;            break;
+			case air_wt:         typ |= airstop;         break;
+			case monorail_wt:    typ |= monorailstop;    break;
+			case tram_wt:
+			case track_wt:       typ |= railstation;     break;
+			case maglev_wt:      typ |= maglevstop;      break;
+			case narrowgauge_wt: typ |= narrowgaugestop; break;
+			default: ;
+		}
+	}
+	for(uint32 i=registered_convoys.get_count(); i-->0;) {
+		waytype_t wt = registered_convoys[i]->get_schedule()->get_waytype();
+		switch (wt)
+		{
+			case road_wt:	 	 typ |= busstop; 		 break;
+			case water_wt:       typ |= dock;            break;
+			case air_wt:         typ |= airstop;         break;
+			case monorail_wt:    typ |= monorailstop;    break;
+			case tram_wt:
+			case track_wt:       typ |= railstation;     break;
+			case maglev_wt:      typ |= maglevstop;      break;
+			case narrowgauge_wt: typ |= narrowgaugestop; break;
+			default: ;
+		}		
+	}
+	return typ&station_type;
+}
 
 
 int haltestelle_t::generate_pedestrians(koord3d pos, int count)
