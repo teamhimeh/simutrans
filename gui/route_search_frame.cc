@@ -209,6 +209,7 @@ void route_search_frame_t::append_connection_row(haltestelle_t::connection_t con
         auto original_sched = cnv->get_schedule();
 
         schedule_t* spliced_schedule = original_sched->copy();
+        spliced_schedule->set_next_line(linehandle_t());
         spliced_schedule->remove_all();
         
         bool recording = false;
