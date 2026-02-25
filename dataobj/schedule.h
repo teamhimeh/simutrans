@@ -214,7 +214,7 @@ public:
 	/**
 	 * Remove all entries from the schedule.
 	 */
-	void remove_all() { entries.clear(); }
+	void remove_all() { unset_next_line(); entries.clear(); }
 
 	void move_entry_forward(uint8);
 	void move_entry_backward(uint8);
