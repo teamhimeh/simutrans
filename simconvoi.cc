@@ -5849,10 +5849,6 @@ void convoi_t::trade_convoi() {
 	}
 	// because next line's owner is invalid, unset it.
 	schedule->unset_next_line();
-	cbuffer_t buf;
-	if(  need_new_line  ) {
-		schedule->sprintf_schedule(buf);
-	}
 	set_owner(welt->get_player(get_accept_player_nr()));
 	register_stops();
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
@@ -5871,8 +5867,7 @@ void convoi_t::trade_convoi() {
 		}
 		dbg->message("convoi_t::trade_convoi()","%s do not find match line",get_name());
 		// not find match line -> create new one!
-		linehandle_t new_line = owner->simlinemgmt.create_line(schedule->get_type(), owner);
-		new_line->get_schedule()->sscanf_schedule(buf);
+		linehandle_t new_line = owner->simlinemgmt.create_line(schedule->get_type(), owner, schedule);
 		new_line->get_schedule()->finish_editing();
 		set_line(new_line);
 	}
