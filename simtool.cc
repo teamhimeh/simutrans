@@ -8770,11 +8770,8 @@ bool tool_change_convoi_t::init( player_t *player )
 					// invalid line type
 					break;
 				}
-				linehandle_t line = player->simlinemgmt.create_line( ltype, player );
+				linehandle_t line = player->simlinemgmt.create_line( ltype, player, schedule );
 
-				cbuffer_t buf;
-				schedule->sprintf_schedule( buf );
-				line->get_schedule()->sscanf_schedule( buf );
 				// check scenario conditions
 				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(line);
