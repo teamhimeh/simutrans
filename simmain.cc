@@ -618,7 +618,7 @@ int simu_main(int argc, char** argv)
 
 	if( !check_and_set_dir( args.gimme_arg( "-set_installdir", 1 ), "-set_installdir", env_t::install_dir ) ) {
 		if( !check_and_set_dir( getenv( "SIMUTRANS_INSTALLDIR" ), "SIMUTRANS_INSTALLDIR", env_t::install_dir ) ) {
-			if( multiuser ) {
+			if( !multiuser ) {
 				// portable installation
 				strcpy( env_t::install_dir, env_t::data_dir );
 			}
