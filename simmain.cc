@@ -575,7 +575,7 @@ int simu_main(int argc, char** argv)
 		if( !check_and_set_dir( getenv( "SIMUTRANS_INSTALLDIR" ), "SIMUTRANS_INSTALLDIR", env_t::install_dir ) ) {
 			if( multiuser ) {
 				// portable installation
-				strcpy( env_t::install_dir, env_t::base_dir );
+				strcpy( env_t::install_dir, env_t::data_dir );
 			}
 			else {
 				strcpy( env_t::install_dir, dr_query_installdir() );
@@ -586,7 +586,7 @@ int simu_main(int argc, char** argv)
 	if( !check_and_set_dir( args.gimme_arg( "-set_userdir", 1 ), "-set_userdir", env_t::data_dir ) ) {
 		if( !check_and_set_dir( getenv( "SIMUTRANS_USERDIR" ), "SIMUTRANS_USERDIR", env_t::data_dir ) ) {
 			if( multiuser ) {
-				strcpy( env_t::data_dir, env_t::base_dir );
+				strcpy( env_t::data_dir, env_t::data_dir );
 			}
 			else {
 				strcpy( env_t::data_dir, dr_query_homedir() );
@@ -919,7 +919,7 @@ int simu_main(int argc, char** argv)
 		dr_chdir( "themes" );
 		themes_ok = gui_theme_t::themes_init( env_t::default_theme, true, false );
 		if(  !themes_ok  ) {
-			dr_chdir( env_t::base_dir );
+			dr_chdir( env_t::data_dir );
 			dr_chdir( "themes" );
 			themes_ok = gui_theme_t::themes_init( env_t::default_theme, true, false );
 		}

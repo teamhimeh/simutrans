@@ -33,11 +33,6 @@ enum { MENU_LEFT, MENU_TOP, MENU_RIGHT, MENU_BOTTOM };
 class env_t
 {
 public:
-	/// Points to the simutrans data directory which hosts translation theme etc.
-	/// This directory may be write protected or only accesible for certain users
-	/// May contain pak, scripts and addons
-	static char base_dir[PATH_MAX];
-
 	/// Points to a global writable directory, where downloaded content content is stored
 	/// This directory is writable to all users to store global content (like paksets)
 	static char install_dir[PATH_MAX];

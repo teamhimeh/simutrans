@@ -158,6 +158,7 @@ bool check_and_set_dir(const char *path, const char *info, char *result, const c
 */
 bool dr_set_basedir(const char *base_dir_arg, char *executable_path);
 
+
 /* query home directory */
 char const* dr_query_homedir();
 

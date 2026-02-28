@@ -16,7 +16,6 @@
 
 #include "../utils/simrandom.h"
 void rdwr_win_settings(loadsave_t *file); // simwin
-char env_t::base_dir[PATH_MAX];
 char env_t::install_dir[PATH_MAX];
 sint16 env_t::menupos = MENU_TOP;
 sint16 env_t::fullscreen = WINDOWED;

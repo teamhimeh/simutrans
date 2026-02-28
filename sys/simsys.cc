@@ -392,31 +392,31 @@ bool check_and_set_dir( const char *path, const char *info, char *result, const 
 
 /**
 * Simutrans has three directories:
-* base_dir: directory with default data (may be write protected)
+* data_dir: directory with default data (may be write protected)
 * install_dir: global writable directory where paksets are installed
 * user_dir: a user writable directory
 *
 * The directory will be determined in the following order
 * -set_XXXdir Path (command line option)
 * SIMUTRANS_XXXDIR (environment variable)
-* (in case of base_dir current path, then executable path)
+* (in case of data_dir current path, then executable path)
 * (for user_dir and install_dir: machine dependent default directories)
 *
 * The pak_dir contains the complete path to the current pak, since it could be in different locations
 *
 */
-bool dr_set_basedir(const char * base_dir_arg, char * executable_path)
+bool dr_set_basedir(const char * data_dir_arg, char * executable_path)
 {
 	bool found_basedir = false;
 #ifdef __ANDROID__
-	found_basedir = check_and_set_dir( SDL_AndroidGetInternalStoragePath(), "Android Internal Storage", env_t::base_dir, "config/simuconf.tab");
+	found_basedir = check_and_set_dir( SDL_AndroidGetInternalStoragePath(), "Android Internal Storage", env_t::data_dir, "config/simuconf.tab");
 #else
-	found_basedir = check_and_set_dir( base_dir_arg, "-set_basedir", env_t::base_dir, "config/simuconf.tab");
+	found_basedir = check_and_set_dir( data_dir_arg, "-set_basedir", env_t::data_dir, "config/simuconf.tab");
 	if( !found_basedir ) {
-		found_basedir = check_and_set_dir( getenv("SIMUTRANS_BASEDIR"), "SIMUTRANS_BASEDIR", env_t::base_dir, "config/simuconf.tab");
+		found_basedir = check_and_set_dir( getenv("SIMUTRANS_BASEDIR"), "SIMUTRANS_BASEDIR", env_t::data_dir, "config/simuconf.tab");
 		if( !found_basedir ) {
-			dr_getcwd(env_t::base_dir, lengthof(env_t::base_dir));
-			strcat( env_t::base_dir, PATH_SEPARATOR );
+			dr_getcwd(env_t::data_dir, lengthof(env_t::data_dir));
+			strcat( env_t::data_dir, PATH_SEPARATOR );
 			// test if base installation
 			if (FILE* f = dr_fopen("config/simuconf.tab", "r")) {
 				fclose(f);
@@ -428,17 +428,17 @@ bool dr_set_basedir(const char * base_dir_arg, char * executable_path)
 				char* c = strrchr(testpath, *PATH_SEPARATOR);
 				if(c) {
 					*c = 0; // remove program name
-					found_basedir = check_and_set_dir(testpath, "program dir", env_t::base_dir, "config/simuconf.tab");
+					found_basedir = check_and_set_dir(testpath, "program dir", env_t::data_dir, "config/simuconf.tab");
 					if(!found_basedir) {
 #ifdef __APPLE__
 						// Detect if the binary is started inside an application bundle
 						// Change working dir from MacOS to Resources dir
-						strcpy(env_t::base_dir, testpath);
-						if( strstr(env_t::base_dir, ".app/Contents/MacOS") != NULL ) {
-							while (env_t::base_dir[strlen(env_t::base_dir) - 1] != 's') {
-								env_t::base_dir[strlen(env_t::base_dir) - 1] = 0;
+						strcpy(env_t::data_dir, testpath);
+						if( strstr(env_t::data_dir, ".app/Contents/MacOS") != NULL ) {
+							while (env_t::data_dir[strlen(env_t::data_dir) - 1] != 's') {
+								env_t::data_dir[strlen(env_t::data_dir) - 1] = 0;
 							}
-							strcat(env_t::base_dir, "/Resources/simutrans/");
+							strcat(env_t::data_dir, "/Resources/simutrans/");
 							found_basedir = true;
 						}
 #else
@@ -447,10 +447,10 @@ bool dr_set_basedir(const char * base_dir_arg, char * executable_path)
 						if(  c  &&  strcmp(c+1,"bin")==0  ) {
 							// replace bin with other paths
 							strcpy( c+1, "share/simutrans/" );
-							found_basedir = check_and_set_dir(testpath, "program dir", env_t::base_dir, "config/simuconf.tab");
+							found_basedir = check_and_set_dir(testpath, "program dir", env_t::data_dir, "config/simuconf.tab");
 							if (!found_basedir) {
 								strcpy( c+1 , "share/games/simutrans/" );
-								found_basedir = check_and_set_dir(testpath, "share/games/simutrans", env_t::base_dir, "config/simuconf.tab");
+								found_basedir = check_and_set_dir(testpath, "share/games/simutrans", env_t::data_dir, "config/simuconf.tab");
 							}
 						}
 #endif
@@ -462,7 +462,7 @@ bool dr_set_basedir(const char * base_dir_arg, char * executable_path)
 #endif
 	if (!found_basedir) {
 		// try the installer dir next
-		found_basedir = check_and_set_dir(dr_query_installdir(), "install_dir", env_t::base_dir, "config/simuconf.tab");
+		found_basedir = check_and_set_dir(dr_query_installdir(), "install_dir", env_t::data_dir, "config/simuconf.tab");
 	}
 	return found_basedir;
 }
