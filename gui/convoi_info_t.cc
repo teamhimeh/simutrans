@@ -658,6 +658,19 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 		}
 
 		if(  comp == &bt_promote_to_line  ) {
+			vector_tpl<linehandle_t> lines;
+			cnv->get_owner()->simlinemgmt.get_lines(cnv->get_schedule()->get_type(), &lines);
+			FOR(  vector_tpl<linehandle_t>, const line, lines  ) {
+				if(  cnv->get_schedule()->matches(  welt, line->get_schedule()  )  ) {
+					dbg->message("convoi_info_t::action_triggered()","%s's schedule match line %s", cnv->get_name(), line->get_name());
+					char id[16];
+					sprintf( id, "%i,%i", line.get_id(), cnv->get_schedule()->get_current_stop() );
+					cnv->call_convoi_tool( 'l', id );
+					return true;
+				}
+			}
+			// not find match line -> create new one!
+			dbg->message("convoi_info_t::action_triggered()","%s's schedule did not match any lines", cnv->get_name());
 			cnv->call_convoi_tool( 'L', NULL );
 			return true;
 		}
