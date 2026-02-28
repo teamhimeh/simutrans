@@ -74,7 +74,7 @@ bool pakselector_t::item_action(const char *fullpath)
 {
 	env_t::pak_dir = fullpath;
 	env_t::pak_dir += PATH_SEPARATOR;
-	env_t::pak_name = (get_filename(fullpath)+PATH_SEPARATOR);
+	env_t::objfilename = (get_filename(fullpath)+PATH_SEPARATOR);
 	env_t::default_settings.set_with_private_paks( false );
 
 	return true;
@@ -86,7 +86,7 @@ bool pakselector_t::del_action(const char *fullpath)
 	// cannot delete set => use this for selection
 	env_t::pak_dir = fullpath;
 	env_t::pak_dir += PATH_SEPARATOR;
-	env_t::pak_name = get_filename(fullpath)+PATH_SEPARATOR;
+	env_t::objfilename = get_filename(fullpath)+PATH_SEPARATOR;
 	env_t::default_settings.set_with_private_paks( true );
 	return true;
 }
@@ -151,7 +151,7 @@ void pakselector_t::fill_list()
 			// if list contains only one header, one pakset entry without addons
 			// store path to pakset temporary, reset later if more choices available
 			// if env_t::pak_dir is non-empty then simmain.cc will close the window immediately
-			env_t::pak_name = (std::string)i.button->get_text() + PATH_SEPARATOR;
+			env_t::objfilename = (std::string)i.button->get_text() + PATH_SEPARATOR;
 			env_t::pak_dir = (std::string)i.info + PATH_SEPARATOR;
 		}
 	}
@@ -160,7 +160,7 @@ void pakselector_t::fill_list()
 	if(entries.get_count() > this->num_sections+1) {
 		// empty path as more than one pakset is present, user has to choose
 		env_t::pak_dir.clear();
-		env_t::pak_name.clear();
+		env_t::objfilename.clear();
 	}
 }
 

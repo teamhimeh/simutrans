@@ -500,8 +500,8 @@ bool set_pakdir( const char *chkdir )
 		env_t::pak_dir = tmp;
 		env_t::pak_dir += PATH_SEPARATOR;
 		const char* new_name = strrchr(tmp, *PATH_SEPARATOR);
-		env_t::pak_name = new_name+1;
-		env_t::pak_name += PATH_SEPARATOR;
+		env_t::objfilename = new_name+1;
+		env_t::objfilename += PATH_SEPARATOR;
 		return true;
 	}
 	dr_chdir( env_t::install_dir );
@@ -510,8 +510,8 @@ bool set_pakdir( const char *chkdir )
 		env_t::pak_dir = tmp;
 		env_t::pak_dir += PATH_SEPARATOR;
 		const char* new_name = strrchr(tmp, *PATH_SEPARATOR);
-		env_t::pak_name = new_name+1;
-		env_t::pak_name += PATH_SEPARATOR;
+		env_t::objfilename = new_name+1;
+		env_t::objfilename += PATH_SEPARATOR;
 		return true;
 	}
 	dr_chdir( env_t::user_dir );
@@ -521,8 +521,8 @@ bool set_pakdir( const char *chkdir )
 			env_t::pak_dir = tmp;
 			env_t::pak_dir += PATH_SEPARATOR;
 			const char* new_name = strrchr(tmp, *PATH_SEPARATOR);
-			env_t::pak_name = new_name+1;
-			env_t::pak_name += PATH_SEPARATOR;
+			env_t::objfilename = new_name+1;
+			env_t::objfilename += PATH_SEPARATOR;
 			return true;
 		}
 	}
@@ -759,7 +759,7 @@ int simu_main(int argc, char** argv)
 		}
 	}
 
-	if(  env_t::pak_name.empty()  ) {
+	if(  env_t::objfilename.empty()  ) {
 		if(  const char *filename = args.gimme_arg("-load", 1)  ) {
 			// try to get a pak file path from a savegame file
 			// read pak_extension from file
