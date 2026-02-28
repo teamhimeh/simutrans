@@ -386,6 +386,7 @@ void print_help()
 		" -nomidi             turns off background music\n"
 		" -nosound            turns off ambient sounds\n"
 		" -objects DIR_NAME/  load the pakset in specified directory\n"
+		" -set_pakdir DIR     loads the pakset in specified directory\n"
 		" -pause              starts game with paused after loading\n"
 		"                     a server will pause if there are no clients\n"
 		" -res N              starts in specified resolution: \n"
@@ -482,6 +483,50 @@ void setup_logging(const args_t &args)
 	else {
 		init_logging(NULL, false, false, version, NULL);
 	}
+}
+
+
+// search for this in all possible pakset locations for the directory chkdir and take the first match
+bool set_pakdir( const char *chkdir )
+{
+	if(  !chkdir  ||  !*chkdir  ) {
+		return false;
+	}
+
+	char tmp[PATH_MAX];
+	dr_chdir( env_t::data_dir );
+	if( !dr_chdir( chkdir ) ) {
+		dr_getcwd(tmp, lengthof(tmp));
+		env_t::pak_dir = tmp;
+		env_t::pak_dir += PATH_SEPARATOR;
+		const char* new_name = strrchr(tmp, *PATH_SEPARATOR);
+		env_t::pak_name = new_name+1;
+		env_t::pak_name += PATH_SEPARATOR;
+		return true;
+	}
+	dr_chdir( env_t::install_dir );
+	if( !dr_chdir( chkdir ) ) {
+		dr_getcwd(tmp, lengthof(tmp));
+		env_t::pak_dir = tmp;
+		env_t::pak_dir += PATH_SEPARATOR;
+		const char* new_name = strrchr(tmp, *PATH_SEPARATOR);
+		env_t::pak_name = new_name+1;
+		env_t::pak_name += PATH_SEPARATOR;
+		return true;
+	}
+	dr_chdir( env_t::user_dir );
+	if(!dr_chdir( USER_PAK_PATH ) ) {
+		if( !dr_chdir( chkdir ) ) {
+			dr_getcwd(tmp, lengthof(tmp));
+			env_t::pak_dir = tmp;
+			env_t::pak_dir += PATH_SEPARATOR;
+			const char* new_name = strrchr(tmp, *PATH_SEPARATOR);
+			env_t::pak_name = new_name+1;
+			env_t::pak_name += PATH_SEPARATOR;
+			return true;
+		}
+	}
+	return false;
 }
 
 
@@ -682,35 +727,56 @@ int simu_main(int argc, char** argv)
 #endif
 
 	// now set the desired objectfilename (override all previous settings)
-	if(  const char *fn = args.gimme_arg("-objects", 1)  ) {
-		env_t::objfilename = fn;
-		// append slash / replace trailing backslash if necessary
-		size_t len = env_t::objfilename.length();
-		if (len > 0) {
-			if (env_t::objfilename[len-1]=='\\') {
-				env_t::objfilename.erase(len-1);
-				env_t::objfilename += "/";
+	if(  const char *fn = args.gimme_arg("-set_pakdir", 1)  ) {
+		if(!set_pakdir(fn)) {
+			// try as absolute path
+			char tmp[PATH_MAX];
+			if( check_and_set_dir( fn, "-set_pakdir", tmp, "config/menuconf.tab" ) ) {
+				env_t::pak_dir = tmp;
+				// to be done => extrat pak name!!!
+				const char *last_pathsep=0;
+				for( char *c=tmp; c[0]>0; c++ ) {
+					if( *c==*PATH_SEPARATOR ) {
+						if( c[1]==0 ) {
+							c[0] = 0;
+							break;
+						}
+						last_pathsep = c+1;
+					}
+				}
+				set_pakdir(last_pathsep);
 			}
-			else if (env_t::objfilename[len-1]!='/') {
-				env_t::objfilename += "/";
+		}
+		else {
+			set_pakdir(fn);
+		}
+	}
+
+	if(  env_t::pak_dir.empty()  ) {
+		// old style (deprecated)
+		if( const char* pak = args.gimme_arg( "-objects", 1 ) ) {
+			set_pakdir(pak);
+		}
+	}
+
+	if(  env_t::pak_name.empty()  ) {
+		if(  const char *filename = args.gimme_arg("-load", 1)  ) {
+			// try to get a pak file path from a savegame file
+			// read pak_extension from file
+			loadsave_t test;
+			std::string fn = env_t::user_dir;
+			fn += "save/";
+			fn += filename;
+			if(  test.rd_open(fn.c_str()) == loadsave_t::FILE_STATUS_OK  ) {
+				// add pak extension
+				const char *pak = test.get_pak_extension();
+				if(  strcmp(pak,"(unknown)")!=0  ) {
+					set_pakdir(pak);
+				}
 			}
 		}
 	}
-	else if(  const char *filename = args.gimme_arg("-load", 1)  ) {
-		// try to get a pak file path from a savegame file
-		// read pak_extension from file
-		loadsave_t test;
-		std::string fn = env_t::user_dir;
-		fn += "save/";
-		fn += filename;
-		if(  test.rd_open(fn.c_str()) == loadsave_t::FILE_STATUS_OK  ) {
-			// add pak extension
-			std::string pak_extension = test.get_pak_extension();
-			if(  pak_extension!="(unknown)"  ) {
-				env_t::objfilename = pak_extension + "/";
-			}
-		}
-	}
+	dr_chdir( env_t::data_dir );
 
 	// starting a server?
 	if(  args.has_arg("-easyserver")  ) {

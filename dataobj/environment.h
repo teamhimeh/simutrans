@@ -41,6 +41,12 @@ public:
 	/// where the executable is located, unless -use_workdir is specified.
 	static char data_dir[PATH_MAX];
 
+	/// the selected pak (whole path, can be write protected)
+	static std::string pak_dir;
+
+	/// the folder name of the selected pak (with trailing path separator)
+	static std::string pak_name;
+
 	static sint16 menupos;
 
 	static sint16 fullscreen;
