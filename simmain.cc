@@ -571,6 +571,30 @@ int simu_main(int argc, char** argv)
 		simuconf.close();
 	}
 
+	if( !check_and_set_dir( args.gimme_arg( "-set_installdir", 1 ), "-set_installdir", env_t::install_dir ) ) {
+		if( !check_and_set_dir( getenv( "SIMUTRANS_INSTALLDIR" ), "SIMUTRANS_INSTALLDIR", env_t::install_dir ) ) {
+			if( multiuser ) {
+				// portable installation
+				strcpy( env_t::install_dir, env_t::base_dir );
+			}
+			else {
+				strcpy( env_t::install_dir, dr_query_installdir() );
+			}
+		}
+	}
+
+	if( !check_and_set_dir( args.gimme_arg( "-set_userdir", 1 ), "-set_userdir", env_t::data_dir ) ) {
+		if( !check_and_set_dir( getenv( "SIMUTRANS_USERDIR" ), "SIMUTRANS_USERDIR", env_t::data_dir ) ) {
+			if( multiuser ) {
+				strcpy( env_t::data_dir, env_t::base_dir );
+			}
+			else {
+				strcpy( env_t::data_dir, dr_query_homedir() );
+			}
+		}
+	}
+
+
 	// init dirs now
 	if(multiuser) {
 		env_t::user_dir = dr_query_homedir();
