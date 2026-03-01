@@ -1067,7 +1067,7 @@ int simu_main(int argc, char** argv)
 	}
 
 	// now find the pak specific tab file ...
-	obj_conf = env_t::objfilename + path_to_simuconf;
+	obj_conf = env_t::pak_dir + path_to_simuconf;
 	if(  simuconf.open(obj_conf.c_str())  ) {
 		env_t::default_settings.set_way_height_clearance( 0 );
 
@@ -1168,7 +1168,7 @@ int simu_main(int argc, char** argv)
 	}
 
 	// Adam - Moved away loading from simu_main() and placed into translator for better modularization
-	if(  !translator::load(env_t::objfilename)  ) {
+	if(  !translator::load(env_t::pak_dir)  ) {
 		// installation error: likely only program started
 		dbg->fatal("simu_main()",
 			"Unable to load any language files\n"
@@ -1223,19 +1223,19 @@ int simu_main(int argc, char** argv)
 	stadt_t::cityrules_init(env_t::objfilename);
 
 	dbg->message("simu_main()","Reading speedbonus configuration ...");
-	vehicle_builder_t::speedbonus_init(env_t::objfilename);
+	vehicle_builder_t::speedbonus_init(env_t::pak_dir);
 
 	dbg->message("simu_main()","Reading menu configuration ...");
 	tool_t::init_menu();
 
 	// loading all objects in the pak
-	dbg->message("simu_main()","Reading object data from %s...", env_t::objfilename.c_str());
-	obj_reader_t::load( env_t::objfilename.c_str(), translator::translate("Loading paks ...") );
+	dbg->message("simu_main()","Reading object data from %s...", env_t::pak_dir.c_str());
+	obj_reader_t::load( env_t::pak_dir.c_str(), translator::translate("Loading paks ...") );
 	std::string overlaid_warning; // more prominent handling of double objects
 
 	if(  dbg->had_overlaid()  ) {
 		overlaid_warning = translator::translate("<h1>Error</h1><p><strong>");
-		overlaid_warning.append( env_t::objfilename + translator::translate("contains the following doubled objects:</strong><p>") + dbg->get_overlaid() + "<p>" );
+		overlaid_warning.append( env_t::pak_dir + translator::translate("contains the following doubled objects:</strong><p>") + dbg->get_overlaid() + "<p>" );
 		dbg->clear_overlaid();
 	}
 
