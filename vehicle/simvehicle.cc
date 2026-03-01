@@ -968,6 +968,42 @@ void vehicle_t::initialise_journey(uint16 start_route_index, bool recalc)
 	}
 }
 
+sint8 vehicle_t::vehicle_offset_defined_by_way(ribi_t::dir d, const sint8 offset, const bool is_x, const bool reverse, const sint16 raster_width)
+{
+	sint8 offset_value;
+	switch (d%(reverse?4:8))
+	{
+	case ribi_t::dir_south:
+		offset_value = is_x? -offset*2: -offset;
+		break;
+	case ribi_t::dir_west:
+		offset_value = is_x? offset*2: -offset;
+		break;
+	case ribi_t::dir_southwest:
+		offset_value = is_x? 0: -offset;
+		break;
+	case ribi_t::dir_southeast:
+		offset_value = is_x? -offset*2: 0;
+		break;
+	case ribi_t::dir_north:
+		offset_value = is_x? offset*2: offset;
+		break;
+	case ribi_t::dir_east:
+		offset_value = is_x? -offset*2: offset;
+		break;
+	case ribi_t::dir_northeast:
+		offset_value = is_x? 0: offset;
+		break;
+	case ribi_t::dir_northwest:
+		offset_value = is_x? offset*2: 0;
+		break;
+	default:
+		offset_value = 0;
+		break;
+	}
+	sint8 offset_raster_value = is_x? tile_raster_scale_x( offset_value, raster_width/4 ): tile_raster_scale_y( offset_value, raster_width/4 );
+	return offset_raster_value;
+}
 
 vehicle_t::vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player) :
 	vehicle_base_t(pos)
@@ -1034,6 +1070,10 @@ void vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raster_wid
 	const int dir = ribi_t::get_dir(get_direction());
 	xoff += tile_raster_scale_x( env_t::vehicle_base_offsets[dir][0][get_waytype()], raster_width );
 	yoff += tile_raster_scale_y( env_t::vehicle_base_offsets[dir][1][get_waytype()], raster_width );
+	if(  welt->lookup(get_pos()) && welt->lookup(get_pos())->get_weg(get_waytype())  ) {
+		xoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),true,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
+		yoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),false,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
+	}
 	if(  !cnv->is_reversed()  ) {
 		return;
 	}
@@ -1524,11 +1564,12 @@ void vehicle_t::calc_image()
 	image_id old_image=get_image();
 	// When loading savedata, vehicles do not have cnv information.
 	const bool is_reversed = (cnv==NULL  ||  cnv==(convoi_t *)1) ? false : cnv->is_reversed();
+	const bool is_no_electric = (cnv==NULL  ||  cnv==(convoi_t *)1) ? false : !cnv->get_use_electric();
 	if (fracht.empty()) {
-		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),NULL,is_reversed));
+		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),NULL,is_reversed,is_no_electric));
 	}
 	else {
-		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()), fracht.front().get_desc(),is_reversed));
+		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()), fracht.front().get_desc(),is_reversed,is_no_electric));
 	}
 	if(old_image!=get_image()) {
 		set_flag(obj_t::dirty);
@@ -2060,14 +2101,14 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 		if(ypos>LINESPACE+32  &&  ypos+LINESPACE<display_get_clip_wh().yy) {
 			display_ddd_proportional_clip( xpos, ypos, color, color_idx_to_rgb(COL_BLACK), tooltip_text, true );
 			if(  state==env_t::LINE_NAME_TOOLTIPS  ||  state==env_t::LINE_NAME_AND_STATES_TOOLTIPS  ) {
-				if(  cnv->get_max_loading()>0  ) {
+				if(  env_t::show_convoy_loadinglevel && cnv->get_max_loading()>0  ) {
 					// show loading level only for loadable convoy(not for locomotive, etc.)
 					// show loading capacity as gray background
 					display_fillbox_wh_clip_rgb( xpos, ypos+14, 100, D_WAITINGBAR_WIDTH, color_idx_to_rgb(COL_GREY4), dirty );
 					// show loading level as green(if level<=100%), or orange(overloading).
 					display_fillbox_wh_clip_rgb( xpos, ypos+14, cnv->get_loading_level()>100?100:cnv->get_loading_level(), D_WAITINGBAR_WIDTH, color_idx_to_rgb(cnv->get_loading_level()>100?COL_RED:COL_LIGHT_GREEN), dirty );
 				}
-				if(  lh.is_bound()  ) {
+				if(  env_t::show_line_colors && lh.is_bound()  ) {
 					// show line colour
 					uint8 tooltip_width = proportional_string_width(tooltip_text);
 					display_fillbox_wh_clip_rgb( xpos, ypos-D_WAITINGBAR_WIDTH, tooltip_width+4, D_WAITINGBAR_WIDTH, color_idx_to_rgb(lh->get_colour()), dirty );
@@ -2327,15 +2368,19 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raster_width, bool prev_based ) const
 {
 	vehicle_base_t::get_screen_offset( xoff, yoff, raster_width );
+	const int dir = ribi_t::get_dir(get_direction());
 
 	if(  welt->get_settings().is_drive_left()  ) {
-		const int drive_left_dir = ribi_t::get_dir(get_direction());
-		xoff += tile_raster_scale_x( env_t::driveleft_base_offsets[drive_left_dir][0], raster_width );
-		yoff += tile_raster_scale_y( env_t::driveleft_base_offsets[drive_left_dir][1], raster_width );
+		xoff += tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
+		yoff += tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
 	}
 
 	// eventually shift position to take care of overtaking
 	if(cnv) {
+		if(  welt->lookup(get_pos()) && welt->lookup(get_pos())->get_weg(get_waytype())  ) {
+		xoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),true,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
+		yoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),false,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
+		}
 		sint8 tiles_overtaking = prev_based ? cnv->get_prev_tiles_overtaking() : cnv->get_tiles_overtaking();
 		if(  tiles_overtaking>0  ) { /* This means the convoy is overtaking other vehicles. */
 			xoff += tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width);

@@ -31,6 +31,8 @@ can branch cityroad
 市道の分岐を許可
 Cityroad allow branch from this road
 この道路からの市道の分岐を許可する
+pedestrians do not enter 
+歩行者通行禁止
 Overtaking:
 追越設定:
 Can be cityroad:
@@ -51,8 +53,12 @@ intersection
 交差点
 Citycars are excluded.
 自家用車進入禁止
+Pedestrias are excluded.
+歩行者通行禁止
 Road Configuration
 道路の設定
+Way Configuration
+敷設時の設定
 citycars do not enter
 自家用車進入禁止
 set wayobj spacing
@@ -311,6 +317,10 @@ Overwrite max speed of convoy
 編成最高速度を上書きする
 Overwrite max speed of convoy here.
 この地点に到達した編成の最高速度を設定した値で上書きします．
+Overwrite balance speed of convoy
+加速度設定を上書きする
+Overwrite balance speed of convoy here. This value define acceleration. The actual acceleration is determined by whichever is lower: this value or the vehicle's performance limit.
+この地点に到達した編成の最大加速度を上書きします．終端速度で加速度を定義します．実際の加速度は車両性能とこの値の遅いほうに基づきます．
 No overtake
 追い越し禁止
 Do not overtake other cars until this stop.
@@ -348,7 +358,7 @@ Show finances for transport type
 輸送タイプごとに表示する
 #------乗車区間------
 transfer interval
-乗車区間を区切る(I)
+乗車区間を区切る(V)
 Passengers who boarded outside the section get off at this stop.
 区間外からの乗客はこの停留所で降車します
 #------編成情報ウィンドウ------
@@ -427,6 +437,8 @@ To halt not found.
 到着停留所が見つかりません。
 No route found!
 経路が見つかりません！
+Show Non-Traveled Section
+乗車路線の乗車しない区間も地図に表示
 #------車庫内連結機能------
 Child convoy:
 後ろに連結する編成:
@@ -465,6 +477,10 @@ Max speed of convoi: UNLIMIT
 編成最高速度：UNLIMIT(制限無し)
 Max speed of convoi: %i km/h
 編成最高速度： %i km/h
+Set Balance Speed
+加速度を設定
+Set acceleratable speed of this convoi
+加速度を設定します。入力値は終端速度です。
 #------ルート計算方法------
 route by route cost
 ルートコスト法で計算
@@ -527,6 +543,25 @@ maximum_village_size
 村の人口上限:これ以上の人口の町は「都市city」となります(maximum_village_size)
 maximum_city_size
 都市の人口上限:これ以上の人口の町は「首都capital」となります(maximum_city_size)
+Show line colors
+路線の色を表示
+Show convoy loading level
+編成の乗車率を表示
+#------車両オフセット機能------
+\nVehicle offset: 
+車両オフセット量: 
+Offset mode:
+モード:
+Direction
+進行方向
+Absolute
+絶対値
+vehicle offset
+車両オフセット量
+Offset mode: Absolute
+モード:絶対値
+set offset value and mode: On->Absolute(same offset for N&S),OFF->Direction(offset different based on Difference)
+車両のオフセット量とモードの設定: ONなら対向車も同じ向きにオフセットされます．OFFなら対向車は進行方向に応じてオフセットされます．
 #------その他の翻訳------
 Remove all waiting goods and pax
 この駅のすべての待機中の旅客と貨物を除去します
@@ -618,3 +653,7 @@ Recreate halt name
 停車場名を再生成します
  Locked
 ゲーム速度固定
+Connected Factories
+接続産業
+Depots must be build on flat dead-end way tiles!
+この車庫は平坦な終端にしか建設できません!
