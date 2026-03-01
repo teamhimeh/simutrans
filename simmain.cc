@@ -1046,7 +1046,7 @@ int simu_main(int argc, char** argv)
 	{
 		cbuffer_t buf;
 		buf.append( env_t::pak_dir.c_str() );
-		buf.append( env_t::objfilename.c_str() );
+		// buf.append( env_t::objfilename.c_str() );
 		buf.append("ground.Outside.pak");
 
 		FILE* const f = dr_fopen(buf, "r");
@@ -1054,10 +1054,10 @@ int simu_main(int argc, char** argv)
 			cbuffer_t errmsg;
 			errmsg.printf(
 				"The file 'ground.Outside.pak' was not found in\n"
-				"'%s%s'.\n"
+				"'%s'.\n"
 				"This file is required for a valid pak set (graphics).\n"
 				"Please install and select a valid pak set.",
-				env_t::pak_dir, env_t::objfilename.c_str());
+				env_t::pak_dir.c_str());
 
 			dr_fatal_notify(errmsg);
 			simgraph_exit();
