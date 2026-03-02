@@ -636,9 +636,6 @@ int simu_main(int argc, char** argv)
 			if( multiuser ) {
 				strcpy( env_t::data_dir, env_t::data_dir );
 			}
-			else {
-				strcpy( env_t::data_dir, dr_query_homedir() );
-			}
 		}
 	}
 
