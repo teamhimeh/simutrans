@@ -13,7 +13,7 @@
 #include "../pathes.h"
 
 pakselector_t::pakselector_t() :
-	savegame_frame_t( NULL, true, env_t::data_dir, true ),
+	savegame_frame_t( NULL, true, NULL, true ),
 	notice_label(&notice_buffer)
 {
 	// if true, we would call the installler afterwards
@@ -60,7 +60,7 @@ pakselector_t::pakselector_t() :
 		char ud[PATH_MAX];
 		dr_getcwd(ud, lengthof(ud)-2 );
 		strcat(ud, PATH_SEPARATOR);
-		if(  strcmp(id, ud)  ) {
+		if(  strcmp(id, ud)  &&  strcmp(bd, ud)  ) {
 			add_path(ud);
 		}
 	}
