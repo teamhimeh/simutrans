@@ -1098,7 +1098,7 @@ int simu_main(int argc, char** argv)
 	}
 	//parse reposition.tab
 	sprintf(path_to_simuconf, "config%creposition.tab", PATH_SEPARATOR[0]);
-	obj_conf = env_t::data_dir + env_t::objfilename + path_to_simuconf;
+	obj_conf = env_t::pak_dir + path_to_simuconf;
 	repositioning_t::get_instance().read_tabfile(obj_conf.c_str());
 
 	// load with private addons (now in addons/pak-name either in simutrans main dir or in userdir)
@@ -1269,7 +1269,7 @@ int simu_main(int argc, char** argv)
 	// load tool scripts
 	dbg->message("simu_main()","Reading tool scripts ...");
 	dr_chdir( env_t::data_dir );
-	script_tool_manager_t::load_scripts((env_t::data_dir + env_t::objfilename + "tool/").c_str());
+	script_tool_manager_t::load_scripts((env_t::pak_dir + "tool/").c_str());
 	if(  env_t::default_settings.get_with_private_paks()  ) {
 		dr_chdir( env_t::user_dir );
 		script_tool_manager_t::load_scripts(("addons/" + env_t::objfilename + "tool/").c_str());
@@ -1277,13 +1277,13 @@ int simu_main(int argc, char** argv)
 
 	dbg->message("simu_main()","Reading menu configuration ...");
 	dr_chdir( env_t::data_dir );
-	if (!tool_t::read_menu(env_t::objfilename + "config/menuconf.tab")) {
+	if (!tool_t::read_menu(env_t::pak_dir + "config/menuconf.tab")) {
 		// Fatal error while reading menuconf.tab, we cannot continue!
 		dbg->fatal(
-			"Could not read %s%sconfig/menuconf.tab.\n"
+			"Could not read %sconfig/menuconf.tab.\n"
 			"This file is required for a valid pak set (graphics).\n"
 			"Please install and select a valid pak set.",
-			env_t::data_dir, env_t::objfilename.c_str());
+			env_t::pak_dir.c_str());
 	}
 
 #if COLOUR_DEPTH != 0
@@ -1401,7 +1401,7 @@ int simu_main(int argc, char** argv)
 	if(  new_world  ) {
 		dr_chdir( env_t::data_dir );
 
-		const std::string path = env_t::data_dir + env_t::objfilename + "demo.sve";
+		const std::string path = env_t::pak_dir + "demo.sve";
 
 		// access did not work!
 		if(  FILE *const f = dr_fopen(path.c_str(), "rb")  ) {
@@ -1578,7 +1578,7 @@ int simu_main(int argc, char** argv)
 		}
 		if (err) {
 			// no addon scenario, look in pakset
-			err = scen->init((env_t::data_dir + env_t::objfilename + "scenario/").c_str(), scen_name, welt);
+			err = scen->init((env_t::pak_dir + "scenario/").c_str(), scen_name, welt);
 		}
 		if(  err  ) {
 			dbg->error("simu_main()", "Could not load scenario %s%s: %s", env_t::objfilename.c_str(), scen_name, err);
