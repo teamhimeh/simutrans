@@ -5840,10 +5840,9 @@ void convoi_t::trade_convoi() {
 	}
 	sint64 value = calc_restwert();
 	owner->book_new_vehicle(value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
-	bool need_new_line = false;
-	if(  line.is_bound()  ) {
+	const bool need_new_line = line.is_bound();
+	if(  need_new_line  ) {
 		unset_line();
-		need_new_line = true;
 	} else {
 		unregister_stops();
 	}
