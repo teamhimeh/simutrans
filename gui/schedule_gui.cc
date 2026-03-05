@@ -1649,10 +1649,10 @@ void schedule_gui_t::init_departure_slot_group_selector()
 				continue;
 			}
 			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)) {
-				if(  schedule->matches(world(), line->get_schedule())  ) {
+				if(  player == this->player &&  schedule->matches(world(), line->get_schedule())  ) {
 					this_schedule_index = departure_slot_group_selector.count_elements();
 				}
-				else if(  line->get_schedule()->get_departure_slot_group_id()==schedule->get_departure_slot_group_id()  &&  selection==0  ) {
+				if(  line->get_schedule()->get_departure_slot_group_id()==schedule->get_departure_slot_group_id()  &&  selection==0  ) {
 					selection = departure_slot_group_selector.count_elements();
 				}
 				departure_slot_group_selector.new_component<company_color_line_scroll_item_t>(line);
