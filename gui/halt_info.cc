@@ -356,9 +356,17 @@ void halt_info_t::init(halthandle_t halt)
 				}
 			}
 			end_table();
-			other_players_connection_button.init(button_t::square, "Allow other players to connect");
-			other_players_connection_button.add_listener(this);
-			add_component(&other_players_connection_button);
+			add_table(2,1);
+			{
+				other_players_connection_button.init(button_t::square, "Allow other players to connect");
+				other_players_connection_button.add_listener(this);
+				add_component(&other_players_connection_button);
+				bt_change_to_owner.init(button_t::box_state | button_t::flexible, halt->get_owner()->get_name());
+				bt_change_to_owner.background_color = color_idx_to_rgb(halt->get_owner()->get_player_color1());
+				bt_change_to_owner.add_listener(this);
+				add_component(&bt_change_to_owner);
+			}	
+			end_table();
 			add_table(4,1);
 			{
 				new_component<gui_label_t>(translator::translate("No handle:"));
@@ -371,6 +379,14 @@ void halt_info_t::init(halthandle_t halt)
 				bt_no_handle_ware.init(button_t::square, "Fracht");
 				bt_no_handle_ware.add_listener(this);
 				add_component(&bt_no_handle_ware);
+			}
+			end_table();
+			add_table(1,1);
+			{
+				bt_allow_unload_longer_convoy.init(button_t::square, "Unload from longer convoy");
+				bt_allow_unload_longer_convoy.set_tooltip("Allow unloading when convoy length is longer than this station length");
+				bt_allow_unload_longer_convoy.add_listener(this);
+				add_component(&bt_allow_unload_longer_convoy);
 			}
 			end_table();
 		}
@@ -540,12 +556,17 @@ void halt_info_t::update_components()
 	other_players_connection_button.set_visible(!halt->get_owner()->is_public_service());
 	other_players_connection_button.enable(player_t::check_owner(halt->get_owner(), welt->get_active_player()));
 	other_players_connection_button.pressed = halt->is_other_player_connection_allowed();
+	bt_change_to_owner.set_visible(true);
+	bt_change_to_owner.enable(true);
+	bt_change_to_owner.pressed = halt->get_owner()==welt->get_active_player();
 	bt_no_handle_pax.set_visible(true);
 	bt_no_handle_post.set_visible(true);
 	bt_no_handle_ware.set_visible(true);
 	bt_no_handle_pax.disable();
 	bt_no_handle_post.disable();
 	bt_no_handle_ware.disable();
+	bt_allow_unload_longer_convoy.set_visible(welt->get_settings().is_allow_unload_longer_convoy());
+	bt_allow_unload_longer_convoy.disable();
 	if(halt->get_desc_pax_enable()) {
 		bt_no_handle_pax.enable(player_t::check_owner(halt->get_owner(), welt->get_active_player()));
 	}
@@ -555,9 +576,11 @@ void halt_info_t::update_components()
 	if(halt->get_desc_ware_enable()) {
 		bt_no_handle_ware.enable(player_t::check_owner(halt->get_owner(), welt->get_active_player()));
 	}
+	bt_allow_unload_longer_convoy.enable(player_t::check_owner(halt->get_owner(), welt->get_active_player()));
 	bt_no_handle_pax.pressed = halt->is_no_handle_pax();
 	bt_no_handle_post.pressed = halt->is_no_handle_post();
 	bt_no_handle_ware.pressed = halt->is_no_handle_ware();
+	bt_allow_unload_longer_convoy.pressed = halt->is_allow_unload_longer_convoy();
 	set_dirty();
 }
 
@@ -795,7 +818,7 @@ uint32 gui_departure_board_t::calc_ticks_until_arrival( convoihandle_t cnv )
 		// extra time for acceleration
 		delta_t += kmh_average * 25;
 	}
-	delta_t += ( ((sint64)delta_tiles << (8+12) ) / kmh_to_speed( kmh_average ) );
+	delta_t += ( ((sint64)delta_tiles << (8+12) ) / kmh_to_speed( max(kmh_average,1) ) ); // avoid div. by 0
 	return delta_t;
 }
 
@@ -1049,6 +1072,16 @@ bool halt_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_HALT], welt->get_active_player() );
 
+	}
+	else if(comp == &bt_allow_unload_longer_convoy) {
+		cbuffer_t buf;
+		buf.printf("l,%hu", halt.get_id());
+		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
+		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_HALT], welt->get_active_player() );
+
+	}
+	else if(comp == &bt_change_to_owner) {
+		welt->switch_active_player(halt->get_owner()->get_player_nr(),false);
 	}
 	return true;
 }

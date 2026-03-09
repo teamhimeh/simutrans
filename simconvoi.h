@@ -216,6 +216,12 @@ private:
 	*/
 	sint32 loading_limit;
 
+	/**
+	 * The stopping time for waiting minimum_loading.
+	 * return: ticks value
+	 */
+	uint32 loading_waiting_time;
+
 	/*
 	 * a list of all catg_index, which can be transported by this convoy.
 	 */
@@ -391,12 +397,21 @@ private:
 	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
 	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
 
+	bool unloading_done;//unload once in stop
+
 	/**
 	 * The temporary speed limit for this convoy.
 	 * For example, as limited by a speed limit sign.
 	 * This value is set from schedule_entry_t, and can be edited from convoy detail window by user anytime.
 	 */
 	uint16 max_speed_kmh_of_convoi;
+
+	/**
+	 * The limitation of balance speed
+	 * This speed limit define the limited power of convoys
+	 * The actual power is the minimum of gear_and_power of desc vs. the value calculated by this speed limit.
+	 */
+	uint16 max_balance_speed_convoi;
 
 	/**
 	* Initialize all variables with default values.
@@ -902,11 +917,17 @@ public:
 	*/
 	const sint32 &get_loading_level() const { return loading_level; }
 	sint32 get_capacity_left() const;
+	sint32 get_max_loading() const;
 
 	/**
 	* At which loading level is the train allowed to start? 0 during driving.
 	*/
 	const sint32 &get_loading_limit() const { return loading_limit; }
+
+	/**
+	* waiting time for loading level
+	*/
+	const uint32 &get_loading_waiting_time() const { return loading_waiting_time; }
 
 	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
 
@@ -1094,6 +1115,7 @@ public:
 	void set_coupling_done(bool tf) { coupling_done = tf; }
 
 	void set_arrived_time(uint32 t) { arrived_time = t; }
+	uint32 get_arrived_time() const { return arrived_time; }
 	uint32 get_departure_time() const { return scheduled_departure_time; } // in ticks.
 	void reset_departure_time() { scheduled_departure_time = 0; }
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
@@ -1120,7 +1142,7 @@ public:
 	uint32 calc_available_halt_length_in_vehicle_steps(koord3d front_vehicle_pos, ribi_t::ribi front_vehicle_dir) const;
 
 	// Returns the parent and root parent convoi of this convoy. Returns this convoy if not coupled.
-	convoihandle_t get_parent_convoi() const {return parent_convoi.is_bound()? parent_convoi: self;}
+	convoihandle_t get_parent_convoi() const {return parent_convoi;}
 	convoihandle_t get_most_parent_convoi() const;
 
 	// Returns the most child convoi of this convoy.
@@ -1155,6 +1177,8 @@ public:
 
 	uint16 get_max_speed_kmh_of_convoi() const {return max_speed_kmh_of_convoi;}
 	void set_max_speed_kmh_of_convoi(uint16 n);
+	uint16 get_max_balance_speed_convoi() const {return max_balance_speed_convoi;}
+	void set_max_balance_speed_convoi(uint16 n) { max_balance_speed_convoi = n; }
 };
 
 #endif

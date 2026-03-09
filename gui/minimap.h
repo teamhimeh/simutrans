@@ -14,6 +14,7 @@
 #include "../dataobj/schedule.h"
 #include "../tpl/array2d_tpl.h"
 #include "../tpl/vector_tpl.h"
+#include "../dataobj/translator.h"
 
 
 class karte_ptr_t;
@@ -63,9 +64,20 @@ public:
 		MAP_WAITCHANGE   = 1 << 22,
 		MAP_HIDE_CONTOUR = 1 << 23,
 		MAP_CLIMATES     = 1 << 24,
+		MAP_CITIZENS     = 1 << 25,
+		MAP_CITY_GROWTH  = 1 << 26,
 
 		MAP_MODE_HALT_FLAGS = (MAP_STATUS|MAP_SERVICE|MAP_ORIGIN|MAP_TRANSFER|MAP_WAITING|MAP_WAITCHANGE),
-		MAP_MODE_FLAGS = (MAP_TOWN|MAP_CITYLIMIT|MAP_STATUS|MAP_SERVICE|MAP_WAITING|MAP_WAITCHANGE|MAP_TRANSFER|MAP_LINES|MAP_FACTORIES|MAP_ORIGIN|MAP_DEPOT|MAP_TOURIST|MAP_PAX_DEST)
+		MAP_MODE_CITY_FLAGS = (MAP_CITIZENS|MAP_CITY_GROWTH),
+		MAP_MODE_FLAGS = (MAP_TOWN|MAP_CITYLIMIT|MAP_STATUS|MAP_SERVICE|MAP_WAITING|MAP_WAITCHANGE|MAP_TRANSFER|MAP_LINES|MAP_FACTORIES|MAP_ORIGIN|MAP_DEPOT|MAP_TOURIST|MAP_PAX_DEST|MAP_CITIZENS|MAP_CITY_GROWTH)
+	};
+
+	enum NETWORK_COLOR_MODE {
+		ORIGINAL,
+		LOAD_FACTOR,
+		PLAYER_COLOR,
+		LINE_COLOR,
+		MAX_COLOR_MODE
 	};
 
 private:
@@ -92,9 +104,10 @@ private:
 		uint8 start_offset;
 		uint8 end_offset;
 		bool start_diagonal;
+		bool is_minimap_route_visible;
 
 		line_segment_t() {}
-		line_segment_t( koord s, uint8 so, koord e, uint8 eo, schedule_t *sched, player_t *p, uint8 cc, bool diagonal );
+		line_segment_t( koord s, uint8 so, koord e, uint8 eo, schedule_t *sched, player_t *p, uint8 cc, bool diagonal, bool is_highlighted = true );
 
 		bool operator==(const line_segment_t & other) const;
 	};
@@ -108,11 +121,13 @@ private:
 
 	vector_tpl<line_segment_t> schedule_cache;
 	convoihandle_t current_cnv;
+	schedule_t* current_schedule;
 	uint8 last_schedule_counter;
 	vector_tpl<halthandle_t> stop_cache;
 
 	/// adds a schedule to cache
 	void add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints );
+	void add_to_schedule_cache_without_cnv( schedule_t* schedule, player_t* owner, bool with_waypoints, bool is_highlighted = true );
 
 	/**
 	 * 0: normal
@@ -157,10 +172,16 @@ private:
 	/// if true, draw the map with 45 degree rotation
 	bool isometric;
 
+	static bool circle_halts;
+
 	bool is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_index);
 
 	/// nonstatic, if we have someday many maps ...
 	void set_map_color(koord k, PIXVAL color);
+
+	vector_tpl<halthandle_t> route_search_highlighted_halts;
+	vector_tpl<halthandle_t> route_search_transfer_halts;
+	halthandle_t route_search_from_halt, route_search_dest_halt;
 
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
@@ -170,7 +191,10 @@ public:
 
 	static bool is_visible;
 
-	bool show_network_load_factor;
+	void set_circle_halts(bool val) { circle_halts = val; };
+	bool is_cnv_schedule_bound() { return current_cnv.is_bound() || current_schedule != nullptr; }
+
+	uint8 network_color_mode;
 
 	int player_showed_on_map;
 	int transport_type_showed_on_map;
@@ -229,7 +253,8 @@ public:
 
 	void draw(scr_coord pos) OVERRIDE;
 
-	void set_selected_cnv( convoihandle_t c );
+	void set_selected_cnv( convoihandle_t c, bool const clear_cache = true );
+	void set_selected_route(schedule_t* schedule, player_t* owner, bool is_highlighted = true, bool const clear_cache = true);
 
 	void set_selected_city( const stadt_t* _city );
 
@@ -250,6 +275,26 @@ public:
 	scr_size get_min_size() const OVERRIDE;
 
 	scr_size get_max_size() const OVERRIDE;
+
+	static const char *get_color_mode_name(const minimap_t::NETWORK_COLOR_MODE i)
+	{
+		char *cm2name[MAX_COLOR_MODE] = {"Individual color","Free Capacity","Player color","Line color"};
+		return translator::translate(cm2name[i]);
+	}
+
+	void clear_route_search_highlights() {
+		route_search_highlighted_halts.clear();
+		route_search_transfer_halts.clear();
+	}
+
+	void add_route_halt(halthandle_t halt) { route_search_highlighted_halts.append_unique(halt); }
+	void add_transfer_halt(halthandle_t halt) { route_search_transfer_halts.append_unique(halt); }
+	void set_from_dest_halt(halthandle_t from_halt, halthandle_t dest_halt) {
+		if (  from_halt.is_bound() && dest_halt.is_bound()  ) {
+			route_search_from_halt = from_halt;
+			route_search_dest_halt = dest_halt;
+		}
+	}
 };
 
 #endif

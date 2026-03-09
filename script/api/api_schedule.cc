@@ -21,18 +21,24 @@ halthandle_t get_halt_from_koord3d(koord3d pos, const player_t *player )
 	if(  player == NULL  ) {
 		return halthandle_t();
 	}
-	return haltestelle_t::get_halt(pos, player);
+	return haltestelle_t::get_stoppable_halt(pos, player);
 }
 
 SQInteger schedule_constructor(HSQUIRRELVM vm) // instance, wt, entries
 {
 	waytype_t wt = param<waytype_t>::get(vm, 2);
 	SQInteger res = set_slot(vm, "waytype", wt, 1);
+	uint16 wait = 0;
 
 	if (SQ_SUCCEEDED(res)) {
 		sq_pushstring(vm, "entries", -1);
 		sq_push(vm, 3); // entries
 		res = sq_set(vm, 1);
+
+		if (sq_gettop(vm) >= 4) {
+			wait = param<uint16>::get(vm, 4);
+		}
+		set_slot(vm, "base_waiting_time", wait, 1);
 	}
 	if (SQ_SUCCEEDED(res)) {
 		// attach a schedule instance
@@ -51,6 +57,7 @@ SQInteger schedule_constructor(HSQUIRRELVM vm) // instance, wt, entries
 				sq_raise_error(vm, "Invalid waytype %d", wt);
 				return SQ_ERROR;
 		}
+		sched->set_additional_base_waiting_time(wait);
 		attach_instance(vm, 1, sched);
 	}
 	return res;
@@ -67,9 +74,12 @@ void append_entry(HSQUIRRELVM vm, SQInteger index, schedule_t* sched)
 	uint16 waiting_time_shift = 0;
 	get_slot(vm, "wait", waiting_time_shift, index);
 
+	uint32 stop_flags = 0;
+	get_slot(vm, "flags", stop_flags, index);
+
 	grund_t *gr = welt->lookup(pos);
 	if (gr) {
-		sched->append(gr, minimum_loading, waiting_time_shift);
+		sched->append(gr, minimum_loading, waiting_time_shift, stop_flags);
 	}
 }
 
@@ -82,6 +92,7 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 	// get instance pointer
 	schedule_t* sched = get_attached_instance<schedule_t>(vm, index, param<schedule_t*>::tag());
 	if (sched) {
+		linehandle_t const next_line = sched->get_next_line();
 		sched->remove_all();
 		// now read the entries
 		sq_pushstring(vm, "entries", -1);
@@ -96,6 +107,11 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 			}
 			sq_pop(vm, 1);
 		}
+
+		uint16 wait = 0;
+		get_slot(vm, "base_waiting_time", wait, index);
+		sched->set_additional_base_waiting_time(wait);
+		sched->set_next_line(next_line);
 	}
 	return sched;
 }
@@ -112,6 +128,25 @@ void export_schedule(HSQUIRRELVM vm)
 	 */
 	begin_class(vm, "schedule_entry_x", "coord3d");
 
+#ifdef SQAPI_DOC //document members
+	/**
+	 * X-coordinate of entry position
+	 */
+	integer x;
+	/**
+	 * Y-coordinate of entry position
+	 */
+	integer y;
+	/**
+	 * Z-coordinate of entry position
+	 */
+	integer z;
+#endif
+
+	create_slot(vm, "x", 0);
+	create_slot(vm, "y", 0);
+	create_slot(vm, "z", 0);
+
 #ifdef SQAPI_DOC // document members
 	/**
 	 * Minimum loading percentage.
@@ -121,7 +156,13 @@ void export_schedule(HSQUIRRELVM vm)
 	 * Waiting time setting.
 	 */
 	integer wait;
+	/**
+	 * Stop flags bitmask (NO_LOAD=4, NO_UNLOAD=8, etc.).
+	 */
+	integer flags;
 #endif
+
+	create_slot(vm, "flags", 0);
 
 	/**
 	 * Returns halt at this entry position.
@@ -142,7 +183,7 @@ void export_schedule(HSQUIRRELVM vm)
 	 * Constructor
 	 * @typemask command_x(way_types)
 	 */
-	register_function(vm, schedule_constructor, "constructor", 3, "xi.");
+	register_function(vm, schedule_constructor, "constructor", -3, "xi.i");
 	sq_settypetag(vm, -1, param<schedule_t*>::tag());
 
 #ifdef SQAPI_DOC // document members
@@ -155,9 +196,16 @@ void export_schedule(HSQUIRRELVM vm)
 	 * Waytype of schedule.
 	 */
 	way_types waytype;
+	
+	/**
+	 * Additional base waiting time for this schedule.
+	 * 
+	 */
+	integer base_waiting_time;
 #else
 	create_slot(vm, "entries", 0);
 	create_slot(vm, "waytype", 0);
+	create_slot(vm, "base_waiting_time", 0);
 #endif
 
 	end_class(vm);

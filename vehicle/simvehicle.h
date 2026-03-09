@@ -46,7 +46,6 @@ protected:
 	static uint16 diagonal_multiplier;
 
 	// [0]=xoff [1]=yoff
-	static sint8 driveleft_base_offsets[8][2];
 	static sint8 overtaking_base_offsets[8][2];
 
 	/**
@@ -274,6 +273,7 @@ protected:
 public:
 	void calc_image() OVERRIDE;
 
+	static sint8 vehicle_offset_defined_by_way(ribi_t::dir d, const sint8 offset, const bool is_x, const bool reverse, const sint16 raster_width);
 
 	// the coordinates, where the vehicle was loaded the last time
 	koord3d last_stop_pos;
@@ -588,8 +588,8 @@ public:
 	uint32 get_cost_upslope() const OVERRIDE { return 25; }
 
 	// returns true for the way search to an unknown target.
-	bool is_target(const grund_t*, const grund_t*, const bool) const OVERRIDE;
-	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr);}
+	bool is_target(const grund_t*, const grund_t*, const bool, const uint8) const OVERRIDE;
+	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr,false,0);}
 	bool is_coupling_target(const grund_t *, const grund_t *) const OVERRIDE;
 
 	// handles all block stuff and route choosing ...
@@ -749,12 +749,7 @@ private:
 	sint16 altitude_level; // for AFHP
 	sint16 landing_distance; // for AFHP
 
-	void calc_altitude_level(sint32 speed_limit_kmh){
-		altitude_level = max(5, speed_limit_kmh/33);
-		altitude_level = min(altitude_level, 30);
-		// landing_distance = altitude_level - 1;
-		landing_distance = altitude_level - 2;
-	}
+	void calc_altitude_level(sint32 speed_limit_kmh);
 
 protected:
 	// jumps to next tile and correct the height ...

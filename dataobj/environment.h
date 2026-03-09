@@ -285,6 +285,9 @@ public:
 		MAX_SHOW_VEHICLE_STATES
 	};
 
+	static bool show_line_colors;
+	static bool show_convoy_loadinglevel;
+
 	/// show station coverage indicators
 	static uint8 station_coverage_show;
 
@@ -464,6 +467,10 @@ public:
 	/// @author THLeaderH
 	static bool previous_OTRP_data;
 
+	/// friction parameter on gravity: 
+	/// old: same as 112.3 when TILE_HEIGHT_STEP=16, not old: same as 120
+	static bool use_old_friction;
+
 	/// To make the snapshot like a commandline tool
 	/// can be set by command-line switch '-snapshot'
 	/// @author shingoushori
@@ -531,6 +538,16 @@ public:
 	static koord commandline_server_start_position;
 
 	static bool send_tax_public;
+
+	// offset for all vehicles
+	// [car direction][x/y direction][waytype]
+	static sint8 vehicle_base_offsets[8][2][waytype_t::air_wt+1];
+
+	// drivelelft offset
+	static sint8 driveleft_base_offsets[8][2];
+
+	// overtaking offset
+	static sint8 overtaking_base_offsets[8][2];
 
 	// Graphical offsets for reverseing vehicles
 	// [directions][offsets]

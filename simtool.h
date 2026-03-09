@@ -83,6 +83,8 @@ protected:
 	bool is_dragging;
 	sint16 drag_height;
 	bool is_area_process;
+	// avoid raise or lower same position many times at one dragging
+	vector_tpl<koord> dragged_pos;
 
 	const char* drag(player_t*, koord k, sint16 h, int &n);
 	virtual sint16 get_drag_height(koord k) = 0;
@@ -254,7 +256,7 @@ public:
 	tool_plant_tree_t() : kartenboden_tool_t(TOOL_PLANT_TREE | GENERAL_TOOL) {}
 	image_id get_icon(player_t *) const OVERRIDE { return tree_builder_t::get_num_trees() > 0 ? icon : IMG_EMPTY; }
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate( "Plant tree" ); }
-	bool init(player_t*) OVERRIDE { return tree_builder_t::has_trees(); }
+	bool init(player_t*) OVERRIDE;
 	char const* move(player_t* const player, uint16 const b, koord3d const k) OVERRIDE;
 	bool move_has_effects() const OVERRIDE { return true; }
 	char const* work(player_t*, koord3d) OVERRIDE;
@@ -266,7 +268,7 @@ public:
 	tool_plant_groundobj_t() : kartenboden_tool_t(TOOL_PLANT_GROUNDOBJ | GENERAL_TOOL) {}
 	image_id get_icon(player_t *) const OVERRIDE { return groundobj_t::get_count() > 0 ? icon : IMG_EMPTY; }
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate( "Plant groundobj" ); }
-	bool init(player_t*) OVERRIDE { return groundobj_t::get_count() > 0; }
+	bool init(player_t*) OVERRIDE;
 	char const* move(player_t* const player, uint16 const b, koord3d const k) OVERRIDE;
 	bool move_has_effects() const OVERRIDE { return true; }
 	char const* work(player_t*, koord3d) OVERRIDE;
@@ -306,6 +308,7 @@ protected:
 	bool look_toolbar = false;
 	uint8 street_flag;
 	sint8 height_offset;
+	sint8 vehicle_offset;
 
 	virtual way_desc_t const* get_desc(uint16 timeline_year_month) const;
 	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
@@ -316,6 +319,7 @@ public:
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
 		height_offset = 0;
+		vehicle_offset = 0;
 	 }
 	image_id get_icon(player_t*) const OVERRIDE;
 	char const* get_tooltip(player_t const*) const OVERRIDE;
@@ -339,6 +343,10 @@ public:
 		height_offset = a<min_offset?0:a;
 	}
 	sint8 get_height_offset() const { return height_offset; }
+	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
+	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
+	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	static void set_mode_str(char* str, overtaking_mode_t overtaking_mode);
 	void set_look_toolbar() { look_toolbar = true; }
 	static uint8 get_flag_color(uint8 flag);
@@ -361,6 +369,7 @@ private:
 	ribi_t::ribi ribi;
 	overtaking_mode_t overtaking_mode;
 	uint8 street_flag;
+	sint8 vehicle_offset;
 
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -370,6 +379,7 @@ public:
 	tool_build_bridge_t() : two_click_tool_t(TOOL_BUILD_BRIDGE | GENERAL_TOOL) {
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
+		vehicle_offset = 0;
 	}
 	image_id get_icon(player_t*) const OVERRIDE { return grund_t::underground_mode==grund_t::ugm_all ? IMG_EMPTY : icon; }
 	char const* get_tooltip(player_t const*) const OVERRIDE;
@@ -382,6 +392,10 @@ public:
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
+	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
+	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
+	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
 	uint8 get_street_flag() const { return street_flag; }
 };
@@ -390,6 +404,7 @@ class tool_build_tunnel_t : public two_click_tool_t {
 private:
 	overtaking_mode_t overtaking_mode;
 	uint8 street_flag;
+	sint8 vehicle_offset;
 
 	void calc_route( way_builder_t &bauigel, const koord3d &, const koord3d &);
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -400,6 +415,7 @@ public:
 	tool_build_tunnel_t() : two_click_tool_t(TOOL_BUILD_TUNNEL | GENERAL_TOOL) {
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
+		vehicle_offset = 0;
 	}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
@@ -412,6 +428,10 @@ public:
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
+	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
+	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
+	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
 	uint8 get_street_flag() const { return street_flag; }
 };
@@ -794,6 +814,23 @@ public:
 };
 
 
+// Copies item under cursor into cursor
+class tool_pipette_t : public tool_t
+{
+public:
+	tool_pipette_t() : tool_t(TOOL_PIPETTE | GENERAL_TOOL) {}
+
+public:
+	const char *get_tooltip(const player_t *) const OVERRIDE { return translator::translate("Pipette"); }
+	const char *work(player_t *, koord3d) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+
+private:
+	const char* allow_tool_check(const obj_t* obj, const obj_desc_timelined_t* desc, const player_t* pl) const;
+};
+
+
 class tool_extinguish_waiting_goods_t : public tool_t {
 public:
 	tool_extinguish_waiting_goods_t() : tool_t(TOOL_EXTINGUISH_WAITING_GOODS | GENERAL_TOOL) {}
@@ -802,6 +839,14 @@ public:
 	bool is_init_network_safe() const OVERRIDE { return true; }
 };
 
+
+class tool_recreate_halt_name_t : public tool_t {
+public:
+	tool_recreate_halt_name_t() : tool_t(TOOL_RECREATE_HALT_NAME | GENERAL_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Recreate halt name"); }
+	char const* work(player_t*, koord3d) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+};
 
 /********************* one click tools ****************************/
 
@@ -914,6 +959,36 @@ public:
 	}
 };
 
+class tool_reset_game_speed_t : public tool_t {
+public:
+	tool_reset_game_speed_t() : tool_t(TOOL_RESET_GAME_SPEED | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE {
+	}
+	bool init( player_t *player ) OVERRIDE {
+		if(  !env_t::networkmode  ||  player->is_public_service()  ) {
+			// in networkmode only for public player
+			welt->change_time_multiplier( 16-welt->get_time_multiplier() );
+		}
+		return false;
+	}
+};
+
+class tool_fix_game_speed_t : public tool_t {
+public:
+	tool_fix_game_speed_t() : tool_t(TOOL_FIX_GAME_SPEED | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE {
+		env_t::networkmode? translator::translate("Fix game speed."): translator::translate("deactivated in offline mode");
+	}
+	image_id get_icon(player_t*) const OVERRIDE { return env_t::networkmode ? icon : IMG_EMPTY; }
+	bool is_selected() const OVERRIDE { return welt->is_game_speed_fixed(); }
+	bool init( player_t *player ) OVERRIDE {
+		if(  env_t::networkmode  &&  player->is_public_service()  ) {
+			// only for networkmode, only for public player
+			welt->set_game_speed_fixed( welt->is_game_speed_fixed()^1 );
+		}
+		return false;
+	}
+};
 
 class tool_zoom_in_t : public tool_t {
 public:

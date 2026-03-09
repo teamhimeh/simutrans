@@ -19,6 +19,7 @@
 #include "../simintr.h"
 #include "../simhalt.h"
 #include "../simworld.h"
+#include "../simdepot.h"
 
 #include "../dataobj/translator.h"
 #include "../dataobj/environment.h"
@@ -574,6 +575,21 @@ bool win_is_top(const gui_frame_t *ig)
 void rdwr_all_win(loadsave_t *file)
 {
 	if(  file->is_version_atleast(120, 8)  ) {
+		// we store depot filter for each depots.
+		// this filter is only for you!(not share with server/clients)
+		// not write it in .sve and rdwr only one time.
+		if(  file->get_OTRP_version()>=52  ) {
+			FOR(const slist_tpl<depot_t*>, d, depot_t::get_depot_list()) {
+				char filter[64];
+				if(file->is_saving()) {
+					strncpy(filter,d->get_name_filter(),sizeof(d->get_name_filter()));
+				}
+				file->rdwr_str(filter, sizeof(filter));
+				if(file->is_loading()) {
+					d->set_name_filter(filter);
+				}
+			}
+		}
 		if(  file->is_saving()  ) {
 			FOR(vector_tpl<simwin_t>, & i, wins) {
 				uint32 id = i.gui->get_rdwr_id();
@@ -1957,17 +1973,18 @@ void win_display_flush(double konto)
 	if(wl->show_distance!=koord3d::invalid  &&  wl->show_distance!=pos) {
 		info.printf("-(%d,%d)", wl->show_distance.x-pos.x, wl->show_distance.y-pos.y );
 	}
-	if(  !env_t::networkmode  ) {
-		// time multiplier text
-		if(wl->is_fast_forward()) {
-			info.printf(" %s(T~%1.2f)", skinverwaltung_t::fastforwardsymbol?"":">> ", wl->get_simloops()/50.0 );
-		}
-		else if(!wl->is_paused()) {
-			info.printf(" (T=%1.2f)", wl->get_time_multiplier()/16.0 );
-		}
-		else if(  skinverwaltung_t::pausesymbol==NULL  ) {
-			info.printf( " %s", translator::translate("GAME PAUSED") );
-		}
+	// time multiplier text
+	if(wl->is_fast_forward()) {
+		info.printf(" %s(T~%1.2f)", skinverwaltung_t::fastforwardsymbol?"":">> ", wl->get_simloops()/50.0 );
+	}
+	else if(!wl->is_paused()) {
+		info.printf(" (T=%1.2f)", wl->get_time_multiplier()/16.0 );
+	}
+	else if(  skinverwaltung_t::pausesymbol==NULL  ) {
+		info.printf( " %s", translator::translate("GAME PAUSED") );
+	}
+	if(env_t::networkmode&&wl->is_game_speed_fixed()) {
+		info.printf(" Locked");
 	}
 #ifdef DEBUG
 	if(  env_t::verbose_debug>3  ) {
