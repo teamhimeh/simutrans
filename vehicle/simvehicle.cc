@@ -4137,8 +4137,14 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						restart_speed = 0;
 						return false;
 					}
+					if(  next_signal<(cnv->get_entire_convoy_length()/16+1)  ) {
+						return is_signal_clear(next_signal, restart_speed, true);
+					}
 					cnv->set_next_stop_index(next_crossing < next_signal ? next_crossing : next_signal);
 					return true;
+				}
+				else if(w->has_signal()) {
+					return is_signal_clear(max(route_index, 1) - 1, restart_speed);
 				}
 			} else if(  can_couple(cnv->get_route(), route_index, next_coupling, next_c_steps)  &&  next_coupling!=route_t::INVALID_INDEX  ) {
 				cnv->set_next_coupling(next_coupling, next_c_steps);
