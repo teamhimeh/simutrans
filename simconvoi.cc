@@ -5245,11 +5245,11 @@ const char* convoi_t::send_to_depot(bool local)
 		depot_t *dep=gr->get_depot();
 		// check the owner
 		if(  dep  &&  (dep->get_owner()==get_owner())  ) {
-			// check waytype
+			// check waytype (bahndepot also accepts tram convoys)
 			convoihandle_t c=get_coupling_convoi();
-			bool valid_waytype = dep->get_waytype()==front()->get_waytype();
+			bool valid_waytype = dep->can_accept_waytype(front()->get_waytype());
 			while(  valid_waytype && c.is_bound()  ) {
-				valid_waytype &= (dep->get_waytype()==c->front()->get_waytype());
+				valid_waytype &= dep->can_accept_waytype(c->front()->get_waytype());
 				c = c->get_coupling_convoi();
 			}
 			if(  valid_waytype  ) {
@@ -5264,7 +5264,7 @@ const char* convoi_t::send_to_depot(bool local)
 	route_t *route = new route_t();
 	koord3d home = koord3d::invalid;
 	FOR(slist_tpl<depot_t*>, const depot, depot_t::get_depot_list()) {
-		if (depot->get_waytype() != v->get_desc()->get_waytype()  ||  depot->get_owner() != get_owner()) {
+		if (!depot->can_accept_waytype(v->get_desc()->get_waytype())  ||  depot->get_owner() != get_owner()) {
 			continue;
 		}
 		koord3d pos = depot->get_pos();
@@ -5358,7 +5358,7 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 	// find the depot in the schedule. It doesn't have to be next.
 	for ( uint8 i = 0 ; i<schedule->get_count() ; i++  ) {
 		koord3d next_pos = schedule->at((current_stop+i)%schedule->get_count()).pos;
-		if(world()->lookup(next_pos)->get_depot() && world()->lookup(next_pos)->get_depot()->get_waytype() == v->get_desc()->get_waytype() && world()->lookup(next_pos)->get_depot()->get_owner()  == get_owner()){
+		if(world()->lookup(next_pos)->get_depot() && world()->lookup(next_pos)->get_depot()->can_accept_waytype(v->get_desc()->get_waytype()) && world()->lookup(next_pos)->get_depot()->get_owner()  == get_owner()){
 			// if this convoy is already know the depot position, it will be teleported to that depot.
 			// but if the depot is changed or wrong, we search nearest depot.
 			find_depot_route = true;
@@ -5369,7 +5369,7 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 	if (!find_depot_route) {
 		// Find the nearest depot
 		FOR(slist_tpl<depot_t*>, const depot, depot_t::get_depot_list()) {
-			if (depot->get_waytype() != v->get_desc()->get_waytype()  ||  depot->get_owner() != get_owner()) {
+			if (!depot->can_accept_waytype(v->get_desc()->get_waytype())  ||  depot->get_owner() != get_owner()) {
 				continue;
 			}
 			koord3d pos = depot->get_pos();
