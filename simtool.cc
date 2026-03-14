@@ -8983,6 +8983,23 @@ bool tool_change_line_t::init( player_t *player )
 					if(w) {
 						destroy_win( w );
 					}
+					// If the departure slot group changed, cascade-update all lines that were following this line.
+					linehandle_t new_group = linehandle_t();
+					for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+						player_t *pl = welt->get_player(pi);
+						if(  !pl  ) { continue; }
+						FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+							if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+								if(  !new_group.is_bound()  ) {
+									// set this line as a new group id for us.
+									new_group = other;
+								} else {
+									// set new departure slot group
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
+					}
 					player->simlinemgmt.delete_line(line);
 				}
 			}
