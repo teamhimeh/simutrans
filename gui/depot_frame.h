@@ -120,6 +120,7 @@ private:
 
 	button_t bt_obsolete;
 	button_t bt_show_all;
+	button_t bt_show_tram; // toggle: show tram vehicle tabs (pressed) or track vehicle tabs (not pressed)
 	button_t bt_sell_all;
 
 	gui_label_t lb_sort_by;
