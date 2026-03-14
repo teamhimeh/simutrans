@@ -735,6 +735,11 @@ uint32 convoi_t::get_entire_convoy_length() const
  */
 void convoi_t::add_running_cost( const weg_t *weg )
 {
+	if(!get_most_parent_convoi()->front()->is_leading()) {
+		// if the most parent convoy's front vehicle is not leading, do not consider running cost
+		// e.g. start from station (reset vehicles)
+		return;
+	}
 	jahresgewinn += base_sum_running_costs;
 
 	if(  weg  &&  weg->get_owner()!=get_owner()  &&  weg->get_owner()!=NULL  ) {
@@ -1229,6 +1234,18 @@ vehicle_t* find_convoy_on_tile(grund_t* const gr, convoihandle_t cnv) {
 bool convoi_t::drive_to()
 {
 	if(  anz_vehikel>0  ) {
+		convoihandle_t c = self;
+		bool stop_next=true;
+		while(  c.is_bound()  ) {
+			stop_next&=c->is_users_at_next_stop();
+			c=c->get_coupling_convoi();
+		}
+		if(  !stop_next  ) {
+			// skip next stop!
+			next_stop_button_pressed();
+			set_state(ROUTING_1);
+			return false;
+		}
 
 		// unreserve all tiles that are covered by the train but do not contain one of the wagons,
 		// otherwise repositioning of the train drive_to may lead to stray reserved tiles
@@ -2771,16 +2788,6 @@ void convoi_t::vorfahren()
 	wait_lock = 0;
 	INT_CHECK("simconvoi 711");
 	reversing_needed = false;
-	c = self;
-	bool stop_next=true;
-	while(  c.is_bound()  ) {
-		stop_next&=c->is_users_at_next_stop();
-		c=c->get_coupling_convoi();
-	}
-	if(  !stop_next  ) {
-		// skip next stop!
-		next_stop_button_pressed();
-	}
 }
 
 // a helper function for convoi_t::vorfahren()
@@ -5840,16 +5847,36 @@ void convoi_t::trade_convoi() {
 	}
 	sint64 value = calc_restwert();
 	owner->book_new_vehicle(value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
-	if(  line.is_bound()  ) {
+	const bool need_new_line = line.is_bound();
+	if(  need_new_line  ) {
 		unset_line();
 	} else {
 		unregister_stops();
 	}
+	// because next line's owner is invalid, unset it.
+	schedule->unset_next_line();
 	set_owner(welt->get_player(get_accept_player_nr()));
 	register_stops();
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	set_permit_trade(false);
 	set_accept_player_nr(owner->get_player_nr());
+	if(  need_new_line  ) {
+		// reset line for new owner.
+		// search line of my schedule.
+		vector_tpl<linehandle_t> lines;
+		owner->simlinemgmt.get_lines(schedule->get_type(), &lines);
+		FOR(  vector_tpl<linehandle_t>, const line, lines  ) {
+			if(  schedule->matches(  welt, line->get_schedule()  )  ) {
+				set_line(line);
+				return;
+			}
+		}
+		dbg->message("convoi_t::trade_convoi()","%s do not find match line",get_name());
+		// not find match line -> create new one!
+		linehandle_t new_line = owner->simlinemgmt.create_line(schedule->get_type(), owner, schedule);
+		new_line->get_schedule()->finish_editing();
+		set_line(new_line);
+	}
 }
 
 
@@ -6036,6 +6063,19 @@ bool convoi_t::couple_convoi_during_running(convoihandle_t coupled) {
 	must_recalc_min_top_speed();
 	must_recalc_friction_weight();
 	return true;
+}
+
+void convoi_t::reverse_convoy_coupling_by_user_request()
+{
+	// reverse convoy coupling by user request
+	// this must be most parent convoy!
+	if(  is_coupled()  ) {
+		return;
+	}
+	// firse we release the reservation
+	unreserve_route();
+	// then reverse convoy coupling
+	reverse_convoy_coupling();
 }
 
 uint16 convoi_t::get_length_coupling_done() const {
