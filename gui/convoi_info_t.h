@@ -62,6 +62,7 @@ private:
 	button_t button;
 	button_t follow_button;
 	button_t go_home_button;
+	button_t bt_teleport_depot;
 	button_t no_load_button;
 	button_t set_recovery_button;
 	button_t next_stop_button;
