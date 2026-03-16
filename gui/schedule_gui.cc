@@ -39,8 +39,6 @@
 #include "minimap.h"
 
 static karte_ptr_t welt;
-#define UP_FLAG (0x4000)
-#define DOWN_FLAG (0x2000)
 
 /**
  * One entry in the list of schedule entries.
@@ -53,11 +51,7 @@ class gui_schedule_entry_t : public gui_aligned_container_t, public gui_action_c
 	player_t* player;
 	waytype_t waytype;
 	gui_image_t arrow;
-	gui_image_t up_arrow;
-	gui_image_t down_arrow;
 	gui_label_buf_t stop;
-	bool is_allow_up;// allow up? (not 0 nor last (when next line is bound))
-	bool is_allow_down;// allow down? (not last nor last-1 (when next line is bound))
 
 public:
 	gui_schedule_entry_t(player_t* pl, schedule_entry_t e, uint n, waytype_t const wt)
@@ -240,21 +234,7 @@ void schedule_gui_stats_t::draw(scr_coord offset)
 bool schedule_gui_stats_t::action_triggered(gui_action_creator_t *, value_t v)
 {
 	// has to be one of the entries
-	if( v.i & UP_FLAG ) {
-		dbg->message("schedule_gui_stats_t::action_triggered()","up button pressed!");
-		uint8 up_stop = v.i & 0x00FF;
-		schedule->move_entry_backward(  up_stop  );
-		call_listeners( schedule->get_current_stop() );
-	}
-	else if( v.i & DOWN_FLAG ) {
-		dbg->message("schedule_gui_stats_t::action_triggered()","down button pressed!");
-		uint8 down_stop = v.i & 0x00FF;
-		schedule->move_entry_forward( down_stop );
-		call_listeners( schedule->get_current_stop() );
-	}
-	else {
-		call_listeners(v);
-	}
+	call_listeners(v);
 	return true;
 }
 
