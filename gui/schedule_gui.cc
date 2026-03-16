@@ -60,22 +60,15 @@ class gui_schedule_entry_t : public gui_aligned_container_t, public gui_action_c
 	bool is_allow_down;// allow down? (not last nor last-1 (when next line is bound))
 
 public:
-	gui_schedule_entry_t(player_t* pl, schedule_entry_t e, uint n, waytype_t const wt, const bool can_up, const bool can_down)
+	gui_schedule_entry_t(player_t* pl, schedule_entry_t e, uint n, waytype_t const wt)
 	{
 		player = pl;
 		entry  = e;
 		number = n;
 		waytype = wt;
 		is_current = false;
-		is_allow_up = can_up;
-		is_allow_down = can_down;
 		set_table_layout(4,1);
 
-		// up & down arrow
-		add_component(&up_arrow);
-		up_arrow.set_image(gui_theme_t::arrow_button_up_img[0], true);
-		add_component(&down_arrow);
-		down_arrow.set_image(gui_theme_t::arrow_button_down_img[0], true);
 		// jump to this stop
 		add_component(&arrow);
 		arrow.set_image(gui_theme_t::pos_button_img[0], true);
@@ -90,8 +83,6 @@ public:
 		schedule_t::gimme_stop_name(stop.buf(), welt, player, entry, -1, waytype);
 		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : SYSCOL_TEXT);
 		stop.update();
-		up_arrow.set_image(gui_theme_t::arrow_button_up_img[(player==welt->get_active_player()&&is_allow_up)?0:2], true);
-		down_arrow.set_image(gui_theme_t::arrow_button_down_img[(player==welt->get_active_player()&&is_allow_down)?0:2], true);
 	}
 
 	void draw(scr_coord offset) OVERRIDE
@@ -121,20 +112,6 @@ public:
 			else if(  player!=welt->get_active_player()  ) {
 				// avoid change by other player
 				call_listeners(number);
-			}
-			else if(  ev->mx < down_arrow.get_pos().x  ) {
-				// up arrow, actioon triggered
-				if(  is_allow_up  ) {
-					call_listeners( UP_FLAG | number );
-					return false;
-				}
-			}
-			else if(  ev->mx < arrow.get_pos().x  ) {
-				// down arrow, actioon triggered
-				if(  is_allow_down  ) {
-					call_listeners( DOWN_FLAG | number );
-					return false;
-				}
 			}
 			else {
 				call_listeners(number);
@@ -237,9 +214,7 @@ void schedule_gui_stats_t::update_schedule()
 		}
 		else {
 			for(uint8 i=0; i<schedule->get_count(); i++) {
-				const bool is_allow_up = (i!=0 && (!schedule->get_next_line().is_bound()||i!=schedule->get_count()-1));
-				const bool is_allow_down = (i!=schedule->get_count()-1 && (!schedule->get_next_line().is_bound()||i!=schedule->get_count()-2));
-				entries.append( new_component<gui_schedule_entry_t>(player, schedule->at(i), i, schedule->get_waytype(), is_allow_up, is_allow_down) );
+				entries.append( new_component<gui_schedule_entry_t>(player, schedule->at(i), i, schedule->get_waytype()) );
 				entries.back()->add_listener( this );
 			}
 			entries[ schedule->get_current_stop() ]->set_active(true);
