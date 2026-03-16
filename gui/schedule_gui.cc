@@ -307,14 +307,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 	set_table_layout(1,0);
 
-	add_table(1,1);
-	if(  cnv.is_bound()  ) {
-		snprintf(lb_cnv_line_name_str,255,cnv->get_name());
-	} else {
-		snprintf(lb_cnv_line_name_str,255,cnv_line_name);
+	add_table(3,1);
+	{
+		if(  cnv.is_bound()  ) {
+			snprintf(lb_cnv_line_name_str,255,cnv->get_name());
+		} else {
+			snprintf(lb_cnv_line_name_str,255,cnv_line_name);
+		}
+		lb_cnv_line_name.set_text(lb_cnv_line_name_str);
+		add_component(&lb_cnv_line_name);
+		new_component<gui_fill_t>();
+		bt_revert.init(button_t::roundbox, "Revert schedule");
+		bt_revert.set_tooltip("Revert to original schedule");
+		bt_revert.add_listener(this);
+		add_component(&bt_revert);
 	}
-	lb_cnv_line_name.set_text(lb_cnv_line_name_str);
-	add_component(&lb_cnv_line_name);
 	end_table();
 
 
@@ -735,11 +742,6 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 	add_table(6,1);
 	{
-		bt_revert.init(button_t::roundbox, "Revert schedule");
-		bt_revert.set_tooltip("Revert to original schedule");
-		bt_revert.add_listener(this);
-		add_component(&bt_revert);
-
 		// return tickets
 		if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
 			//  hide the return ticket on rail stuff, where it causes much trouble
@@ -751,6 +753,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		else {
 			new_component<gui_fill_t>();
 		}
+		new_component<gui_fill_t>();
 
 		bt_up.init(button_t::arrowup, "up");
 		bt_up.set_tooltip("up this entry");
