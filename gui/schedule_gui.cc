@@ -67,7 +67,7 @@ public:
 		number = n;
 		waytype = wt;
 		is_current = false;
-		set_table_layout(4,1);
+		set_table_layout(2,1);
 
 		// jump to this stop
 		add_component(&arrow);
