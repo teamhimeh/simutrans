@@ -5473,6 +5473,11 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 	}
 	else {
 		// Route-based: insert the depot as the next schedule stop
+		route_t *route = new route_t();
+		if(  !v->calc_route(get_pos(), depot_pos, 50, route)  ) {
+			return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
+		}
+		delete route;
 		convoihandle_t c = self;
 		while (c.is_bound()) {
 			schedule_t *sched = c->get_schedule();
@@ -5487,7 +5492,7 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 			}
 		}
 	}
-	return "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
+	return "Convoi has been sent\nto the selected depot\nof appropriate type.\n";
 }
 
 

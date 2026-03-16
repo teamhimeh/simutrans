@@ -162,11 +162,6 @@ void convoi_info_t::init(convoihandle_t cnv)
 		go_home_button.add_listener(this);
 		add_component(&go_home_button);
 
-		bt_teleport_depot.init(button_t::roundbox | button_t::flexible, "teleport depot");
-		bt_teleport_depot.set_tooltip("Teleports the convoi to depot. Ctrl+click to choose depot.");
-		bt_teleport_depot.add_listener(this);
-		add_component(&bt_teleport_depot);
-
 		no_load_button.init(button_t::roundbox | button_t::flexible, "no load");
 		no_load_button.set_tooltip("No goods are loaded onto this convoi.");
 		no_load_button.add_listener(this);
@@ -657,21 +652,6 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 				}
 			}
 		} // end go home button
-
-		if(  comp == &bt_teleport_depot  ) {
-			int state = cnv->get_state();
-			if(state==convoi_t::EDIT_SCHEDULE) {
-				return true;
-			}
-			if(  event_get_last_control_shift() & 2  ) {
-				// Ctrl+click: open depot picker to choose destination
-				create_win(new depot_picker_t(cnv, true), w_info, magic_depot_picker);
-			}
-			else {
-				cnv->call_convoi_tool( 'y', NULL );
-			}
-			return true;
-		}
 
 		if(  comp == &set_recovery_button  ) {
 			cnv->call_convoi_tool( 'e', NULL );
