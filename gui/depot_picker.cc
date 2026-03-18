@@ -226,7 +226,7 @@ void depot_picker_t::init_ui(const char *title)
 depot_picker_t::depot_picker_t(convoihandle_t cnv, bool teleport)
 	: gui_frame_t("", cnv->get_owner()),
 	  scrolly(gui_scrolled_list_t::windowskin, depot_picker_item_t::compare),
-	  cnv(cnv), wt(cnv->front()->get_waytype()), owner(cnv->get_owner()),
+	  cnv(cnv), wt(cnv->front()->get_desc()->get_waytype()), owner(cnv->get_owner()),
 	  teleport(teleport), has_nearest_sort(true)
 {
 	depot_picker_item_t::sort_origin = cnv->get_pos();
