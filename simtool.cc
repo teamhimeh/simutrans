@@ -8637,6 +8637,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'w' : toggle withdraw
  * 's' : change state to [number] (and maybe set open schedule flag)
  * 'l' : apply new line [number]
+ * 'L' : create new line
  * 'd' : go to nearest depot
  * 'y' : move to depoot immediately
  * 'r' : release the child convoy
@@ -8645,6 +8646,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'e' : toggle delay recovery
  * 't' : go to next stop
  * 'v' : reversing convoi direction
+ * 'c' : reversing coupling convoys
  * 'm' : apply max speed of convoy
  * 'b' : apply balance speed (limit power)
  */
@@ -8760,6 +8762,28 @@ bool tool_change_convoi_t::init( player_t *player )
 				}
 			}
 			break;
+		
+		case 'L': // create new line
+			{
+				schedule_t* schedule=cnv->get_schedule();
+				int ltype = schedule->get_type();
+				if(ltype < simline_t::truckline  ||  ltype > simline_t::narrowgaugeline) {
+					// invalid line type
+					break;
+				}
+				linehandle_t line = player->simlinemgmt.create_line( ltype, player, schedule );
+
+				// check scenario conditions
+				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
+					player->simlinemgmt.delete_line(line);
+					break;
+				}
+
+				line->get_schedule()->finish_editing();
+				
+				cnv->set_line(line);
+			}
+			break;
 
 		case 'n': // change no_load
 			cnv->set_no_load( !cnv->get_no_load() );
@@ -8797,7 +8821,7 @@ bool tool_change_convoi_t::init( player_t *player )
 
 		case 'y': // move to depot immediately
 		{
-			const char* msg = cnv->send_to_depot_immediately(is_local_execution());
+			const char* msg = cnv->get_most_parent_convoi()->send_to_depot_immediately(is_local_execution());
 
 			if (is_local_execution()) {
 				create_win( new news_img(msg), w_time_delete, magic_none);
@@ -8847,6 +8871,12 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'v':
 		{
 			cnv->reverse_vehicles_on_user_request();
+		}
+		break;
+
+		case 'c':
+		{
+			cnv->get_most_parent_convoi()->reverse_convoy_coupling_by_user_request();
 		}
 		break;
 
