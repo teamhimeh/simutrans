@@ -123,14 +123,18 @@ void convoi_info_t::init(convoihandle_t cnv)
 			end_table();
 
 			add_component(&container_line);
-			container_line.set_table_layout(3,1);
+			container_line.set_table_layout(4,1);
 			container_line.add_component(&line_button);
 			container_line.new_component<gui_label_t>("Serves Line:");
 			container_line.add_component(&line_label);
+			container_line.add_component(&bt_promote_to_line);
 			// goto line button
 			line_button.init( button_t::posbutton, NULL, scr_coord(D_MARGIN_LEFT, D_MARGIN_TOP + D_BUTTON_HEIGHT + D_V_SPACE + LINESPACE*4 ) );
 			line_button.set_targetpos3d( koord3d::invalid );
 			line_button.add_listener( this );
+			bt_promote_to_line.init( button_t::roundbox, "promote to line");
+			bt_promote_to_line.set_tooltip("Create a new line based on this schedule");
+			bt_promote_to_line.add_listener(this);
 			line_bound = false;
 		}
 		end_table();
@@ -337,6 +341,9 @@ void convoi_info_t::update_labels()
 
 		line_label.buf().append(cnv->get_line()->get_name());
 		line_label.set_color(cnv->get_line()->get_state_color());
+		bt_promote_to_line.set_visible(false);
+	} else {
+		bt_promote_to_line.set_visible(true);
 	}
 	line_label.update();
 
@@ -378,15 +385,16 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			container_line.set_visible(line_bound);
 		}
 		line_button.enable();
+		bt_promote_to_line.enable();
 		
 		if(  cnv->get_coupling_convoi().is_bound()  ) {
 			button.set_tooltip("Uncouple the back convoy now.");
 			button.set_text("release back");
 			button.enable();
 		} else if(  cnv->is_coupled()  ) {
-			button.set_tooltip("Please decouple the other convoy to edit the schedule.");
-			button.set_text("Fahrplan");
-			button.disable();
+			button.set_tooltip("Reverse coupling order");
+			button.set_text("Reverse coupling");
+			button.enable();
 		} else {
 			button.set_tooltip("Alters a schedule.");
 			button.set_text("Fahrplan");
@@ -443,6 +451,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			remove_component( &line_button );
 			line_bound = false;
 		}
+		bt_promote_to_line.disable();
 		button.set_text(cnv->get_owner()->get_name());
 		if(  !cnv->get_owner()->is_locked()  ) {
 			button.set_tooltip("move to the owner");
@@ -591,9 +600,13 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 				cnv->call_convoi_tool('r', NULL);
 				return true;
 			}
+			else if(  cnv->is_coupled()  ) {
+				cnv->call_convoi_tool('c', NULL);
+				return true;
+			}
 			else {
-			cnv->call_convoi_tool( 'f', NULL );
-			return true;
+				cnv->call_convoi_tool( 'f', NULL );
+				return true;
 			}
 		}
 
@@ -645,6 +658,24 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 
 		if(  comp == &reversed_button  ) {
 			cnv->call_convoi_tool( 'v', NULL );
+			return true;
+		}
+
+		if(  comp == &bt_promote_to_line  ) {
+			vector_tpl<linehandle_t> lines;
+			cnv->get_owner()->simlinemgmt.get_lines(cnv->get_schedule()->get_type(), &lines);
+			FOR(  vector_tpl<linehandle_t>, const line, lines  ) {
+				if(  cnv->get_schedule()->matches(  welt, line->get_schedule()  )  ) {
+					dbg->message("convoi_info_t::action_triggered()","%s's schedule matches line %s", cnv->get_name(), line->get_name());
+					char id[16];
+					sprintf( id, "%i,%i", line.get_id(), cnv->get_schedule()->get_current_stop() );
+					cnv->call_convoi_tool( 'l', id );
+					return true;
+				}
+			}
+			// not find match line -> create new one!
+			dbg->message("convoi_info_t::action_triggered()","%s's schedule did not match any lines", cnv->get_name());
+			cnv->call_convoi_tool( 'L', NULL );
 			return true;
 		}
 	}

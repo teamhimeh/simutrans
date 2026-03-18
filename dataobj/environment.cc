@@ -16,7 +16,8 @@
 
 #include "../utils/simrandom.h"
 void rdwr_win_settings(loadsave_t *file); // simwin
-
+char env_t::install_dir[PATH_MAX];
+std::string env_t::pak_dir;
 sint16 env_t::menupos = MENU_TOP;
 sint16 env_t::fullscreen = WINDOWED;
 sint16 env_t::display_scale_percent = 100;
@@ -122,6 +123,7 @@ bool env_t::road_user_info;
 bool env_t::tree_info;
 bool env_t::ground_info;
 uint8 env_t::show_factory_storage_bar;
+bool env_t::show_way_offset_label = false;
 bool env_t::townhall_info;
 bool env_t::single_info;
 bool env_t::window_buttons_right;
