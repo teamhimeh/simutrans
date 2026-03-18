@@ -4137,8 +4137,16 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						restart_speed = 0;
 						return false;
 					}
-					if(  next_signal<(cnv->get_entire_convoy_length()/16+1)  ) {
-						return is_signal_clear(next_signal, restart_speed, true);
+					if(  next_signal<(cnv->get_entire_convoy_length()/8+1)  ) {
+						if(  is_signal_clear(next_signal, restart_speed, true)  ) {
+							// ok we start
+							return true;
+						} else {
+							// the start signal is not clear -> stay here
+							block_reserver(cnv->get_route(), max(route_index, 1) - 1, next_signal, next_crossing, 0, false, false);
+							restart_speed = 0;
+							return false;
+						}
 					}
 					cnv->set_next_stop_index(next_crossing < next_signal ? next_crossing : next_signal);
 					return true;
