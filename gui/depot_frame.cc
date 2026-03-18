@@ -1739,7 +1739,6 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			couple_buf.printf("%u", child_convoy_id);
 			depot->call_depot_tool('u',cnv,couple_buf);
 			update_data();
-			update_tabs();
 			return true;
 		}
 		else if(  comp == &bt_uncouple  ) {
@@ -1749,7 +1748,6 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			}
 			depot->call_depot_tool('u',cnv,"0");
 			update_data();
-			update_tabs();
 			return true;
 		}
 		else if(  comp == &depot_name_input  ) {
@@ -1757,12 +1755,10 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			buf.printf(depot_name_input.get_text());
 			depot->call_depot_tool('N',convoihandle_t(),buf);
 			update_data();
-			update_tabs();
 			return true;
 		}
 		else {
 			update_data();
-			update_tabs();
 			return false;
 		}
 		build_vehicle_lists();
