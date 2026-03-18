@@ -404,7 +404,7 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			return true;
 		}
 		else if(comp==&move_to_depot_button) {
-			cnv->get_most_parent_convoi()->call_convoi_tool( 'y', NULL );
+			cnv->call_convoi_tool( 'y', NULL );
 			return true;
 		}
 		else if(comp==&withdraw_button) {
