@@ -23,13 +23,9 @@
 static karte_ptr_t welt;
 
 
-// ── static members ────────────────────────────────────────────────────────────
-
 koord3d depot_picker_item_t::sort_origin = koord3d::invalid;
 depot_sort_mode_t depot_picker_item_t::sort_mode = DEPOT_SORT_NAME;
 
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 static bool is_depot_electrified(depot_t *d)
 {
@@ -40,8 +36,6 @@ static bool is_depot_electrified(depot_t *d)
 	return w && w->is_electrified();
 }
 
-
-// ── depot_picker_item_t ──────────────────────────────────────────────────────
 
 static void init_item_layout(depot_picker_item_t *self, depot_t *d,
                              gui_image_t &waytype_symbol,
@@ -181,8 +175,6 @@ bool depot_picker_item_t::compare(const gui_component_t *aa, const gui_component
 	              translator::translate(fb->depot->get_name())) < 0;
 }
 
-
-// ── depot_picker_t ───────────────────────────────────────────────────────────
 
 void depot_picker_t::init_ui(const char *title)
 {

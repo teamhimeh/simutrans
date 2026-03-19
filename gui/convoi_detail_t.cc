@@ -167,7 +167,7 @@ void convoi_detail_t::init(convoihandle_t cnv)
 		add_table(3,1)->set_force_equal_columns(true);
 		{
 			move_to_depot_button.init(button_t::roundbox| button_t::flexible, "Teleport to Depot");
-			move_to_depot_button.set_tooltip("Remove vehicle from here and send to the nearest depot.");
+			move_to_depot_button.set_tooltip(translator::translate("Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)"));
 			move_to_depot_button.add_listener(this);
 			add_component(&move_to_depot_button);
 

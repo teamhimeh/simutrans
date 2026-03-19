@@ -356,7 +356,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 
 	bt_teleport_line_to_depot.init(button_t::roundbox_state, "Teleport All to Depot",
 		scr_coord(RIGHT_COLUMN_OFFSET, bt_y+D_BUTTON_HEIGHT+D_V_SPACE), scr_size(D_BUTTON_WIDTH, D_BUTTON_HEIGHT));
-	bt_teleport_line_to_depot.set_tooltip("Convoys are teleported to depot immediately\n(Ctrl+click to choose depot)");
+	bt_teleport_line_to_depot.set_tooltip(translator::translate("Convoys are teleported to depot immediately (Ctrl+click to choose depot)"));
 	bt_teleport_line_to_depot.set_visible(false);
 	bt_teleport_line_to_depot.add_listener(this);
 	add_component(&bt_teleport_line_to_depot);

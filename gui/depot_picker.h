@@ -24,10 +24,10 @@ class player_t;
 
 
 enum depot_sort_mode_t {
-	DEPOT_SORT_ORIGINAL    = 0,   ///< distance from (0,0), then by X — the original behaviour
-	DEPOT_SORT_NAME        = 1,
-	DEPOT_SORT_NEAREST     = 2,   ///< only meaningful when called by a convoy
-	DEPOT_SORT_ELECTRIFIED = 3,
+	DEPOT_SORT_ORIGINAL    = 0,   /// distance from (0,0), then by X — the original behaviour
+	DEPOT_SORT_NAME        = 1,	  /// sort by name
+	DEPOT_SORT_NEAREST     = 2,   /// distance from convoy position, only meaningful when called by a convoy
+	DEPOT_SORT_ELECTRIFIED = 3,   /// show electrified depots first
 	DEPOT_SORT_COUNT
 };
 
