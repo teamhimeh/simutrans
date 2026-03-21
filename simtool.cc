@@ -8821,10 +8821,34 @@ bool tool_change_convoi_t::init( player_t *player )
 
 		case 'y': // move to depot immediately
 		{
-			const char* msg = cnv->send_to_depot_immediately(is_local_execution());
+			const char* msg = cnv->get_most_parent_convoi()->send_to_depot_immediately(is_local_execution());
 
 			if (is_local_execution()) {
 				create_win( new news_img(msg), w_time_delete, magic_none);
+			}
+		}
+		break;
+
+		case 'D': // route to user-specified depot
+		{
+			sint16 x, y, z;
+			if (p && sscanf(p, "%hi,%hi,%hi", &x, &y, &z) == 3) {
+				const char* msg = cnv->send_to_specific_depot(koord3d(x, y, z), false, is_local_execution());
+				if (is_local_execution()) {
+					create_win(new news_img(msg), w_time_delete, magic_none);
+				}
+			}
+		}
+		break;
+
+		case 'Y': // teleport to user-specified depot
+		{
+			sint16 x, y, z;
+			if (p && sscanf(p, "%hi,%hi,%hi", &x, &y, &z) == 3) {
+				const char* msg = cnv->send_to_specific_depot(koord3d(x, y, z), true, is_local_execution());
+				if (is_local_execution()) {
+					create_win(new news_img(msg), w_time_delete, magic_none);
+				}
 			}
 		}
 		break;
