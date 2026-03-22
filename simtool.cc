@@ -9777,6 +9777,7 @@ bool tool_change_roadsign_t::init( player_t* )
 				}
 			}
 		}
+		break;
 
 
 		default:
