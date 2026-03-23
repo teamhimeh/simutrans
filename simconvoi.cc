@@ -735,6 +735,11 @@ uint32 convoi_t::get_entire_convoy_length() const
  */
 void convoi_t::add_running_cost( const weg_t *weg )
 {
+	if(!get_most_parent_convoi()->front()->is_leading()) {
+		// if the most parent convoy's front vehicle is not leading, do not consider running cost
+		// e.g. start from station (reset vehicles)
+		return;
+	}
 	jahresgewinn += base_sum_running_costs;
 
 	if(  weg  &&  weg->get_owner()!=get_owner()  &&  weg->get_owner()!=NULL  ) {
@@ -1229,6 +1234,18 @@ vehicle_t* find_convoy_on_tile(grund_t* const gr, convoihandle_t cnv) {
 bool convoi_t::drive_to()
 {
 	if(  anz_vehikel>0  ) {
+		convoihandle_t c = self;
+		bool stop_next=true;
+		while(  c.is_bound()  ) {
+			stop_next&=c->is_users_at_next_stop();
+			c=c->get_coupling_convoi();
+		}
+		if(  !stop_next  ) {
+			// skip next stop!
+			next_stop_button_pressed();
+			set_state(ROUTING_1);
+			return false;
+		}
 
 		// unreserve all tiles that are covered by the train but do not contain one of the wagons,
 		// otherwise repositioning of the train drive_to may lead to stray reserved tiles
@@ -1976,12 +1993,14 @@ void convoi_t::ziel_erreicht()
 	// check for coupling
 	if(  next_coupling_index!=route_t::INVALID_INDEX  &&  next_coupling_index<=v->get_route_index()  ) {
 		const uint16 route_index = v->get_route_index();
-		const grund_t* grc[2];
+		const grund_t* grc[3];
 		grc[0] = gr;
 		grc[1] = route_index>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index));
+		// for diagonal stops(tile length can be shorter than vehicle length!)
+		grc[2] = route_index+1>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index+1));
 		// find convoy to couple with
 		// convoy can be on the next tile of coupling_index.
-		for(  uint8 i=0;  i<2;  i++  ) {
+		for(  uint8 i=0;  i<3;  i++  ) {
 			const grund_t* g = grc[i];
 			if(  !g  ) {
 				continue;
@@ -2771,16 +2790,6 @@ void convoi_t::vorfahren()
 	wait_lock = 0;
 	INT_CHECK("simconvoi 711");
 	reversing_needed = false;
-	c = self;
-	bool stop_next=true;
-	while(  c.is_bound()  ) {
-		stop_next&=c->is_users_at_next_stop();
-		c=c->get_coupling_convoi();
-	}
-	if(  !stop_next  ) {
-		// skip next stop!
-		next_stop_button_pressed();
-	}
 }
 
 // a helper function for convoi_t::vorfahren()
@@ -5244,13 +5253,19 @@ const char* convoi_t::send_to_depot(bool local)
 	if(  grund_t *gr=welt->lookup(front()->get_pos())  ) {
 		depot_t *dep=gr->get_depot();
 		// check the owner
-		if(  dep  &&  (dep->get_owner()==get_owner())  ) {
-			// check waytype
+		if(  dep  ) {
+			// check waytype and owner
 			convoihandle_t c=get_coupling_convoi();
-			bool valid_waytype = dep->get_waytype()==front()->get_waytype();
-			while(  valid_waytype && c.is_bound()  ) {
+			bool valid_waytype = dep->get_waytype()==front()->get_desc()->get_waytype();
+			bool valid_owner = dep->get_owner()==get_owner();
+			while(  valid_waytype && c.is_bound() && valid_owner  ) {
 				valid_waytype &= (dep->get_waytype()==c->front()->get_waytype());
+				valid_owner &= dep->get_owner()==c->get_owner();
 				c = c->get_coupling_convoi();
+			}
+			if(  !valid_owner  ) {
+				txt = "%s leads\ndifferent owner's or\ndifferent waytype convoy.\n",get_name();
+				return txt;
 			}
 			if(  valid_waytype  ) {
 				txt = "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
@@ -5419,6 +5434,75 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 
 	return txt;
 }
+
+const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, bool local)
+{
+	// Validate the target depot
+	grund_t *gr = welt->lookup(depot_pos);
+	if (!gr) {
+		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
+	}
+	depot_t *dep = gr->get_depot();
+	if (!dep) {
+		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
+	}
+	vehicle_t *v = front();
+	if (dep->get_waytype() != v->get_waytype() || dep->get_owner() != get_owner()) {
+		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
+	}
+
+	if (immediate) {
+		// Teleport: same pre-conditions as send_to_depot_immediately
+		if (state == INITIAL) {
+			return "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
+		}
+		if (is_coupled()) {
+			return "Convoi is not front convoy.\n";
+		}
+		// Insert depot into schedule of all coupled convoys (to discard cargo)
+		bool already_in_schedule = false;
+		uint8 current_stop = schedule->get_current_stop();
+		for (uint8 i = 0; i < schedule->get_count(); i++) {
+			if (schedule->at((current_stop + i) % schedule->get_count()).pos == depot_pos) {
+				already_in_schedule = true;
+				break;
+			}
+		}
+		if (!already_in_schedule) {
+			convoihandle_t c = self;
+			while (c.is_bound()) {
+				schedule_t *sched = c->get_schedule();
+				sched->insert(gr);
+				sched->set_current_stop((sched->get_current_stop() + sched->get_count() - 1) % sched->get_count());
+				c = c->get_coupling_convoi();
+			}
+		}
+		betrete_depot(dep, false);
+	}
+	else {
+		// Route-based: insert the depot as the next schedule stop
+		route_t *route = new route_t();
+		if(  !v->calc_route(get_pos(), depot_pos, 50, route)  ) {
+			return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
+		}
+		delete route;
+		convoihandle_t c = self;
+		while (c.is_bound()) {
+			schedule_t *sched = c->get_schedule();
+			sched->insert(gr);
+			sched->set_current_stop((sched->get_current_stop() + sched->get_count() - 1) % sched->get_count());
+			c = c->get_coupling_convoi();
+		}
+		set_schedule(get_schedule());
+		if (local) {
+			if (convoi_info_t *info = dynamic_cast<convoi_info_t*>(win_get_magic(magic_convoi_info + self.get_id()))) {
+				info->route_search_finished();
+			}
+		}
+	}
+	return "Convoi has been sent\nto the selected depot\nof appropriate type.\n";
+}
+
 
 /*
  * Functions to yield lane space to vehicles on passing lane.
@@ -5840,16 +5924,36 @@ void convoi_t::trade_convoi() {
 	}
 	sint64 value = calc_restwert();
 	owner->book_new_vehicle(value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
-	if(  line.is_bound()  ) {
+	const bool need_new_line = line.is_bound();
+	if(  need_new_line  ) {
 		unset_line();
 	} else {
 		unregister_stops();
 	}
+	// because next line's owner is invalid, unset it.
+	schedule->unset_next_line();
 	set_owner(welt->get_player(get_accept_player_nr()));
 	register_stops();
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	set_permit_trade(false);
 	set_accept_player_nr(owner->get_player_nr());
+	if(  need_new_line  ) {
+		// reset line for new owner.
+		// search line of my schedule.
+		vector_tpl<linehandle_t> lines;
+		owner->simlinemgmt.get_lines(schedule->get_type(), &lines);
+		FOR(  vector_tpl<linehandle_t>, const line, lines  ) {
+			if(  schedule->matches(  welt, line->get_schedule()  )  ) {
+				set_line(line);
+				return;
+			}
+		}
+		dbg->message("convoi_t::trade_convoi()","%s do not find match line",get_name());
+		// not find match line -> create new one!
+		linehandle_t new_line = owner->simlinemgmt.create_line(schedule->get_type(), owner, schedule);
+		new_line->get_schedule()->finish_editing();
+		set_line(new_line);
+	}
 }
 
 
@@ -6036,6 +6140,19 @@ bool convoi_t::couple_convoi_during_running(convoihandle_t coupled) {
 	must_recalc_min_top_speed();
 	must_recalc_friction_weight();
 	return true;
+}
+
+void convoi_t::reverse_convoy_coupling_by_user_request()
+{
+	// reverse convoy coupling by user request
+	// this must be most parent convoy!
+	if(  is_coupled()  ) {
+		return;
+	}
+	// firse we release the reservation
+	unreserve_route();
+	// then reverse convoy coupling
+	reverse_convoy_coupling();
 }
 
 uint16 convoi_t::get_length_coupling_done() const {
