@@ -2627,17 +2627,42 @@ void stadt_t::check_bau_townhall(bool new_town)
 		}
 
 		if (neugruendung || umziehen) {
-			// build the road in front of the townhall
-			if (road0!=road1) {
-				way_builder_t bauigel(NULL);
-				bauigel.init_builder(way_builder_t::strasse, welt->get_city_road(), NULL, NULL);
-				bauigel.set_build_sidewalk(true);
-				bauigel.calc_straight_route(welt->lookup_kartenboden(best_pos + road0)->get_pos(), welt->lookup_kartenboden(best_pos + road1)->get_pos());
-				bauigel.set_overtaking_mode(twoway_mode);
-				bauigel.build();
+			// check if any road already exists on any tile adjacent to the townhall footprint
+			bool has_existing_road = false;
+			{
+				const koord hall_pos = best_pos + offset;
+				const int w = desc->get_x(layout);
+				const int h = desc->get_y(layout);
+				// top and bottom rows
+				for (int x = -1; x <= w && !has_existing_road; x++) {
+					for (int dy : {-1, h}) {
+						if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, dy))) {
+							if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
+						}
+					}
+				}
+				// left and right columns (excluding corners already checked)
+				for (int y = 0; y <= h-1 && !has_existing_road; y++) {
+					for (int dx : {-1, w}) {
+						if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(dx, y))) {
+							if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
+						}
+					}
+				}
 			}
-			else {
-				build_road(best_pos + road0, NULL, true);
+			// build the road in front of the townhall only if no road exists nearby
+			if (!has_existing_road) {
+				if (road0!=road1) {
+					way_builder_t bauigel(NULL);
+					bauigel.init_builder(way_builder_t::strasse, welt->get_city_road(), NULL, NULL);
+					bauigel.set_build_sidewalk(true);
+					bauigel.calc_straight_route(welt->lookup_kartenboden(best_pos + road0)->get_pos(), welt->lookup_kartenboden(best_pos + road1)->get_pos());
+					bauigel.set_overtaking_mode(twoway_mode);
+					bauigel.build();
+				}
+				else {
+					build_road(best_pos + road0, NULL, true);
+				}
 			}
 			townhall_road = best_pos + road0;
 		}
