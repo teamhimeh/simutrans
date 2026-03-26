@@ -20,7 +20,7 @@
 // fluidsynth music routine interfaces
 static int         midi_number = -1;
 static plainstring midi_filenames[MAX_MIDI];
-static bool        is_midi_track[MAX_MIDI];  // true if MIDI, false if WAV/OGG/etc.
+static bool        is_midi_track[MAX_MIDI];  // true if MIDI, false if WAV
 
 #if !defined(_WIN32) && defined(HAS_SDL_MIXER)
 static Mix_Music  *bgm_music         = NULL;
@@ -28,20 +28,31 @@ static bool        mixer_initialized = false;
 #endif
 
 
-static bool is_midi_ext(const char *filename)
+static void get_ext_lower(const char *filename, char *ext, int maxlen)
 {
 	const char *p = strrchr(filename, '.');
-	if(  !p  ) {
-		return true;  // no extension, assume MIDI
-	}
-	// case-insensitive compare
-	char ext[8];
+	ext[0] = 0;
+	if(  !p  ) { return; }
 	int i;
-	for(  i = 0;  i < 7  &&  p[i];  i++  ) {
+	for(  i = 0;  i < maxlen - 1  &&  p[i];  i++  ) {
 		ext[i] = (char)tolower((unsigned char)p[i]);
 	}
 	ext[i] = 0;
+}
+
+static bool is_midi_ext(const char *filename)
+{
+	char ext[8];
+	get_ext_lower(filename, ext, sizeof(ext));
+	if(  ext[0] == 0  ) { return true; }  // no extension, assume MIDI
 	return strcmp(ext, ".mid") == 0  ||  strcmp(ext, ".midi") == 0;
+}
+
+static bool is_wav_ext(const char *filename)
+{
+	char ext[8];
+	get_ext_lower(filename, ext, sizeof(ext));
+	return strcmp(ext, ".wav") == 0;
 }
 
 fluid_settings_t* settings;
@@ -97,7 +108,7 @@ void dr_set_midi_volume(int vol)
 
 
 /**
- * Loads a MIDI/WAV/OGG file
+ * Loads a MIDI or WAV file
  */
 int dr_load_midi(const char *filename)
 {
@@ -106,6 +117,11 @@ int dr_load_midi(const char *filename)
 
 		if(  i >= 0  &&  i < MAX_MIDI  ) {
 			const bool is_midi = is_midi_ext( filename );
+			const bool is_wav  = !is_midi && is_wav_ext( filename );
+			if(  !is_midi  &&  !is_wav  ) {
+				dbg->warning("dr_load_midi()", "Unsupported BGM format (only MIDI and WAV are supported): %s.", filename);
+				return midi_number;
+			}
 			if(  is_midi  &&  !fluid_is_midifile( filename )  ) {
 				dbg->warning("dr_load_midi()", "FluidSynth: Not a valid MIDI file: %s.", filename );
 				return midi_number;
@@ -120,7 +136,7 @@ int dr_load_midi(const char *filename)
 
 
 /**
- * Plays a MIDI/WAV/OGG file
+ * Plays a MIDI or WAV file
  */
 void dr_play_midi(int key)
 {
@@ -158,7 +174,7 @@ void dr_play_midi(int key)
 
 
 /**
- * Stops playing MIDI/WAV/OGG file
+ * Stops playing MIDI or WAV file
  */
 void dr_stop_midi(void)
 {
@@ -316,17 +332,17 @@ bool dr_init_midi()
 	}
 
 #if !defined(_WIN32) && defined(HAS_SDL_MIXER)
-	// Initialize SDL_mixer for WAV/OGG BGM support.
+	// Initialize SDL_mixer for WAV BGM support.
 	// This requires SDL audio to be free (i.e., FluidSynth not using sdl2 driver).
 	if(  !SDL_WasInit(SDL_INIT_AUDIO)  ) {
 		SDL_InitSubSystem( SDL_INIT_AUDIO );
 	}
 	if(  Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 4096 ) == 0  ) {
 		mixer_initialized = true;
-		dbg->message("dr_init_midi()", "SDL_mixer initialized for WAV/OGG BGM support.");
+		dbg->message("dr_init_midi()", "SDL_mixer initialized for WAV BGM support.");
 	}
 	else {
-		dbg->warning("dr_init_midi()", "SDL_mixer: Could not open audio (WAV/OGG BGM disabled): %s", Mix_GetError());
+		dbg->warning("dr_init_midi()", "SDL_mixer: Could not open audio (WAV BGM disabled): %s", Mix_GetError());
 	}
 #endif
 
