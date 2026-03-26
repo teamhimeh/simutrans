@@ -1224,7 +1224,7 @@ void vehicle_t::hop(grund_t* gr)
 		route_index ++;
 		check_for_finish = true;
 		// estimate pos_next if possible
-		const koord3d estimated_pos_next = cnv->get_route()->opposite_pos_of_route_ending(get_waytype());
+		const koord3d estimated_pos_next = route_index<cnv->get_route()->get_count()? cnv->get_route()->at(route_index) : cnv->get_route()->opposite_pos_of_route_ending(get_waytype());
 		if(  estimated_pos_next != koord3d::invalid  ) {
 			pos_next = estimated_pos_next;
 		}
@@ -2110,7 +2110,7 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 				}
 				if(  env_t::show_line_colors && lh.is_bound()  ) {
 					// show line colour
-					uint8 tooltip_width = proportional_string_width(tooltip_text);
+					sint32 tooltip_width = proportional_string_width(tooltip_text);
 					display_fillbox_wh_clip_rgb( xpos, ypos-D_WAITINGBAR_WIDTH, tooltip_width+4, D_WAITINGBAR_WIDTH, color_idx_to_rgb(lh->get_colour()), dirty );
 				}
 			}
@@ -3884,10 +3884,10 @@ skip_choose:
 	target_halt = target->get_halt();
 	bool route_found = false;
 
-	if(  !try_coupling&&!sig->is_stop_before_check()  ) {
+	if(  !try_coupling && !sig->is_skip_default_route()  ) {
 		// call block_reserver only when the next halt is not a coupling point.
 		route_found = block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false );
-	}
+	}	
 	if(  !route_found  ) {
 		// no free route to target!
 		// note: any old reservations should be invalid after the block reserver call.
@@ -4047,6 +4047,15 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			return true;
 		}
 
+		if(  !cnv->is_waiting()&&!call_by_step&&cnv->is_signal_check_in_step_needed()  ) {
+			// now we are in the sync_step.
+			// the next signal is choose or long, we check this signal in the next step!
+			block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
+			sig->set_state( roadsign_t::STATE_RED );
+			restart_speed = -1;
+
+			return false;
+		} 
 		// when we reached here, the way after the last signal is not free though the way before is => we can still go
 		if(  cnv->get_next_stop_index()<=next_signal+1  ) {
 			// only show third aspect on last signal of cascade

@@ -996,6 +996,13 @@ public:
 	const char* send_to_depot_immediately(bool local);
 
 	/**
+	 * Sends convoi to a user-specified depot (by route or immediately).
+	 * @param depot_pos position of the target depot
+	 * @param immediate true = teleport (betrete_depot), false = route via schedule
+	 */
+	const char* send_to_specific_depot(koord3d depot_pos, bool immediate, bool local);
+
+	/**
 	 * this give the index of the next signal or the end of the route
 	 * convois will slow down before it, if this is not a waypoint or the cannot pass
 	 * The slowdown is done by the vehicle routines
@@ -1093,6 +1100,7 @@ public:
 
 	void request_signal_check_in_step() {signal_check_in_step_request = true;}
 	void set_signal_check_in_step_request_invalid() { signal_check_in_step_request = false; };
+	const bool is_signal_check_in_step_needed() {return signal_check_in_step_request;}
 
 	void calc_crossing_reservation();
 	vector_tpl<std::pair< uint16, uint16> > get_crossing_reservation_index() const { return crossing_reservation_index; }
@@ -1155,6 +1163,9 @@ public:
 	// Reverse convoy coupling at waypoint
 	// if this bool value is true, reversing done, this convoy is no longer the leading (most parent) convoy.
 	bool reverse_convoy_coupling_at_waypoint();
+
+	// Reverse convoy coupling by user request
+	void reverse_convoy_coupling_by_user_request();
 
 	// coupling during running.
 	// Only for during leaving a depot

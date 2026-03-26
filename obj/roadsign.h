@@ -48,7 +48,8 @@ protected:
 		advance_to_end = 1U<<2,// advance to end
 		end_of_choose  = 1U<<3,// end of choose signal
 		end_of_guide   = 1U<<4,// end of guide signal (for searching coupling target)
-		stop_before_check	= 1U<<5 //stop before check sign. for choose-sign and longblock-sign.
+		stop_before_check	= 1U<<5,//stop before check sign. for choose-sign and longblock-sign.
+		skip_default_route 	= 1U<<6 // use default calc_route() before call find_route().
 	};
 
 	uint8 choose_signal_margin_length;
@@ -182,6 +183,8 @@ public:
 	void set_end_of_guide(bool tf) { tf? choose_sign_flag|=end_of_guide:choose_sign_flag&=~end_of_guide; }
 	bool is_stop_before_check() const { return (choose_sign_flag&stop_before_check)>0; }
 	void set_stop_before_check(bool tf) { tf? choose_sign_flag|=stop_before_check:choose_sign_flag&=~stop_before_check; }
+	bool is_skip_default_route() const { return (choose_sign_flag&skip_default_route)>0; }
+	void set_skip_default_route(bool tf) { tf? choose_sign_flag|=skip_default_route:choose_sign_flag&=~skip_default_route; }
 	uint8 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
 	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
@@ -226,6 +229,8 @@ public:
 	static const roadsign_desc_t *roadsign_search(roadsign_desc_t::types flag, const waytype_t wt, const uint16 time);
 
 	static const roadsign_desc_t *find_desc(const char *name) { return table.get(name); }
+
+	static const stringhashtable_tpl<const roadsign_desc_t *>& get_desc_table() { return table; }
 
 	static const vector_tpl<const roadsign_desc_t*>& get_available_signs(const waytype_t wt);
 };
