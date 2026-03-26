@@ -2719,7 +2719,7 @@ void stadt_t::check_bau_townhall(bool new_town)
 				const int h = desc->get_y(layout);
 				// top and bottom rows
 				for (int x = -1; x <= w && !has_existing_road; x++) {
-					for (int dy : {-1, h}) {
+					for (int dy = -1; dy<=h; dy++) {
 						if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, dy))) {
 							if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
 						}
