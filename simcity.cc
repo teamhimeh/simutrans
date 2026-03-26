@@ -2562,11 +2562,95 @@ void stadt_t::check_bau_townhall(bool new_town)
 		}
 
 		// Now built the new townhall (remember old orientation)
-		int layout = umziehen || neugruendung ? simrand(desc->get_all_layouts()) : old_layout % desc->get_all_layouts();
 		// on which side should we place the road?
 		uint8 dir;
 		// offset of building within searched place, start and end of road
 		koord offset(0,0), road0(0,0),road1(0,0);
+
+		// For a new city, try to orient the townhall so its front faces an existing road.
+		// Iterate over all layouts; use the first one where the front row/column already has a road.
+		int layout;
+		bool pos_preselected = false;
+		if (neugruendung) {
+			layout = -1;  // sentinel: not yet chosen
+			for (int try_layout = 0; try_layout < desc->get_all_layouts(); try_layout++) {
+				uint8 try_dir = ribi_t::layout_to_ribi[try_layout & 3];
+				int tw = desc->get_x(try_layout) + (try_dir & ribi_t::eastwest  ? 1 : 0);
+				int th = desc->get_y(try_layout) + (try_dir & ribi_t::northsouth ? 1 : 0);
+				koord candidate = townhall_placefinder_t(welt, try_dir).find_place(pos, tw, th, desc->get_allowed_climate_bits());
+				if (candidate == koord::invalid) { continue; }
+				int w = desc->get_x(try_layout);
+				int h = desc->get_y(try_layout);
+				// Check the front row/column for an existing road, and also one tile beyond.
+				// If a road exists one tile beyond the road strip, shift the candidate
+				// so the road strip aligns directly with the existing road.
+				bool found_road = false;
+				auto try_road_or_shift = [&](koord shift, koord strip_offs, koord beyond_offs, int count, bool along_x) {
+					// Check road strip itself
+					for (int i = 0; i < count && !found_road; i++) {
+						koord d = along_x ? koord(i, 0) : koord(0, i);
+						if (grund_t *gr = welt->lookup_kartenboden(candidate + strip_offs + d)) {
+							if (gr->hat_weg(road_wt)) { found_road = true; }
+						}
+					}
+					if (!found_road) {
+						// Check one tile beyond road strip
+						bool road_beyond = false;
+						for (int i = 0; i < count && !road_beyond; i++) {
+							koord d = along_x ? koord(i, 0) : koord(0, i);
+							if (grund_t *gr = welt->lookup_kartenboden(candidate + beyond_offs + d)) {
+								if (gr->hat_weg(road_wt) && !gr->has_two_ways() && !gr->is_halt()) {
+									road_beyond = true;
+								}
+							}
+						}
+						if (road_beyond) {
+							// Verify current road strip tiles can become building tiles after shift
+							bool shift_ok = true;
+							for (int i = 0; i < count && shift_ok; i++) {
+								koord d = along_x ? koord(i, 0) : koord(0, i);
+								grund_t *gr = welt->lookup_kartenboden(candidate + strip_offs + d);
+								if (!gr || gr->get_typ() != grund_t::boden || !gr->ist_natur()) {
+									shift_ok = false;
+								}
+							}
+							if (shift_ok) {
+								candidate = candidate + shift;
+								found_road = true;
+							}
+						}
+					}
+				};
+				switch (try_dir) {
+					case ribi_t::south:
+						try_road_or_shift(koord(0,1),  koord(0,h),   koord(0,h+1), w, true);
+						break;
+					case ribi_t::east:
+						try_road_or_shift(koord(1,0),  koord(w,0),   koord(w+1,0), h, false);
+						break;
+					case ribi_t::north:
+						try_road_or_shift(koord(0,-1), koord(0,0),   koord(0,-1),  w, true);
+						break;
+					case ribi_t::west:
+						try_road_or_shift(koord(-1,0), koord(0,0),   koord(-1,0),  h, false);
+						break;
+				}
+				if (found_road) {
+					layout         = try_layout;
+					best_pos       = candidate;
+					pos_preselected = true;
+					break;
+				}
+			}
+			if (layout < 0) {
+				// no road-adjacent placement found — fall back to random layout
+				layout = simrand(desc->get_all_layouts());
+			}
+		}
+		else {
+			layout = umziehen ? simrand(desc->get_all_layouts()) : old_layout % desc->get_all_layouts();
+		}
+
 		dir = ribi_t::layout_to_ribi[layout & 3];
 		switch(dir) {
 			case ribi_t::east:
@@ -2602,7 +2686,7 @@ void stadt_t::check_bau_townhall(bool new_town)
 				road1.x = desc->get_x(layout)-1;
 				road1.y = desc->get_y(layout);
 		}
-		if (neugruendung || umziehen) {
+		if ((neugruendung || umziehen) && !pos_preselected) {
 			best_pos = townhall_placefinder_t(welt, dir).find_place(pos, desc->get_x(layout) + (dir & ribi_t::eastwest ? 1 : 0), desc->get_y(layout) + (dir & ribi_t::northsouth ? 1 : 0), desc->get_allowed_climate_bits());
 		}
 		// check, if the was something found
