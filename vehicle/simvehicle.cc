@@ -2093,7 +2093,7 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 		}
 	}
 	// something to show?
-	if(  tooltip_text[0]  ) {
+	if(  tooltip_text[0] && (!env_t::show_only_own_vehicle_states||welt->get_active_player()==cnv->get_owner())  ) {
 		const int raster_width = get_current_tile_raster_width();
 		get_screen_offset( xpos, ypos, raster_width );
 		xpos += tile_raster_scale_x(get_xoff(), raster_width);
@@ -3884,10 +3884,10 @@ skip_choose:
 	target_halt = target->get_halt();
 	bool route_found = false;
 
-	if(  !try_coupling  ) {
+	if(  !try_coupling && !sig->is_skip_default_route()  ) {
 		// call block_reserver only when the next halt is not a coupling point.
 		route_found = block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 100000, true, false );
-	}
+	}	
 	if(  !route_found  ) {
 		// no free route to target!
 		// note: any old reservations should be invalid after the block reserver call.
@@ -3910,7 +3910,7 @@ skip_choose:
 
 		// now it we are in a step and can use the route search
 		route_t target_rt;
-		const int richtung = ribi_type(cnv->get_route()->at(start_block),cnv->get_route()->at(start_block<cnv->get_route()->get_count()-1?start_block+1:start_block));	// to avoid confusion at diagonals
+		const int richtung = start_block<cnv->get_route()->get_count()-1?ribi_type(cnv->get_route()->at(start_block),cnv->get_route()->at(start_block+1)):ribi_t::all;	// to avoid confusion at diagonals
 		if(  try_coupling  ) {
 			// search for coupling point.
 			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), true, 0 );
@@ -4047,6 +4047,15 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			return true;
 		}
 
+		if(  !cnv->is_waiting()&&!call_by_step&&cnv->is_signal_check_in_step_needed()  ) {
+			// now we are in the sync_step.
+			// the next signal is choose or long, we check this signal in the next step!
+			block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
+			sig->set_state( roadsign_t::STATE_RED );
+			restart_speed = -1;
+
+			return false;
+		} 
 		// when we reached here, the way after the last signal is not free though the way before is => we can still go
 		if(  cnv->get_next_stop_index()<=next_signal+1  ) {
 			// only show third aspect on last signal of cascade
