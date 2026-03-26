@@ -2581,58 +2581,110 @@ void stadt_t::check_bau_townhall(bool new_town)
 				if (candidate == koord::invalid) { continue; }
 				int w = desc->get_x(try_layout);
 				int h = desc->get_y(try_layout);
-				// Check the front row/column for an existing road, and also one tile beyond.
+				// Check the road strip for an existing road, and also one tile beyond.
 				// If a road exists one tile beyond the road strip, shift the candidate
 				// so the road strip aligns directly with the existing road.
 				bool found_road = false;
-				auto try_road_or_shift = [&](koord shift, koord strip_offs, koord beyond_offs, int count, bool along_x) {
-					// Check road strip itself
-					for (int i = 0; i < count && !found_road; i++) {
-						koord d = along_x ? koord(i, 0) : koord(0, i);
-						if (grund_t *gr = welt->lookup_kartenboden(candidate + strip_offs + d)) {
-							if (gr->hat_weg(road_wt)) { found_road = true; }
-						}
-					}
-					if (!found_road) {
-						// Check one tile beyond road strip
-						bool road_beyond = false;
-						for (int i = 0; i < count && !road_beyond; i++) {
-							koord d = along_x ? koord(i, 0) : koord(0, i);
-							if (grund_t *gr = welt->lookup_kartenboden(candidate + beyond_offs + d)) {
-								if (gr->hat_weg(road_wt) && !gr->has_two_ways() && !gr->is_halt()) {
-									road_beyond = true;
-								}
-							}
-						}
-						if (road_beyond) {
-							// Verify current road strip tiles can become building tiles after shift
-							bool shift_ok = true;
-							for (int i = 0; i < count && shift_ok; i++) {
-								koord d = along_x ? koord(i, 0) : koord(0, i);
-								grund_t *gr = welt->lookup_kartenboden(candidate + strip_offs + d);
-								if (!gr || gr->get_typ() != grund_t::boden || !gr->ist_natur()) {
-									shift_ok = false;
-								}
-							}
-							if (shift_ok) {
-								candidate = candidate + shift;
-								found_road = true;
-							}
-						}
-					}
-				};
 				switch (try_dir) {
 					case ribi_t::south:
-						try_road_or_shift(koord(0,1),  koord(0,h),   koord(0,h+1), w, true);
+						for (int x = 0; x < w && !found_road; x++) {
+							if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(x, h))) {
+								found_road = gr->hat_weg(road_wt);
+							}
+						}
+						if (!found_road) {
+							bool road_beyond = false;
+							for (int x = 0; x < w && !road_beyond; x++) {
+								if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(x, h+1))) {
+									road_beyond = gr->hat_weg(road_wt);
+								}
+							}
+							if (road_beyond) {
+								bool shift_ok = true;
+								for (int x = 0; x < w && shift_ok; x++) {
+									grund_t *gr = welt->lookup_kartenboden(candidate + koord(x, h));
+									if (!gr || gr->get_typ() != grund_t::boden || !gr->ist_natur()) {
+										shift_ok = false;
+									}
+								}
+								if (shift_ok) { candidate.y++; found_road = true; }
+							}
+						}
 						break;
 					case ribi_t::east:
-						try_road_or_shift(koord(1,0),  koord(w,0),   koord(w+1,0), h, false);
+						for (int y = 0; y < h && !found_road; y++) {
+							if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(w, y))) {
+								found_road = gr->hat_weg(road_wt);
+							}
+						}
+						if (!found_road) {
+							bool road_beyond = false;
+							for (int y = 0; y < h && !road_beyond; y++) {
+								if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(w+1, y))) {
+									road_beyond = gr->hat_weg(road_wt);
+								}
+							}
+							if (road_beyond) {
+								bool shift_ok = true;
+								for (int y = 0; y < h && shift_ok; y++) {
+									grund_t *gr = welt->lookup_kartenboden(candidate + koord(w, y));
+									if (!gr || gr->get_typ() != grund_t::boden || !gr->ist_natur()) {
+										shift_ok = false;
+									}
+								}
+								if (shift_ok) { candidate.x++; found_road = true; }
+							}
+						}
 						break;
 					case ribi_t::north:
-						try_road_or_shift(koord(0,-1), koord(0,0),   koord(0,-1),  w, true);
+						for (int x = 0; x < w && !found_road; x++) {
+							if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(x, 0))) {
+								found_road = gr->hat_weg(road_wt);
+							}
+						}
+						if (!found_road) {
+							bool road_beyond = false;
+							for (int x = 0; x < w && !road_beyond; x++) {
+								if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(x, -1))) {
+									road_beyond = gr->hat_weg(road_wt);
+								}
+							}
+							if (road_beyond) {
+								bool shift_ok = true;
+								for (int x = 0; x < w && shift_ok; x++) {
+									grund_t *gr = welt->lookup_kartenboden(candidate + koord(x, 0));
+									if (!gr || gr->get_typ() != grund_t::boden || !gr->ist_natur()) {
+										shift_ok = false;
+									}
+								}
+								if (shift_ok) { candidate.y--; found_road = true; }
+							}
+						}
 						break;
 					case ribi_t::west:
-						try_road_or_shift(koord(-1,0), koord(0,0),   koord(-1,0),  h, false);
+						for (int y = 0; y < h && !found_road; y++) {
+							if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(0, y))) {
+								found_road = gr->hat_weg(road_wt);
+							}
+						}
+						if (!found_road) {
+							bool road_beyond = false;
+							for (int y = 0; y < h && !road_beyond; y++) {
+								if (grund_t *gr = welt->lookup_kartenboden(candidate + koord(-1, y))) {
+									road_beyond = gr->hat_weg(road_wt);
+								}
+							}
+							if (road_beyond) {
+								bool shift_ok = true;
+								for (int y = 0; y < h && shift_ok; y++) {
+									grund_t *gr = welt->lookup_kartenboden(candidate + koord(0, y));
+									if (!gr || gr->get_typ() != grund_t::boden || !gr->ist_natur()) {
+										shift_ok = false;
+									}
+								}
+								if (shift_ok) { candidate.x--; found_road = true; }
+							}
+						}
 						break;
 				}
 				if (found_road) {
@@ -2710,7 +2762,7 @@ void stadt_t::check_bau_townhall(bool new_town)
 			welt->lookup_kartenboden(best_pos + offset)->set_text( name );
 		}
 
-		if (neugruendung || umziehen) {
+		if ((neugruendung || umziehen) && !pos_preselected) {
 			// check if any road already exists on any tile adjacent to the townhall footprint
 			bool has_existing_road = false;
 			{
@@ -2719,18 +2771,20 @@ void stadt_t::check_bau_townhall(bool new_town)
 				const int h = desc->get_y(layout);
 				// top and bottom rows
 				for (int x = -1; x <= w && !has_existing_road; x++) {
-					for (int dy = -1; dy<=h; dy++) {
-						if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, dy))) {
-							if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
-						}
+					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, -1))) {
+						if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
+					}
+					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, w))) {
+						if (gr->hat_weg(road_wt)) { has_existing_road = true; }
 					}
 				}
 				// left and right columns (excluding corners already checked)
 				for (int y = 0; y <= h-1 && !has_existing_road; y++) {
-					for (int dx : {-1, w}) {
-						if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(dx, y))) {
-							if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
-						}
+					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(-1, y))) {
+						if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
+					}
+					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(w, y))) {
+						if (gr->hat_weg(road_wt)) { has_existing_road = true; }
 					}
 				}
 			}
