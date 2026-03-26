@@ -1109,8 +1109,10 @@ void depot_frame_t::update_data()
 	if( cnv.is_bound() && !is_shown_convoy_coupled && cnv->get_schedule() && cnv->get_schedule()->get_count()==1) {
 		if( grund_t *gr_depot = welt->lookup(cnv->get_schedule()->at(0).pos) ) {
 			if( depot_t *dep=gr_depot->get_depot() ) {
-				// this convoy will be teleported to another depot
-				is_teleport_to_another_depot = true;
+				if(dep->can_accept_waytype(cnv->front()->get_desc()->get_waytype())) {
+					// this convoy will be teleported to another depot
+					is_teleport_to_another_depot = true;
+				}
 			}
 		}
 	}
