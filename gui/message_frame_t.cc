@@ -28,7 +28,7 @@ static sint32 categories[MAX_MESG_TABS] =
 	(1 << message_t::chat),
 	(1 << message_t::scenario),
 	(1 << message_t::problems),
-	(1 << message_t::traffic_jams) | (1 << message_t::warnings),
+	(1 << message_t::traffic_jams) | (1 << message_t::warnings) | (1 << message_t::stop_length),
 	(1 << message_t::full),
 	(1 << message_t::city) | (1 << message_t::industry),
 	(1 << message_t::ai),
@@ -37,14 +37,14 @@ static sint32 categories[MAX_MESG_TABS] =
 
 static char const* const tab_strings[]=
 {
-	"Chat",
-	"Scenario",
-	"Problems",
-	"Traffic",
-	"Stations",
-	"New Destinations",
-	"Competitors",
-	"General"
+	"Chat_msg",
+	"Scenario_msg",
+	"Problems_msg",
+	"Warnings_msg",
+	"Station_msg",
+	"Town_msg",
+	"Company_msg",
+	"Game_msg"
 };
 
 
@@ -81,19 +81,19 @@ message_frame_t::message_frame_t() :
 	end_table();
 
 	// add tabs for classifying messages
-	tabs.add_tab( &scrolly, "All" );
+	tabs.add_tab( &scrolly, translator::translate("All") );
 	tab_categories.append( -1 );
 
 	if (env_t::networkmode) {
-		tabs.add_tab( &scrolly, tab_strings[0] );
+		tabs.add_tab( &scrolly, translator::translate(tab_strings[0]) );
 		tab_categories.append( categories[0] );
 	}
 	if (welt->get_scenario()->is_scripted()) {
-		tabs.add_tab( &scrolly, tab_strings[1] );
+		tabs.add_tab( &scrolly, translator::translate(tab_strings[1]) );
 		tab_categories.append( categories[1] );
 	}
 	for(  int i=2;  i<MAX_MESG_TABS;  ++i  ) {
-		tabs.add_tab( &scrolly, tab_strings[i] );
+		tabs.add_tab( &scrolly, translator::translate(tab_strings[i]) );
 		tab_categories.append( categories[i] );
 	}
 	tabs.add_listener(this);
