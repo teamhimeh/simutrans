@@ -1525,7 +1525,12 @@ void schedule_gui_t::init_line_selector()
 
 	FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
 		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ) {
-			line_selector.new_component<line_color_line_scroll_item_t>(line);
+			if(  env_t::show_line_colors  ) {
+				line_selector.new_component<line_color_line_scroll_item_t>(line);
+			}
+			else {
+				line_selector.new_component<line_scrollitem_t>(line);
+			}
 		}
 		if(  !new_line.is_bound()  ) {
 			if(  schedule->matches( welt, line->get_schedule() )  ) {
