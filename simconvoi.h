@@ -397,12 +397,21 @@ private:
 	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
 	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
 
+	bool unloading_done;//unload once in stop
+
 	/**
 	 * The temporary speed limit for this convoy.
 	 * For example, as limited by a speed limit sign.
 	 * This value is set from schedule_entry_t, and can be edited from convoy detail window by user anytime.
 	 */
 	uint16 max_speed_kmh_of_convoi;
+
+	/**
+	 * The limitation of balance speed
+	 * This speed limit define the limited power of convoys
+	 * The actual power is the minimum of gear_and_power of desc vs. the value calculated by this speed limit.
+	 */
+	uint16 max_balance_speed_convoi;
 
 	/**
 	* Initialize all variables with default values.
@@ -987,6 +996,13 @@ public:
 	const char* send_to_depot_immediately(bool local);
 
 	/**
+	 * Sends convoi to a user-specified depot (by route or immediately).
+	 * @param depot_pos position of the target depot
+	 * @param immediate true = teleport (betrete_depot), false = route via schedule
+	 */
+	const char* send_to_specific_depot(koord3d depot_pos, bool immediate, bool local);
+
+	/**
 	 * this give the index of the next signal or the end of the route
 	 * convois will slow down before it, if this is not a waypoint or the cannot pass
 	 * The slowdown is done by the vehicle routines
@@ -1084,6 +1100,7 @@ public:
 
 	void request_signal_check_in_step() {signal_check_in_step_request = true;}
 	void set_signal_check_in_step_request_invalid() { signal_check_in_step_request = false; };
+	const bool is_signal_check_in_step_needed() {return signal_check_in_step_request;}
 
 	void calc_crossing_reservation();
 	vector_tpl<std::pair< uint16, uint16> > get_crossing_reservation_index() const { return crossing_reservation_index; }
@@ -1147,6 +1164,9 @@ public:
 	// if this bool value is true, reversing done, this convoy is no longer the leading (most parent) convoy.
 	bool reverse_convoy_coupling_at_waypoint();
 
+	// Reverse convoy coupling by user request
+	void reverse_convoy_coupling_by_user_request();
+
 	// coupling during running.
 	// Only for during leaving a depot
 	bool couple_convoi_during_running(convoihandle_t coupled);
@@ -1168,6 +1188,8 @@ public:
 
 	uint16 get_max_speed_kmh_of_convoi() const {return max_speed_kmh_of_convoi;}
 	void set_max_speed_kmh_of_convoi(uint16 n);
+	uint16 get_max_balance_speed_convoi() const {return max_balance_speed_convoi;}
+	void set_max_balance_speed_convoi(uint16 n) { max_balance_speed_convoi = n; }
 };
 
 #endif

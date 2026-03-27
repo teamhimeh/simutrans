@@ -15,6 +15,8 @@
 #include "../simcolor.h"
 #include "../simworld.h"
 #include "../simware.h"
+#include "simwin.h"
+#include "depot_picker.h"
 
 #include "../dataobj/translator.h"
 #include "../dataobj/loadsave.h"
@@ -165,7 +167,7 @@ void convoi_detail_t::init(convoihandle_t cnv)
 		add_table(3,1)->set_force_equal_columns(true);
 		{
 			move_to_depot_button.init(button_t::roundbox| button_t::flexible, "Teleport to Depot");
-			move_to_depot_button.set_tooltip("Remove vehicle from here and send to the nearest depot.");
+			move_to_depot_button.set_tooltip(translator::translate("Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)"));
 			move_to_depot_button.add_listener(this);
 			add_component(&move_to_depot_button);
 
@@ -227,7 +229,7 @@ void convoi_detail_t::init(convoihandle_t cnv)
 	{
 		add_component(&label_speed);
 
-		add_component(&label_balance_speed_kmh);
+		new_component<gui_fill_t>();
 
 		add_table(2,1)->set_force_equal_columns(true);
 		{
@@ -267,6 +269,31 @@ void convoi_detail_t::init(convoihandle_t cnv)
 	}
 	end_table();
 
+	// balance speed settings
+	add_table(3,1);
+	{
+		add_component(&label_balance_speed_kmh);
+
+		new_component<gui_fill_t>();
+
+		add_table(2,1)->set_force_equal_columns(true);
+		{
+			max_balance_speed_kmh_of_convoi_numberinput.set_width(60);
+			max_balance_speed_kmh_of_convoi_numberinput.set_value( cnv->get_max_balance_speed_convoi() );
+			max_balance_speed_kmh_of_convoi_numberinput.set_limits(0, 65535);
+			max_balance_speed_kmh_of_convoi_numberinput.set_increment_mode(1);
+			max_balance_speed_kmh_of_convoi_numberinput.add_listener(this);
+			add_component(&max_balance_speed_kmh_of_convoi_numberinput);
+
+			max_balance_speed_kmh_of_convoi_button.init(button_t::roundbox| button_t::flexible, "Set Balance Speed");
+			max_balance_speed_kmh_of_convoi_button.set_tooltip("Set acceleratable speed of this convoi");
+			max_balance_speed_kmh_of_convoi_button.add_listener(this);
+			add_component(&max_balance_speed_kmh_of_convoi_button);
+		}
+		end_table();
+	}
+	end_table();
+
 	add_component(&scrolly);
 
 	const sint32 cnv_kmh = (cnv->front()->get_waytype() == air_wt) ? speed_to_kmh(cnv->get_min_top_speed()) : cnv->get_speedbonus_kmh();
@@ -296,7 +323,7 @@ void convoi_detail_t::update_labels()
 		c = c->get_coupling_convoi();
 	}
 	uint32 balance_kmh = speed_to_kmh(convoi_t::calc_max_speed(total_power,total_weight,kmh_to_speed(test_balance_kmh)));
-	label_balance_speed_kmh.buf().printf(translator::translate("%s %d km/h"), translator::translate("terminal speed:"), balance_kmh);
+	label_balance_speed_kmh.buf().printf(translator::translate("%s %d km/h (%d km/h)"), translator::translate("terminal speed:"), cnv->get_max_balance_speed_convoi()>0? cnv->get_max_balance_speed_convoi() : balance_kmh, balance_kmh);
 	label_balance_speed_kmh.update();
 	label_power.buf().printf( translator::translate("Leistung: %d kW"), cnv->get_sum_power() );
 	label_power.update();
@@ -326,10 +353,10 @@ void convoi_detail_t::draw(scr_coord offset)
 	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()  ;
 	sale_button.enable(selling_allowed && !cnv->get_coupling_convoi().is_bound());
 	withdraw_button.enable(selling_allowed  &&  !cnv->get_coupling_convoi().is_bound()  &&  !cnv->is_coupled());
-	bool show_move_to_depot_button = selling_allowed  &&  !cnv->is_coupled();
-	if(  show_move_to_depot_button  &&  cnv->get_coupling_convoi().is_bound()  ) {
+	bool show_move_to_depot_button = selling_allowed;
+	if(  show_move_to_depot_button  &&  cnv->get_most_parent_convoi()->get_coupling_convoi().is_bound()  ) {
 		// Check if all child convoys can be sent to the same depot.
-		convoihandle_t c = cnv;
+		convoihandle_t c = cnv->get_most_parent_convoi();
 		while( c.is_bound() ) {
 			if(  (cnv->get_owner() != c->get_owner())  ||  (cnv->front()->get_desc()->get_waytype() != c->front()->get_desc()->get_waytype())  ) {
 				show_move_to_depot_button = false;
@@ -351,7 +378,12 @@ void convoi_detail_t::draw(scr_coord offset)
 		max_speed_kmh_of_convoi_numberinput.disable();
 	}
 	max_speed_kmh_of_convoi_button.enable(is_owner);
-
+	if (is_owner) {
+		max_balance_speed_kmh_of_convoi_numberinput.enable();
+	} else {
+		max_balance_speed_kmh_of_convoi_numberinput.disable();
+	}
+	max_balance_speed_kmh_of_convoi_button.enable(is_owner);
 
 	update_labels();
 
@@ -374,7 +406,12 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			return true;
 		}
 		else if(comp==&move_to_depot_button) {
-			cnv->call_convoi_tool( 'y', NULL );
+			if(  event_get_last_control_shift() & 2  ) {
+				// Ctrl+click: open depot picker to choose destination
+				create_win(new depot_picker_t(cnv, true), w_info, magic_depot_picker);
+			} else {
+				cnv->call_convoi_tool( 'y', NULL );
+			}
 			return true;
 		}
 		else if(comp==&withdraw_button) {
@@ -403,6 +440,12 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			cbuffer_t buf;
 			buf.printf( "%d", (uint16)max_speed_kmh_of_convoi_numberinput.get_value() );
 			cnv->call_convoi_tool( 'm', buf );
+			return true;
+		}
+		else if(comp==&max_balance_speed_kmh_of_convoi_button) {
+			cbuffer_t buf;
+			buf.printf( "%d", (uint16)max_balance_speed_kmh_of_convoi_numberinput.get_value() );
+			cnv->call_convoi_tool( 'b', buf );
 			return true;
 		}
 	}

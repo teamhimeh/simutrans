@@ -28,6 +28,7 @@
 #include "obj/gebaeude.h"
 
 #include "bauer/vehikelbauer.h"
+#include "simcity.h"
 
 #include "descriptor/building_desc.h"
 
@@ -47,6 +48,7 @@ depot_t::depot_t(loadsave_t *file) : gebaeude_t()
 	selected_sort_by = SORT_BY_DEFAULT;
 	last_selected_line = linehandle_t();
 	command_pending = false;
+	strcpy( depot_filter ,"");
 }
 
 
@@ -59,6 +61,8 @@ depot_t::depot_t(koord3d pos, player_t *player, const building_tile_desc_t *t) :
 	last_selected_line = linehandle_t();
 	command_pending = false;
 	replacement_seed = convoihandle_t();
+	strcpy( depot_filter ,"");
+	name = init_name();
 }
 
 
@@ -68,6 +72,23 @@ depot_t::~depot_t()
 	all_depots.remove(this);
 }
 
+const char *depot_t::make_depot_name(const char *type_name) const
+{
+	static char buf[256];
+	if (get_pos() != koord3d::invalid) {
+		if (stadt_t *city = welt->find_nearest_city(get_pos().get_2d())) {
+			snprintf(buf, sizeof(buf), "%s %s", city->get_name(), type_name);
+			return buf;
+		}
+	}
+	snprintf(buf, sizeof(buf), "%s", type_name);
+	return buf;
+}
+
+
+void depot_t::set_name(const char* new_name){
+	name = new_name;
+}
 
 // finds the next/previous depot relative to the current position
 depot_t *depot_t::find_depot( koord3d start, const obj_t::typ depot_type, const player_t *player, bool forward)
@@ -158,8 +179,6 @@ void replace_cars(convoihandle_t cnv, depot_t* depot) {
 			}
 		}
 	}
-	// Finally, start the replaced convoy
-	cnv->set_state(convoi_t::states::WAITING_FOR_LEAVING_DEPOT);
 }
 
 
@@ -167,7 +186,7 @@ void replace_cars(convoihandle_t cnv, depot_t* depot) {
  * first a convoy reaches the depot during its journey
  * second during loading a convoi is stored in a depot => only store it again
  */
-void depot_t::convoi_arrived(convoihandle_t acnv, bool schedule_adjust)
+void depot_t::convoi_arrived(convoihandle_t acnv, bool schedule_adjust, const bool coupled)
 {
 	for( uint32 i=0; i<convois.get_count(); i++ ) {
 		if (acnv==convois.at(i)) {
@@ -218,9 +237,10 @@ void depot_t::convoi_arrived(convoihandle_t acnv, bool schedule_adjust)
 		}
 	}
 	
-	if(  schedule_adjust  &&  replacement_seed.is_bound()  &&  replacement_seed!=acnv  ) {
+	if(  schedule_adjust  &&  replacement_seed.is_bound()  &&  replacement_seed!=acnv  &&  !coupled  ) {
 		// replace cars of the arrived convoy, then start it immediately.
 		replace_cars(acnv, this);
+		start_convoi(acnv, false);
 	}
 }
 
@@ -477,6 +497,23 @@ bool depot_t::start_convoi(convoihandle_t cnv, bool local_execution)
 		buf.clear();
 		buf.printf( translator::translate("Vehicle %s is coupled convoy, so it cannot depart alone!"), cnv->get_name() );
 		create_win( new news_img(buf), w_time_delete, magic_none);
+		return false;
+	}
+	// If this convoy has only 1 stop:another depot, teleport to there.
+	if(  cnv->get_schedule()->get_count()==1  ) {
+		if(grund_t *gr_depot = welt->lookup(cnv->get_schedule()->at(0).pos)) {
+			depot_t *dep = gr_depot->get_depot();
+			if(  dep && dep->get_owner()==get_owner() && dep->get_waytype()==get_waytype()  ) {
+				// find depot! move to there
+				convoihandle_t c = cnv;
+				while( c.is_bound() ){
+					remove_convoi(c);
+					c->betrete_depot(dep, true);
+					c=c->get_coupling_convoi();
+				}
+				return true;
+			}
+		}
 	}
 	// Check the start condition
 	if(  !can_start_convoi(cnv, local_execution)  ) {
@@ -637,11 +674,17 @@ void depot_t::rdwr(loadsave_t *file)
 {
 	gebaeude_t::rdwr(file);
 
+	
+	if(  file->get_OTRP_version()>= 52  ) {
+		file->rdwr_str(name);
+	}
+	else {
+		name = init_name();
+	}
 	rdwr_vehikel(vehicles, file);
 	if(  file->get_OTRP_version()>=24  ) {
 		convoi_t::rdwr_convoihandle_t(file, replacement_seed);
 	}
-	
 	if (file->is_version_less(81, 33)) {
 		// wagons are stored extra, just add them to vehicles
 		assert(file->is_loading());
@@ -775,13 +818,18 @@ void depot_t::update_all_win()
 	}
 }
 
-void bahndepot_t::rdwr_vehicles(loadsave_t *file) { 
+void bahndepot_t::rdwr_bahndepot(loadsave_t *file) { 
+	if(  file->get_OTRP_version()>= 52  ) {
+		file->rdwr_str(name);
+	}
+	else {
+		name = init_name();
+	}
 	depot_t::rdwr_vehikel(vehicles,file); 
 	if(  file->get_OTRP_version()>=24  ) {
 		convoi_t::rdwr_convoihandle_t(file, replacement_seed);
 	}
 }
-
 
 unsigned bahndepot_t::get_max_convoi_length() const
 {

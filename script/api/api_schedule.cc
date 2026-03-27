@@ -21,7 +21,7 @@ halthandle_t get_halt_from_koord3d(koord3d pos, const player_t *player )
 	if(  player == NULL  ) {
 		return halthandle_t();
 	}
-	return haltestelle_t::get_halt(pos, player);
+	return haltestelle_t::get_stoppable_halt(pos, player);
 }
 
 SQInteger schedule_constructor(HSQUIRRELVM vm) // instance, wt, entries
@@ -74,9 +74,12 @@ void append_entry(HSQUIRRELVM vm, SQInteger index, schedule_t* sched)
 	uint16 waiting_time_shift = 0;
 	get_slot(vm, "wait", waiting_time_shift, index);
 
+	uint32 stop_flags = 0;
+	get_slot(vm, "flags", stop_flags, index);
+
 	grund_t *gr = welt->lookup(pos);
 	if (gr) {
-		sched->append(gr, minimum_loading, waiting_time_shift);
+		sched->append(gr, minimum_loading, waiting_time_shift, stop_flags);
 	}
 }
 
@@ -89,6 +92,7 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 	// get instance pointer
 	schedule_t* sched = get_attached_instance<schedule_t>(vm, index, param<schedule_t*>::tag());
 	if (sched) {
+		linehandle_t const next_line = sched->get_next_line();
 		sched->remove_all();
 		// now read the entries
 		sq_pushstring(vm, "entries", -1);
@@ -107,6 +111,7 @@ schedule_t* script_api::param<schedule_t*>::get(HSQUIRRELVM vm, SQInteger index)
 		uint16 wait = 0;
 		get_slot(vm, "base_waiting_time", wait, index);
 		sched->set_additional_base_waiting_time(wait);
+		sched->set_next_line(next_line);
 	}
 	return sched;
 }
@@ -151,7 +156,13 @@ void export_schedule(HSQUIRRELVM vm)
 	 * Waiting time setting.
 	 */
 	integer wait;
+	/**
+	 * Stop flags bitmask (NO_LOAD=4, NO_UNLOAD=8, etc.).
+	 */
+	integer flags;
 #endif
+
+	create_slot(vm, "flags", 0);
 
 	/**
 	 * Returns halt at this entry position.

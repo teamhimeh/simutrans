@@ -31,6 +31,8 @@ can branch cityroad
 市道の分岐を許可
 Cityroad allow branch from this road
 この道路からの市道の分岐を許可する
+pedestrians do not enter 
+歩行者通行禁止
 Overtaking:
 追越設定:
 Can be cityroad:
@@ -51,8 +53,12 @@ intersection
 交差点
 Citycars are excluded.
 自家用車進入禁止
+Pedestrias are excluded.
+歩行者通行禁止
 Road Configuration
 道路の設定
+Way Configuration
+敷設時の設定
 citycars do not enter
 自家用車進入禁止
 set wayobj spacing
@@ -93,6 +99,8 @@ It will uncouple the child convoy here.
 後ろの編成を駅到着時に切り離します．
 Waiting for coupling! (%i->%i%%)
 連結相手を待機中 (%i->%i%%)
+Waiting for coupling. %i left!
+連結相手を待機中 (発車まで%i)
 Require parent convoy to enter.
 連結相手がいる時のみ進入を許可
 Advance to end
@@ -121,7 +129,7 @@ Please decouple the other convoy to edit the schedule.
 スケジュールを編集するには連結解除してください．
 Convoys length coupling done
 連結上限タイル数:
-If total length of convoys reaches this value, coupling done and depart(if 0, no limit).
+If total length of convoys reaches over this value, coupling done and depart(if 0, no limit).
 総編成長がこのタイル数に達した場合、連結待機を終了して発車します．0の場合は編成長による連結終了はありません．
 Copy Line
 路線複製
@@ -299,10 +307,12 @@ Teleport to Depot
 車庫に転送
 Teleport All to Depot
 全編成を車庫に転送
-Convoys are teleported to depot immediately
-路線のすべての編成を車庫に即座に転送します
-Remove vehicle from here and send to the nearest depot.
-全ての車両を車庫に転送します。
+Convoys are teleported to depot immediately (Ctrl+click to choose depot)
+路線のすべての編成を車庫に即座に転送します(Ctrlキーを押しながらクリックすると転送先の車庫を選べます)
+Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)
+車庫に転送します(Ctrlキーを押しながらクリックすると転送先の車庫を選べます)
+Sends the convoi to the nearest depot. Ctrl+click to choose depot.
+この編成を一番近い車庫に向かわせます。(Ctrlキーを押しながらクリックすると転送先の車庫を選べます)
 Max speed of line
 路線最高速度
 Limits the max speed of all convoys on this line.
@@ -311,6 +321,10 @@ Overwrite max speed of convoy
 編成最高速度を上書きする
 Overwrite max speed of convoy here.
 この地点に到達した編成の最高速度を設定した値で上書きします．
+Overwrite balance speed of convoy
+加速度設定を上書きする
+Overwrite balance speed of convoy here. This value define acceleration. The actual acceleration is determined by whichever is lower: this value or the vehicle's performance limit.
+この地点に到達した編成の最大加速度を上書きします．終端速度で加速度を定義します．実際の加速度は車両性能とこの値の遅いほうに基づきます．
 No overtake
 追い越し禁止
 Do not overtake other cars until this stop.
@@ -348,7 +362,7 @@ Show finances for transport type
 輸送タイプごとに表示する
 #------乗車区間------
 transfer interval
-乗車区間を区切る(I)
+乗車区間を区切る(V)
 Passengers who boarded outside the section get off at this stop.
 区間外からの乗客はこの停留所で降車します
 #------編成情報ウィンドウ------
@@ -427,6 +441,8 @@ To halt not found.
 到着停留所が見つかりません。
 No route found!
 経路が見つかりません！
+Show Non-Traveled Section
+乗車路線の乗車しない区間も地図に表示
 #------車庫内連結機能------
 Child convoy:
 後ろに連結する編成:
@@ -452,6 +468,10 @@ remove all vehicles
 全ての車両を片付ける
 remove all vehicles.
 この編成の全ての車両を片付けます
+Sell all vehicles
+車庫の全車両売却
+Sell all vehicles stored here.
+車庫に格納された全車両を売却します
 #------編成最高速度機能------
 Set Max Speed
 編成最高速度を設定
@@ -461,6 +481,10 @@ Max speed of convoi: UNLIMIT
 編成最高速度：UNLIMIT(制限無し)
 Max speed of convoi: %i km/h
 編成最高速度： %i km/h
+Set Balance Speed
+加速度を設定
+Set acceleratable speed of this convoi
+加速度を設定します。入力値は終端速度です。
 #------ルート計算方法------
 route by route cost
 ルートコスト法で計算
@@ -523,7 +547,36 @@ maximum_village_size
 村の人口上限:これ以上の人口の町は「都市city」となります(maximum_village_size)
 maximum_city_size
 都市の人口上限:これ以上の人口の町は「首都capital」となります(maximum_city_size)
+Show line colors
+路線の色を表示
+Show convoy loading level
+編成の乗車率を表示
+#------車両オフセット機能------
+\nVehicle offset: 
+車両オフセット量: 
+Offset mode:
+モード:
+Direction
+進行方向
+Absolute
+絶対値
+vehicle offset
+車両オフセット量
+Offset mode: Absolute
+モード:絶対値
+set offset value and mode: On->Absolute(same offset for N&S),OFF->Direction(offset different based on Difference)
+車両のオフセット量とモードの設定: ONなら対向車も同じ向きにオフセットされます．OFFなら対向車は進行方向に応じてオフセットされます．
+show/hide way offset labels
+車両オフセット量ラベルを表示/非表示
 #------その他の翻訳------
+Rotate Building
+建物を回転
+%s at (%i,%i) now private stop.
+%s (%i,%i) は私有駅になりました．
+(%s) now public way.
+(%s) は公共化されました．
+merge stop
+駅を統合
 Remove all waiting goods and pax
 この駅のすべての待機中の旅客と貨物を除去します
 Change to public player
@@ -586,6 +639,8 @@ Highlight
 町内の建物を表示
 Make building belong to
 建物をこの町の所属にする
+change city of citybuilding
+建物の所属都市を変更
 Station name already exists
 駅名が既に使用されています
 Line Memo:
@@ -614,3 +669,7 @@ Recreate halt name
 停車場名を再生成します
  Locked
 ゲーム速度固定
+Connected Factories
+接続産業
+Depots must be build on flat dead-end way tiles!
+この車庫は平坦な終端にしか建設できません!

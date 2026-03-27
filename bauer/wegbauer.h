@@ -10,6 +10,7 @@
 #include "../simtypes.h"
 #include "../dataobj/koord3d.h"
 #include "../tpl/vector_tpl.h"
+#include "../tpl/stringhashtable_tpl.h"
 
 
 class way_desc_t;
@@ -51,6 +52,9 @@ public:
 	static bool waytype_available( const waytype_t wtyp, uint16 time );
 
 	static const vector_tpl<const way_desc_t *>&  get_way_list(waytype_t, systemtype_t system_type);
+
+	/// @returns the full descriptor table (for iterating all registered ways)
+	static const stringhashtable_tpl<const way_desc_t *>& get_desc_table();
 
 
 	/**
@@ -125,6 +129,11 @@ private:
 	 */
 	overtaking_mode_t overtaking_mode;
 	uint8 street_flag;
+
+	/**
+	 * set offset value for vehicle drawing
+	 */
+	sint8 vehicle_offset;
 
 	/**
 	 * Only for elevated way
@@ -217,6 +226,7 @@ public:
 	void set_maximum(uint32 n) { maximum = n; }
 
 	void set_overtaking_mode(overtaking_mode_t o) { overtaking_mode = o; }
+	void set_vehicle_offset(sint8 a) { vehicle_offset = a; }
 	void set_street_flag(uint8 a) { street_flag = a; }
 	void set_height_offset(sint8 a) { height_offset = a; }
 

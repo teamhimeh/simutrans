@@ -2451,6 +2451,28 @@ char const* tool_plant_tree_t::move(player_t* const player, uint16 const b, koor
 }
 
 
+bool tool_plant_tree_t::init(player_t*)
+{
+	if (!tree_builder_t::has_trees()) {
+		return false;
+	}
+
+	// Validate default_param format if provided
+	if (default_param != NULL && default_param[0] != '\0') {
+		// Parameter format: "bb,name" where bb are '0' or '1' flags
+		// Minimum length is 4 characters (two flags + comma + at least one char)
+		if (strlen(default_param) < 4) {
+			return false;
+		}
+		if (default_param[2] != ',') {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
 const char *tool_plant_tree_t::work( player_t *player, koord3d pos )
 {
 	koord k(pos.get_2d());
@@ -2749,12 +2771,7 @@ bool tool_build_way_t::init( player_t *player, bool called_from_move )
 	}
 
 	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
-		if(  desc->get_waytype()==road_wt  ) {
-			create_win(new overtaking_mode_frame_t(player, this, desc->get_styp()==0), w_info, (ptrdiff_t)this);
-		}
-		else if(  desc->get_styp()==type_elevated  ) {
-			create_win(new height_offset_frame_t(player, this), w_info, (ptrdiff_t)this);
-		}
+		create_win(new overtaking_mode_frame_t(player, this, desc->get_styp()==0||desc->get_styp()==type_tram), w_info, (ptrdiff_t)this);
 	}
 	return desc!=NULL;
 }
@@ -2940,6 +2957,7 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	}
 	bauigel.set_overtaking_mode(mode);
 	bauigel.set_street_flag(flag);
+	bauigel.set_vehicle_offset(vehicle_offset);
 	if(  bauigel.get_route().get_count()>1  ) {
 		welt->mute_sound(true);
 		bauigel.build();
@@ -2967,6 +2985,7 @@ void tool_build_way_t::rdwr_custom_data(memory_rw_t *packet)
 	sint8 i = overtaking_mode;
 	uint8 a = street_flag;
 	sint8 b = height_offset;
+	sint8 c = vehicle_offset;
 	// If this tool is called from a shortcut key, overtaking_mode of the tool in a toolbar has to be used.
 	if(  packet->is_saving()  &&  look_toolbar  ) {
 		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
@@ -2974,14 +2993,17 @@ void tool_build_way_t::rdwr_custom_data(memory_rw_t *packet)
 			i = toolbar_tool->get_overtaking_mode();
 			a = toolbar_tool->get_street_flag();
 			b = toolbar_tool->get_height_offset();
+			c = toolbar_tool->vehicle_offset;
 		}
 	}
 	packet->rdwr_byte(i);
 	packet->rdwr_byte(a);
 	packet->rdwr_byte(b);
+	packet->rdwr_byte(c);
 	overtaking_mode = (overtaking_mode_t)i;
 	street_flag = a;
 	height_offset = b;
+	vehicle_offset = c;
 }
 
 
@@ -3096,16 +3118,29 @@ void tool_build_way_t::set_mode_str(char* str, overtaking_mode_t overtaking_mode
 }
 
 uint8 tool_build_way_t::get_flag_color(uint8 flag) {
-	switch (flag) {
-		case strasse_t::AVOID_CITYROAD|strasse_t::CITYCAR_NO_ENTRY:
+	if (  flag&strasse_t::CITYCAR_NO_ENTRY  ) {
+		if (  flag&strasse_t::AVOID_CITYROAD  ) {
+			if (  flag&strasse_t::PEDESTRIAN_NO_ENTRY  ) {
+				return COL_DARK_ORANGE;
+			}
 			return COL_ORANGE;
-		case strasse_t::CITYCAR_NO_ENTRY:
-			return COL_MAGENTA;
-		case strasse_t::AVOID_CITYROAD:
-			return COL_GREEN;
-		default:
-			return COL_YELLOW;
+		}
+		if (  flag&strasse_t::PEDESTRIAN_NO_ENTRY  ) {
+			return COL_DARK_RED;
+		}
+		return COL_MAGENTA;
 	}
+	if (  flag&strasse_t::AVOID_CITYROAD  ) {
+		if (  flag&strasse_t::PEDESTRIAN_NO_ENTRY  ) {
+			return COL_DARK_GREEN;
+		}
+		return COL_GREEN;
+	}
+	if (  flag&strasse_t::PEDESTRIAN_NO_ENTRY  ) {
+		return COL_DARK_YELLOW;
+	}
+	// default
+	return COL_YELLOW;
 }
 
 /* city road construction */
@@ -3119,6 +3154,7 @@ const char *tool_build_cityroad::do_work( player_t *player, const koord3d &start
 	way_builder_t bauigel(player);
 	bauigel.set_build_sidewalk(true);
 	bauigel.set_overtaking_mode(overtaking_mode);
+	bauigel.set_vehicle_offset(vehicle_offset);
 	calc_route( bauigel, start, end );
 	if(  bauigel.get_route().get_count()>1  ) {
 		welt->mute_sound(true);
@@ -3164,7 +3200,7 @@ bool tool_build_bridge_t::init( player_t *player )
 	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
 		return false;
 	}
-	if (is_ctrl_pressed()  &&  can_use_gui()  &&  desc->get_waytype()==road_wt  ) {
+	if (is_ctrl_pressed()  &&  can_use_gui()  ) {
 		create_win(new overtaking_mode_frame_t(player, this), w_info, (ptrdiff_t)this);
 	}
 	return desc!=NULL;
@@ -3197,7 +3233,7 @@ const char *tool_build_bridge_t::do_work( player_t *player, const koord3d &start
 {
 	const bridge_desc_t *desc = bridge_builder_t::get_desc(default_param);
 	if (end==koord3d::invalid) {
-		return bridge_builder_t::build( player, start, desc, overtaking_mode, street_flag );
+		return bridge_builder_t::build( player, start, desc, overtaking_mode, street_flag, vehicle_offset );
 	}
 	else {
 		const koord zv(ribi_type(end-start));
@@ -3207,7 +3243,7 @@ const char *tool_build_bridge_t::do_work( player_t *player, const koord3d &start
 		if (end2 != end) {
 			return "End position is not valid"; // could only happen for scripts
 		}
-		bridge_builder_t::build_bridge( player, start, end, zv, bridge_height, desc, way_builder_t::weg_search(desc->get_waytype(), desc->get_topspeed(), welt->get_timeline_year_month(), type_flat), overtaking_mode, street_flag);
+		bridge_builder_t::build_bridge( player, start, end, zv, bridge_height, desc, way_builder_t::weg_search(desc->get_waytype(), desc->get_topspeed(), welt->get_timeline_year_month(), type_flat), overtaking_mode, street_flag, vehicle_offset);
 		return NULL; // all checks are performed before building.
 	}
 }
@@ -3220,8 +3256,11 @@ void tool_build_bridge_t::rdwr_custom_data(memory_rw_t *packet)
 	ribi = (ribi_t::ribi)i;
 
 	sint8 j = overtaking_mode;
+	sint8 k = vehicle_offset;
 	packet->rdwr_byte(j);
+	packet->rdwr_byte(k);
 	overtaking_mode = (overtaking_mode_t)j;
+	vehicle_offset = k;
 	packet->rdwr_byte(street_flag);
 }
 
@@ -3453,7 +3492,7 @@ bool tool_build_tunnel_t::init( player_t *player )
 	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
 		return false;
 	}
-	if (is_ctrl_pressed()  &&  can_use_gui()  &&  desc->get_waytype()==road_wt  ) {
+	if (is_ctrl_pressed()  &&  can_use_gui()  ) {
 		create_win(new overtaking_mode_frame_t(player, this), w_info, (ptrdiff_t)this);
 	}
 	return desc!=NULL;
@@ -3575,7 +3614,7 @@ const char *tool_build_tunnel_t::do_work( player_t *player, const koord3d &start
 					}
 				}
 
-				return tunnel_builder_t::build( player, start.get_2d(), desc, !is_ctrl_pressed(), overtaking_mode, street_flag );
+				return tunnel_builder_t::build( player, start.get_2d(), desc, !is_ctrl_pressed(), overtaking_mode, street_flag, vehicle_offset );
 			}
 		}
 		return "Tunnel must start on single way!";
@@ -3587,6 +3626,7 @@ const char *tool_build_tunnel_t::do_work( player_t *player, const koord3d &start
 		welt->mute_sound(true);
 		bauigel.set_overtaking_mode(overtaking_mode);
 		bauigel.set_street_flag(street_flag);
+		bauigel.set_vehicle_offset(vehicle_offset);
 		bauigel.build();
 		welt->mute_sound(false);
 		welt->lookup_kartenboden(end.get_2d())->clear_flag(grund_t::marked);
@@ -3599,8 +3639,11 @@ void tool_build_tunnel_t::rdwr_custom_data(memory_rw_t *packet)
 {
 	two_click_tool_t::rdwr_custom_data(packet);
 	sint8 i = overtaking_mode;
+	sint8 j = vehicle_offset;
 	packet->rdwr_byte(i);
+	packet->rdwr_byte(j);
 	overtaking_mode = (overtaking_mode_t)i;
+	vehicle_offset = j;
 	packet->rdwr_byte(street_flag);
 }
 
@@ -5142,8 +5185,11 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 
 	halthandle_t halt;
 
+	player_t *halt_player = player;
+
 	if(  old_halt.is_bound()  ) {
 		gebaeude_t* gb = bd->find<gebaeude_t>();
+		halt_player = gb->get_owner();
 		const building_desc_t *old_desc = gb->get_tile()->get_desc();
 		if(  old_desc == desc  ) {
 			// already has the same station
@@ -5174,10 +5220,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		halt = haltestelle_t::create(k, player);
 	}
 	if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
-		hausbauer_t::build_station_on_diagonal_way(halt->get_owner(), bd->get_pos(), desc, ribi, halt);
+		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
 	else {
-		hausbauer_t::build_station_extension_depot(halt->get_owner(), bd->get_pos(), layout, desc, &halt);
+		hausbauer_t::build_station_extension_depot(halt_player, bd->get_pos(), layout, desc, &halt);
 	}
 	halt->recalc_station_type();
 
@@ -5665,10 +5711,7 @@ const char *tool_rotate_building_t::work( player_t *player, koord3d pos )
 char const* tool_build_roadsign_t::get_tooltip(player_t const*) const
 {
 	const roadsign_desc_t * desc = roadsign_t::find_desc(default_param);
-	if(desc) {
-		return tooltip_with_price( desc->get_name(), -desc->get_price() );
-	}
-	return NULL;
+	return desc ? tooltip_with_price_maintenance(welt, desc->get_name(), -desc->get_price(), desc->get_maintenance()) : NULL;
 }
 
 void tool_build_roadsign_t::draw_after(scr_coord k, bool dirty) const
@@ -6095,29 +6138,30 @@ const char *tool_build_depot_t::tool_depot_aux(player_t *player, koord3d pos, co
 		if(wegtype==water_wt) {
 			bd = welt->lookup_kartenboden(pos.get_2d());
 			if(!bd->is_water()) {
+				if(!bd->hat_weg(water_wt)) {
+					return "Ship depots must be built on water!";
+				}
 				bd = NULL;
 			}
 		}
 		if(bd==NULL) {
 			bd = tool_intern_koord_to_weg_grund(player,welt,pos,wegtype);
 		}
-		if(!bd  ||  bd->has_two_ways()) {
-			return NOTICE_DEPOT_BAD_POS;
+		if(!bd) {
+			return "Depots must be built on flat dead-end way tiles!";
+		}
+		else if(bd->has_two_ways()  ||  bd->is_halt()  ||  bd->get_depot()!=NULL) {
+			return "Tile not empty.";
 		}
 
 		// no depots on runways!
 		if(desc->get_extra()==air_wt  &&  bd->get_weg(air_wt)->get_desc()->get_styp()!=type_flat) {
-			return NOTICE_DEPOT_BAD_POS;
+			return "Depots cannot be built on runways!";
 		}
 
 		const char *p=bd->kann_alle_obj_entfernen(player);
 		if(p) {
 			return p;
-		}
-
-		// avoid building over a stop
-		if(bd->is_halt()  ||  bd->get_depot()!=NULL) {
-			return NOTICE_DEPOT_BAD_POS;
 		}
 
 		ribi_t::ribi ribi;
@@ -6151,14 +6195,14 @@ const char *tool_build_depot_t::tool_depot_aux(player_t *player, koord3d pos, co
 
 		if(bd->get_weg_hang()!=0) {
 			// must build on flat ground!
-			return NOTICE_DEPOT_BAD_POS;
+			return "Depots must be built on flat dead-end way tiles!";
 		}
 
 		int layout = 0;
 
 		if(desc->get_all_layouts() == 4) {
 			if(!ribi_t::is_single(ribi)) {
-				return NOTICE_DEPOT_BAD_POS;
+				return "Depots must be built on flat dead-end way tiles!";
 			}
 			switch(ribi) {
 				//case ribi_t::south:layout = 0;  break;
@@ -6168,18 +6212,18 @@ const char *tool_build_depot_t::tool_depot_aux(player_t *player, koord3d pos, co
 			}
 		} else if(desc->get_all_layouts() == 2) {
 			if(!ribi_t::is_straight(ribi)) {
-				return NOTICE_DEPOT_BAD_POS;
+				return "Depots must be built on flat dead-end way tiles!";
 			}
 			layout = ribi_t::is_straight_ew(ribi);
 		} else if(desc->get_all_layouts() == 1) {
 			if(!ribi_t::is_straight(ribi)) {
-				return NOTICE_DEPOT_BAD_POS;
+				return "Depots must be built on flat dead-end way tiles!";
 			}
 			// water depot can be layout=1.
 			layout = 0;
 		}
 		else {
-			return NOTICE_DEPOT_BAD_POS;
+			dbg->warning("tool_build_depot_t::tool_depot_aux()", "Broken depot name \"%s\"", desc->get_name());
 		}
 
 		hausbauer_t::build_station_extension_depot(player, bd->get_pos(), layout, desc );
@@ -7568,9 +7612,12 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 
 			for (int j = 0; j < 2; j++) {
 				if (weg_t* w = gr->get_weg_nr(j)) {
-					// no public way with signs
-					if (w->has_sign()) {
-						return NOTICE_UNSUITABLE_GROUND;
+					// no public way with private signs
+					if(  w->has_sign()  ) {
+						roadsign_t* sign = gr->find<roadsign_t>();
+						if(	 sign && sign->get_desc()->is_private_way()  ) {
+							return NOTICE_UNSUITABLE_GROUND;
+						}
 					}
 				}
 			}
@@ -7681,26 +7728,32 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 	sint64 workcost = -welt->scale_with_month_length(halt->calc_maintenance() * welt->get_settings().cst_make_public_months);
 
 	// check waycost and some forbidden cases too
-	FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
-		// make way public if any suitable
-		for(  int j=0;  j<2;  j++  ) {
-			if(  weg_t *w=i.grund->get_weg_nr(0)  ) {
-				if(  player_t::check_owner( player, w->get_owner() )  &&  w->get_owner()  ) {
-					// no public ways?
-					if(  welt->get_settings().get_disable_make_way_public()  ) {
-						return NOTICE_DISABLED_PUBLIC_WAY;
+	// when ctrl pressed, we only change halt, no check way!
+	if(!is_ctrl_pressed()) {
+		FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
+			// make way public if any suitable
+			for(  int j=0;  j<2;  j++  ) {
+				if(  weg_t *w=i.grund->get_weg_nr(j)  ) {
+					if(  player_t::check_owner( player, w->get_owner() )  &&  w->get_owner()  ) {
+						// no public ways?
+						if(  welt->get_settings().get_disable_make_way_public()  ) {
+							return NOTICE_DISABLED_PUBLIC_WAY;
+						}
+						// no public way with private signs
+						if(  w->has_sign()  ) {
+							roadsign_t* sign = i.grund->find<roadsign_t>();
+							if(	 sign && sign->get_desc()->is_private_way()  ) {
+								return NOTICE_UNSUITABLE_GROUND;
+							}
+						}
+						// compute maintainance cost
+						sint64 cost = w->get_desc()->get_maintenance();
+						// tunnel cost overwrites way cost
+						if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
+							cost = t->get_desc()->get_maintenance();
+						}
+						workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
 					}
-					// no public way with signs
-					if(  w->has_sign()  ) {
-						return NOTICE_UNSUITABLE_GROUND;
-					}
-					// compute maintainance cost
-					sint64 cost = w->get_desc()->get_maintenance();
-					// tunnel cost overwrites way cost
-					if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
-						cost = t->get_desc()->get_maintenance();
-					}
-					workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
 				}
 			}
 		}
@@ -8030,7 +8083,7 @@ const char *tool_pipette_t::work(player_t *pl, koord3d pos)
 				static tool_build_house_t t = tool_build_house_t();
 				t.cursor = tool_t::general_tool[TOOL_BUILD_HOUSE]->cursor;
 				param_str.clear();
-				param_str.printf("%d,%s",
+				param_str.printf("0%d%s",
 					gb->get_tile()->get_layout(), /*rotation*/
 					gb->get_tile()->get_desc()->get_name());
 				t.set_default_param(param_str);
@@ -8064,16 +8117,21 @@ const char *tool_pipette_t::work(player_t *pl, koord3d pos)
 			// if ctrl pressed, we only see way.
 			select_and_check(signal_t);
 			select_and_check(roadsign_t);
-			if(tool_t *wayobj_builder = gr->get_wayobj(gr->get_weg_nr(1)->get_waytype())->get_desc()->get_builder()) {
-				if (const char* err = allow_tool_check(gr->get_wayobj(gr->get_weg_nr(1)->get_waytype()), gr->get_wayobj(gr->get_weg_nr(1)->get_waytype())->get_desc(), pl)) {
-					return err;
+			if(gr->get_wayobj(gr->get_weg_nr(1)->get_waytype())){
+			  	if(tool_t *wayobj_builder = gr->get_wayobj(gr->get_weg_nr(1)->get_waytype())->get_desc()->get_builder()) {
+					if (const char* err = allow_tool_check(gr->get_wayobj(gr->get_weg_nr(1)->get_waytype()), gr->get_wayobj(gr->get_weg_nr(1)->get_waytype())->get_desc(), pl)) {
+						return err;
+					}
+					welt->set_tool(wayobj_builder, pl);
+					return NULL;
 				}
-				welt->set_tool(wayobj_builder, pl);
-				return NULL;
 			}
 		}
 		if (tool_t *way_builder = gr->get_weg_nr(1)->get_desc()->get_builder()) {
 			if (const char* err = allow_tool_check(gr->get_weg_nr(1), gr->get_weg_nr(1)->get_desc(), pl)) {
+				if(  gr->get_weg_nr(1)->get_owner()!=NULL  ) {
+					welt->switch_active_player(gr->get_weg_nr(1)->get_owner_nr(),false);
+				}
 				return err;
 			}
 			welt->set_tool(way_builder, pl);
@@ -8093,6 +8151,9 @@ const char *tool_pipette_t::work(player_t *pl, koord3d pos)
 		}
 		if (tool_t *way_builder = gr->get_weg_nr(0)->get_desc()->get_builder()) {
 			if (const char* err = allow_tool_check(gr->get_weg_nr(0), gr->get_weg_nr(0)->get_desc(), pl)) {
+				if(  gr->get_weg_nr(0)->get_owner()!=NULL  ) {
+					welt->switch_active_player(gr->get_weg_nr(0)->get_owner_nr(),false);
+				}
 				return err;
 			}
 			welt->set_tool(way_builder, pl);
@@ -8576,6 +8637,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'w' : toggle withdraw
  * 's' : change state to [number] (and maybe set open schedule flag)
  * 'l' : apply new line [number]
+ * 'L' : create new line
  * 'd' : go to nearest depot
  * 'y' : move to depoot immediately
  * 'r' : release the child convoy
@@ -8584,7 +8646,9 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'e' : toggle delay recovery
  * 't' : go to next stop
  * 'v' : reversing convoi direction
+ * 'c' : reversing coupling convoys
  * 'm' : apply max speed of convoy
+ * 'b' : apply balance speed (limit power)
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -8698,6 +8762,28 @@ bool tool_change_convoi_t::init( player_t *player )
 				}
 			}
 			break;
+		
+		case 'L': // create new line
+			{
+				schedule_t* schedule=cnv->get_schedule();
+				int ltype = schedule->get_type();
+				if(ltype < simline_t::truckline  ||  ltype > simline_t::narrowgaugeline) {
+					// invalid line type
+					break;
+				}
+				linehandle_t line = player->simlinemgmt.create_line( ltype, player, schedule );
+
+				// check scenario conditions
+				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
+					player->simlinemgmt.delete_line(line);
+					break;
+				}
+
+				line->get_schedule()->finish_editing();
+				
+				cnv->set_line(line);
+			}
+			break;
 
 		case 'n': // change no_load
 			cnv->set_no_load( !cnv->get_no_load() );
@@ -8735,10 +8821,34 @@ bool tool_change_convoi_t::init( player_t *player )
 
 		case 'y': // move to depot immediately
 		{
-			const char* msg = cnv->send_to_depot_immediately(is_local_execution());
+			const char* msg = cnv->get_most_parent_convoi()->send_to_depot_immediately(is_local_execution());
 
 			if (is_local_execution()) {
 				create_win( new news_img(msg), w_time_delete, magic_none);
+			}
+		}
+		break;
+
+		case 'D': // route to user-specified depot
+		{
+			sint16 x, y, z;
+			if (p && sscanf(p, "%hi,%hi,%hi", &x, &y, &z) == 3) {
+				const char* msg = cnv->send_to_specific_depot(koord3d(x, y, z), false, is_local_execution());
+				if (is_local_execution()) {
+					create_win(new news_img(msg), w_time_delete, magic_none);
+				}
+			}
+		}
+		break;
+
+		case 'Y': // teleport to user-specified depot
+		{
+			sint16 x, y, z;
+			if (p && sscanf(p, "%hi,%hi,%hi", &x, &y, &z) == 3) {
+				const char* msg = cnv->send_to_specific_depot(koord3d(x, y, z), true, is_local_execution());
+				if (is_local_execution()) {
+					create_win(new news_img(msg), w_time_delete, magic_none);
+				}
 			}
 		}
 		break;
@@ -8788,11 +8898,25 @@ bool tool_change_convoi_t::init( player_t *player )
 		}
 		break;
 
+		case 'c':
+		{
+			cnv->get_most_parent_convoi()->reverse_convoy_coupling_by_user_request();
+		}
+		break;
+
 		case 'm':
 		{
 			uint16 max_speed_kmh_of_convoi=0;
 			int count=sscanf( p, "%hi", &max_speed_kmh_of_convoi);
 			cnv->set_max_speed_kmh_of_convoi(max_speed_kmh_of_convoi);
+		}
+		break;
+
+		case 'b':
+		{
+			uint16 max_balance_speed_convoi=0;
+			int count=sscanf( p, "%hi", &max_balance_speed_convoi);
+			cnv->set_max_balance_speed_convoi(max_balance_speed_convoi);
 		}
 		break;
 	}
@@ -8879,6 +9003,8 @@ bool tool_change_line_t::init( player_t *player )
 				}
 
 				line->get_schedule()->sscanf_schedule( p );
+				// departure_slot_group_id is always the line's own ID for a newly created line
+				line->get_schedule()->set_departure_slot_group_id(line);
 				// check scenario conditions
 				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(line);
@@ -8911,6 +9037,23 @@ bool tool_change_line_t::init( player_t *player )
 					if(w) {
 						destroy_win( w );
 					}
+					// If the departure slot group changed, cascade-update all lines that were following this line.
+					linehandle_t new_group = linehandle_t();
+					for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+						player_t *pl = welt->get_player(pi);
+						if(  !pl  ) { continue; }
+						FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+							if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+								if(  !new_group.is_bound()  ) {
+									// set this line as a new group id for us.
+									new_group = other;
+								} else {
+									// set new departure slot group
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
+					}
 					player->simlinemgmt.delete_line(line);
 				}
 			}
@@ -8928,9 +9071,20 @@ bool tool_change_line_t::init( player_t *player )
 					}
 					schedule_t *schedule = line->get_schedule()->copy();
 					if (schedule->sscanf_schedule( p )  &&  (no_check()  ||  scenario_check_schedule(welt, player, schedule, can_use_gui())) ) {
+						const linehandle_t new_group = schedule->get_departure_slot_group_id();
 						schedule->finish_editing();
 						line->set_schedule( schedule );
 						line->get_owner()->simlinemgmt.update_line(line);
+						// If the departure slot group changed, cascade-update all lines that were following this line.
+						for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+							player_t *pl = welt->get_player(pi);
+							if(  !pl  ) { continue; }
+							FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+								if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
 					}
 					else {
 						// could not read schedule, do not assign
@@ -9048,6 +9202,7 @@ bool tool_change_line_t::init( player_t *player )
 					// if there is more than one convois => new line
 					if(  cnvs[i].get_count()>1  ) {
 						line = player->simlinemgmt.create_line( cnvs[i][0]->get_schedule()->get_type(), player, cnvs[i][0]->get_schedule() );
+						line->get_schedule()->set_departure_slot_group_id(line);
 						FOR(vector_tpl<convoihandle_t>, cnv, cnvs[i] ) {
 							line->add_convoy( cnv );
 							cnv->set_line( line );
@@ -9071,6 +9226,8 @@ bool tool_change_line_t::init( player_t *player )
 					break;
 				}
 				linehandle_t new_line = player->simlinemgmt.create_line( line->get_linetype(), player , line->get_schedule());
+				// copied line starts in its own departure slot group
+				new_line->get_schedule()->set_departure_slot_group_id(new_line);
 				// check scenario conditions
 				if (!scenario_check_schedule(welt, player, new_line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(new_line);
@@ -9126,6 +9283,7 @@ bool tool_change_line_t::init( player_t *player )
  * 'a' : appends a vehicle (+vehikel_name) uses the oldest
  * 'i' : inserts a vehicle in front (+vehikel_name) uses the oldest
  * 's' : sells a vehikel (+vehikel_name) uses the newest
+ * 'S' : sells all vehicles in this depot
  * 'r' : removes a vehikel (+number in convoi)
  * 'R' : removes all vehikels including (+number in convoi) to end
  * 'D' : removes all convoys' all vehikels from start to end
@@ -9135,6 +9293,7 @@ bool tool_change_line_t::init( player_t *player )
  * 'v' : sell convoi
  * 'V' : sell all convoys
  * 't' : reverse convoy direction
+ * 'N' : change depot name
  */
 bool tool_change_depot_t::init( player_t *player )
 {
@@ -9256,6 +9415,7 @@ bool tool_change_depot_t::init( player_t *player )
 		case 'a':   // append a vehicle
 		case 'i':   // insert a vehicle in front
 		case 's':   // sells a vehicle
+		case 'S':	// sells all vehicles
 		case 'r':   // removes a vehicle (assumes a valid depot)
 		case 'R': { // removes all vehicles to end (assumes a valid depot)
 			if(  tool=='r'  ||  tool=='R'  ) {
@@ -9285,6 +9445,11 @@ bool tool_change_depot_t::init( player_t *player )
 							depot->remove_vehicle(cnv, start_nr);
 						}
 					}
+				}
+			}
+			if(  tool=='S'  ) {
+				while(  depot->get_vehicle_list().get_count()  ) {
+					depot->sell_vehicle(depot->get_vehicle_list().at(0));
 				}
 			}
 			else {
@@ -9391,6 +9556,10 @@ bool tool_change_depot_t::init( player_t *player )
 		}
 		case 't': { // reverse convoy direction
 			cnv->set_reversing_needed(!cnv->is_reversing_needed());
+			break;
+		}
+		case 'N': { // change depot name
+			depot->set_name(p);
 			break;
 		}
 	}
@@ -9524,6 +9693,7 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * c:set end of choose signal
  * g:set end of guide signal
  * m:set margin of the stoplength of choose signal
+ * d:set use default route for choose signal
  * 
  */
 bool tool_change_roadsign_t::init( player_t* )
@@ -9624,6 +9794,19 @@ bool tool_change_roadsign_t::init( player_t* )
 					if(  signal_info_win  ) {
 						signal_info_win->update_data();
 					}
+				}
+			}
+		}
+		break;
+
+		case 'd':
+		// use default route for choose signal(before call find_route())
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_skip_default_route(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
 				}
 			}
 		}

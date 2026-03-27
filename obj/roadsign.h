@@ -43,11 +43,12 @@ protected:
 	uint8 choose_sign_flag;
 	enum choose_sign_state {
 		NONE = 0,
-		guide_signal   = 1U<<0,// guide signal for coupling
-		choose_signal  = 1U<<1,// choose signal
-		advance_to_end = 1U<<2,// advance to end
-		end_of_choose  = 1U<<3,// end of choose signal
-		end_of_guide   = 1U<<4 // end of guide signal (for searching coupling target)
+		guide_signal   	  	= 1U<<0,// guide signal for coupling
+		choose_signal  	  	= 1U<<1,// choose signal
+		advance_to_end 	  	= 1U<<2,// advance to end
+		end_of_choose  	 	= 1U<<3,// end of choose signal
+		end_of_guide   	 	= 1U<<4,// end of guide signal (for searching coupling target)
+		skip_default_route 	= 1U<<5 // use default calc_route() before call find_route().
 	};
 
 	uint8 choose_signal_margin_length;
@@ -179,6 +180,8 @@ public:
 	void set_end_of_choose(bool tf) { tf? choose_sign_flag|=end_of_choose:choose_sign_flag&=~end_of_choose; }
 	bool is_flag_end_of_guide() const { return (choose_sign_flag&end_of_guide)>0; }
 	void set_end_of_guide(bool tf) { tf? choose_sign_flag|=end_of_guide:choose_sign_flag&=~end_of_guide; }
+	bool is_skip_default_route() const { return (choose_sign_flag&skip_default_route)>0; }
+	void set_skip_default_route(bool tf) { tf? choose_sign_flag|=skip_default_route:choose_sign_flag&=~skip_default_route; }
 	uint8 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
 	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
@@ -223,6 +226,8 @@ public:
 	static const roadsign_desc_t *roadsign_search(roadsign_desc_t::types flag, const waytype_t wt, const uint16 time);
 
 	static const roadsign_desc_t *find_desc(const char *name) { return table.get(name); }
+
+	static const stringhashtable_tpl<const roadsign_desc_t *>& get_desc_table() { return table; }
 
 	static const vector_tpl<const roadsign_desc_t*>& get_available_signs(const waytype_t wt);
 };

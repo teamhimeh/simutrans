@@ -37,9 +37,12 @@ class schedule_t
 	// The line to which the convoy belongs when the schedule reaches its end.
 	linehandle_t next_line;
 
-	// the id of the departure slot group.
-	// defined in sint64 since uint64 value cannot be handled with rdwr_longlong
-	sint64 departure_slot_group_id;
+	// The "leader" line of the departure slot group.
+	// A line in its own group has this set to its own linehandle.
+	linehandle_t departure_slot_group_id;
+
+	// only used during migration from OTRP save version < 53
+	sint64 _legacy_departure_slot_group_id;
 
 	// The base waiting time of the schedule on the goods route search when TBGR is enabled.
 	// The unit is OTRP divided time, same as the departure time slot offset.
@@ -48,6 +51,8 @@ class schedule_t
 	static schedule_entry_t dummy_entry;
 
 	minivec_tpl<schedule_entry_t> entries;
+
+	bool minimap_route_search_found;
 
 	/**
 	 * Fix up current_stop value, which we may have made out of range
@@ -63,7 +68,7 @@ class schedule_t
 	}
 
 protected:
-	schedule_t() : editing_finished(false), current_stop(0), flags(0), max_speed(0), departure_slot_group_id(0), additional_base_waiting_time(0) {}
+	schedule_t() : editing_finished(false), current_stop(0), flags(0), max_speed(0), _legacy_departure_slot_group_id(0), additional_base_waiting_time(0), minimap_route_search_found(false) {}
 
 public:
 	enum schedule_type {
@@ -161,9 +166,9 @@ public:
 	void set_reverse_default(bool y) { y? flags |= REVERSE_DEFAULT : flags &= ~REVERSE_DEFAULT; }
 	uint16 get_max_speed() const { return max_speed; }
 	void set_max_speed(uint16 v) { max_speed = v; }
-	sint64 get_departure_slot_group_id() const { return departure_slot_group_id; }
-	void set_departure_slot_group_id(sint64 id) { departure_slot_group_id = id; }
-	void set_new_departure_slot_group_id();
+	linehandle_t get_departure_slot_group_id() const { return departure_slot_group_id; }
+	void set_departure_slot_group_id(linehandle_t line) { departure_slot_group_id = line; }
+	sint64 get_legacy_departure_slot_group_id() const { return _legacy_departure_slot_group_id; }
 
 	bool is_full_load_time() const { return (flags&FULL_LOAD_TIME)>0; }
 	void set_full_load_time(bool y) { y ? flags |= FULL_LOAD_TIME : flags &= ~FULL_LOAD_TIME; }
@@ -189,13 +194,13 @@ public:
 	/**
 	 * Inserts a coordinate at current_stop into the schedule.
 	 */
-	bool insert(const grund_t* gr, uint8 minimum_loading = 0, uint16 waiting_time_shift = 0, uint32 stop_flags = 0, uint16 max_speed_kmh_of_convoi = 0, uint16 length_coupling_done = 0, uint8 maximum_loading = 100);
+	bool insert(const grund_t* gr, uint8 minimum_loading = 0, uint16 waiting_time_shift = 0, uint32 stop_flags = 0, uint16 max_speed_kmh_of_convoi = 0, uint16 length_coupling_done = 0, uint8 maximum_loading = 100, uint16 balance_speed_kmh_of_convoi = 0);
 
 
 	/**
 	 * Appends a coordinate to the schedule.
 	 */
-	bool append(const grund_t* gr, uint8 minimum_loading = 0, uint16 waiting_time_shift = 0, uint32 stop_flags = 0, uint16 max_speed_kmh_of_convoi = 0, uint16 length_coupling_done = 0, uint8 maximum_loading = 100);
+	bool append(const grund_t* gr, uint8 minimum_loading = 0, uint16 waiting_time_shift = 0, uint32 stop_flags = 0, uint16 max_speed_kmh_of_convoi = 0, uint16 length_coupling_done = 0, uint8 maximum_loading = 100, uint16 balance_speed_kmh_of_convoi = 0);
 
 
 
@@ -211,8 +216,9 @@ public:
 
 	/**
 	 * Remove all entries from the schedule.
+	 * Attention! We unset next line (because the last entry is same as next_line->get_schedule()->at(0), and we clear all entries including it)!
 	 */
-	void remove_all() { entries.clear(); }
+	void remove_all() { unset_next_line(); entries.clear(); }
 
 	void move_entry_forward(uint8);
 	void move_entry_backward(uint8);
@@ -266,11 +272,12 @@ public:
 
 	static void get_schedule_flag_text(cbuffer_t& buf, schedule_t* schedule);
 
-	static sint64 issue_new_departure_slot_group_id();
-
 	// Returns the median journey time ticks between the given index halt and the previous halt (or waypoint).
 	// Returns Euclid distance / max_speed if no journey time record is available.
 	uint32 get_median_journey_time(uint8 index, uint32 max_speed_kmh) const;
+
+	bool is_minimap_route_search_found() const { return minimap_route_search_found; }
+	void set_minimap_route_search_found( bool val ) { minimap_route_search_found = val; }
 };
 
 

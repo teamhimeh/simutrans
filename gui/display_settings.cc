@@ -52,6 +52,10 @@ enum {
 	IDBTN_INFINITE_SCROLL,
 	IDBTN_RIBI_ARROW,
 	IDBTN_ONEWAY_RIBI_ONLY,
+	IDBTN_SHOW_LINE_COLOR,
+	IDBTN_SHOW_CONVOY_LOADINGLEVEL,
+	IDBTN_SHOW_WAY_OFFSET_LABEL,
+	IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES,
 	COLORS_MAX_BUTTONS, 
 };
 
@@ -462,6 +466,14 @@ traffic_settings_t::traffic_settings_t()
 	add_component(&convoy_tooltip, 2);
 	convoy_tooltip.add_listener(this);
 
+	buttons[IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES].init(button_t::square_state, "show only own vehicle states");
+	add_component(buttons+IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES,2);
+
+	buttons[IDBTN_SHOW_LINE_COLOR].init(button_t::square_state, "Show line colors");
+	add_component(buttons+IDBTN_SHOW_LINE_COLOR,2);
+	buttons[IDBTN_SHOW_CONVOY_LOADINGLEVEL].init(button_t::square_state, "Show convoy loading level");
+	add_component(buttons+IDBTN_SHOW_CONVOY_LOADINGLEVEL,2);
+
 	// Convoy follow mode
 	new_component<gui_label_t>("Convoi following mode");
 
@@ -493,6 +505,11 @@ traffic_settings_t::traffic_settings_t()
 	buttons[IDBTN_ONEWAY_RIBI_ONLY].init(button_t::square_state, "show directions only for oneway roads");
 	buttons[IDBTN_ONEWAY_RIBI_ONLY].pressed = env_t::show_oneway_ribi_only;
 	add_component(buttons+IDBTN_ONEWAY_RIBI_ONLY, 2);
+
+	// Show way offset label checkbox
+	buttons[ IDBTN_SHOW_WAY_OFFSET_LABEL ].init( button_t::square_state, "show way offset label" );
+	buttons[ IDBTN_SHOW_WAY_OFFSET_LABEL ].pressed = env_t::show_way_offset_label;
+	add_component( buttons + IDBTN_SHOW_WAY_OFFSET_LABEL, 2 );
 }
 
 bool traffic_settings_t::action_triggered( gui_action_creator_t *comp, value_t v )
@@ -682,6 +699,11 @@ bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 	case IDBTN_SHOW_WAITING_BARS:
 		env_t::show_names ^= 2;
 		break;
+	case IDBTN_SHOW_WAY_OFFSET_LABEL:
+		env_t::show_way_offset_label = !env_t::show_way_offset_label;
+		buttons[ IDBTN_SHOW_WAY_OFFSET_LABEL ].pressed = env_t::show_way_offset_label;
+		welt->set_dirty();
+		break;
 	case IDBTN_SHOW_SLICE_MAP_VIEW:
 		// see simtool.cc::tool_show_underground_t::init
 		grund_t::set_underground_mode( buttons[ IDBTN_SHOW_SLICE_MAP_VIEW ].pressed ? grund_t::ugm_none : grund_t::ugm_level, map_settings.inp_underground_level.get_value() );
@@ -717,6 +739,15 @@ bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 	case IDBTN_ONEWAY_RIBI_ONLY:
 		env_t::show_oneway_ribi_only ^= 1;
 		break;
+	case IDBTN_SHOW_LINE_COLOR:
+		env_t::show_line_colors ^= 1;
+		break;
+	case IDBTN_SHOW_CONVOY_LOADINGLEVEL:
+		env_t::show_convoy_loadinglevel ^= 1;
+		break;
+	case IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES:
+		env_t::show_only_own_vehicle_states ^= 1;
+		break;
 	default:
 		assert( 0 );
 	}
@@ -749,6 +780,12 @@ void color_gui_t::draw(scr_coord pos, scr_size size)
 	buttons[IDBTN_UNDERGROUND_VIEW].pressed = grund_t::underground_mode == grund_t::ugm_all;
 	buttons[IDBTN_TRANSPARENT_STATION_COVERAGE].pressed = env_t::use_transparency_station_coverage;
 	buttons[IDBTN_TRANSPARENT_INSTEAD_OF_HIDDEN].pressed = env_t::hide_with_transparency;
+	buttons[IDBTN_SHOW_LINE_COLOR].pressed = env_t::show_line_colors;
+	buttons[IDBTN_SHOW_LINE_COLOR].enable(env_t::show_vehicle_states==env_t::LINE_NAME_TOOLTIPS||env_t::show_vehicle_states==env_t::LINE_NAME_AND_STATES_TOOLTIPS);
+	buttons[IDBTN_SHOW_CONVOY_LOADINGLEVEL].pressed = env_t::show_convoy_loadinglevel;
+	buttons[IDBTN_SHOW_CONVOY_LOADINGLEVEL].enable(env_t::show_vehicle_states==env_t::LINE_NAME_TOOLTIPS||env_t::show_vehicle_states==env_t::LINE_NAME_AND_STATES_TOOLTIPS);
+	buttons[IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES].pressed = env_t::show_only_own_vehicle_states;
+	buttons[IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES].enable();
 	buttons[IDBTN_RIBI_ARROW].pressed = strasse_t::show_masked_ribi;
 	buttons[IDBTN_RIBI_ARROW].enable(skinverwaltung_t::ribi_arrow!=NULL);
 	buttons[IDBTN_ONEWAY_RIBI_ONLY].pressed = env_t::show_oneway_ribi_only;
