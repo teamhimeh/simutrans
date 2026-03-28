@@ -15,7 +15,7 @@ signal(s)
 	bt_stop_before_check.init( button_t::square_state, translator::translate("Stop before check") );
 	bt_stop_before_check.add_listener(this);
 	bt_stop_before_check.pressed = signal->is_stop_before_check();
-	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->is_choose_signal()  ) {
+	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->get_desc()->is_choose_sign()  ) {
 		add_component(&bt_stop_before_check);
 	}
 	
@@ -155,7 +155,7 @@ void signal_info_t::update_data()
 		numinp_tiles_margin.disable();
 		bt_stop_before_check.enable(signal->get_desc()->is_longblock_signal());
 	}
-	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->is_choose_signal()  ) {
+	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->get_desc()->is_choose_sign()  ) {
 		bt_stop_before_check.enable();
 	}
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
