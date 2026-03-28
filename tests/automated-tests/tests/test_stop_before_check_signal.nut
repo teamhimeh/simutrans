@@ -62,6 +62,8 @@ function test_stop_before_check_default_false()
 
 // ─── Test 2: set / get round-trip ─────────────────────────────────────────────
 // Verify that setting the flag and reading it back works for all three types.
+// Note: command_x.set_stop_before_check uses call_tool_init internally,
+//       which returns true (not null) on success; do not assert the return value.
 function test_stop_before_check_set_get()
 {
 	local pl   = player_x(0)
@@ -90,12 +92,12 @@ function test_stop_before_check_set_get()
 		ASSERT_TRUE(sig != null)
 		ASSERT_FALSE(sig.is_stop_before_check())
 
-		// Set to true.
-		ASSERT_EQUAL(command_x.set_stop_before_check(pl, pos, 1), null)
+		// Set to true – verify via is_stop_before_check(), not the return value.
+		command_x.set_stop_before_check(pl, pos, 1)
 		ASSERT_TRUE(sig.is_stop_before_check())
 
 		// Set back to false.
-		ASSERT_EQUAL(command_x.set_stop_before_check(pl, pos, 0), null)
+		command_x.set_stop_before_check(pl, pos, 0)
 		ASSERT_FALSE(sig.is_stop_before_check())
 	}
 
@@ -112,8 +114,8 @@ function test_stop_before_check_set_get()
 // ─── Shared helpers for convoy-based tests ────────────────────────────────────
 
 // Build infrastructure common to convoy tests:
-//   Track  : (4,0) – (4,14)
-//   Depot  : (4,0)
+//   Track     : (4,0) – (4,14)
+//   Depot     : (4,0)
 //   Station A : (4,2)
 //   Station B : (4,12)
 //   Signal    : (4,7)   (caller supplies the descriptor)
@@ -150,36 +152,30 @@ function _start_test_convoy(pl)
 		schedule_entry_x(coord3d(4, 12, 0), 0, 0)
 	]))
 	depot.start_all_convoys(pl)
-	sleep()   // let the simulation advance one tick
+	sleep()
 	return cnv
 }
 
 // Tear down everything built by _build_convoy_test_infra.
 function _remove_convoy_test_infra(pl)
 {
-	// Remove signal (if still present).
 	local sig = tile_x(4, 7, 0).find_object(mo_signal)
 	if (sig != null) {
 		command_x(tool_remover).work(pl, coord3d(4, 7, 0))
 	}
-	// Remove stations.
 	command_x(tool_remover).work(pl, coord3d(4,  2, 0))
 	command_x(tool_remover).work(pl, coord3d(4, 12, 0))
-	// Remove depot (may already be gone when convoy was destroyed from it).
 	command_x(tool_remover).work(pl, coord3d(4,  0, 0))
-	// Remove track.
 	command_x(tool_remove_way).work(
 	    pl, coord3d(4, 0, 0), coord3d(4, 14, 0), "" + wt_rail)
 }
 
 
-// ─── Test 3: simple signal – convoy must stop at signal ───────────────────────
+// ─── Test 3: simple signal – convoy must stop (is_waiting) at signal ──────────
 //
-// Without stop_before_check the signal can turn green while the convoy is still
-// approaching; the convoy may pass without fully stopping.
-// With stop_before_check the signal is held red (signal_clear = false,
-// restart_speed = -1) until the convoy stops completely, then the check runs.
-// We verify that the convoy reaches speed == 0 at y == 7 before proceeding.
+// With stop_before_check=true the signal is held red until the convoy is fully
+// waiting (is_waiting()==true); only then does the block check run.
+// We verify cnv.is_waiting() while cnv.get_pos().y == 7 (signal tile).
 function test_stop_before_check_simple_signal_convoy_stops()
 {
 	local pl   = player_x(0)
@@ -192,35 +188,32 @@ function test_stop_before_check_simple_signal_convoy_stops()
 	local sig = _build_convoy_test_infra(pl, rail, signal_desc)
 
 	// Enable stop_before_check.
-	ASSERT_EQUAL(command_x.set_stop_before_check(pl, coord3d(4, 7, 0), 1), null)
+	command_x.set_stop_before_check(pl, coord3d(4, 7, 0), 1)
 	ASSERT_TRUE(sig.is_stop_before_check())
-
-	// Signal must start red.
 	ASSERT_EQUAL(sig.get_state(), state_red)
 
 	local cnv = _start_test_convoy(pl)
 
 	debug.set_game_speed(5)
 
-	local stopped_at_signal = false   // convoy speed == 0 while at signal tile
-	local convoy_passed     = false   // convoy head moved past y == 7
+	local stopped_at_signal = false
+	local convoy_passed     = false
 	local max_steps = 3000
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos   = cnv.get_pos()
-		local speed = cnv.get_speed()   // km/h
+		local pos = cnv.get_pos()
 
-		// Record that convoy stopped exactly on the signal tile.
-		if (pos.y == 7 && speed == 0) {
+		// Convoy must enter waiting state ON the signal tile.
+		if (pos.y == 7 && cnv.is_waiting()) {
 			stopped_at_signal = true
-			// Signal must still be red at this moment.
+			// Signal must still be red while the convoy is waiting.
 			ASSERT_EQUAL(sig.get_state(), state_red)
 		}
 
-		// Once the convoy has passed the signal the test is done.
+		// After having stopped, the convoy must eventually proceed past y==7.
 		if (stopped_at_signal && pos.y > 7) {
 			convoy_passed = true
 			break
@@ -230,10 +223,9 @@ function test_stop_before_check_simple_signal_convoy_stops()
 	print("  stopped_at_signal: " + stopped_at_signal)
 	print("  convoy_passed:     " + convoy_passed)
 
-	ASSERT_TRUE(stopped_at_signal)   // convoy must have stopped at y==7
-	ASSERT_TRUE(convoy_passed)       // convoy must eventually continue
+	ASSERT_TRUE(stopped_at_signal)
+	ASSERT_TRUE(convoy_passed)
 
-	// Clean up.
 	cnv.destroy(pl)
 	sleep()
 	debug.set_game_speed(1)
@@ -242,7 +234,7 @@ function test_stop_before_check_simple_signal_convoy_stops()
 }
 
 
-// ─── Test 4: longblock signal – convoy must stop at signal ────────────────────
+// ─── Test 4: longblock signal – convoy must stop (is_waiting) at signal ───────
 function test_stop_before_check_longblock_signal_convoy_stops()
 {
 	local pl   = player_x(0)
@@ -254,11 +246,8 @@ function test_stop_before_check_longblock_signal_convoy_stops()
 
 	local sig = _build_convoy_test_infra(pl, rail, lb_desc)
 
-	// Enable stop_before_check.
-	ASSERT_EQUAL(command_x.set_stop_before_check(pl, coord3d(4, 7, 0), 1), null)
+	command_x.set_stop_before_check(pl, coord3d(4, 7, 0), 1)
 	ASSERT_TRUE(sig.is_stop_before_check())
-
-	// Signal must start red.
 	ASSERT_EQUAL(sig.get_state(), state_red)
 
 	local cnv = _start_test_convoy(pl)
@@ -273,10 +262,9 @@ function test_stop_before_check_longblock_signal_convoy_stops()
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos   = cnv.get_pos()
-		local speed = cnv.get_speed()
+		local pos = cnv.get_pos()
 
-		if (pos.y == 7 && speed == 0) {
+		if (pos.y == 7 && cnv.is_waiting()) {
 			stopped_at_signal = true
 			ASSERT_EQUAL(sig.get_state(), state_red)
 		}
@@ -301,9 +289,7 @@ function test_stop_before_check_longblock_signal_convoy_stops()
 }
 
 
-// ─── Test 5: choose signal – convoy must stop at signal ───────────────────────
-// For a minimal stop_before_check test we only need the choose signal on the
-// track; full choose-routing is not required.
+// ─── Test 5: choose signal – convoy must stop (is_waiting) at signal ──────────
 function test_stop_before_check_choose_signal_convoy_stops()
 {
 	local pl   = player_x(0)
@@ -315,11 +301,8 @@ function test_stop_before_check_choose_signal_convoy_stops()
 
 	local sig = _build_convoy_test_infra(pl, rail, ch_desc)
 
-	// Enable stop_before_check.
-	ASSERT_EQUAL(command_x.set_stop_before_check(pl, coord3d(4, 7, 0), 1), null)
+	command_x.set_stop_before_check(pl, coord3d(4, 7, 0), 1)
 	ASSERT_TRUE(sig.is_stop_before_check())
-
-	// Signal must start red.
 	ASSERT_EQUAL(sig.get_state(), state_red)
 
 	local cnv = _start_test_convoy(pl)
@@ -334,10 +317,9 @@ function test_stop_before_check_choose_signal_convoy_stops()
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos   = cnv.get_pos()
-		local speed = cnv.get_speed()
+		local pos = cnv.get_pos()
 
-		if (pos.y == 7 && speed == 0) {
+		if (pos.y == 7 && cnv.is_waiting()) {
 			stopped_at_signal = true
 			ASSERT_EQUAL(sig.get_state(), state_red)
 		}
@@ -362,9 +344,9 @@ function test_stop_before_check_choose_signal_convoy_stops()
 }
 
 
-// ─── Test 6: without the flag, convoy does NOT stop at signal ─────────────────
-// Complement test: when stop_before_check is false (default) the convoy
-// should be able to pass the signal without fully stopping at the signal tile.
+// ─── Test 6: without the flag, convoy does NOT wait at signal ─────────────────
+// Complement test: with stop_before_check=false (default) and an empty block
+// ahead, the convoy should pass the signal without ever entering waiting state.
 function test_stop_before_check_false_convoy_does_not_stop()
 {
 	local pl   = player_x(0)
@@ -383,20 +365,19 @@ function test_stop_before_check_false_convoy_does_not_stop()
 
 	debug.set_game_speed(5)
 
-	local stopped_at_signal = false   // convoy speed == 0 while at y == 7
-	local convoy_passed     = false
+	local waited_at_signal = false
+	local convoy_passed    = false
 	local max_steps = 3000
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos   = cnv.get_pos()
-		local speed = cnv.get_speed()
+		local pos = cnv.get_pos()
 
-		// Record a full stop on the signal tile.
-		if (pos.y == 7 && speed == 0) {
-			stopped_at_signal = true
+		// If the convoy is waiting on the signal tile, record it.
+		if (pos.y == 7 && cnv.is_waiting()) {
+			waited_at_signal = true
 		}
 
 		if (pos.y > 7) {
@@ -405,11 +386,11 @@ function test_stop_before_check_false_convoy_does_not_stop()
 		}
 	}
 
-	print("  stopped_at_signal (expected false): " + stopped_at_signal)
-	print("  convoy_passed:                      " + convoy_passed)
+	print("  waited_at_signal (expected false): " + waited_at_signal)
+	print("  convoy_passed:                     " + convoy_passed)
 
-	// Without the flag the convoy should pass without a full stop.
-	ASSERT_FALSE(stopped_at_signal)
+	// Without the flag the convoy should pass without entering waiting state.
+	ASSERT_FALSE(waited_at_signal)
 	ASSERT_TRUE(convoy_passed)
 
 	cnv.destroy(pl)

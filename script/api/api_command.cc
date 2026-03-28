@@ -425,11 +425,11 @@ call_tool_work build_sign_at(player_t* pl, koord3d start, const roadsign_desc_t*
 	return call_tool_work(TOOL_BUILD_ROADSIGN | GENERAL_TOOL, sign->get_name(), 0, pl, start);
 }
 
-call_tool_work set_signal_stop_before_check(player_t* pl, koord3d pos, int val)
+call_tool_init set_signal_stop_before_check(player_t* pl, koord3d pos, int val)
 {
 	cbuffer_t buf;
 	buf.printf("%hi,%hi,%hi,%hi,t", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
-	return call_tool_work(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl, pos);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
 }
 
 call_tool_work change_climate_at(player_t* pl, koord3d start, int climate)
