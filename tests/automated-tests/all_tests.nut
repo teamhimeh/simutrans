@@ -24,6 +24,7 @@ include("tests/test_powerline")
 include("tests/test_reservation")
 include("tests/test_scenario")
 include("tests/test_sign")
+include("tests/test_stop_before_check_signal")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
@@ -148,6 +149,12 @@ all_tests <- [
 	test_sign_build_signal_multiple,
 	test_sign_signal_turns_red_on_leading_vehicle,
 	test_sign_signal_when_player_removed,
+	test_stop_before_check_default_false,
+	test_stop_before_check_set_get,
+	test_stop_before_check_simple_signal_convoy_stops,
+	test_stop_before_check_longblock_signal_convoy_stops,
+	test_stop_before_check_choose_signal_convoy_stops,
+	test_stop_before_check_false_convoy_does_not_stop,
 	test_slope_to_dir,
 	test_slope_set_and_restore,
 	test_slope_get_price,
