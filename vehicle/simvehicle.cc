@@ -4098,6 +4098,13 @@ bool rail_vehicle_t::is_signal_clear(uint16 next_block, sint32 &restart_speed, b
 	// simple signal: fail, if next block is not free
 	if(  sig_desc->is_simple_signal()  ) {
 
+		// if this signal check only when convoy is stop:
+		if(  !cnv->is_waiting()&&sig->is_stop_before_check()  ) {
+			sig->set_state( roadsign_t::STATE_RED );
+			restart_speed = 0;
+			return false;
+		}
+
 		uint16 next_signal, next_crossing;
 		if(  block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false )  ) {
 			sig->set_state( roadsign_t::STATE_GREEN );
