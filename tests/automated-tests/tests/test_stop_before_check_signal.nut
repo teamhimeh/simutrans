@@ -229,7 +229,7 @@ function test_stop_before_check_simple_signal_convoy_stops()
 
 		// do not pre-check before stop
 		if (!stopped_at_signal && pos.y == 6 && speed > 0) {
-			if (sig.get_state() == roadsign_t.STATE_RED) {
+			if (sig.get_state() == state_red) {
 				saw_red_before_signal = true
 			}
 		}
@@ -347,6 +347,7 @@ function test_stop_before_check_choose_signal_convoy_stops()
 	local convoy_passed     = false
 	local saw_red_before_signal = false
 	local max_steps = 3000
+	local prev_y = cnv.get_pos().y
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
@@ -357,7 +358,7 @@ function test_stop_before_check_choose_signal_convoy_stops()
 
 		// do not pre-check before stop
 		if (!stopped_at_signal && pos.y == 6 && speed > 0) {
-			if (sig.get_state() == roadsign_t.STATE_RED) {
+			if (sig.get_state() == state_red) {
 				saw_red_before_signal = true
 			}
 		}
@@ -371,6 +372,7 @@ function test_stop_before_check_choose_signal_convoy_stops()
 			convoy_passed = true
 			break
 		}
+		prev_y = pos.y
 	}
 
 	print("  saw_red_before_signal: " + saw_red_before_signal)
