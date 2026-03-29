@@ -383,18 +383,23 @@ function test_stop_before_check_false_convoy_does_not_stop()
 
 	debug.set_game_speed(5)
 
+	local signal_pre_check = false
 	local convoy_passed = false
 	local max_steps = 3000
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
 		if (!cnv.is_valid()) break
-		if (cnv.get_pos().y > 7) {
+		if (cnv.get_pos().y==7 && sig.get_state()==state_green) {
+			signal_pre_check = true
+		}
+		if (signal_pre_check && cnv.get_pos().y > 7) {
 			convoy_passed = true
 			break
 		}
 	}
 
+	print("  signal_pre_check:" + signal_pre_check)
 	print("  convoy_passed: " + convoy_passed)
 
 	debug.set_game_speed(1)
@@ -404,6 +409,6 @@ function test_stop_before_check_false_convoy_does_not_stop()
 		sleep()
 	}
 	_remove_convoy_test_infra(pl)
-
+	ASSERT_TRUE(signal_pre_check)
 	ASSERT_TRUE(convoy_passed)
 }
