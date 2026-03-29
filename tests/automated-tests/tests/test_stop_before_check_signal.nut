@@ -242,10 +242,12 @@ function test_stop_before_check_simple_signal_convoy_stops()
 	// If an assertion below fails the world is still left clean for the next
 	// test (prevents cascade failures).
 	debug.set_game_speed(1)
-	if (cnv.is_valid()) cnv.destroy(pl)
-	sleep()
+	if (cnv.is_valid()) {
+		cnv.destroy(pl)
+		sleep()
+		sleep() // make sure the convoy is destroyed (mirrors test_transport pattern)
+	}
 	_remove_convoy_test_infra(pl)
-	RESET_ALL_PLAYER_FUNDS()
 
 	ASSERT_TRUE(stopped_at_signal)
 	ASSERT_TRUE(convoy_passed)
@@ -295,10 +297,12 @@ function test_stop_before_check_longblock_signal_convoy_stops()
 	print("  convoy_passed:     " + convoy_passed)
 
 	debug.set_game_speed(1)
-	if (cnv.is_valid()) cnv.destroy(pl)
-	sleep()
+	if (cnv.is_valid()) {
+		cnv.destroy(pl)
+		sleep()
+		sleep()
+	}
 	_remove_convoy_test_infra(pl)
-	RESET_ALL_PLAYER_FUNDS()
 
 	ASSERT_TRUE(stopped_at_signal)
 	ASSERT_TRUE(convoy_passed)
@@ -348,10 +352,12 @@ function test_stop_before_check_choose_signal_convoy_stops()
 	print("  convoy_passed:     " + convoy_passed)
 
 	debug.set_game_speed(1)
-	if (cnv.is_valid()) cnv.destroy(pl)
-	sleep()
+	if (cnv.is_valid()) {
+		cnv.destroy(pl)
+		sleep()
+		sleep()
+	}
 	_remove_convoy_test_infra(pl)
-	RESET_ALL_PLAYER_FUNDS()
 
 	ASSERT_TRUE(stopped_at_signal)
 	ASSERT_TRUE(convoy_passed)
@@ -392,10 +398,12 @@ function test_stop_before_check_false_convoy_does_not_stop()
 	print("  convoy_passed: " + convoy_passed)
 
 	debug.set_game_speed(1)
-	if (cnv.is_valid()) cnv.destroy(pl)
-	sleep()
+	if (cnv.is_valid()) {
+		cnv.destroy(pl)
+		sleep()
+		sleep()
+	}
 	_remove_convoy_test_infra(pl)
-	RESET_ALL_PLAYER_FUNDS()
 
 	ASSERT_TRUE(convoy_passed)
 }
