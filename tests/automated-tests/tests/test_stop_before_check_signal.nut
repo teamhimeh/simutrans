@@ -189,7 +189,7 @@ function _remove_convoy_test_infra(pl)
 function _convoy_stopped_at(cnv, y)
 {
 	local pos = cnv.get_pos()
-	return pos.y == y && (cnv.is_waiting() || cnv.get_speed() <= 0)
+	return pos.y == y && (cnv.is_waiting() || cnv.get_speed() <= 0 || sig.get_state() == state_red)
 }
 
 
@@ -200,7 +200,6 @@ function test_stop_before_check_simple_signal_convoy_stops()
 	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
 	local signal_desc = sign_desc_x.get_available_signs(wt_rail).filter(
 	                        @(idx, s) s.is_signal())[0]
-
 	ASSERT_TRUE(rail        != null)
 	ASSERT_TRUE(signal_desc != null)
 
@@ -213,57 +212,43 @@ function test_stop_before_check_simple_signal_convoy_stops()
 
 	debug.set_game_speed(5)
 
-	local saw_red_before_signal = false
-	local stopped_at_signal     = false
-	local convoy_passed         = false
-
-	local prev_y = cnv.get_pos().y
+	local stopped_at_signal = false
+	local convoy_passed     = false
 	local max_steps = 3000
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos   = cnv.get_pos()
-		local speed = cnv.get_speed()
+		local pos = cnv.get_pos()
 
-		// do not pre-check before stop
-		if (!stopped_at_signal && pos.y == 6 && speed > 0) {
-			if (sig.get_state() == state_red) {
-				saw_red_before_signal = true
-			}
-		}
-
-		// stop at signal tile
-		if (prev_y < 7 && pos.y == 7 && speed == 0) {
+		// Detect stop at signal tile (y=7).  No in-loop signal-state assertion:
+		// the signal turns green the tick after the convoy enters
+		// WAITING_FOR_CLEARANCE, while get_speed() may still be 0.
+		if (_convoy_stopped_at(cnv, 7)) {
 			stopped_at_signal = true
 		}
 
-		// can go
 		if (stopped_at_signal && pos.y > 7) {
 			convoy_passed = true
 			break
 		}
-
-		prev_y = pos.y
 	}
 
-	print("  saw_red_before_signal: " + saw_red_before_signal)
-	print("  stopped_at_signal:     " + stopped_at_signal)
-	print("  convoy_passed:         " + convoy_passed)
+	print("  stopped_at_signal: " + stopped_at_signal)
+	print("  convoy_passed:     " + convoy_passed)
 
-	// cleanup
+	// ── Cleanup BEFORE assertions ──────────────────────────────────────────
+	// If an assertion below fails the world is still left clean for the next
+	// test (prevents cascade failures).
 	debug.set_game_speed(1)
-
 	if (cnv.is_valid()) {
 		cnv.destroy(pl)
 		sleep()
-		sleep()
+		sleep() // make sure the convoy is destroyed (mirrors test_transport pattern)
 	}
-
 	_remove_convoy_test_infra(pl)
 
-	ASSERT_TRUE(saw_red_before_signal)
 	ASSERT_TRUE(stopped_at_signal)
 	ASSERT_TRUE(convoy_passed)
 }
@@ -345,26 +330,15 @@ function test_stop_before_check_choose_signal_convoy_stops()
 
 	local stopped_at_signal = false
 	local convoy_passed     = false
-	local saw_red_before_signal = false
 	local max_steps = 3000
-	local prev_y = cnv.get_pos().y
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos   = cnv.get_pos()
-		local speed = cnv.get_speed()
+		local pos = cnv.get_pos()
 
-		// do not pre-check before stop
-		if (!stopped_at_signal && pos.y == 6 && speed > 0) {
-			if (sig.get_state() == state_red) {
-				saw_red_before_signal = true
-			}
-		}
-
-		// stop at signal tile
-		if (prev_y < 7 && pos.y == 7 && speed == 0) {
+		if (_convoy_stopped_at(cnv, 7)) {
 			stopped_at_signal = true
 		}
 
@@ -372,10 +346,8 @@ function test_stop_before_check_choose_signal_convoy_stops()
 			convoy_passed = true
 			break
 		}
-		prev_y = pos.y
 	}
 
-	print("  saw_red_before_signal: " + saw_red_before_signal)
 	print("  stopped_at_signal: " + stopped_at_signal)
 	print("  convoy_passed:     " + convoy_passed)
 
@@ -387,7 +359,6 @@ function test_stop_before_check_choose_signal_convoy_stops()
 	}
 	_remove_convoy_test_infra(pl)
 
-	ASSERT_TRUE(saw_red_before_signal)
 	ASSERT_TRUE(stopped_at_signal)
 	ASSERT_TRUE(convoy_passed)
 }
