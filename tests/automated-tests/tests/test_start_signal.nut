@@ -7,20 +7,21 @@
 // position (station/loading point) instead of advancing to the signal tile.
 //
 // Contrast with default behaviour (is_start_signal=false):
-//   The convoy advances to the signal tile and enters WAITING_FOR_CLEARANCE
-//   there.
+//   The convoy advances past the station toward the signal tile even when the
+//   block ahead is occupied.
 //
 // Infrastructure uses x=8 to avoid coordinate collision with other tests.
+// The test map is 16x16 (valid coordinates 0-15); all y values stay ≤ 14.
 //
-// Layout for convoy tests (x=8, vertical track):
-//   y= 0 : depot_A          (convoy_1 starts here)
-//   y= 2 : station_A        (convoy_1 first stop; where it waits with RED signal)
-//   y= 7 : signal           (the signal under test)
-//   y=12 : station_B        (convoy_1 second stop; convoy_2 blocks here)
-//   y=20 : depot_B          (convoy_2 blocker starts here)
+// Layout for convoy tests (x=8, vertical track y=0..14):
+//   y= 0 : depot_A     -- convoy_1 leaves from here
+//   y= 2 : station_A   -- convoy_1 first stop; waits here when start_signal is RED
+//   y= 7 : signal       -- the signal under test (start_signal flag)
+//   y=10 : station_B   -- convoy_1 second stop; convoy_2 (blocker) loads here
+//   y=14 : depot_B     -- convoy_2 (blocker) departs from here
 //
-// NOTE: convoy_2 has a 100 % minimum-loading schedule so it stays at
-// station_B indefinitely, keeping the block y=8..y=12 occupied.
+// convoy_2 has 200 % min-load at station_B so it never departs;
+// its reserved track keeps the block y=8..y=10 occupied.
 //
 
 
@@ -114,20 +115,22 @@ function test_start_signal_set_get()
 
 // ─── Shared helpers for convoy-based tests ────────────────────────────────────
 
+// Build all infrastructure for tests 3-5.
+// Returns the signal object at (8,7,0).
 function _build_start_signal_infra(pl, rail, signal_desc)
 {
-	ASSERT_EQUAL(command_x.build_way(pl, coord3d(8, 0, 0), coord3d(8, 20, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(8, 0, 0), coord3d(8, 14, 0), rail, true), null)
 
 	local station_desc = building_desc_x.get_available_stations(
 	                         building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
 	ASSERT_TRUE(station_desc != null)
 	ASSERT_EQUAL(command_x.build_station(pl, coord3d(8,  2, 0), station_desc), null)
-	ASSERT_EQUAL(command_x.build_station(pl, coord3d(8, 12, 0), station_desc), null)
+	ASSERT_EQUAL(command_x.build_station(pl, coord3d(8, 10, 0), station_desc), null)
 
 	local depot_desc = get_depot_by_wt(wt_rail)
 	ASSERT_TRUE(depot_desc != null)
 	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(8,  0, 0), depot_desc), null)
-	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(8, 20, 0), depot_desc), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(8, 14, 0), depot_desc), null)
 
 	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(8, 7, 0), signal_desc), null)
 	local sig = tile_x(8, 7, 0).find_object(mo_signal)
@@ -142,15 +145,15 @@ function _remove_start_signal_infra(pl)
 		ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 7, 0)), null)
 	}
 	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8,  2, 0)), null)
-	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 12, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 10, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8,  0, 0)), null)
-	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 20, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 14, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remove_way).work(
-	    pl, coord3d(8, 0, 0), coord3d(8, 20, 0), "" + wt_rail), null)
+	    pl, coord3d(8, 0, 0), coord3d(8, 14, 0), "" + wt_rail), null)
 }
 
-// convoy_1: depot_A(8,0) → station_A(8,2) → station_B(8,12), departs immediately.
-function _start_convoy_a(pl)
+// convoy_1: depot_A(8,0) → station_A(8,2) → station_B(8,10), departs immediately.
+function _start_convoy_1(pl)
 {
 	local depot = depot_x(8, 0, 0)
 	depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
@@ -160,25 +163,25 @@ function _start_convoy_a(pl)
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
 	cnv.change_schedule(pl, schedule_x(wt_rail, [
 		schedule_entry_x(coord3d(8,  2, 0), 0, 0),
-		schedule_entry_x(coord3d(8, 12, 0), 0, 0)
+		schedule_entry_x(coord3d(8, 10, 0), 0, 0)
 	]))
 	depot.start_all_convoys(pl)
 	sleep()
 	return cnv
 }
 
-// convoy_2: blocker.  depot_B(8,20) → station_B(8,12) with 200 % min-load
-// so it never departs and the block y=8..y=12 remains occupied.
-function _start_convoy_b(pl)
+// convoy_2: blocker.  depot_B(8,14) → station_B(8,10) with 200% min-load
+// so it never departs; its reserved track keeps block y=8..y=10 occupied.
+function _start_convoy_2(pl)
 {
-	local depot = depot_x(8, 20, 0)
+	local depot = depot_x(8, 14, 0)
 	depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
 	local cnv = depot.get_convoy_list()[0]
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
 	cnv.change_schedule(pl, schedule_x(wt_rail, [
-		schedule_entry_x(coord3d(8, 12, 0), 200, 0)  // 200% min-load → stays at station_B
+		schedule_entry_x(coord3d(8, 10, 0), 200, 0)  // 200% min-load → stays at station_B
 	]))
 	depot.start_all_convoys(pl)
 	sleep()
@@ -202,23 +205,23 @@ function test_start_signal_convoy_stays_at_station()
 
 	debug.set_game_speed(5)
 
-	// Start convoy_2 (blocker); wait until it reaches station_B (y≤12).
-	local cnv2 = _start_convoy_b(pl)
-	for (local i = 0; i < 4000 && cnv2.is_valid() && cnv2.get_pos().y > 12; i++) {
+	// Start blocker first; wait until it reaches station_B (y=10).
+	local cnv2 = _start_convoy_2(pl)
+	for (local i = 0; i < 4000 && cnv2.is_valid() && cnv2.get_pos().y > 10; i++) {
 		sleep()
 	}
 
 	// Start convoy_1.
-	local cnv1 = _start_convoy_a(pl)
+	local cnv1 = _start_convoy_1(pl)
 
-	// Wait for convoy_1 to arrive at station_A (y≤2).
+	// Wait for convoy_1 to arrive at station_A (y=2).
 	for (local i = 0; i < 4000; i++) {
 		sleep()
 		if (!cnv1.is_valid()) break
 		if (cnv1.get_pos().y <= 2) break
 	}
 
-	// Verify convoy_1 stays at station_A for 300 ticks (start_signal is RED).
+	// Convoy_1 should stay at station_A for 300 ticks while signal is RED.
 	local stayed_at_station = false
 	if (cnv1.is_valid() && cnv1.get_pos().y <= 2) {
 		stayed_at_station = true
@@ -231,7 +234,7 @@ function test_start_signal_convoy_stays_at_station()
 		}
 	}
 
-	// Remove convoy_2 to free the block; convoy_1 should then depart and pass the signal.
+	// Remove blocker; convoy_1 should then depart and pass the signal.
 	local eventually_passed = false
 	if (stayed_at_station) {
 		if (cnv2.is_valid()) {
@@ -272,10 +275,8 @@ function test_start_signal_convoy_stays_at_station()
 }
 
 
-// ─── Test 4: is_start_signal=false → convoy advances past station to signal ────
-// Without the flag the convoy departs station_A normally and advances toward the
-// signal tile even when the block ahead is occupied.
-function test_start_signal_false_convoy_advances_to_signal()
+// ─── Test 4: is_start_signal=false → convoy leaves station even when block occupied ─
+function test_start_signal_false_convoy_advances()
 {
 	local pl   = player_x(0)
 	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -290,17 +291,16 @@ function test_start_signal_false_convoy_advances_to_signal()
 
 	debug.set_game_speed(5)
 
-	// Start convoy_2 (blocker) and wait for it to reach station_B.
-	local cnv2 = _start_convoy_b(pl)
-	for (local i = 0; i < 4000 && cnv2.is_valid() && cnv2.get_pos().y > 12; i++) {
+	// Start blocker and wait until it reaches station_B.
+	local cnv2 = _start_convoy_2(pl)
+	for (local i = 0; i < 4000 && cnv2.is_valid() && cnv2.get_pos().y > 10; i++) {
 		sleep()
 	}
 
 	// Start convoy_1.
-	local cnv1 = _start_convoy_a(pl)
+	local cnv1 = _start_convoy_1(pl)
 
-	// Without the flag, convoy_1 should leave station_A (y>2) and advance
-	// toward the signal even though the block ahead is occupied.
+	// Without the flag, convoy_1 must leave station_A (y>2) even though block is occupied.
 	local convoy_left_station = false
 	for (local i = 0; i < 3000; i++) {
 		sleep()
@@ -348,8 +348,8 @@ function test_start_signal_convoy_passes_when_clear()
 
 	debug.set_game_speed(5)
 
-	// No blocking convoy; convoy_1 should depart and pass the signal freely.
-	local cnv1 = _start_convoy_a(pl)
+	// No blocker; convoy_1 should depart and pass the signal freely.
+	local cnv1 = _start_convoy_1(pl)
 
 	local convoy_passed = false
 	for (local i = 0; i < 4000; i++) {
