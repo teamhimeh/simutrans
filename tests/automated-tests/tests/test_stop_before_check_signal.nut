@@ -194,7 +194,7 @@ function _convoy_stopped_at(cnv, y)
 
 
 // ─── Test 3: simple signal – convoy must stop at signal ───────────────────────
-function test_stop_before_check_simple_convoy_stops()
+function test_stop_before_check_simple_signal_convoy_stops()
 {
 	local pl   = player_x(0)
 	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -345,15 +345,25 @@ function test_stop_before_check_choose_signal_convoy_stops()
 
 	local stopped_at_signal = false
 	local convoy_passed     = false
+	local saw_red_before_signal = false
 	local max_steps = 3000
 
 	for (local i = 0; i < max_steps; i++) {
 		sleep()
 		if (!cnv.is_valid()) break
 
-		local pos = cnv.get_pos()
+		local pos   = cnv.get_pos()
+		local speed = cnv.get_speed()
 
-		if (_convoy_stopped_at(cnv, 7)) {
+		// do not pre-check before stop
+		if (!stopped_at_signal && pos.y == 6 && speed > 0) {
+			if (sig.get_state() == roadsign_t.STATE_RED) {
+				saw_red_before_signal = true
+			}
+		}
+
+		// stop at signal tile
+		if (prev_y < 7 && pos.y == 7 && speed == 0) {
 			stopped_at_signal = true
 		}
 
@@ -363,6 +373,7 @@ function test_stop_before_check_choose_signal_convoy_stops()
 		}
 	}
 
+	print("  saw_red_before_signal: " + saw_red_before_signal)
 	print("  stopped_at_signal: " + stopped_at_signal)
 	print("  convoy_passed:     " + convoy_passed)
 
@@ -374,6 +385,7 @@ function test_stop_before_check_choose_signal_convoy_stops()
 	}
 	_remove_convoy_test_infra(pl)
 
+	ASSERT_TRUE(saw_red_before_signal)
 	ASSERT_TRUE(stopped_at_signal)
 	ASSERT_TRUE(convoy_passed)
 }
