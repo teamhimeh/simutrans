@@ -18,6 +18,7 @@
 //   y= 2 : station_A   -- convoy_1 first stop; waits here when start_signal is RED
 //   y= 7 : signal       -- the signal under test (start_signal flag)
 //   y=10 : station_B   -- convoy_1 second stop; convoy_2 (blocker) loads here
+//   y=13 : station_C	-- convoy_2 (blocker) finally go here
 //   y=14 : depot_B     -- convoy_2 (blocker) departs from here
 //
 // convoy_2 has 200 % min-load at station_B so it never departs;
@@ -126,6 +127,7 @@ function _build_start_signal_infra(pl, rail, signal_desc)
 	ASSERT_TRUE(station_desc != null)
 	ASSERT_EQUAL(command_x.build_station(pl, coord3d(8,  2, 0), station_desc), null)
 	ASSERT_EQUAL(command_x.build_station(pl, coord3d(8, 10, 0), station_desc), null)
+	ASSERT_EQUAL(command_x.build_station(pl, coord3d(8, 13, 0), station_desc), null)
 
 	local depot_desc = get_depot_by_wt(wt_rail)
 	ASSERT_TRUE(depot_desc != null)
@@ -146,6 +148,7 @@ function _remove_start_signal_infra(pl)
 	}
 	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8,  2, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 10, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 13, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8,  0, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(8, 14, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remove_way).work(
@@ -182,6 +185,7 @@ function _start_convoy_2(pl)
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
 	cnv.change_schedule(pl, schedule_x(wt_rail, [
 		schedule_entry_x(coord3d(8, 10, 0), 200, 0)  // 200% min-load → stays at station_B
+		schedule_entry_x(coord3d(8, 13, 0), 200, 0)  // 200% min-load → stays at station_C
 	]))
 	depot.start_all_convoys(pl)
 	sleep()
@@ -276,7 +280,7 @@ function test_start_signal_convoy_stays_at_station()
 
 
 // ─── Test 4: is_start_signal=false → convoy leaves station even when block occupied ─
-function test_start_signal_false_convoy_advances()
+function test_start_signal_false_convoy_advances_to_signal()
 {
 	local pl   = player_x(0)
 	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
