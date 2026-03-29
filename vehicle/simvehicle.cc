@@ -3816,20 +3816,6 @@ bool rail_vehicle_t::is_choose_signal_clear(signal_t *sig, const uint16 start_bl
 		try_coupling = cnv->get_schedule()->at((cnv->get_schedule()->get_current_stop()+test_iter)%cnv->get_schedule()->get_count()).is_try_coupling();
 	}
 	
-	if(!cnv->is_waiting()&&!call_by_step) {
-		// we are in a sync_step->no calculate route, return
-		if(!try_coupling&&!sig->is_stop_before_check()) {
-			// non coupling -> non stop(search new route to halt in step)
-			cnv->request_signal_check_in_step();
-		} // try_coupling -> must stop at signal
-		restart_speed = -1;
-		return false;
-	}
-	// we are in a step. calculate route.
-	// reset request
-	cnv->set_signal_check_in_step_request_invalid();
-	// now we are in a step and can use the route search array
-	
 	if(  !try_coupling&&!sig->is_choose_signal()  ) {
 		// this is not choose signal
 		goto skip_choose;
@@ -3885,6 +3871,12 @@ bool rail_vehicle_t::is_choose_signal_clear(signal_t *sig, const uint16 start_bl
 skip_choose:
 	if(  !choose_ok  ) {
 		// just act as normal signal
+		if(  !cnv->is_waiting()&&!is_next_tile_already_reserved(start_block)&&sig->is_stop_before_check()  ) {
+			// must stop before check!
+			restart_speed = -1;
+			sig->set_state( roadsign_t::STATE_RED );
+			return false;
+		}
 		if(  block_reserver( cnv->get_route(), start_block+1, next_signal, next_crossing, 0, true, false )  ) {
 			sig->set_state( roadsign_t::STATE_GREEN );
 			cnv->set_next_stop_index( min( next_crossing, next_signal ) );
@@ -3907,6 +3899,20 @@ skip_choose:
 		// no free route to target!
 		// note: any old reservations should be invalid after the block reserver call.
 		// => We can now start freshly all over
+	
+		if(!cnv->is_waiting()&&!call_by_step) {
+			// we are in a sync_step->no calculate route, return
+			if(!try_coupling&&!sig->is_stop_before_check()) {
+				// non coupling -> non stop(search new route to halt in step)
+				cnv->request_signal_check_in_step();
+			} // try_coupling -> must stop at signal
+			restart_speed = -1;
+			return false;
+		}
+		// we are in a step. calculate route.
+		// reset request
+		cnv->set_signal_check_in_step_request_invalid();
+		// now we are in a step and can use the route search array
 
 		// now it we are in a step and can use the route search
 		route_t target_rt;
@@ -4099,7 +4105,7 @@ bool rail_vehicle_t::is_signal_clear(uint16 next_block, sint32 &restart_speed, b
 	if(  sig_desc->is_simple_signal()  ) {
 
 		// if this signal check only when convoy is stop:
-		if(  !cnv->is_waiting()&&sig->is_stop_before_check()  ) {
+		if(  !cnv->is_waiting()&&!is_next_tile_already_reserved(next_block)&&sig->is_stop_before_check()  ) {
 			sig->set_state( roadsign_t::STATE_RED );
 			restart_speed = -1;
 			return false;
@@ -4135,6 +4141,27 @@ bool rail_vehicle_t::is_signal_clear(uint16 next_block, sint32 &restart_speed, b
 
 	dbg->error( "rail_vehicle_t::is_signal_clear()", "felt through at signal at %s", cnv->get_route()->at(next_block).get_str() );
 	return false;
+}
+
+bool rail_vehicle_t::is_next_tile_already_reserved(uint16 index)
+{
+	if(  index >= cnv->get_route()->get_count()-1  ) {
+		// already reach the end point, we do not need concidering next tile
+		return true;
+	}
+	koord3d k = cnv->get_route()->at(index+1);
+	grund_t *gr = welt->lookup(k);
+	if(  !gr  ) {
+		// something wrong!
+		return false;
+	}
+	schiene_t *w = (schiene_t *)gr->get_weg(get_waytype());
+	if(  !w  ) {
+		// no way
+		return false;
+	}
+	// if the next tile is reserved by us, ok!
+	return cnv->self == w->get_reserved_convoi();
 }
 
 
