@@ -186,10 +186,10 @@ function _remove_convoy_test_infra(pl)
 // have speed=0 at y=7 while re-accelerating.  Asserting state_red here would
 // fire against the now-green signal and abort the test before cleanup.
 //
-function _convoy_stopped_at(cnv, y)
+function _convoy_stopped_at(cnv, y, state)
 {
 	local pos = cnv.get_pos()
-	return pos.y == y && (cnv.is_waiting() || cnv.get_speed() <= 0 || sig.get_state() == state_red)
+	return pos.y == y && (cnv.is_waiting() || cnv.get_speed() <= 0 || state == state_red)
 }
 
 
@@ -225,7 +225,7 @@ function test_stop_before_check_simple_signal_convoy_stops()
 		// Detect stop at signal tile (y=7).  No in-loop signal-state assertion:
 		// the signal turns green the tick after the convoy enters
 		// WAITING_FOR_CLEARANCE, while get_speed() may still be 0.
-		if (_convoy_stopped_at(cnv, 7)) {
+		if (_convoy_stopped_at(cnv, 7, sig.get_state())) {
 			stopped_at_signal = true
 		}
 
@@ -283,7 +283,7 @@ function test_stop_before_check_longblock_signal_convoy_stops()
 
 		local pos = cnv.get_pos()
 
-		if (_convoy_stopped_at(cnv, 7)) {
+		if (_convoy_stopped_at(cnv, 7, sig.get_state())) {
 			stopped_at_signal = true
 		}
 
@@ -338,7 +338,7 @@ function test_stop_before_check_choose_signal_convoy_stops()
 
 		local pos = cnv.get_pos()
 
-		if (_convoy_stopped_at(cnv, 7)) {
+		if (_convoy_stopped_at(cnv, 7, sig.get_state())) {
 			stopped_at_signal = true
 		}
 
