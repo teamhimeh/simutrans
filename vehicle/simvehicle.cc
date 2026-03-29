@@ -3918,6 +3918,7 @@ skip_choose:
 				// non coupling -> non stop(search new route to halt in step)
 				cnv->request_signal_check_in_step();
 			} // try_coupling -> must stop at signal
+			sig->set_state( roadsign_t::STATE_RED );
 			restart_speed = -1;
 			return false;
 		}
