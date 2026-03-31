@@ -42,6 +42,7 @@
 
 #include "dataobj/schedule.h"
 #include "dataobj/route.h"
+#include "dataobj/route_cache.h"
 #include "dataobj/ribi.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/translator.h"
@@ -779,6 +780,9 @@ void convoi_t::add_running_cost( const weg_t *weg )
 
 	sum_speed_limit += speed_to_kmh( min( min_top_speed, speed_limit ));
 	book( 1, CONVOI_DISTANCE );
+	for (uint16 i=0; i<anz_vehikel; i++) {
+		book( fahr[i]->get_total_cargo(), CONVOI_TONKILO );
+	}
 }
 
 
@@ -1273,6 +1277,36 @@ bool convoi_t::drive_to()
 		koord3d start = front()->get_pos();
 		koord3d ziel = schedule->get_current_entry().pos;
 
+		const sint32 max_speed_kmh = speed_to_kmh(min_top_speed);
+		const bool need_electric = needs_electrification();
+
+		// Cache-aware route calculation: tries cache first, falls back to A* on miss or passability failure.
+		// Only convoys assigned to a line use the cache, and only when the convoy's schedule
+		// exactly matches the line's schedule (no extra depot entries).
+		const bool use_route_cache = front()->get_waytype()!=air_wt  &&  line.is_bound()  &&  schedule->get_count() == line->get_schedule()->get_count();
+		auto cached_calc_route = [&](koord3d s, koord3d z, route_t* r, bool pass_stop) -> bool {
+			if (use_route_cache) {
+				const uint8 entry_idx = schedule->get_current_stop();
+				const uint16 cnv_len = pass_stop ? 0 : get_entire_convoy_length();
+				route_t *cached = welt->get_route_cache().find(
+						line, entry_idx, s, z, max_speed_kmh, cnv_len, need_electric);
+				if (cached  &&  cached->is_passable(welt, fahr[0], need_electric)) {
+					*r = *cached;
+					return true;
+				}
+				if (cached) {
+					welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, need_electric);
+				}
+			}
+			const bool ok = fahr[0]->calc_route(s, z, max_speed_kmh, r, pass_stop);
+			if (ok  &&  use_route_cache) {
+				const uint8 entry_idx = schedule->get_current_stop();
+				const uint16 cnv_len = pass_stop ? 0 : get_entire_convoy_length();
+				welt->get_route_cache().add(line, entry_idx, s, z, max_speed_kmh, cnv_len, need_electric, *r);
+			}
+			return ok;
+		};
+
 		// avoid stopping mid-halt
 		if(  start==ziel  ) {
 			halthandle_t halt = haltestelle_t::get_stoppable_halt(ziel,get_owner(),front()->get_waytype());
@@ -1289,7 +1323,7 @@ bool convoi_t::drive_to()
 			}
 		}
 
-		if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route, schedule->get_current_entry().is_pass_stop() )  ) {
+		if(  !cached_calc_route( start, ziel, &route, schedule->get_current_entry().is_pass_stop() )  ) {
 			if(  state != NO_ROUTE  ) {
 				state = NO_ROUTE;
 				get_owner()->report_vehicle_problem( self, ziel );
@@ -1343,7 +1377,7 @@ bool convoi_t::drive_to()
 					}
 
 					route_t next_segment;
-					if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment, schedule->get_current_entry().is_pass_stop() )  ) {
+					if(  !cached_calc_route( start, ziel, &next_segment, schedule->get_current_entry().is_pass_stop() )  ) {
 						// do we still have a valid route to proceed => then go until there
 						if(  route.get_count()>1  ) {
 							break;
@@ -3097,6 +3131,7 @@ void convoi_t::rdwr(loadsave_t *file)
 			financial_history[k][CONVOI_DISTANCE] = 0;
 			financial_history[k][CONVOI_MAXSPEED] = 0;
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(102, 3)  ){
@@ -3110,6 +3145,7 @@ void convoi_t::rdwr(loadsave_t *file)
 			financial_history[k][CONVOI_DISTANCE] = 0;
 			financial_history[k][CONVOI_MAXSPEED] = 0;
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(111, 1)  ){
@@ -3122,6 +3158,7 @@ void convoi_t::rdwr(loadsave_t *file)
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][CONVOI_MAXSPEED] = 0;
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(112, 8)  ){
@@ -3133,6 +3170,19 @@ void convoi_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
+		}
+	}
+	else if (  file->get_OTRP_version()<53  ) 
+	{
+		// load statistics
+		for (int j = 0; j<CONVOI_TONKILO; j++) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		for (size_t k = MAX_MONTHS; k-- != 0;) {
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else
