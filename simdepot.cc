@@ -585,7 +585,7 @@ bool depot_t::can_start_convoi(convoihandle_t cnv, bool local_execution)
 		}
 
 		// check if convoi is complete
-		if( front_cnv->get_total_sum_power() == 0 || !cnv->pruefe_alle()) {
+		if( front_cnv->get_total_sum_power() == 0 || ( !cnv->pruefe_alle() && !cnv->is_invalid_convoy() ) ) {
 			if (local_execution) {
 				create_win( new news_img("Diese Zusammenstellung kann nicht fahren!\n"), w_time_delete, magic_none);
 			}

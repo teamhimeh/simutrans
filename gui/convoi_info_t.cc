@@ -428,7 +428,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		if(  grund_t* gr=welt->lookup(cnv->get_schedule()->get_current_entry().pos)  ) {
 			go_home_button.pressed = gr->get_depot() != NULL;
 		}
-		no_load_button.pressed = cnv->get_no_load();
+		no_load_button.pressed = cnv->get_no_load()||cnv->is_invalid_convoy();
 		no_load_button.enable();
 		set_recovery_button.pressed = cnv->is_in_delay_recovery();
 		set_recovery_button.enable();
@@ -612,7 +612,7 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 			}
 		}
 
-		if(  comp == &no_load_button    &&    !route_search_in_progress  ) {
+		if(  comp == &no_load_button    &&    !route_search_in_progress  &&  !cnv->is_invalid_convoy()  ) {
 			cnv->call_convoi_tool( 'n', NULL );
 			return true;
 		}

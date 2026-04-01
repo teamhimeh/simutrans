@@ -8649,6 +8649,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'c' : reversing coupling convoys
  * 'm' : apply max speed of convoy
  * 'b' : apply balance speed (limit power)
+ * 'i' : set invalid convoy
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -8919,6 +8920,11 @@ bool tool_change_convoi_t::init( player_t *player )
 			cnv->set_max_balance_speed_convoi(max_balance_speed_convoi);
 		}
 		break;
+
+		case 'i':
+		{
+			cnv->set_invalid_convoy(!cnv->is_invalid_convoy());
+		}
 	}
 
 	if(  cnv->in_depot()  &&  (tool=='g'  ||  tool=='l')  ) {
@@ -9281,6 +9287,7 @@ bool tool_change_line_t::init( player_t *player )
  * 'd' : disassembles convoi
  * 's' : sells a vehicle
  * 'a' : appends a vehicle (+vehikel_name) uses the oldest
+ * 'A' : appends a vehicle (for invalid convoy)
  * 'i' : inserts a vehicle in front (+vehikel_name) uses the oldest
  * 's' : sells a vehikel (+vehikel_name) uses the newest
  * 'S' : sells all vehicles in this depot
@@ -9412,7 +9419,8 @@ bool tool_change_depot_t::init( player_t *player )
 			}
 			break;
 		}
-		case 'a':   // append a vehicle
+		case 'a':   // append a vehicle(with some vehicles)
+		case 'A':   // append a vehicle(for invalid convoy)
 		case 'i':   // insert a vehicle in front
 		case 's':   // sells a vehicle
 		case 'S':	// sells all vehicles
@@ -9461,7 +9469,7 @@ bool tool_change_depot_t::init( player_t *player )
 					slist_tpl<const vehicle_desc_t *>new_vehicle_info;
 					const vehicle_desc_t *start_info = info;
 
-					if(tool!='a') {
+					if(tool!='a'&&tool!='A') {
 						// start of composition
 						while(  info->get_leader_count() == 1  &&  info->get_leader(0) != NULL  &&  info->get_leader(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_leader(0))) {
 							info = info->get_leader(0);
@@ -9470,7 +9478,7 @@ bool tool_change_depot_t::init( player_t *player )
 						info = start_info;
 					}
 					new_vehicle_info.append( info );
-					if (tool != 'i') {
+					if (tool != 'i'&&tool!='A') {
 						while(info->get_trailer_count() == 1  &&  info->get_trailer(0) != NULL  &&  info->get_trailer(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_trailer(0))) {
 							info = info->get_trailer(0);
 							new_vehicle_info.append(info);
@@ -9526,6 +9534,9 @@ bool tool_change_depot_t::init( player_t *player )
 								}
 								depot->append_vehicle( cnv, veh, tool=='i', can_use_gui() );
 							}
+						}
+						if(  tool=='A'  ) {
+							cnv->set_invalid_convoy(true);
 						}
 					}
 				}
