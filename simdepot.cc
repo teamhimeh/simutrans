@@ -28,6 +28,7 @@
 #include "obj/gebaeude.h"
 
 #include "bauer/vehikelbauer.h"
+#include "simcity.h"
 
 #include "descriptor/building_desc.h"
 
@@ -70,6 +71,20 @@ depot_t::~depot_t()
 	destroy_win((ptrdiff_t)this);
 	all_depots.remove(this);
 }
+
+const char *depot_t::make_depot_name(const char *type_name) const
+{
+	static char buf[256];
+	if (get_pos() != koord3d::invalid) {
+		if (stadt_t *city = welt->find_nearest_city(get_pos().get_2d())) {
+			snprintf(buf, sizeof(buf), "%s %s", city->get_name(), type_name);
+			return buf;
+		}
+	}
+	snprintf(buf, sizeof(buf), "%s", type_name);
+	return buf;
+}
+
 
 void depot_t::set_name(const char* new_name){
 	name = new_name;
@@ -483,6 +498,27 @@ bool depot_t::start_convoi(convoihandle_t cnv, bool local_execution)
 		buf.printf( translator::translate("Vehicle %s is coupled convoy, so it cannot depart alone!"), cnv->get_name() );
 		create_win( new news_img(buf), w_time_delete, magic_none);
 		return false;
+	}
+	if (!cnv->get_schedule()) {
+		dbg->warning("depot_t::start_convoi()","No schedule for convoi.");
+		create_win( new news_img("Noch kein Fahrzeug\nmit Fahrplan\nvorhanden\n"), w_time_delete, magic_none);
+		return false;
+	}
+	// If this convoy has only 1 stop:another depot, teleport to there.
+	if(  cnv->get_schedule()->get_count()==1  ) {
+		if(grund_t *gr_depot = welt->lookup(cnv->get_schedule()->at(0).pos)) {
+			depot_t *dep = gr_depot->get_depot();
+			if(  dep && dep->get_owner()==get_owner() && dep->can_accept_waytype(cnv->front()->get_desc()->get_waytype())  ) {
+				// find depot! move to there
+				convoihandle_t c = cnv;
+				while( c.is_bound() ){
+					remove_convoi(c);
+					c->betrete_depot(dep, true);
+					c=c->get_coupling_convoi();
+				}
+				return true;
+			}
+		}
 	}
 	// Check the start condition
 	if(  !can_start_convoi(cnv, local_execution)  ) {

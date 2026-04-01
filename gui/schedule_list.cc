@@ -49,6 +49,7 @@
 
 
 #include "minimap.h"
+#include "depot_picker.h"
 
 
 static const char *cost_type[MAX_LINE_COST] =
@@ -61,7 +62,8 @@ static const char *cost_type[MAX_LINE_COST] =
 	"Convoys",
 	"Distance",
 	"Maxspeed",
-	"Road toll"
+	"Road toll",
+	"Freight ton-kilo"
 };
 
 const uint8 cost_type_color[MAX_LINE_COST] =
@@ -74,7 +76,8 @@ const uint8 cost_type_color[MAX_LINE_COST] =
 	COL_CONVOI_COUNT,
 	COL_DISTANCE,
 	COL_MAXSPEED,
-	COL_TOLL
+	COL_TOLL,
+	COL_TONKILO
 };
 
 static uint8 tabs_to_lineindex[9];
@@ -89,7 +92,8 @@ static uint8 statistic[MAX_LINE_COST] = {
 	LINE_CONVOIS,
 	LINE_DISTANCE,
 	LINE_MAXSPEED,
-	LINE_WAYTOLL
+	LINE_WAYTOLL,
+	LINE_TONKILO
 };
 
 static uint8 statistic_type[MAX_LINE_COST] = {
@@ -101,7 +105,8 @@ static uint8 statistic_type[MAX_LINE_COST] = {
 	STANDARD,
 	STANDARD,
 	STANDARD,
-	MONEY
+	MONEY,
+	STANDARD
 };
 
 static uint8 copy_labels[3] = {
@@ -355,7 +360,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 
 	bt_teleport_line_to_depot.init(button_t::roundbox_state, "Teleport All to Depot",
 		scr_coord(RIGHT_COLUMN_OFFSET, bt_y+D_BUTTON_HEIGHT+D_V_SPACE), scr_size(D_BUTTON_WIDTH, D_BUTTON_HEIGHT));
-	bt_teleport_line_to_depot.set_tooltip("Convoys are teleported to depot immediately");
+	bt_teleport_line_to_depot.set_tooltip(translator::translate("Convoys are teleported to depot immediately (Ctrl+click to choose depot)"));
 	bt_teleport_line_to_depot.set_visible(false);
 	bt_teleport_line_to_depot.add_listener(this);
 	add_component(&bt_teleport_line_to_depot);
@@ -470,8 +475,15 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 		}
 	}
 	else if(  comp == &bt_teleport_line_to_depot  &&  line->get_convoys().get_count()>0  ) {
-		for (size_t i = line->get_convoys().get_count(); i-- != 0;) {
-			line->get_convoy(i)->call_convoi_tool( 'y', NULL );
+		if(  event_get_last_control_shift() & 2  ) {
+			// Ctrl+click: open depot picker so the player chooses which depot
+			waytype_t wt = simline_t::linetype_to_waytype(line->get_linetype());
+			create_win(new depot_picker_t(line, wt, player), w_info, magic_depot_picker);
+		}
+		else {
+			for (size_t i = line->get_convoys().get_count(); i-- != 0;) {
+				line->get_convoy(i)->call_convoi_tool( 'y', NULL );
+			}
 		}
 	}
 	else if(  comp == &bt_new_line  ) {

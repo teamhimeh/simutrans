@@ -99,6 +99,8 @@ It will uncouple the child convoy here.
 後ろの編成を駅到着時に切り離します．
 Waiting for coupling! (%i->%i%%)
 連結相手を待機中 (%i->%i%%)
+Waiting for coupling. %i left!
+連結相手を待機中 (発車まで%i)
 Require parent convoy to enter.
 連結相手がいる時のみ進入を許可
 Advance to end
@@ -111,6 +113,12 @@ Margin
 停車余白
 tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)
 振分使用時に、停車する際にこのタイル分の余裕を空けて停車します．「ホーム終端まで進む」がオンのときは奥側に，オフの時は手前側に停車余白をとります．
+Starting signal
+出発信号機
+Stop before check
+一時停止後に信号開通
+Do not use default route
+スケジュールで設定したホームを優先しない
 try coupling convoy not enter here
 連結試行時の進入禁止
 remove signal
@@ -127,7 +135,7 @@ Please decouple the other convoy to edit the schedule.
 スケジュールを編集するには連結解除してください．
 Convoys length coupling done
 連結上限タイル数:
-If total length of convoys reaches this value, coupling done and depart(if 0, no limit).
+If total length of convoys reaches over this value, coupling done and depart(if 0, no limit).
 総編成長がこのタイル数に達した場合、連結待機を終了して発車します．0の場合は編成長による連結終了はありません．
 Copy Line
 路線複製
@@ -303,12 +311,18 @@ Vehicle count:
 車両数:
 Teleport to Depot
 車庫に転送
+Go to depot
+車庫へ
 Teleport All to Depot
 全編成を車庫に転送
-Convoys are teleported to depot immediately
-路線のすべての編成を車庫に即座に転送します
-Remove vehicle from here and send to the nearest depot.
-全ての車両を車庫に転送します。
+Teleport this convoy to another depot(defined in schedule)
+この編成をスケジュールで指定したほかの車庫に転送します
+Convoys are teleported to depot immediately (Ctrl+click to choose depot)
+路線のすべての編成を車庫に即座に転送します(Ctrlキーを押しながらクリックすると転送先の車庫を選べます)
+Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)
+車庫に転送します(Ctrlキーを押しながらクリックすると転送先の車庫を選べます)
+Sends the convoi to the nearest depot. Ctrl+click to choose depot.
+この編成を一番近い車庫に向かわせます。(Ctrlキーを押しながらクリックすると転送先の車庫を選べます)
 Max speed of line
 路線最高速度
 Limits the max speed of all convoys on this line.
@@ -378,6 +392,10 @@ Stops
 停車駅一覧
 line memo
 路線メモ
+Reverse coupling order
+編成連結順序を反転します(この編成を先頭の編成にして運航継続します)
+Reverse coupling
+編成連結順序反転
 #------乗降時間制御------
 Full Get on/off Time
 乗降時間制御(G)
@@ -468,6 +486,16 @@ Sell all vehicles
 車庫の全車両売却
 Sell all vehicles stored here.
 車庫に格納された全車両を売却します
+Show tram
+路面電車を表示
+Tram Electrics
+路面電車
+Tram Passengers
+軌道用客車
+Trams
+軌道用機関車
+Tram Trailers
+軌道用貨車
 #------編成最高速度機能------
 Set Max Speed
 編成最高速度を設定
@@ -547,6 +575,33 @@ Show line colors
 路線の色を表示
 Show convoy loading level
 編成の乗車率を表示
+show only own vehicle states
+自社の車両のみ表示
+#------通知設定------
+New Year
+新年
+Players News
+他社
+City News
+都市
+No Route
+ルート不明
+New Destinations
+産業
+Chat
+チャット
+New vehicle types
+車両登場
+Station Full
+駅の混雑
+Problems
+問題
+Traffic Jams
+渋滞
+Scenario
+シナリオ
+Stop Length
+ホーム有効長
 #------車両オフセット機能------
 \nVehicle offset: 
 車両オフセット量: 
@@ -562,7 +617,30 @@ Offset mode: Absolute
 モード:絶対値
 set offset value and mode: On->Absolute(same offset for N&S),OFF->Direction(offset different based on Difference)
 車両のオフセット量とモードの設定: ONなら対向車も同じ向きにオフセットされます．OFFなら対向車は進行方向に応じてオフセットされます．
+show/hide way offset labels
+車両オフセット量ラベルを表示/非表示
+#------車庫転送先選択------
+Original
+通常
+Nearest
+距離の近い順
+Electrified
+電化
+%s leads\ndifferent owner's or\ndifferent waytype convoy.\n
+%sは異なる会社か\n異なる属性の車両を\n連結しているため\n入庫できません.\n
+Convoi has been sent\nto the selected depot\nof appropriate type.\n
+編成は指定された\n車庫に向かいました.\n
 #------その他の翻訳------
+Freight ton-kilo
+輸送量(人キロ/トンキロ)
+Rotate Building
+建物を回転
+%s at (%i,%i) now private stop.
+%s (%i,%i) は私有駅になりました．
+(%s) now public way.
+(%s) は公共化されました．
+merge stop
+駅を統合
 Remove all waiting goods and pax
 この駅のすべての待機中の旅客と貨物を除去します
 Change to public player
@@ -625,6 +703,8 @@ Highlight
 町内の建物を表示
 Make building belong to
 建物をこの町の所属にする
+change city of citybuilding
+建物の所属都市を変更
 Station name already exists
 駅名が既に使用されています
 Line Memo:
@@ -657,3 +737,7 @@ Connected Factories
 接続産業
 Depots must be build on flat dead-end way tiles!
 この車庫は平坦な終端にしか建設できません!
+Unused addons
+未使用アドオン
+Show unused addons list
+未使用アドオンリストを表示

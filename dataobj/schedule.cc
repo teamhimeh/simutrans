@@ -79,7 +79,7 @@ bool schedule_t::is_stop_allowed(const grund_t *gr) const
 	if(  ok  ) {
 		// ok, we can go here; but we must also check, that we are not entering a foreign depot
 		depot_t *dp = gr->get_depot();
-		ok &= (dp==NULL  ||  (int)dp->get_tile()->get_desc()->get_extra()==my_waytype);
+		ok &= (dp==NULL  ||  dp->can_accept_waytype(my_waytype));
 	}
 
 	return ok;
@@ -836,7 +836,8 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 			p = translator::translate("Invalid coordinate");
 		}
 		else if(gr->get_depot() != NULL) {
-			p = translator::translate("Depot");
+			buf.printf("%s ",translator::translate("Depot"));
+			p = gr->get_depot()->get_name();
 		}
 		else {
 			construct_schedule_entry_attributes(buf, entry);

@@ -85,10 +85,28 @@ public:
 	virtual const char * get_zieher_name() { return "Lokomotive_tab"; }
 	virtual const char * get_haenger_name() { return "Waggon_tab"; }
 
+	/**
+	 * Secondary waytype: if not invalid_wt, this depot also shows vehicles of
+	 * this waytype in separate tabs (e.g. bahndepot shows tram vehicles).
+	 */
+	virtual waytype_t get_secondary_waytype() const { return invalid_wt; }
+
+	/**
+	 * Returns true if a convoy whose front vehicle has the given waytype may
+	 * enter (or be built in) this depot.
+	 */
+	virtual bool can_accept_waytype(waytype_t wt) const { return get_waytype() == wt; }
+
 	char const *get_name() const { return name; }
 	void set_name(const char *name);
 
-	virtual const char *init_name() const { return "Depot"; }
+protected:
+	/// Returns "CityName type_name", or just type_name when no nearby city exists.
+	/// Uses a static buffer — valid until the next call.
+	const char *make_depot_name(const char *type_name) const;
+
+public:
+	virtual const char *init_name() const { return make_depot_name(translator::translate("Depot")); }
 
 	vehicle_t* find_oldest_newest(const vehicle_desc_t* desc, bool old);
 
@@ -263,6 +281,11 @@ public:
 	}
 
 	simline_t::linetype get_line_type() const OVERRIDE { return simline_t::trainline; }
+
+	// Only the actual track depot (not tram/monorail/etc.) shows tram vehicles in separate tabs and accepts tram convoys.
+	waytype_t get_secondary_waytype() const OVERRIDE { return get_typ() == obj_t::bahndepot ? tram_wt : invalid_wt; }
+	bool can_accept_waytype(waytype_t wt) const OVERRIDE { return get_typ() == obj_t::bahndepot ? (wt == track_wt  ||  wt == tram_wt) : get_waytype() == wt; }
+
 	void rdwr_name(loadsave_t *file);
 
 	void rdwr_bahndepot(loadsave_t *file);
@@ -280,7 +303,7 @@ public:
 	unsigned get_max_convoi_length() const OVERRIDE;
 
 	obj_t::typ get_typ() const OVERRIDE { return bahndepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Bahndepot"); }
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Bahndepot")); }
 };
 
 
@@ -299,7 +322,7 @@ public:
 	simline_t::linetype get_line_type() const OVERRIDE { return simline_t::tramline; }
 
 	obj_t::typ get_typ() const OVERRIDE { return tramdepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Tramdepot"); }
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Tramdepot")); }
 };
 
 class monoraildepot_t : public bahndepot_t
@@ -316,7 +339,7 @@ public:
 	simline_t::linetype get_line_type() const OVERRIDE { return simline_t::monorailline; }
 
 	obj_t::typ get_typ() const OVERRIDE { return monoraildepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Monoraildepot"); }
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Monoraildepot")); }
 };
 
 class maglevdepot_t : public bahndepot_t
@@ -333,7 +356,7 @@ public:
 	simline_t::linetype get_line_type() const OVERRIDE { return simline_t::maglevline; }
 
 	obj_t::typ get_typ() const OVERRIDE { return maglevdepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Maglevdepot"); }
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Maglevdepot")); }
 };
 
 class narrowgaugedepot_t : public bahndepot_t
@@ -350,7 +373,7 @@ public:
 	simline_t::linetype get_line_type() const OVERRIDE { return simline_t::narrowgaugeline; }
 
 	obj_t::typ get_typ() const OVERRIDE { return narrowgaugedepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Narrowgaugedepot"); }
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Narrowgaugedepot")); }
 };
 
 /**
@@ -391,7 +414,7 @@ public:
 	unsigned get_max_convoi_length() const OVERRIDE;
 
 	obj_t::typ get_typ() const OVERRIDE { return strassendepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Strassendepot");}
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Strassendepot")); }
 };
 
 
@@ -431,7 +454,7 @@ public:
 	
 	unsigned get_max_convoi_length() const OVERRIDE;
 	obj_t::typ get_typ() const OVERRIDE { return schiffdepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Schiffdepot");}
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Schiffdepot")); }
 };
 
 
@@ -468,7 +491,7 @@ public:
 	unsigned get_max_convoi_length() const OVERRIDE;
 
 	obj_t::typ get_typ() const OVERRIDE { return airdepot; }
-	const char *init_name() const OVERRIDE {return translator::translate("Hangar");}
+	const char *init_name() const OVERRIDE { return make_depot_name(translator::translate("Hangar")); }
 };
 
 #endif
