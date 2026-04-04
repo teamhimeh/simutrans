@@ -9693,6 +9693,9 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * c:set end of choose signal
  * g:set end of guide signal
  * m:set margin of the stoplength of choose signal
+ * t:set stop before check(for choose/longblock signs)
+ * d:set use default route for choose signal
+ * p:set start signal(do not start from stops if this flag is true)
  * 
  */
 bool tool_change_roadsign_t::init( player_t* )
@@ -9797,6 +9800,44 @@ bool tool_change_roadsign_t::init( player_t* )
 			}
 		}
 		break;
+
+		case 't':
+		// set advance to end state for signal
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_stop_before_check(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'd':
+		// use default route for choose signal(before call find_route())
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_skip_default_route(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'p':
+		// when state is RED, do not move even if convoy is not reached the end of the signal tile.
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>() ) {
+				rs->set_start_signal(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
 
 
 		default:
