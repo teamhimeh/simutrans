@@ -207,10 +207,12 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			// we added a target to the closed list: check for length
 			target_reached = true;
 			if(  !length_based  ) {
+				dbg->message("route_t::find_route()","find %s, length_based false",gr->get_pos().get_str());
 				break;
 			}
 			// length based: compare to other.
-			const uint32 found_platform_length = tdriver->get_available_halt_length_in_vehicle_steps(tmp->gr,tmp->parent->gr);
+			const uint32 found_platform_length = tdriver->get_available_halt_length_in_vehicle_steps(tmp->gr,tmp->ribi_from);
+			dbg->message("route_t::find_route()","find %s, prev %s, length_based %i",gr->get_pos().get_str(),tmp->parent->gr->get_pos().get_str(), found_platform_length);
 			if(  platform_length > found_platform_length && found_platform_length > 0  ) {
 				// we found good one:
 				platform_length = found_platform_length;
@@ -270,6 +272,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	if( length_based && target_reached && found_node!=NULL ) {
 		tmp = found_node;
 		step = MAX_STEP-1;
+		dbg->message("route_t::find_route()","find %s, length_based %i",found_node->gr->get_pos().get_str(), platform_length);
 	}
 	if(!target_reached  ||  step >= MAX_STEP) {
 		if(  step >= MAX_STEP  ) {

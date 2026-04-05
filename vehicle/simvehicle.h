@@ -282,7 +282,7 @@ public:
 
 	void rotate90() OVERRIDE;
 
-	uint32 get_available_halt_length_in_vehicle_steps(const grund_t *gr, const grund_t *prev) const OVERRIDE;
+	uint32 get_available_halt_length_in_vehicle_steps(const grund_t *gr, const ribi_t::ribi) const OVERRIDE;
 
 	ribi_t::ribi get_previous_direction() const { return previous_direction; }
 
