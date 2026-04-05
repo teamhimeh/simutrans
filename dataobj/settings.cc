@@ -1853,6 +1853,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 		= contents.get_int("waiting_limit_for_first_come_first_serve", waiting_limit_for_first_come_first_serve);
 	
 	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
+	use_route_cache = contents.get_int("use_route_cache", use_route_cache);
 
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);
