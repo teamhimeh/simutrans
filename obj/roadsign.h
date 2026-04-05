@@ -40,7 +40,7 @@ protected:
 	uint8 ticks_ow;
         uint8 ticks_yellow_ns, ticks_yellow_ow;
 	uint8 ticks_offset;
-	uint8 choose_sign_flag;
+	uint16 choose_sign_flag;
 	enum choose_sign_state {
 		NONE = 0,
 		guide_signal   = 1U<<0,// guide signal for coupling
@@ -188,7 +188,7 @@ public:
 	void set_skip_default_route(bool tf) { tf? choose_sign_flag|=skip_default_route:choose_sign_flag&=~skip_default_route; }
 	bool is_start_signal() const { return (choose_sign_flag&start_signal)>0; }
 	void set_start_signal(bool tf) { tf? choose_sign_flag|=start_signal:choose_sign_flag&=~start_signal; }
-	uint8 const get_choose_sign_flag() {return choose_sign_flag;}
+	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
 	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
 	/**
