@@ -227,6 +227,9 @@ void roadsign_t::show_info()
 	else if(  desc->is_end_choose_signal()  ) {
 		create_win(new end_of_choose_info_t(this), w_info, (ptrdiff_t)this);
 	}
+	else if(  desc->is_choose_sign()  ) {
+		create_win(new onewaysign_info_t(this, koord3d::invalid), w_info, (ptrdiff_t)this);
+	}
 	else {
 		obj_t::show_info();
 	}
