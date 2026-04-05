@@ -2155,11 +2155,12 @@ uint32 vehicle_t::calc_full_load_weight(const vehicle_desc_t* desc) {
 uint32 vehicle_t::get_available_halt_length_in_vehicle_steps(const grund_t* gr, const ribi_t::ribi r) const
 {
 	grund_t* prev = NULL;
-	if(  gr==NULL || !gr->get_neighbour(prev,get_waytype(),r)  ) {
+	if(  gr==NULL || gr->get_weg(get_waytype())==NULL || !gr->get_neighbour(prev,get_waytype(),ribi_t::backward(r))  ) {
 		// no ground
 		return 0;
 	}
-	const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),r); 
+	ribi_t::ribi front_dir = gr->get_weg(get_waytype())->get_ribi_unmasked() & ~(ribi_t::backward(r));
+	const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),front_dir); 
 	return stop_length;
 }
 
@@ -2346,7 +2347,7 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 				// end of stop: Is it long enough?
 				const uint32 length=cnv->get_length_in_steps();
 				ribi_t::ribi back_ribi=ribi_t::backward(ribi_type(dir));
-				const uint32 stop_length=get_available_halt_length_in_vehicle_steps(gr,ribi);
+				const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),ribi);
 				if(length>stop_length) {
 					// length not enough
 					return false;
@@ -3636,7 +3637,7 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 		}
 	}
 	// end of stop: Is it long enough?
-	const uint32 available_halt_length = get_available_halt_length_in_vehicle_steps(gr,ribi); // 256 units per a straight tile
+	const uint32 available_halt_length = cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),next_gr_ribi); // 256 units per a straight tile
 	return available_halt_length >= (((uint32)cnv->get_entire_convoy_length()) << 4)+(uint32)choose_margin*VEHICLE_STEPS_PER_TILE;
 }
 
