@@ -338,6 +338,8 @@ settings_t::settings_t() :
 	default_reverse=false;
 	allow_unload_longer_convoy=false;
 	allow_higher_flight = true;
+
+	use_route_cache = false;
 }
 
 
@@ -1032,6 +1034,11 @@ void settings_t::rdwr(loadsave_t *file)
 			env_t::use_old_friction = false;
 			allow_unload_longer_convoy = false;
 			allow_higher_flight=true;
+		}
+		if(  file->get_OTRP_version() >= 54  ) {
+			file->rdwr_bool(use_route_cache);
+		} else {
+			use_route_cache = false;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
