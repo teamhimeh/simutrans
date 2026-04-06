@@ -3150,7 +3150,7 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 				case building_desc_t::city_res:
 					won -= level * 10;
 					hr = hausbauer_t::get_residential(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, 1, 1, exclude_desc);
-					won += hr->get_level() * 10;
+					won += hr->get_level();
 					break;
 				case building_desc_t::city_com:
 					arb -= level * 20;
@@ -3305,10 +3305,16 @@ void stadt_t::build_city_building(const koord k)
 	// so we found at least one suitable building for this place
 	int rotation = orient_city_building( k, h, maxsize );
 	if(  rotation >= 0  ) {
-		hausbauer_t::build(NULL, k, rotation, h, this);
+		const gebaeude_t* gb = hausbauer_t::build(NULL, k, rotation, h, this);
+		if (gb) {
+			koord sz = gb->get_tile()->get_desc()->get_size(gb->get_tile()->get_layout());
+			for (int x = 0; x < sz.x; x++) {
+				for (int y = 0; y < sz.y; y++) {
+					update_city_street(k + koord(x, y));
+				}
+			}
+		}
 	}
-	// to be extended for larger building ...
-	update_city_street(k);
 }
 
 
