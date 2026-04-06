@@ -404,6 +404,9 @@ private:
 	static bool process_city_street(grund_t& gr, const way_desc_t* cr);
 
 public:
+	bool check_ground_tile_for_house(grund_t* gr, sint8 zpos) const;
+	gebaeude_t* build_city_house(koord3d base_pos, const building_desc_t* h, uint8 rotation, uint32 cl, vector_tpl<const building_desc_t*>* exclude_desc);
+
 	bool is_within_players_network( const player_t* player ) const;
 
 	/// Connects factories to this city.
