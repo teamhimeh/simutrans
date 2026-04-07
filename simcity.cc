@@ -1234,6 +1234,20 @@ void stadt_t::rdwr(loadsave_t* file)
 		// save button settings for this town
 		file->rdwr_long( stadtinfo_options);
 	}
+	else if(  file->get_OTRP_version()<54  ) {
+		for (uint year = 0; year < MAX_CITY_HISTORY_YEARS; year++) {
+			for (uint hist_type = 0; hist_type < HIST_POWER_NEEDED; hist_type++) {
+				file->rdwr_longlong(city_history_year[year][hist_type]);
+			}
+		}
+		for (uint month = 0; month < MAX_CITY_HISTORY_MONTHS; month++) {
+			for (uint hist_type = 0; hist_type < HIST_POWER_NEEDED; hist_type++) {
+				file->rdwr_longlong(city_history_month[month][hist_type]);
+			}
+		}
+		// save button settings for this town
+		file->rdwr_long( stadtinfo_options);
+	} 
 	else {
 		// 120,001 with walking (direct connections) recored seperately
 		for (uint year = 0; year < MAX_CITY_HISTORY_YEARS; year++) {

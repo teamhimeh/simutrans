@@ -248,6 +248,14 @@ void city_info_t::init()
 
 		button_to_chart.append(buttons[i], &chart, curve);
 	}
+	// electricity satisfaction percentage curve (year)
+	sint16 pct_curve_year = chart.add_curve( color_idx_to_rgb(COL_LIGHT_GREEN), power_pct_year,
+		1, 0, MAX_CITY_HISTORY_YEARS, PERCENT, false, true, 0 );
+	button_t* pct_btn = container_year.new_component<button_t>();
+	pct_btn->init( button_t::box_state_automatic | button_t::flexible, "Electricity %" );
+	pct_btn->background_color = color_idx_to_rgb(COL_LIGHT_GREEN);
+	pct_btn->pressed = false;
+	button_to_chart.append(pct_btn, &chart, pct_curve_year);
 	container_year.end_table();
 
 	// month chart
@@ -268,6 +276,11 @@ void city_info_t::init()
 		container_month.add_component(buttons[i]);
 		button_to_chart.append(buttons[i], &mchart, curve);
 	}
+	// electricity satisfaction percentage curve (month)
+	sint16 pct_curve_month = mchart.add_curve( color_idx_to_rgb(COL_LIGHT_GREEN), power_pct_month,
+		1, 0, MAX_CITY_HISTORY_MONTHS, PERCENT, false, true, 0 );
+	container_month.add_component(pct_btn);
+	button_to_chart.append(pct_btn, &mchart, pct_curve_month);
 	container_month.end_table();
 
 	// factory list
@@ -453,6 +466,18 @@ void city_info_t::update_labels()
 		highlight.set_text("Make building belong to");
 	} else {
 		highlight.set_text("Highlight");
+	}
+
+	// Update electricity satisfaction percentage arrays for the charts
+	for(  int i = 0;  i < MAX_CITY_HISTORY_YEARS;  i++  ) {
+		const sint64 needed   = city->get_finance_history_year(i, HIST_POWER_NEEDED);
+		const sint64 received = city->get_finance_history_year(i, HIST_POWER_RECEIVED);
+		power_pct_year[i] = needed > 0 ? (received * 100) / needed : 0;
+	}
+	for(  int i = 0;  i < MAX_CITY_HISTORY_MONTHS;  i++  ) {
+		const sint64 needed   = city->get_finance_history_month(i, HIST_POWER_NEEDED);
+		const sint64 received = city->get_finance_history_month(i, HIST_POWER_RECEIVED);
+		power_pct_month[i] = needed > 0 ? (received * 100) / needed : 0;
 	}
 }
 
