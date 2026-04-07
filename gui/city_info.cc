@@ -154,7 +154,7 @@ const char *hist_type[MAX_CITY_HISTORY] =
 {
 	"citicens", "Growth", "Buildings", "Verkehrsteilnehmer",
 	"Transported", "walking", "Passagiere", "sended", "directmail", "Post",
-	"Arrived", "Goods", "Electricity"
+	"Arrived", "Goods", "Electricity", "Power demand"
 };
 
 
@@ -162,7 +162,7 @@ const uint8 hist_type_color[MAX_CITY_HISTORY] =
 {
 	COL_WHITE, COL_DARK_GREEN, COL_LIGHT_PURPLE, COL_CONSTRUCTION,
 	COL_LIGHT_BLUE, COL_DARK_BLUE, COL_SOFT_BLUE, COL_LIGHT_YELLOW, COL_DARK_YELLOW, COL_YELLOW,
-	COL_LIGHT_BROWN, COL_BROWN, COL_OPS_PROFIT
+	COL_LIGHT_BROWN, COL_BROWN, COL_OPS_PROFIT, COL_ORANGE
 };
 
 
@@ -226,7 +226,7 @@ void city_info_t::init()
 	year_month_tabs.add_tab(&container_factories, translator::translate("Factories"));
 	add_component(&year_month_tabs);
 	// .. put the same buttons in both containers
-	button_t* buttons[MAX_CITY_HISTORY-1];
+	button_t* buttons[MAX_CITY_HISTORY];
 	// add city charts
 	// year chart
 	container_year.set_table_layout(1,0);
@@ -236,9 +236,8 @@ void city_info_t::init()
 	chart.set_seed(welt->get_last_year());
 	chart.set_background(SYSCOL_CHART_BACKGROUND);
 
-	container_year.add_table(4,3)->set_force_equal_columns(true);
-	//   skip electricity
-	for(  uint32 i = 0;  i<MAX_CITY_HISTORY-1;  i++  ) {
+	container_year.add_table(4,4)->set_force_equal_columns(true);
+	for(  uint32 i = 0;  i<MAX_CITY_HISTORY;  i++  ) {
 		sint16 curve = chart.add_curve( color_idx_to_rgb(hist_type_color[i]), city->get_city_history_year(),
 			MAX_CITY_HISTORY, i, 12, STANDARD, (city->stadtinfo_options & (1<<i))!=0, true, 0 );
 		// add button
@@ -260,8 +259,8 @@ void city_info_t::init()
 	mchart.set_seed(0);
 	mchart.set_background(SYSCOL_CHART_BACKGROUND);
 
-	container_month.add_table(4,3)->set_force_equal_columns(true);
-	for(  uint32 i = 0;  i<MAX_CITY_HISTORY-1;  i++  ) {
+	container_month.add_table(4,4)->set_force_equal_columns(true);
+	for(  uint32 i = 0;  i<MAX_CITY_HISTORY;  i++  ) {
 		sint16 curve = mchart.add_curve( color_idx_to_rgb(hist_type_color[i]), city->get_city_history_month(),
 			MAX_CITY_HISTORY, i, 12, STANDARD, (city->stadtinfo_options & (1<<i))!=0, true, 0 );
 

@@ -34,6 +34,7 @@
 #include "simdebug.h"
 
 #include "obj/gebaeude.h"
+#include "obj/leitung2.h"
 
 #include "dataobj/translator.h"
 #include "dataobj/settings.h"
@@ -935,6 +936,12 @@ stadt_t::~stadt_t()
 		minimap_t::get_instance()->set_selected_city(NULL);
 	}
 
+	// disconnect all substations
+	for(senke_t* sub : substations) {
+		sub->city = NULL;
+	}
+	substations.clear();
+
 	// only if there is still a world left to delete from
 	if( welt->get_size().x > 1 ) {
 
@@ -962,6 +969,23 @@ stadt_t::~stadt_t()
 			// avoid the bookkeeping if world gets destroyed
 		}
 	}
+}
+
+
+uint32 stadt_t::get_power_demand() const
+{
+	// 1kW per citizen in internal power units (POWER_TO_MW=12: 1<<12 internal units = 1MW)
+	return ((uint32)city_history_month[0][HIST_CITIZENS] << POWER_TO_MW) / 1000;
+}
+
+void stadt_t::add_substation(senke_t* sub)
+{
+	substations.append_unique(sub);
+}
+
+void stadt_t::remove_substation(senke_t* sub)
+{
+	substations.remove(sub);
 }
 
 
