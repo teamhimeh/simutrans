@@ -718,9 +718,9 @@ void senke_t::step(uint32 delta_t)
 		// Calculate actual power load delivered
 		const uint32 power_load = get_power_load();
 
-		// Report to city history (in internal MW units)
-		city->add_power(power_load >> POWER_TO_MW);
-		city->add_power_demand(my_demand >> POWER_TO_MW);
+		// Report to city history in kW-scale units (÷5 like Extended's KW_DIVIDER, better precision than ÷4096)
+		city->add_power(power_load / 5);
+		city->add_power_demand(my_demand / 5);
 
 		// Accumulate revenue for energy delivered
 		energy_acc += ((uint64)my_demand * (uint64)get_net()->get_normal_supply() * (uint64)delta_t) / ((uint64)PRODUCTION_DELTA_T << powernet_t::FRACTION_PRECISION);
