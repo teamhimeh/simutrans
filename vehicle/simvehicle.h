@@ -505,6 +505,8 @@ protected:
 
 	koord3d pos_prev; //used in enter_tile()
 
+	sint16 sideways_image_steps; // >0 while showing sideways departure image
+
 public:
 	virtual void enter_tile(grund_t*) OVERRIDE;
 
@@ -540,6 +542,9 @@ public:
 	virtual void get_screen_offset( int &xoff, int &yoff, const sint16 raster_width ) const OVERRIDE { get_screen_offset(xoff,yoff,raster_width,false); }
 
 	obj_t::typ get_typ() const OVERRIDE { return road_vehicle; }
+
+	void calc_image() OVERRIDE;
+	uint32 do_drive(uint32 dist) OVERRIDE;
 
 	koord3d get_pos_prev() const { return pos_prev; }
 
