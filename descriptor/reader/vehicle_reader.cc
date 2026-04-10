@@ -212,7 +212,7 @@ obj_desc_t *vehicle_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 				decode_uint16(p); // increase_maintenance_by_percent
 				decode_uint8(p);  // years_before_maintenance_max_reached
 			}
-			if (extended_version >= 5) { decode_uint8(p); } // livery_image_type
+			if (extended_version >= 5) { desc->livery_image_type = decode_uint8(p); } // livery_image_type
 			if (extended_version >= 6) { decode_uint16(p); decode_uint16(p); } // min/max_loading_time_seconds
 		}
 	}
@@ -269,7 +269,7 @@ obj_desc_t *vehicle_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 				decode_uint16(p); // increase_maintenance_by_percent
 				decode_uint8(p);  // years_before_maintenance_max_reached
 			}
-			if (extended_version >= 5) { decode_uint8(p); } // livery_image_type
+			if (extended_version >= 5) { desc->livery_image_type = decode_uint8(p); } // livery_image_type
 			if (extended_version >= 6) { decode_uint16(p); decode_uint16(p); } // loading_time_seconds
 			if (extended_version >= 7) {
 				decode_uint16(p); // rolling_resistance
@@ -364,7 +364,7 @@ obj_desc_t *vehicle_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 			decode_uint16(p); // increase_maintenance_after_years
 			decode_uint16(p); // increase_maintenance_by_percent
 			decode_uint8(p);  // years_before_maintenance_max_reached
-			decode_uint8(p);  // livery_image_type
+			desc->livery_image_type = decode_uint8(p); // livery_image_type
 			decode_uint16(p); // min_loading_time_seconds
 			decode_uint16(p); // max_loading_time_seconds
 			decode_uint16(p); // rolling_resistance
@@ -506,6 +506,11 @@ obj_desc_t *vehicle_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 	// before version 8 vehicles could only have one freight image in each direction
 	if(version<8) {
 		desc->freight_image_type=0;
+	}
+
+	// non-extended vehicles never have livery images
+	if(!extended) {
+		desc->livery_image_type = 0;
 	}
 
 	if (version < 9 && !extended) {

@@ -119,9 +119,8 @@ obj_desc_t * tunnel_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 				decode_uint8(p);  // max_vehicles_on_tile
 			}
 			if (extended_version >= 2) {
-				// complex subsea cost flags block - just skip it safely
+				// flags byte: bit0=is_half_height, other bits select optional cost fields
 				uint8 flags = decode_uint8(p);
-				decode_uint8(p); // is_half_height already consumed by flags byte
 				if (flags & 0x02) { decode_uint32(p); decode_uint32(p); } // subsea_cost, subsea_maintenance
 				if (flags & 0x04) { decode_uint32(p); } // subbuilding_cost
 				if (flags & 0x08) { decode_uint32(p); decode_uint32(p); } // subwaterline_cost, _maintenance
