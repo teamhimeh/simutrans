@@ -499,6 +499,8 @@ private:
 
 	vector_tpl<koord3d> reserving_tiles;
 
+	const uint16 turned_length = VEHICLE_STEPS_PER_TILE / 32;
+
 protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
