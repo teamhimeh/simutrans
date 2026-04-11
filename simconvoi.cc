@@ -1280,6 +1280,7 @@ bool convoi_t::drive_to()
 
 		const sint32 max_speed_kmh = speed_to_kmh(min_top_speed);
 		const bool need_electric = needs_electrification();
+		const bool is_electric = is_electrification();
 
 		// Cache-aware route calculation: tries cache first, falls back to A* on miss or passability failure.
 		// Only convoys assigned to a line use the cache, and only when the convoy's schedule
@@ -1289,21 +1290,37 @@ bool convoi_t::drive_to()
 			if (use_route_cache) {
 				const uint8 entry_idx = schedule->get_current_stop();
 				const uint16 cnv_len = pass_stop ? 0 : get_entire_convoy_length();
-				route_t *cached = welt->get_route_cache().find(
-						line, entry_idx, s, z, max_speed_kmh, cnv_len, need_electric);
-				if (cached  &&  cached->is_passable(welt, fahr[0], need_electric)) {
-					*r = *cached;
-					return true;
+				if(is_electric) {
+					route_t *cached = welt->get_route_cache().find(
+							line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
+					if (cached  &&  cached->is_passable(welt, fahr[0], true)) {
+						*r = *cached;
+						set_use_electric(true);
+						return true;
+					}
+					if (cached) {
+						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
+					}
 				}
-				if (cached) {
-					welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, need_electric);
+				if(!r&&!need_electric) {
+					// no electric route found
+					route_t *cached = welt->get_route_cache().find(
+							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
+					if (cached  &&  cached->is_passable(welt, fahr[0], false)) {
+						*r = *cached;
+						set_use_electric(false);
+						return true;
+					}
+					if (cached) {
+						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
+					}
 				}
 			}
 			const bool ok = fahr[0]->calc_route(s, z, max_speed_kmh, r, pass_stop);
 			if (ok  &&  use_route_cache) {
 				const uint8 entry_idx = schedule->get_current_stop();
 				const uint16 cnv_len = pass_stop ? 0 : get_entire_convoy_length();
-				welt->get_route_cache().add(line, entry_idx, s, z, max_speed_kmh, cnv_len, need_electric, *r);
+				welt->get_route_cache().add(line, entry_idx, s, z, max_speed_kmh, cnv_len, use_electric, *r);
 			}
 			return ok;
 		};
@@ -3450,6 +3467,16 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->is_loading()  ) {
+		// A try-coupling convoy waiting at a guide signal (WAITING_FOR_CLEARANCE etc.) has
+		// next_coupling_index == INVALID_INDEX because the coupling route is not yet found.
+		// next_reservation_index may have been set too far ahead by a prior block_reserver(1001)
+		// call on the ORIGINAL route (past the guide signal). Cap it at next_stop_index before
+		// reserve_route() runs so the wrong tiles are never reserved in the first place.
+		if(  is_waiting()  &&  next_coupling_index == route_t::INVALID_INDEX
+		  &&  schedule != NULL  &&  schedule->get_current_entry().is_try_coupling()
+		  &&  next_reservation_index > next_stop_index  ) {
+			next_reservation_index = next_stop_index;
+		}
 		reserve_route();
 		recalc_catg_index();
 	}
