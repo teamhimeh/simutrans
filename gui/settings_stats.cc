@@ -261,6 +261,7 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_NUM ( "base_waiting_ticks_for_air_convoi", sets->base_waiting_ticks_for_air_convoi, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	SEPERATOR
 	INIT_BOOL( "allow_higher_flight", sets->allow_higher_flight );
+	INIT_BOOL( "use_route_cache", sets->use_route_cache );
 	INIT_END
 }
 
@@ -311,6 +312,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->base_waiting_ticks_for_air_convoi );
 
 	READ_BOOL_VALUE( sets->allow_higher_flight );
+	READ_BOOL_VALUE( sets->use_route_cache );
 }
 
 
@@ -354,7 +356,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	INIT_NUM( "electric_promille", sets->get_electric_promille(), 0, 1000, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_BOOL( "allow_underground_transformers", sets->get_allow_underground_transformers() );
 	INIT_NUM( "way_height_clearance", sets->get_way_height_clearance(), 1, 2, gui_numberinput_t::AUTOLINEAR, true );
-	INIT_NUM( "credit_per_MWs", sets->get_credit_per_MWs(), 1, 10000, gui_numberinput_t::AUTOLINEAR, false);
+	INIT_NUM( "cst_kw_per_credit", sets->get_cst_kw_per_credit(), 1, 10000, gui_numberinput_t::AUTOLINEAR, false);
 	SEPERATOR
 
 	INIT_NUM( "passenger_factor",  sets->get_passenger_factor(), 0, 16, gui_numberinput_t::AUTOLINEAR, false );
@@ -452,7 +454,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->electric_promille );
 	READ_BOOL_VALUE( sets->allow_underground_transformers );
 	READ_NUM_VALUE( sets->way_height_clearance );
-	READ_NUM_VALUE( sets->credit_per_MWs );
+	READ_NUM_VALUE( sets->cst_kw_per_credit );
 
 	READ_NUM_VALUE( sets->passenger_factor );
 	READ_NUM_VALUE( sets->passenger_factor_float );
