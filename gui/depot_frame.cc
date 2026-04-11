@@ -1085,6 +1085,9 @@ void depot_frame_t::update_data()
 		if(  cnv.is_bound()  &&  c == cnv  ) {
 			// this convoy
 			convoy_selector.set_selection( convoy_selector.count_elements() - 1 );
+			if(  cnv->get_vehicle_count()>0  ) {
+				bt_show_tram.pressed = cnv->front()->get_desc()->get_waytype()==tram_wt;
+			}
 		} 
 	}
 
@@ -1814,7 +1817,7 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 		else if(  comp == &bt_allow_invalid_convoy  ) {
 			bt_allow_invalid_convoy.pressed = !bt_allow_invalid_convoy.pressed;
 			if(  cnv.is_bound() && cnv->pruefe_alle()  ) {
-				cnv->call_convoi_tool('i',NULL);
+				cnv->call_convoi_tool('i', "0");
 			}
 			return true;
 		}

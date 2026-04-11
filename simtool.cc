@@ -8931,7 +8931,7 @@ bool tool_change_convoi_t::init( player_t *player )
 
 		case 'i':
 		{
-			cnv->set_invalid_convoy(!cnv->is_invalid_convoy());
+			cnv->set_invalid_convoy(atoi(p)!=0);
 		}
 	}
 
