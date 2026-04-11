@@ -9441,13 +9441,18 @@ bool tool_change_depot_t::init( player_t *player )
 					int start_nr = atoi(p);
 					int nr = start_nr;
 
-					// find end
-					while(nr<cnv->get_vehicle_count()) {
-						const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
-						nr ++;
-						if(info->get_trailer_count()!=1) {
-							break;
+					// find end (for invalid convoy, only remove 1 vehicle at a time)
+					if(  !cnv->is_invalid_convoy()  ) {
+						while(nr<cnv->get_vehicle_count()) {
+							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
+							nr ++;
+							if(info->get_trailer_count()!=1) {
+								break;
+							}
 						}
+					}
+					else {
+						nr = start_nr + 1;
 					}
 					// now remove the vehicles
 					if(  cnv->get_vehicle_count()==nr-start_nr  ||  (tool=='R'  &&  start_nr==0)  ) {
@@ -9477,8 +9482,9 @@ bool tool_change_depot_t::init( player_t *player )
 					slist_tpl<const vehicle_desc_t *>new_vehicle_info;
 					const vehicle_desc_t *start_info = info;
 
-					if(tool!='a'&&tool!='A') {
-						// start of composition
+					const bool is_invalid = cnv.is_bound() && cnv->is_invalid_convoy();
+					if(tool!='a'&&tool!='A'&&!is_invalid) {
+						// start of composition (skipped for invalid convoy: insert only 1 vehicle)
 						while(  info->get_leader_count() == 1  &&  info->get_leader(0) != NULL  &&  info->get_leader(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_leader(0))) {
 							info = info->get_leader(0);
 							new_vehicle_info.insert(info);
@@ -9486,7 +9492,8 @@ bool tool_change_depot_t::init( player_t *player )
 						info = start_info;
 					}
 					new_vehicle_info.append( info );
-					if (tool != 'i'&&tool!='A') {
+					if (tool != 'i'&&tool!='A'&&!is_invalid) {
+						// trailer chain (skipped for invalid convoy: append only 1 vehicle)
 						while(info->get_trailer_count() == 1  &&  info->get_trailer(0) != NULL  &&  info->get_trailer(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_trailer(0))) {
 							info = info->get_trailer(0);
 							new_vehicle_info.append(info);
