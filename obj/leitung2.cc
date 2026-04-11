@@ -743,8 +743,11 @@ uint32 senke_t::get_power_load() const
 
 void senke_t::pay_revenue()
 {
+	// megajoules (megawatt seconds) per cent
+	const uint64 mjpc = (1 << (POWER_TO_MW-10)) * world()->get_settings().get_cst_kw_per_credit();
+
 	// calculate payment in cent
-	const sint64 payment = (sint64)(energy_acc * world()->get_settings().get_credit_per_MWs() / (1 << POWER_TO_MW));
+	const sint64 payment = (sint64)(energy_acc / mjpc);
 
 	// make payment
 	if(  payment  >  0  ) {
@@ -752,7 +755,7 @@ void senke_t::pay_revenue()
 		get_owner()->book_revenue( payment, get_pos().get_2d(), powerline_wt );
 
 		// remove payment from accumulator
-		energy_acc = (energy_acc * world()->get_settings().get_credit_per_MWs() - payment * (1 << POWER_TO_MW))/world()->get_settings().get_credit_per_MWs();
+		energy_acc %= mjpc;
 	}
 }
 
