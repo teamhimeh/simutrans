@@ -583,6 +583,7 @@ void depot_frame_t::layout(scr_size *size)
 
 	bt_allow_invalid_convoy.set_pos(scr_size(D_MARGIN_LEFT+D_H_SPACE+BUTTON_WIDTH_DEPOT, CONVOI_VSTART + cont_convoi.get_size().h + (3+D_SCROLLBAR_HEIGHT)*(CLIST_WIDTH >= win_size.w-D_MARGIN_LEFT-D_MARGIN_RIGHT) + D_V_SPACE));
 	bt_allow_invalid_convoy.set_width(BUTTON_WIDTH_DEPOT);
+	// invalid convoy can not go alone!
 	bt_allow_invalid_convoy.set_visible(should_show_child_convoi_selector);
 
 	// place for description text

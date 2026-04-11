@@ -922,7 +922,7 @@ public:
 	/**
 	 * invalid convoy: invalid coupling condition
 	 */
-	const bool is_invalid_convoy() const { return invalid_convoy; }
+	bool is_invalid_convoy() const { return invalid_convoy; }
 	void set_invalid_convoy(bool y) { invalid_convoy = y; }
 
 	/**
