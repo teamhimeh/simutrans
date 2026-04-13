@@ -33,7 +33,7 @@
 
 static const char cost_type[convoi_t::MAX_CONVOI_COST][64] =
 {
-	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll"
+	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo"
 };
 
 static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
@@ -45,12 +45,13 @@ static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
 	COL_PROFIT,
 	COL_DISTANCE,
 	COL_MAXSPEED,
-	COL_TOLL
+	COL_TOLL,
+	COL_TONKILO
 };
 
 static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 {
-	false, false, true, true, true, false, false, true
+	false, false, true, true, true, false, false, true, false
 };
 
 
@@ -221,7 +222,7 @@ void convoi_info_t::init(convoihandle_t cnv)
 	chart.set_min_size(scr_size(0, CHART_HEIGHT));
 	container_stats.add_component(&chart);
 
-	container_stats.add_table(4,2)->set_force_equal_columns(true);
+	container_stats.add_table(4,3)->set_force_equal_columns(true);
 
 	for (int cost = 0; cost<convoi_t::MAX_CONVOI_COST; cost++) {
 		uint16 curve = chart.add_curve( color_idx_to_rgb(cost_type_color[cost]), cnv->get_finance_history(), convoi_t::MAX_CONVOI_COST, cost, MAX_MONTHS, cost_type_money[cost], false, true, cost_type_money[cost]*2 );
@@ -410,7 +411,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			if(  cnv->get_coupling_convoi().is_bound()  ) {
 				convoihandle_t c = cnv;
 				while( c.is_bound() ) {
-					if(  cnv->get_owner() != c->get_owner() || cnv->get_schedule()->get_waytype() != c->get_schedule()->get_waytype()  ) {
+					if(  cnv->get_owner() != c->get_owner() || cnv->front()->get_waytype() != c->front()->get_waytype()  ) {
 						show_go_home_button = false;
 					}
 					c = c->get_coupling_convoi();

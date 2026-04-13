@@ -6883,6 +6883,14 @@ const char *tool_link_factory_t::do_work( player_t *, const koord3d &start, cons
 			return NULL;
 		}
 	}
+	else if(fab!=NULL  &&  last_fab!=NULL  &&  last_fab==fab  &&  is_shift_pressed()) {
+		// connect to all factories
+		fab->add_all_suppliers();
+		FOR(slist_tpl<fabrik_t*>, const f, welt->get_fab_list()) {
+			// connect to an existing one, if this is an producer
+			f->add_supplier(fab);
+		}
+	}
 	return "";
 }
 
@@ -9003,6 +9011,8 @@ bool tool_change_line_t::init( player_t *player )
 				}
 
 				line->get_schedule()->sscanf_schedule( p );
+				// departure_slot_group_id is always the line's own ID for a newly created line
+				line->get_schedule()->set_departure_slot_group_id(line);
 				// check scenario conditions
 				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(line);
@@ -9035,6 +9045,23 @@ bool tool_change_line_t::init( player_t *player )
 					if(w) {
 						destroy_win( w );
 					}
+					// If the departure slot group changed, cascade-update all lines that were following this line.
+					linehandle_t new_group = linehandle_t();
+					for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+						player_t *pl = welt->get_player(pi);
+						if(  !pl  ) { continue; }
+						FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+							if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+								if(  !new_group.is_bound()  ) {
+									// set this line as a new group id for us.
+									new_group = other;
+								} else {
+									// set new departure slot group
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
+					}
 					player->simlinemgmt.delete_line(line);
 				}
 			}
@@ -9052,9 +9079,20 @@ bool tool_change_line_t::init( player_t *player )
 					}
 					schedule_t *schedule = line->get_schedule()->copy();
 					if (schedule->sscanf_schedule( p )  &&  (no_check()  ||  scenario_check_schedule(welt, player, schedule, can_use_gui())) ) {
+						const linehandle_t new_group = schedule->get_departure_slot_group_id();
 						schedule->finish_editing();
 						line->set_schedule( schedule );
 						line->get_owner()->simlinemgmt.update_line(line);
+						// If the departure slot group changed, cascade-update all lines that were following this line.
+						for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+							player_t *pl = welt->get_player(pi);
+							if(  !pl  ) { continue; }
+							FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+								if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
 					}
 					else {
 						// could not read schedule, do not assign
@@ -9172,6 +9210,7 @@ bool tool_change_line_t::init( player_t *player )
 					// if there is more than one convois => new line
 					if(  cnvs[i].get_count()>1  ) {
 						line = player->simlinemgmt.create_line( cnvs[i][0]->get_schedule()->get_type(), player, cnvs[i][0]->get_schedule() );
+						line->get_schedule()->set_departure_slot_group_id(line);
 						FOR(vector_tpl<convoihandle_t>, cnv, cnvs[i] ) {
 							line->add_convoy( cnv );
 							cnv->set_line( line );
@@ -9195,6 +9234,8 @@ bool tool_change_line_t::init( player_t *player )
 					break;
 				}
 				linehandle_t new_line = player->simlinemgmt.create_line( line->get_linetype(), player , line->get_schedule());
+				// copied line starts in its own departure slot group
+				new_line->get_schedule()->set_departure_slot_group_id(new_line);
 				// check scenario conditions
 				if (!scenario_check_schedule(welt, player, new_line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(new_line);
@@ -9660,6 +9701,9 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * c:set end of choose signal
  * g:set end of guide signal
  * m:set margin of the stoplength of choose signal
+ * t:set stop before check(for choose/longblock signs)
+ * d:set use default route for choose signal
+ * p:set start signal(do not start from stops if this flag is true)
  * 
  */
 bool tool_change_roadsign_t::init( player_t* )
@@ -9764,6 +9808,44 @@ bool tool_change_roadsign_t::init( player_t* )
 			}
 		}
 		break;
+
+		case 't':
+		// set advance to end state for signal
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_stop_before_check(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'd':
+		// use default route for choose signal(before call find_route())
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_skip_default_route(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'p':
+		// when state is RED, do not move even if convoy is not reached the end of the signal tile.
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>() ) {
+				rs->set_start_signal(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
 
 
 		default:

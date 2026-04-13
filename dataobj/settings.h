@@ -64,7 +64,7 @@ private:
 	sint32 electric_promille;
 	sint32 tourist_attractions;
 
-	uint32 credit_per_MWs;
+	uint32 cst_kw_per_credit=512;
 
 	sint32 city_count;
 	sint32 mean_citizen_count;
@@ -350,6 +350,9 @@ private:
 	// flying height calculation method
 	bool allow_higher_flight;
 
+	// use route cache
+	bool use_route_cache;
+
 	// The flag whether the time based goods routing is enabled for the goods.
 	// The array index is the goods category index.
 	bool is_time_based_routing_enabled[256];
@@ -477,7 +480,7 @@ public:
 
 	sint32 get_electric_promille() const {return electric_promille;}
 
-	sint32 get_credit_per_MWs() const {return credit_per_MWs;}
+	sint32 get_cst_kw_per_credit() const {return cst_kw_per_credit;}
 
 	void set_tourist_attractions( sint32 n ) { tourist_attractions = n; }
 	sint32 get_tourist_attractions() const {return tourist_attractions;}
@@ -763,6 +766,8 @@ public:
 	bool is_default_reverse() const {return default_reverse;}
 	// allow unload longer convoy
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+
+	bool is_using_route_cache() const { return use_route_cache; }
 };
 
 #endif
