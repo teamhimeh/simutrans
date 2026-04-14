@@ -2427,7 +2427,7 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 	vehicle_base_t::get_screen_offset( xoff, yoff, raster_width );
 	const int dir = ribi_t::get_dir(get_direction());
 
-	if(  welt->get_settings().is_drive_left()  ) {
+	if(  welt->get_settings().is_drive_left() && sideways_image_steps==0  ) {
 		xoff += tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
 		yoff += tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
 	}
@@ -2439,11 +2439,11 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 		yoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),false,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
 		}
 		sint8 tiles_overtaking = prev_based ? cnv->get_prev_tiles_overtaking() : cnv->get_tiles_overtaking();
-		if(  tiles_overtaking>0  ) { /* This means the convoy is overtaking other vehicles. */
+		if(  tiles_overtaking>0 && sideways_image_steps==0 ) { /* This means the convoy is overtaking other vehicles. */
 			xoff += tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width);
 			yoff += tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][1], raster_width);
 		}
-		else if(  tiles_overtaking<0  ) { /* This means the convoy is overtaken by other vehicles. */
+		else if(  tiles_overtaking<0 && sideways_image_steps==0  ) { /* This means the convoy is overtaken by other vehicles. */
 			xoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width)/5;
 			yoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][1], raster_width)/5;
 		}
