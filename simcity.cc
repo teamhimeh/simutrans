@@ -2762,35 +2762,39 @@ void stadt_t::check_bau_townhall(bool new_town)
 			welt->lookup_kartenboden(best_pos + offset)->set_text( name );
 		}
 
-		if ((neugruendung || umziehen) && !pos_preselected) {
-			// check if any road already exists on any tile adjacent to the townhall footprint
+		if (neugruendung && pos_preselected) {
+			// Layout was chosen because the road0 strip already has a road — record it without building.
+			townhall_road = best_pos + road0;
+		}
+		else if (neugruendung || umziehen) {
+			// Check whether a road already exists on the road strip where we would place new road tiles.
+			// Only scan the road0..road1 strip (the actual side that would receive new tiles),
+			// so a road on any other side does not suppress construction on the road0 side.
 			bool has_existing_road = false;
-			{
-				const koord hall_pos = best_pos + offset;
-				const int w = desc->get_x(layout);
-				const int h = desc->get_y(layout);
-				// top and bottom rows
-				for (int x = -1; x <= w && !has_existing_road; x++) {
-					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, -1))) {
-						if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
-					}
-					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(x, w))) {
-						if (gr->hat_weg(road_wt)) { has_existing_road = true; }
-					}
+			if (road0 == road1) {
+				if (grund_t *gr = welt->lookup_kartenboden(best_pos + road0)) {
+					has_existing_road = gr->hat_weg(road_wt);
 				}
-				// left and right columns (excluding corners already checked)
-				for (int y = 0; y <= h-1 && !has_existing_road; y++) {
-					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(-1, y))) {
-						if (gr->hat_weg(road_wt)) { has_existing_road = true; break; }
-					}
-					if (grund_t *gr = welt->lookup_kartenboden(hall_pos + koord(w, y))) {
-						if (gr->hat_weg(road_wt)) { has_existing_road = true; }
+			}
+			else if (road0.y == road1.y) {
+				// horizontal strip (south- or north-facing layout)
+				for (int x = road0.x; x <= road1.x && !has_existing_road; x++) {
+					if (grund_t *gr = welt->lookup_kartenboden(best_pos + koord(x, road0.y))) {
+						has_existing_road = gr->hat_weg(road_wt);
 					}
 				}
 			}
-			// build the road in front of the townhall only if no road exists nearby
+			else {
+				// vertical strip (east- or west-facing layout)
+				for (int y = road0.y; y <= road1.y && !has_existing_road; y++) {
+					if (grund_t *gr = welt->lookup_kartenboden(best_pos + koord(road0.x, y))) {
+						has_existing_road = gr->hat_weg(road_wt);
+					}
+				}
+			}
+			// build the road in front of the townhall only if the strip has no road yet
 			if (!has_existing_road) {
-				if (road0!=road1) {
+				if (road0 != road1) {
 					way_builder_t bauigel(NULL);
 					bauigel.init_builder(way_builder_t::strasse, welt->get_city_road(), NULL, NULL);
 					bauigel.set_build_sidewalk(true);
