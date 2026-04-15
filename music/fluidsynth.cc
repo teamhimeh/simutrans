@@ -33,6 +33,7 @@ static void get_ext_lower(const char *filename, char *ext, int maxlen)
 	const char *p = strrchr(filename, '.');
 	ext[0] = 0;
 	if(  !p  ) { return; }
+	p++;  // skip the '.' so ext contains e.g. "mid", not ".mid"
 	int i;
 	for(  i = 0;  i < maxlen - 1  &&  p[i];  i++  ) {
 		ext[i] = (char)tolower((unsigned char)p[i]);
@@ -44,15 +45,18 @@ static bool is_midi_ext(const char *filename)
 {
 	char ext[8];
 	get_ext_lower(filename, ext, sizeof(ext));
-	if(  ext[0] == 0  ) { return true; }  // no extension, assume MIDI
-	return strcmp(ext, ".mid") == 0  ||  strcmp(ext, ".midi") == 0;
+	if(  ext[0] == 0  ) {
+		dbg->warning("is_midi_ext()", "BGM file has no extension, assuming MIDI: %s", filename);
+		return true;
+	}
+	return strcmp(ext, "mid") == 0  ||  strcmp(ext, "midi") == 0;
 }
 
 static bool is_wav_ext(const char *filename)
 {
 	char ext[8];
 	get_ext_lower(filename, ext, sizeof(ext));
-	return strcmp(ext, ".wav") == 0;
+	return strcmp(ext, "wav") == 0;
 }
 
 fluid_settings_t* settings;
@@ -155,6 +159,11 @@ void dr_play_midi(int key)
 				dbg->warning("dr_play_midi()", "SDL_mixer: Failed to load %s: %s", midi_filenames[key].c_str(), Mix_GetError());
 			}
 		}
+		else {
+			dbg->warning("dr_play_midi()", "SDL_mixer not initialized; cannot play WAV BGM: %s", midi_filenames[key].c_str());
+		}
+#else
+		dbg->warning("dr_play_midi()", "WAV BGM not supported in this build: %s", midi_filenames[key].c_str());
 #endif
 		return;
 	}
@@ -183,7 +192,6 @@ void dr_stop_midi(void)
 		Mix_HaltMusic();
 		Mix_FreeMusic( bgm_music );
 		bgm_music = NULL;
-		return;
 	}
 #endif
 	if(  !player  ) {
@@ -342,7 +350,8 @@ bool dr_init_midi()
 		dbg->message("dr_init_midi()", "SDL_mixer initialized for WAV BGM support.");
 	}
 	else {
-		dbg->warning("dr_init_midi()", "SDL_mixer: Could not open audio (WAV BGM disabled): %s", Mix_GetError());
+		dbg->warning("dr_init_midi()", "SDL_mixer: Could not open audio (WAV BGM disabled): %s. "
+			"This typically happens when FluidSynth is using the sdl2 audio driver and already owns the SDL audio device.", Mix_GetError());
 	}
 #endif
 
