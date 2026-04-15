@@ -211,6 +211,144 @@ function test_building_build_house_auto_rotation_citybuilding()
 }
 
 
+// Tests for multi-tile city buildings (res/com/ind type, size > 1x1).
+// Uses CITY_RES_2X2, a 2x2 city_res building derived from RUIN_0 imagery,
+// added to simutrans-test-base.zip specifically to cover PR #460 fixes.
+
+
+function test_building_city_multitile_all_tiles_occupied()
+{
+	local public_pl = player_x(1)
+	local builder   = command_x(tool_build_house)
+	local remover   = command_x(tool_remover)
+
+	// a city is required for city buildings
+	ASSERT_EQUAL(command_x(tool_add_city).work(public_pl, coord3d(8, 8, 0), "0"), null)
+
+	// build the 2x2 city residential building
+	ASSERT_EQUAL(builder.work(public_pl, coord3d(2, 2, 0), "11CITY_RES_2X2"), null)
+
+	// all four tiles must carry a building object after construction
+	ASSERT_TRUE(tile_x(2, 2, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(3, 2, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(2, 3, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(3, 3, 0).find_object(mo_building) != null)
+
+	// the building descriptor must be the one we placed
+	ASSERT_EQUAL(building_x(2, 2, 0).get_desc().get_name(), "CITY_RES_2X2")
+
+	// clean up
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(2, 2, 0)), null)
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(8, 8, 0)), null)
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(7, 9, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_building_city_multitile_removal_clears_all_tiles()
+{
+	local public_pl = player_x(1)
+	local builder   = command_x(tool_build_house)
+	local remover   = command_x(tool_remover)
+
+	ASSERT_EQUAL(command_x(tool_add_city).work(public_pl, coord3d(8, 8, 0), "0"), null)
+	ASSERT_EQUAL(builder.work(public_pl, coord3d(2, 2, 0), "11CITY_RES_2X2"), null)
+
+	// remove via the origin tile
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(2, 2, 0)), null)
+
+	// all four tiles must be empty (no leftover foundations or building objects)
+	ASSERT_TRUE(tile_x(2, 2, 0).is_empty())
+	ASSERT_TRUE(tile_x(3, 2, 0).is_empty())
+	ASSERT_TRUE(tile_x(2, 3, 0).is_empty())
+	ASSERT_TRUE(tile_x(3, 3, 0).is_empty())
+
+	// clean up
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(8, 8, 0)), null)
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(7, 9, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_building_city_multitile_requires_city()
+{
+	local public_pl = player_x(1)
+
+	// without a city, placement must fail
+	ASSERT_EQUAL(command_x(tool_build_house).work(public_pl, coord3d(2, 2, 0), "11CITY_RES_2X2"), "No suitable ground!")
+
+	// tiles must remain empty
+	ASSERT_TRUE(tile_x(2, 2, 0).find_object(mo_building) == null)
+	ASSERT_TRUE(tile_x(3, 2, 0).find_object(mo_building) == null)
+	ASSERT_TRUE(tile_x(2, 3, 0).find_object(mo_building) == null)
+	ASSERT_TRUE(tile_x(3, 3, 0).find_object(mo_building) == null)
+
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_building_city_multitile_replaces_existing_1x1()
+{
+	local public_pl = player_x(1)
+	local builder   = command_x(tool_build_house)
+	local remover   = command_x(tool_remover)
+
+	ASSERT_EQUAL(command_x(tool_add_city).work(public_pl, coord3d(8, 8, 0), "0"), null)
+
+	// place a 1x1 city building at the origin of the future 2x2 footprint
+	ASSERT_EQUAL(builder.work(public_pl, coord3d(2, 2, 0), "1ARES_01_23"), null)
+	ASSERT_EQUAL(building_x(2, 2, 0).get_desc().get_name(), "RES_01_23")
+
+	// place the 2x2 building at the same origin — should replace the 1x1
+	ASSERT_EQUAL(builder.work(public_pl, coord3d(2, 2, 0), "11CITY_RES_2X2"), null)
+
+	// the 2x2 building must now occupy all four tiles
+	ASSERT_TRUE(tile_x(2, 2, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(3, 2, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(2, 3, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(3, 3, 0).find_object(mo_building) != null)
+	ASSERT_EQUAL(building_x(2, 2, 0).get_desc().get_name(), "CITY_RES_2X2")
+
+	// clean up
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(2, 2, 0)), null)
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(8, 8, 0)), null)
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(7, 9, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_building_city_multitile_on_slope()
+{
+	local public_pl = player_x(1)
+	local builder   = command_x(tool_build_house)
+	local remover   = command_x(tool_remover)
+
+	ASSERT_EQUAL(command_x(tool_add_city).work(public_pl, coord3d(8, 8, 0), "0"), null)
+
+	// raise one corner so tile (3, 2) sits on a slope
+	ASSERT_EQUAL(command_x.grid_raise(public_pl, coord3d(4, 2, 0)), null)
+
+	// building on a footprint where at least one tile is sloped should fail
+	// (check_ground_tile_for_house rejects steep/uneven tiles)
+	local result = builder.work(public_pl, coord3d(2, 2, 0), "11CITY_RES_2X2")
+	ASSERT_TRUE(result != null) // any error message is acceptable
+
+	// no tile in the footprint must have been occupied
+	ASSERT_TRUE(tile_x(2, 2, 0).find_object(mo_building) == null)
+	ASSERT_TRUE(tile_x(3, 2, 0).find_object(mo_building) == null)
+	ASSERT_TRUE(tile_x(2, 3, 0).find_object(mo_building) == null)
+	ASSERT_TRUE(tile_x(3, 3, 0).find_object(mo_building) == null)
+
+	// restore terrain
+	ASSERT_EQUAL(command_x.grid_lower(public_pl, coord3d(4, 2, 1)), null)
+
+	// clean up
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(8, 8, 0)), null)
+	ASSERT_EQUAL(remover.work(public_pl, coord3d(7, 9, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
 function test_building_build_multi_tile_sloped()
 {
 	local public_pl = player_x(1)

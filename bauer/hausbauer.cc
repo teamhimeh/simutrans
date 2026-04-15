@@ -541,6 +541,7 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 						obj_t *const obj = gr->obj_bei(i);
 						obj_t::typ const objtype = obj->get_typ();
 						if(  objtype == obj_t::leitung  ||  objtype == obj_t::pillar  ||  objtype == obj_t::air_vehicle  ) {
+							// air vehicle can fly everywhere->keep it.
 							keptobjs.append(obj);
 						}
 					}
