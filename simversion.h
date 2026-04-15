@@ -22,7 +22,7 @@
 #define SIM_VERSION_BUILD SIM_BUILD_NIGHTLY
 
 #define SIM_LOADABLE_MAJOR 124
-#define SIM_LOADABLE_MINOR 3
+#define SIM_LOADABLE_MINOR 4
 
 // Beware: SAVEGAME minor is often ahead of version minor when there were patches.
 // ==> These have no direct connection at all!
@@ -30,9 +30,9 @@
 #define SIM_SERVER_MINOR    0
 // NOTE: increment before next release to enable save/load of new features
 
-#define OTRP_VERSION_MAJOR 52
-#define OTRP_VERSION_MINOR 2
-#define OTRP_VERSION_PATCH 0
+#define OTRP_VERSION_MAJOR 53
+#define OTRP_VERSION_MINOR 0
+#define OTRP_VERSION_PATCH 2
 // NOTE: increment OTRP_VERSION_MAJOR when the save data structure changes.
 
 #define MAKEOBJ_VERSION "60.5"

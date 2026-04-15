@@ -42,6 +42,7 @@
 
 #include "dataobj/schedule.h"
 #include "dataobj/route.h"
+#include "dataobj/route_cache.h"
 #include "dataobj/ribi.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/translator.h"
@@ -779,6 +780,9 @@ void convoi_t::add_running_cost( const weg_t *weg )
 
 	sum_speed_limit += speed_to_kmh( min( min_top_speed, speed_limit ));
 	book( 1, CONVOI_DISTANCE );
+	for (uint16 i=0; i<anz_vehikel; i++) {
+		book( fahr[i]->get_total_cargo(), CONVOI_TONKILO );
+	}
 }
 
 
@@ -1273,6 +1277,53 @@ bool convoi_t::drive_to()
 		koord3d start = front()->get_pos();
 		koord3d ziel = schedule->get_current_entry().pos;
 
+		const sint32 max_speed_kmh = speed_to_kmh(min_top_speed);
+		const bool need_electric = needs_electrification();
+		const bool is_electric = is_electrification();
+
+		// Cache-aware route calculation: tries cache first, falls back to A* on miss or passability failure.
+		// Only convoys assigned to a line use the cache, and only when the convoy's schedule
+		// exactly matches the line's schedule (no extra depot entries).
+		const bool use_route_cache = front()->get_waytype()!=air_wt  &&  line.is_bound()  &&  schedule->get_count() == line->get_schedule()->get_count() && welt->get_settings().is_using_route_cache();
+		auto cached_calc_route = [&](koord3d s, koord3d z, route_t* r, bool pass_stop) -> bool {
+			if (use_route_cache) {
+				const uint8 entry_idx = schedule->get_current_stop();
+				const uint16 cnv_len = pass_stop ? 0 : get_entire_convoy_length();
+				if(is_electric) {
+					route_t *cached = welt->get_route_cache().find(
+							line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
+					if (cached  &&  cached->is_passable(welt, fahr[0], true)) {
+						*r = *cached;
+						set_use_electric(true);
+						return true;
+					}
+					if (cached) {
+						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
+					}
+				}
+				if(!r&&!need_electric) {
+					// no electric route found
+					route_t *cached = welt->get_route_cache().find(
+							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
+					if (cached  &&  cached->is_passable(welt, fahr[0], false)) {
+						*r = *cached;
+						set_use_electric(false);
+						return true;
+					}
+					if (cached) {
+						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
+					}
+				}
+			}
+			const bool ok = fahr[0]->calc_route(s, z, max_speed_kmh, r, pass_stop);
+			if (ok  &&  use_route_cache) {
+				const uint8 entry_idx = schedule->get_current_stop();
+				const uint16 cnv_len = pass_stop ? 0 : get_entire_convoy_length();
+				welt->get_route_cache().add(line, entry_idx, s, z, max_speed_kmh, cnv_len, use_electric, *r);
+			}
+			return ok;
+		};
+
 		// avoid stopping mid-halt
 		if(  start==ziel  ) {
 			halthandle_t halt = haltestelle_t::get_stoppable_halt(ziel,get_owner(),front()->get_waytype());
@@ -1289,7 +1340,7 @@ bool convoi_t::drive_to()
 			}
 		}
 
-		if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &route, schedule->get_current_entry().is_pass_stop() )  ) {
+		if(  !cached_calc_route( start, ziel, &route, schedule->get_current_entry().is_pass_stop() )  ) {
 			if(  state != NO_ROUTE  ) {
 				state = NO_ROUTE;
 				get_owner()->report_vehicle_problem( self, ziel );
@@ -1343,7 +1394,7 @@ bool convoi_t::drive_to()
 					}
 
 					route_t next_segment;
-					if(  !fahr[0]->calc_route( start, ziel, speed_to_kmh(min_top_speed), &next_segment, schedule->get_current_entry().is_pass_stop() )  ) {
+					if(  !cached_calc_route( start, ziel, &next_segment, schedule->get_current_entry().is_pass_stop() )  ) {
 						// do we still have a valid route to proceed => then go until there
 						if(  route.get_count()>1  ) {
 							break;
@@ -3097,6 +3148,7 @@ void convoi_t::rdwr(loadsave_t *file)
 			financial_history[k][CONVOI_DISTANCE] = 0;
 			financial_history[k][CONVOI_MAXSPEED] = 0;
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(102, 3)  ){
@@ -3110,6 +3162,7 @@ void convoi_t::rdwr(loadsave_t *file)
 			financial_history[k][CONVOI_DISTANCE] = 0;
 			financial_history[k][CONVOI_MAXSPEED] = 0;
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(111, 1)  ){
@@ -3122,6 +3175,7 @@ void convoi_t::rdwr(loadsave_t *file)
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][CONVOI_MAXSPEED] = 0;
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(112, 8)  ){
@@ -3133,6 +3187,19 @@ void convoi_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][CONVOI_WAYTOLL] = 0;
+			financial_history[k][CONVOI_TONKILO] = 0;
+		}
+	}
+	else if (  file->get_OTRP_version()<53  ) 
+	{
+		// load statistics
+		for (int j = 0; j<CONVOI_TONKILO; j++) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		for (size_t k = MAX_MONTHS; k-- != 0;) {
+			financial_history[k][CONVOI_TONKILO] = 0;
 		}
 	}
 	else
@@ -3394,6 +3461,16 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->is_loading()  ) {
+		// A try-coupling convoy waiting at a guide signal (WAITING_FOR_CLEARANCE etc.) has
+		// next_coupling_index == INVALID_INDEX because the coupling route is not yet found.
+		// next_reservation_index may have been set too far ahead by a prior block_reserver(1001)
+		// call on the ORIGINAL route (past the guide signal). Cap it at next_stop_index before
+		// reserve_route() runs so the wrong tiles are never reserved in the first place.
+		if(  is_waiting()  &&  next_coupling_index == route_t::INVALID_INDEX
+		  &&  schedule != NULL  &&  schedule->get_current_entry().is_try_coupling()
+		  &&  next_reservation_index > next_stop_index  ) {
+			next_reservation_index = next_stop_index;
+		}
 		reserve_route();
 		recalc_catg_index();
 	}
@@ -5256,10 +5333,10 @@ const char* convoi_t::send_to_depot(bool local)
 		if(  dep  ) {
 			// check waytype and owner
 			convoihandle_t c=get_coupling_convoi();
-			bool valid_waytype = dep->get_waytype()==front()->get_desc()->get_waytype();
+			bool valid_waytype = dep->can_accept_waytype(front()->get_desc()->get_waytype());
 			bool valid_owner = dep->get_owner()==get_owner();
 			while(  valid_waytype && c.is_bound() && valid_owner  ) {
-				valid_waytype &= (dep->get_waytype()==c->front()->get_waytype());
+				valid_waytype &= dep->can_accept_waytype(c->front()->get_desc()->get_waytype());
 				valid_owner &= dep->get_owner()==c->get_owner();
 				c = c->get_coupling_convoi();
 			}
@@ -5269,6 +5346,9 @@ const char* convoi_t::send_to_depot(bool local)
 			}
 			if(  valid_waytype  ) {
 				txt = "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
+				cbuffer_t buf;
+				buf.printf( translator::translate("%s has entered a depot."), get_name() );
+				welt->get_message()->add_message(buf, front()->get_pos().get_2d(),message_t::warnings, PLAYER_FLAG|get_owner()->get_player_nr(), IMG_EMPTY);
 				betrete_depot(dep,false);
 				return txt;
 			}
@@ -5279,7 +5359,7 @@ const char* convoi_t::send_to_depot(bool local)
 	route_t *route = new route_t();
 	koord3d home = koord3d::invalid;
 	FOR(slist_tpl<depot_t*>, const depot, depot_t::get_depot_list()) {
-		if (depot->get_waytype() != v->get_desc()->get_waytype()  ||  depot->get_owner() != get_owner()) {
+		if (!depot->can_accept_waytype(v->get_desc()->get_waytype())  ||  depot->get_owner() != get_owner()) {
 			continue;
 		}
 		koord3d pos = depot->get_pos();
@@ -5373,7 +5453,7 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 	// find the depot in the schedule. It doesn't have to be next.
 	for ( uint8 i = 0 ; i<schedule->get_count() ; i++  ) {
 		koord3d next_pos = schedule->at((current_stop+i)%schedule->get_count()).pos;
-		if(world()->lookup(next_pos)->get_depot() && world()->lookup(next_pos)->get_depot()->get_waytype() == v->get_desc()->get_waytype() && world()->lookup(next_pos)->get_depot()->get_owner()  == get_owner()){
+		if(world()->lookup(next_pos)->get_depot() && world()->lookup(next_pos)->get_depot()->can_accept_waytype(v->get_desc()->get_waytype()) && world()->lookup(next_pos)->get_depot()->get_owner()  == get_owner()){
 			// if this convoy is already know the depot position, it will be teleported to that depot.
 			// but if the depot is changed or wrong, we search nearest depot.
 			find_depot_route = true;
@@ -5384,7 +5464,7 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 	if (!find_depot_route) {
 		// Find the nearest depot
 		FOR(slist_tpl<depot_t*>, const depot, depot_t::get_depot_list()) {
-			if (depot->get_waytype() != v->get_desc()->get_waytype()  ||  depot->get_owner() != get_owner()) {
+			if (!depot->can_accept_waytype(v->get_desc()->get_waytype())  ||  depot->get_owner() != get_owner()) {
 				continue;
 			}
 			koord3d pos = depot->get_pos();
@@ -5423,6 +5503,9 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 				c = c->get_coupling_convoi();
 			}
 		}
+		cbuffer_t buf;
+		buf.printf( translator::translate("%s has entered a depot."), get_name() );
+		welt->get_message()->add_message(buf, home.get_2d(),message_t::warnings, PLAYER_FLAG|get_owner()->get_player_nr(), IMG_EMPTY);
 		betrete_depot(world()->lookup(home)->get_depot(), false);
 		txt = "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
 		set_schedule(get_schedule());
@@ -5447,7 +5530,8 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
 	}
 	vehicle_t *v = front();
-	if (dep->get_waytype() != v->get_waytype() || dep->get_owner() != get_owner()) {
+
+	if (!dep->can_accept_waytype(v->get_desc()->get_waytype()) || dep->get_owner() != get_owner()) {
 		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
 	}
 
@@ -5477,6 +5561,9 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 				c = c->get_coupling_convoi();
 			}
 		}
+		cbuffer_t buf;
+		buf.printf( translator::translate("%s has entered a depot."), get_name() );
+		welt->get_message()->add_message(buf, depot_pos.get_2d(),message_t::warnings, PLAYER_FLAG|get_owner()->get_player_nr(), IMG_EMPTY);
 		betrete_depot(dep, false);
 	}
 	else {

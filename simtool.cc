@@ -6883,6 +6883,14 @@ const char *tool_link_factory_t::do_work( player_t *, const koord3d &start, cons
 			return NULL;
 		}
 	}
+	else if(fab!=NULL  &&  last_fab!=NULL  &&  last_fab==fab  &&  is_shift_pressed()) {
+		// connect to all factories
+		fab->add_all_suppliers();
+		FOR(slist_tpl<fabrik_t*>, const f, welt->get_fab_list()) {
+			// connect to an existing one, if this is an producer
+			f->add_supplier(fab);
+		}
+	}
 	return "";
 }
 
@@ -9693,7 +9701,9 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * c:set end of choose signal
  * g:set end of guide signal
  * m:set margin of the stoplength of choose signal
+ * t:set stop before check(for choose/longblock signs)
  * d:set use default route for choose signal
+ * p:set start signal(do not start from stops if this flag is true)
  * 
  */
 bool tool_change_roadsign_t::init( player_t* )
@@ -9799,6 +9809,19 @@ bool tool_change_roadsign_t::init( player_t* )
 		}
 		break;
 
+		case 't':
+		// set advance to end state for signal
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_stop_before_check(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
 		case 'd':
 		// use default route for choose signal(before call find_route())
 		if(  grund_t *gr = welt->lookup(pos)  ) {
@@ -9811,6 +9834,18 @@ bool tool_change_roadsign_t::init( player_t* )
 			}
 		}
 		break;
+
+		case 'p':
+		// when state is RED, do not move even if convoy is not reached the end of the signal tile.
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>() ) {
+				rs->set_start_signal(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
 
 
 		default:
