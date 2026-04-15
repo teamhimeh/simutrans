@@ -267,9 +267,15 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	INT_CHECK("route 194");
 
 	// target reached?
-	if( length_based && target_reached && found_node!=NULL ) {
-		tmp = found_node;
-		step = MAX_STEP-1;
+	if( length_based && target_reached ) {
+		if( found_node != NULL ) {
+			tmp = found_node;
+			step = MAX_STEP-1;
+		} else {
+			// Platforms were found by is_target(), but get_available_halt_length_in_vehicle_steps()
+			// returned 0 for all of them. Treat as no route found.
+			target_reached = false;
+		}
 	}
 	if(!target_reached  ||  step >= MAX_STEP) {
 		if(  step >= MAX_STEP  ) {
