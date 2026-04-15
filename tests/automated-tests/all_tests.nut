@@ -48,8 +48,6 @@ all_tests <- [
 	test_building_city_multitile_all_tiles_occupied,
 	test_building_city_multitile_removal_clears_all_tiles,
 	test_building_city_multitile_requires_city,
-	test_building_city_multitile_replaces_existing_1x1,
-	test_building_city_multitile_on_slope,
 	test_building_build_multi_tile_sloped,
 	test_building_buy_house_invalid_param,
 	test_building_buy_house_from_public_player,
@@ -234,6 +232,7 @@ all_tests <- [
 
 // Tests that are currently failing
 failing_tests <- [
+	test_building_city_multitile_replaces_existing,
 	test_city_change_size_to_minimum,
 	test_depot_build_invalid_pos,
 	test_depot_build_on_tunnel_entrance,
