@@ -319,8 +319,23 @@ void convoi_t::reserve_route()
 		}
 	}
 	else if(  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
-		// reservation is controlled by next_reservation_index
-		for(  int idx = back()->get_route_index();  idx < next_reservation_index  /*&&  idx < route.get_count()*/;  idx++  ) {
+		// reservation is controlled by next_reservation_index.
+		// Start one step back so the rear car's current tile is also reserved with
+		// the correct ribi direction (individual loading only uses ribi_t::none).
+		for(  int idx = max(1u, (uint32)back()->get_route_index()) - 1;  idx < next_reservation_index  /*&&  idx < route.get_count()*/;  idx++  ) {
+			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
+				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
+					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+				}
+			}
+		}
+	}
+	else if(  !route.empty()  &&  anz_vehikel>0  &&  is_loading()  ) {
+		// In LOADING/COUPLED_LOADING state, next_reservation_index is not reliable.
+		// Reserve only the tiles the convoy physically occupies (rear to front).
+		// Start one step back from back()'s route_index so the rear car's current tile
+		// is also reserved with the correct ribi (individual loading uses ribi_t::none).
+		for(  int idx = max(1u, (uint32)back()->get_route_index()) - 1;  idx < front()->get_route_index();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
 					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
