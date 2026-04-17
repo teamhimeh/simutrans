@@ -318,7 +318,7 @@ void convoi_t::reserve_route()
 			}
 		}
 	}
-	else if(  !route.empty()  &&  anz_vehikel>0  &&  (state==WAITING_FOR_CLEARANCE  ||  state==WAITING_FOR_CLEARANCE_ONE_MONTH  ||  state==WAITING_FOR_CLEARANCE_TWO_MONTHS  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
+	else if(  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
@@ -330,7 +330,7 @@ void convoi_t::reserve_route()
 			}
 		}
 	}
-	else if(  !route.empty()  &&  anz_vehikel>0  &&  (is_loading()  ||  state==CAN_START  ||  state==CAN_START_ONE_MONTH  ||  state==CAN_START_TWO_MONTHS)  ) {
+	else if(  !route.empty()  &&  anz_vehikel>0  &&  is_loading()  ) {
 		// In LOADING/COUPLED_LOADING state, next_reservation_index is not reliable.
 		// Reserve only the tiles the convoy physically occupies (rear to front).
 		// Start one step back from back()'s route_index so the rear car's current tile
