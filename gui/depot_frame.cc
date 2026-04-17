@@ -1816,9 +1816,6 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 		}
 		else if(  comp == &bt_allow_invalid_convoy  ) {
 			bt_allow_invalid_convoy.pressed = !bt_allow_invalid_convoy.pressed;
-			if(  cnv.is_bound() && cnv->pruefe_alle()  ) {
-				cnv->call_convoi_tool('i', "0");
-			}
 			return true;
 		}
 		// image list selection here ...

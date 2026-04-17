@@ -3668,11 +3668,6 @@ bool convoi_t::pruefe_alle()
 	if(ok) {
 		ok = pred->get_desc()->can_lead(NULL);
 	}
-	if(ok) {
-		// if the coupoling condition is good, this is valid convoy.
-		// we set invalid_convoy only fron depot_frame_t
-		invalid_convoy=false;
-	}
 
 	return ok;
 }
