@@ -709,7 +709,7 @@ void senke_t::step(uint32 delta_t)
 	if(city != NULL) {
 		// Calculate city power demand and split across substations
 		const uint32 city_demand = city->get_power_demand();
-		const uint32 sub_count = city->get_substations()->get_count();
+		const uint32 sub_count = city->get_substations().get_count();
 		const uint32 my_demand = sub_count > 0 ? city_demand / sub_count : city_demand;
 		
 		// Update demand on the power network
