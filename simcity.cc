@@ -3135,6 +3135,8 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 		}
 	}
 
+	recalc_city_size();
+
 	// if new building is smaller than old one => convert remaining tiles
 	for (int x = 0; x < min_size.x; x++) {
 		for (int y = 0; y < min_size.y; y++) {
