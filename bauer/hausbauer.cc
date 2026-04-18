@@ -145,7 +145,7 @@ bool hausbauer_t::successfully_loaded()
 		// now insert the desc into the correct list.
 		if(  desc->is_city_building()  ) {
 			if(  desc->get_x()>3 || desc->get_y()>3  ) {
-				dbg->fatal( "hausbauer_t::successfully_loaded()", "maximum city building size (3x3) but %s is (%sx%i)", desc->get_name(), desc->get_x(), desc->get_y() );
+				dbg->fatal( "hausbauer_t::successfully_loaded()", "maximum city building size (3x3) but %s is (%ix%i)", desc->get_name(), desc->get_x(), desc->get_y() );
 			}
 			if(  desc->get_area() > largest_city_building_area  ) {
 				largest_city_building_area = desc->get_area();
