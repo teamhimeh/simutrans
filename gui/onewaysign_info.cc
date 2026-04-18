@@ -17,6 +17,7 @@ onewaysign_info_t::onewaysign_info_t(roadsign_t* s, koord3d) :
 	obj_infowin_t(s),
 	sign(s)
 {
+	set_table_layout(1,0);
 	if(  sign->get_desc()->is_single_way()  ) {
 		direction[0].init( button_t::square_state, translator::translate("Left") );
 		direction[1].init( button_t::square_state, translator::translate("Right") );
@@ -26,7 +27,6 @@ onewaysign_info_t::onewaysign_info_t(roadsign_t* s, koord3d) :
 		direction[1].pressed = (sign->get_lane_affinity() & 2) != 0;
 		
 		// place components
-		set_table_layout(1,0);
 		add_table(2,1);
 		{
 			add_component( &direction[0] );
