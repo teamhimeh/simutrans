@@ -6372,18 +6372,12 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 		return "";
 	}
 
-	if(  strempty(default_param)  ) {
-		// no building specified: let the nearest city place a city building
-		stadt_t *city = welt->find_nearest_city( k );
-		if(  city == NULL  ) {
-			return NOTICE_UNSUITABLE_GROUND;
-		}
-		city->build_city_building( k );
-		return NULL;
-	}
-
 	const building_desc_t *desc = NULL;
-	if(  !buildings.empty()  ) {
+	if(  strempty(default_param)  ) {
+		// choose a building randomly
+		desc = hausbauer_t::get_random_attraction( welt->get_timeline_year_month(), false, welt->get_climate( k ) );
+	}
+	else if(  !buildings.empty()  ) {
 		// choose desc from buildings
 		desc = pick_any(buildings);
 	}
@@ -6400,7 +6394,7 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 		return "";
 	}
 	int rotation;
-	if(  default_param[1]=='#'  ) {
+	if(  !default_param || default_param[1]=='#'  ) {
 		rotation = simrand(desc->get_all_layouts());
 	}
 	else if(  default_param[1]=='A'  ) {
@@ -6424,10 +6418,10 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 
 	if (stadt_t* city = welt->find_nearest_city(k)) {
 		// process ignore climates switch
-		climate_bits cl = (default_param[0]=='1') ? ALL_CLIMATES : desc->get_allowed_climate_bits();
+		climate_bits cl = (default_param  &&  default_param[0]=='1') ? ALL_CLIMATES : desc->get_allowed_climate_bits();
 
 		bool hat_platz = welt->square_is_free( k, desc->get_x(rotation), desc->get_y(rotation), NULL, cl );
-		if(!hat_platz  &&  size.y!=size.x  &&  desc->get_all_layouts()>1  &&  (default_param[1]=='#'  ||  default_param[1]=='A')) {
+		if(!hat_platz  &&  size.y!=size.x  &&  desc->get_all_layouts()>1  &&  (default_param==NULL  ||  default_param[1]=='#'  ||  default_param[1]=='A')) {
 			// try other rotation too ...
 			rotation = (rotation+1) % desc->get_all_layouts();
 			hat_platz = welt->square_is_free( k, desc->get_x(rotation), desc->get_y(rotation), NULL, cl );
