@@ -143,15 +143,15 @@ bool hausbauer_t::successfully_loaded()
 		building_desc_t const* const desc = i.value;
 
 		// now insert the desc into the correct list.
-		switch(desc->get_type()) {
-			if(  desc->is_city_building()  ) {
-				if(  desc->get_x()>3 || desc->get_y()>3  ) {
-					dbg->fatal( "hausbauer_t::successfully_loaded()", "maximum city building size (3x3) but %s is (%sx%i)", desc->get_name(), desc->get_x(), desc->get_y() );
-				}
-				if(  desc->get_area() > largest_city_building_area  ) {
-					largest_city_building_area = desc->get_area();
-				}
+		if(  desc->is_city_building()  ) {
+			if(  desc->get_x()>3 || desc->get_y()>3  ) {
+				dbg->fatal( "hausbauer_t::successfully_loaded()", "maximum city building size (3x3) but %s is (%sx%i)", desc->get_name(), desc->get_x(), desc->get_y() );
 			}
+			if(  desc->get_area() > largest_city_building_area  ) {
+				largest_city_building_area = desc->get_area();
+			}
+		}
+		switch(desc->get_type()) {
 			case building_desc_t::city_res:
 				city_residential.insert_ordered(desc,compare_building_desc);
 				break;
@@ -983,7 +983,7 @@ const building_desc_t* hausbauer_t::get_special(uint32 bev, building_desc_t::bty
  * @param start_level the minimum level of the house/station
  * @param cl allowed climates
  */
-static const building_desc_t* get_city_building_from_list(const vector_tpl<const building_desc_t*>& list, int start_level, uint16 time, climate cl, uint32 clusters, sint16 minsize, sint16 maxsize, vector_tpl<const building_desc_t*>* exclude )
+static const building_desc_t* get_city_building_from_list(const vector_tpl<const building_desc_t*>& list, int start_level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude )
 {
 	weighted_vector_tpl<const building_desc_t *> selections(16);
 	int level = start_level;
@@ -1005,8 +1005,9 @@ static const building_desc_t* get_city_building_from_list(const vector_tpl<const
 		if( (desc->is_allowed_climate(cl)   || cl==MAX_CLIMATES  )  &&
 		     desc->get_distribution_weight() > 0  &&
 		     desc->is_available(time)  &&
-		     // size check
-			(desc->get_area()>=minsize  &&  desc->get_area() <= maxsize)  &&
+		     // size check: building must fit in slot (considering rotation for non-square buildings)
+			( (desc->get_x()>=minsize.x && desc->get_y()>=minsize.y && desc->get_x()<=maxsize.x && desc->get_y()<=maxsize.y)
+			||(desc->get_x()!=desc->get_y() && desc->get_y()>=minsize.x && desc->get_x()>=minsize.y && desc->get_y()<=maxsize.x && desc->get_x()<=maxsize.y) )  &&
 			(!exclude  ||  !exclude->is_contained(desc)) ) {
 			desc_at_least = desc;
 			if( thislevel == level ) {
@@ -1042,19 +1043,19 @@ static const building_desc_t* get_city_building_from_list(const vector_tpl<const
 }
 
 
-const building_desc_t* hausbauer_t::get_commercial(int level, uint16 time, climate cl, uint32 clusters, sint16 minsize, sint16 maxsize, vector_tpl<const building_desc_t*>* exclude )
+const building_desc_t* hausbauer_t::get_commercial(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude )
 {
 	return get_city_building_from_list(city_commercial, level, time, cl, clusters, minsize, maxsize, exclude );
 }
 
 
-const building_desc_t* hausbauer_t::get_industrial(int level, uint16 time, climate cl, uint32 clusters, sint16 minsize, sint16 maxsize, vector_tpl<const building_desc_t*>* exclude )
+const building_desc_t* hausbauer_t::get_industrial(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude )
 {
 	return get_city_building_from_list(city_industry, level, time, cl, clusters, minsize, maxsize, exclude );
 }
 
 
-const building_desc_t* hausbauer_t::get_residential(int level, uint16 time, climate cl, uint32 clusters, sint16 minsize, sint16 maxsize, vector_tpl<const building_desc_t*>* exclude )
+const building_desc_t* hausbauer_t::get_residential(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude )
 {
 	return get_city_building_from_list(city_residential, level, time, cl, clusters, minsize, maxsize, exclude );
 }

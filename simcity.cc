@@ -221,7 +221,7 @@ bool stadt_t::bewerte_loc(const koord pos, const rule_t &regel, int rotation)
 				break;
 			case 'n':
 				// nature/empty
-				if (!gr->ist_natur()) return false;
+				if (!gr->ist_natur() || gr->kann_alle_obj_entfernen(NULL) != NULL) return false;
 				break;
 			case 'U':
 				// unbuildable for road
@@ -3096,7 +3096,7 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 					dbg->error("stadt_t::build_city_house", "Has way on tile (%s)", gr->get_pos().get_str());
 				}
 				koord3d new_pos = base_pos + koord(x, y);
-				recalc_foundations = new_pos.z != gr->get_pos().z;
+				recalc_foundations |= (new_pos.z != gr->get_pos().z);
 				gebaeude_t* gb = new gebaeude_t(new_pos, NULL, h->get_tile(rotation, x, y));
 				gr->obj_loesche_alle(welt->get_public_player());
 				grund_t* gr2 = new fundament_t(new_pos, slope_t::flat);
@@ -3149,32 +3149,28 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 			switch (oldgb->get_tile()->get_desc()->get_type()) {
 				case building_desc_t::city_res:
 					won -= level * 10;
-					hr = hausbauer_t::get_residential(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, 1, 1, exclude_desc);
-					won += hr->get_level();
+					hr = hausbauer_t::get_residential(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1), exclude_desc);
+					if(hr) won += hr->get_level() * 10;
 					break;
 				case building_desc_t::city_com:
 					arb -= level * 20;
-					hr = hausbauer_t::get_commercial(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, 1, 1, exclude_desc);
-					arb += hr->get_level() * 20;
+					hr = hausbauer_t::get_commercial(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1), exclude_desc);
+					if(hr) arb += hr->get_level() * 20;
 					break;
 				case building_desc_t::city_ind:
 					arb -= level * 20;
-					hr = hausbauer_t::get_industrial(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, 1, 1, exclude_desc);
-					arb += hr->get_level() * 20;
+					hr = hausbauer_t::get_industrial(level, welt->get_timeline_year_month(), welt->get_climate(kpos), cl, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1), exclude_desc);
+					if(hr) arb += hr->get_level() * 20;
 					break;
 				default:
 					assert(false);
 					break;
 			}
-			exclude_desc->append(hr);
-			oldgb->set_tile(hr->get_tile(0), true);
-			gr->calc_image();
-			update_gebaeude_from_stadt(oldgb);
-			switch (hr->get_type()) {
-				case building_desc_t::city_res: won += hr->get_level() * 10; break;
-				case building_desc_t::city_com: arb += hr->get_level() * 20; break;
-				case building_desc_t::city_ind: arb += hr->get_level() * 20; break;
-				default: break;
+			if(hr) {
+				exclude_desc->append(hr);
+				oldgb->set_tile(hr->get_tile(0), true);
+				gr->calc_image();
+				update_gebaeude_from_stadt(oldgb);
 			}
 		}
 	}
@@ -3246,7 +3242,7 @@ void stadt_t::build_city_building(const koord k)
 	}
 
 	// since the above test is only enough for 2x1 and 1x2, we must test more tiles, if we want larger
-	koord maxsize=koord(1,1);
+	koord maxsize=koord((sint16)1,(sint16)1);
 	switch(  area_level&3  ) {
 		case 3:
 			if(  hausbauer_t::get_largest_city_building_area() > 2  ) {
@@ -3260,13 +3256,13 @@ void stadt_t::build_city_building(const koord k)
 							const building_desc_t* neighbor_building = testgb->get_tile()->get_desc();
 							if(  testgb->get_pos().z == zpos  &&  neighbor_building->is_city_building()  &&  neighbor_building->get_x()*neighbor_building->get_y()==1  ) {
 								// also in right height and citybuilding
-								maxsize = area3x3[area_level]+koord(1,1);
+								maxsize = area3x3[area_level]+koord((sint16)1,(sint16)1);
 								continue;
 							}
 						}
 						else if(  gr->ist_natur()  &&  gr->get_pos().z+slope_t::max_diff(gr->get_grund_hang())==zpos  ) {
 							// we can of course also build on nature
-							maxsize = area3x3[area_level]+koord(1,1);
+							maxsize = area3x3[area_level]+koord((sint16)1,(sint16)1);
 							continue;
 						}
 					}
@@ -3276,10 +3272,10 @@ void stadt_t::build_city_building(const koord k)
 			}
 			break;
 		case 2:
-			maxsize = area3x3[1]+koord(1,1);
+			maxsize = area3x3[1]+koord((sint16)1,(sint16)1);
 			break;
 		case 1:
-			maxsize = area3x3[0]+koord(1,1);
+			maxsize = area3x3[0]+koord((sint16)1,(sint16)1);
 			break;
 		default:
 			break;
@@ -3288,18 +3284,16 @@ void stadt_t::build_city_building(const koord k)
 	// Find a house to build
 	const building_desc_t* h = NULL;
 
-	const sint16 maxarea = maxsize.x * maxsize.y;
-
 	if (sum_commercial > sum_industrial  &&  sum_commercial >= sum_residential) {
-		h = hausbauer_t::get_commercial(0, current_month, cl, neighbor_building_clusters, 1, maxarea);
+		h = hausbauer_t::get_commercial(0, current_month, cl, neighbor_building_clusters, koord((sint16)1,(sint16)1), maxsize);
 	}
 
 	if (h == NULL  &&  sum_industrial > sum_residential  &&  sum_industrial >= sum_commercial) {
-		h = hausbauer_t::get_industrial(0, current_month, cl, neighbor_building_clusters, 1, maxarea);
+		h = hausbauer_t::get_industrial(0, current_month, cl, neighbor_building_clusters, koord((sint16)1,(sint16)1), maxsize);
 	}
 
 	if (h == NULL  &&  sum_residential > sum_industrial  &&  sum_residential >= sum_commercial) {
-		h = hausbauer_t::get_residential(0, current_month, cl, neighbor_building_clusters, 1, maxarea);
+		h = hausbauer_t::get_residential(0, current_month, cl, neighbor_building_clusters, koord((sint16)1,(sint16)1), maxsize);
 	}
 
 	// so we found at least one suitable building for this place
@@ -3358,7 +3352,6 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	uint32 neighbor_building_clusters = gb->get_tile()->get_desc()->get_clusters();
 	sint8 zpos = gb->get_pos().z;
 	koord minsize_koord = gb->get_tile()->get_desc()->get_size(gb->get_tile()->get_layout());
-	const sint16 minsize = minsize_koord.x * minsize_koord.y;
 	// since we handle buildings larger than (1x1) we test all periphery
 	koord lu = k - koord( 1, 1 );
 	koord rd = k + minsize_koord;
@@ -3406,7 +3399,7 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 /* since we only replace tiles, natur is not allowed for the moment, but could be easily changed */
 				else if(  gr->ist_natur()  &&  gr->get_pos().z+slope_t::max_diff(gr->get_grund_hang())==zpos  ) {
 					// we can of course also build on nature
-					maxsize = area3x3[area_level]+koord(1,1);
+					maxsize = area3x3[area_level]+koord((sint16)1,(sint16)1);
 					continue;
 				}
 #endif
@@ -3421,11 +3414,10 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 
 	// try to build
 	const building_desc_t* h = NULL;
-	const sint16 maxarea = maxsize.x * maxsize.y;
 	if (sum_commercial > sum_industrial && sum_commercial > sum_residential) {
 		// we must check, if we can really update to higher level ...
 		const int try_level = (alt_typ == building_desc_t::city_com ? level + 1 : level);
-		h = hausbauer_t::get_commercial(try_level, current_month, cl, neighbor_building_clusters, minsize, maxarea );
+		h = hausbauer_t::get_commercial(try_level, current_month, cl, neighbor_building_clusters, minsize_koord, maxsize );
 		if(  h != NULL  &&  h->get_level() >= try_level  ) {
 			want_to_have = building_desc_t::city_com;
 			sum = sum_commercial;
@@ -3436,7 +3428,7 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	       (sum_commercial > sum_residential  &&  want_to_have == building_desc_t::unknown)  ) {
 		// we must check, if we can really update to higher level ...
 		const int try_level = (alt_typ == building_desc_t::city_ind ? level + 1 : level);
-		h = hausbauer_t::get_industrial(try_level , current_month, cl, neighbor_building_clusters, minsize, maxarea );
+		h = hausbauer_t::get_industrial(try_level , current_month, cl, neighbor_building_clusters, minsize_koord, maxsize );
 		if(  h != NULL  &&  h->get_level() >= try_level  ) {
 			want_to_have = building_desc_t::city_ind;
 			sum = sum_industrial;
@@ -3447,7 +3439,7 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 	if(  want_to_have == building_desc_t::unknown  ) {
 		// we must check, if we can really update to higher level ...
 		const int try_level = (alt_typ == building_desc_t::city_res ? level + 1 : level);
-		h = hausbauer_t::get_residential(try_level, current_month, cl, neighbor_building_clusters, minsize, maxarea );
+		h = hausbauer_t::get_residential(try_level, current_month, cl, neighbor_building_clusters, minsize_koord, maxsize );
 		if(  h != NULL  &&  h->get_level() >= try_level  ) {
 			want_to_have = building_desc_t::city_res;
 			sum = sum_residential;
@@ -3867,10 +3859,10 @@ bool stadt_t::build_road(const koord k, player_t* player_, bool forced)
 // will check a single random pos in the city, then build will be called
 void stadt_t::build()
 {
-	const koord k(lo + koord::koord_random(ur.x - lo.x + 2,ur.y - lo.y + 2)-koord(1,1) );
+	const koord k(lo + koord::koord_random(ur.x - lo.x + 2,ur.y - lo.y + 2)-koord((sint16)1,(sint16)1) );
 
 	// do not build on any border tile
-	if(  !welt->is_within_limits(k+koord(1,1))  ||  k.x<=0  ||  k.y<=0  ) {
+	if(  !welt->is_within_limits(k+koord((sint16)1,(sint16)1))  ||  k.x<=0  ||  k.y<=0  ) {
 		return;
 	}
 
