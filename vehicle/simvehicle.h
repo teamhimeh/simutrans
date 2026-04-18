@@ -274,6 +274,7 @@ public:
 	void calc_image() OVERRIDE;
 
 	static sint8 vehicle_offset_defined_by_way(ribi_t::dir d, const sint8 offset, const bool is_x, const bool reverse, const sint16 raster_width);
+	static constexpr uint16 turned_length = VEHICLE_STEPS_PER_TILE / 32;
 
 	// the coordinates, where the vehicle was loaded the last time
 	koord3d last_stop_pos;
@@ -498,8 +499,6 @@ private:
 	koord3d last_stop_for_intersection;
 
 	vector_tpl<koord3d> reserving_tiles;
-
-	const uint16 turned_length = VEHICLE_STEPS_PER_TILE / 32;
 
 protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE;

@@ -2261,7 +2261,7 @@ void road_vehicle_t::calc_image()
 			if(  old_image != get_image()  ) {
 				set_flag(obj_t::dirty);
 			}
-			sideways_image_steps = turned_length + get_desc()->get_length_in_steps();
+			sideways_image_steps = (sint16)(turned_length + get_desc()->get_length_in_steps());
 			return;
 		}
 	}
