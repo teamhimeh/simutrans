@@ -190,9 +190,6 @@ void gui_chart_t::draw(scr_coord offset)
 		if (c.show) {
 			double display_tmp;
 			long y_off = 0, last_y_off = 0;
-			// PERCENT curves (with or without convert) use chart_size.h as their scale reference
-			// so that 0%=bottom and 100%=top regardless of the shared Y axis scale.
-			const bool is_percent_curve = (c.type == PERCENT) || (c.convert != NULL);
 			// for each curve iterate through all elements and display curve
 			for (int i=0;i<c.elements;i++) {
 
@@ -201,8 +198,7 @@ void gui_chart_t::draw(scr_coord offset)
 				if(  c.convert  ) {
 					tmp = c.convert(tmp);
 					display_tmp = tmp;
-					// tmp is 0..100; map to chart height
-					y_off = (long)((double)tmp * chart_size.h / 100.0);
+					y_off = (long)(tmp/scale);
 				}
 				else if(  c.type==PERCENT  ) {
 					display_tmp = tmp*0.01;
@@ -267,7 +263,6 @@ void gui_chart_t::draw(scr_coord offset)
 				last_year=tmp;
 				last_y_off=y_off;
 			}
-			(void)is_percent_curve;
 		}
 		last_year=tmp=0;
 	}
