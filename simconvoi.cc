@@ -319,8 +319,23 @@ void convoi_t::reserve_route()
 		}
 	}
 	else if(  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
-		// reservation is controlled by next_reservation_index
-		for(  int idx = back()->get_route_index();  idx < next_reservation_index  /*&&  idx < route.get_count()*/;  idx++  ) {
+		// reservation is controlled by next_reservation_index.
+		// Start one step back so the rear car's current tile is also reserved with
+		// the correct ribi direction (individual loading only uses ribi_t::none).
+		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < next_reservation_index  /*&&  idx < route.get_count()*/;  idx++  ) {
+			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
+				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
+					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+				}
+			}
+		}
+	}
+	else if(  !route.empty()  &&  anz_vehikel>0  &&  is_loading()  ) {
+		// In LOADING/COUPLED_LOADING state, next_reservation_index is not reliable.
+		// Reserve only the tiles the convoy physically occupies (rear to front).
+		// Start one step back from back()'s route_index so the rear car's current tile
+		// is also reserved with the correct ribi (individual loading uses ribi_t::none).
+		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < front()->get_route_index();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
 					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
@@ -3321,9 +3336,13 @@ void convoi_t::rdwr(loadsave_t *file)
 		file->rdwr_short( next_stop_index );
 		if(  !file->is_loading()  &&  next_reservation_index>=route.get_count()  ) {
 			// sanitize next_reservation_index because a longblocksignal can set next_reservation_index an illegal number.
-			next_reservation_index = route.get_count()-1;
+			next_reservation_index = route.get_count();
 		}
 		file->rdwr_short( next_reservation_index );
+		if(  file->is_loading()  &&  next_reservation_index>=route.get_count()  ) {
+			// sanitize next_reservation_index because a longblocksignal can set next_reservation_index an illegal number.
+			next_reservation_index = route.get_count();
+		}
 		// If this convoy is an aircraft, next_reservation_index must be 0. sanitaze next_reservation_index because next_reservation_index often be an illegal number. The cause of this problem is still not found!
 		const waytype_t typ = front() ? front()->get_waytype() : track_wt;
 		const bool rail_convoy = typ==track_wt  ||  typ==tram_wt  ||  typ==maglev_wt  ||  typ==monorail_wt  ||  typ==narrowgauge_wt;
@@ -3469,7 +3488,7 @@ void convoi_t::rdwr(loadsave_t *file)
 		if(  is_waiting()  &&  next_coupling_index == route_t::INVALID_INDEX
 		  &&  schedule != NULL  &&  schedule->get_current_entry().is_try_coupling()
 		  &&  next_reservation_index > next_stop_index  ) {
-			next_reservation_index = next_stop_index;
+			next_reservation_index = min(next_stop_index,route.get_count());
 		}
 		reserve_route();
 		recalc_catg_index();
@@ -5346,6 +5365,9 @@ const char* convoi_t::send_to_depot(bool local)
 			}
 			if(  valid_waytype  ) {
 				txt = "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
+				cbuffer_t buf;
+				buf.printf( translator::translate("%s has entered a depot."), get_name() );
+				welt->get_message()->add_message(buf, front()->get_pos().get_2d(),message_t::warnings, PLAYER_FLAG|get_owner()->get_player_nr(), IMG_EMPTY);
 				betrete_depot(dep,false);
 				return txt;
 			}
@@ -5500,6 +5522,9 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 				c = c->get_coupling_convoi();
 			}
 		}
+		cbuffer_t buf;
+		buf.printf( translator::translate("%s has entered a depot."), get_name() );
+		welt->get_message()->add_message(buf, home.get_2d(),message_t::warnings, PLAYER_FLAG|get_owner()->get_player_nr(), IMG_EMPTY);
 		betrete_depot(world()->lookup(home)->get_depot(), false);
 		txt = "Convoi has been sent\nto the nearest depot\nof appropriate type.\n";
 		set_schedule(get_schedule());
@@ -5524,6 +5549,7 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
 	}
 	vehicle_t *v = front();
+
 	if (!dep->can_accept_waytype(v->get_desc()->get_waytype()) || dep->get_owner() != get_owner()) {
 		return "Home depot not found!\nYou need to send the\nconvoi to the depot\nmanually.";
 	}
@@ -5554,6 +5580,9 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 				c = c->get_coupling_convoi();
 			}
 		}
+		cbuffer_t buf;
+		buf.printf( translator::translate("%s has entered a depot."), get_name() );
+		welt->get_message()->add_message(buf, depot_pos.get_2d(),message_t::warnings, PLAYER_FLAG|get_owner()->get_player_nr(), IMG_EMPTY);
 		betrete_depot(dep, false);
 	}
 	else {
