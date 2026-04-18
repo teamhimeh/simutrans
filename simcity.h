@@ -417,7 +417,7 @@ public:
 	uint32 get_power_demand() const;
 	void add_substation(senke_t* sub);
 	void remove_substation(senke_t* sub);
-	const vector_tpl<senke_t*>& get_substations() const { return substations; }
+	uint32 get_substations_count() const {return substations.get_count();}
 
 	/// Connects factories to this city.
 	void verbinde_fabriken();
