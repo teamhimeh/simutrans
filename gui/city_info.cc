@@ -250,8 +250,7 @@ void city_info_t::init()
 	}
 	// electricity satisfaction percentage curve (year); values stored as 0..10000, displayed as 0..100%
 	sint16 pct_curve_year = chart.add_curve( color_idx_to_rgb(COL_LIGHT_GREEN), power_pct_year,
-		1, 0, MAX_CITY_HISTORY_YEARS, PERCENT, false, true, 0,
-		[](const sint64 v) -> sint64 { return v / 100; } );
+		1, 0, MAX_CITY_HISTORY_YEARS, PERCENT, false, true, 0 );
 	button_t* pct_btn = container_year.new_component<button_t>();
 	pct_btn->init( button_t::box_state_automatic | button_t::flexible, "Electricity %" );
 	pct_btn->background_color = color_idx_to_rgb(COL_LIGHT_GREEN);
@@ -279,8 +278,7 @@ void city_info_t::init()
 	}
 	// electricity satisfaction percentage curve (month)
 	sint16 pct_curve_month = mchart.add_curve( color_idx_to_rgb(COL_LIGHT_GREEN), power_pct_month,
-		1, 0, MAX_CITY_HISTORY_MONTHS, PERCENT, false, true, 0,
-		[](const sint64 v) -> sint64 { return v / 100; } );
+		1, 0, MAX_CITY_HISTORY_MONTHS, PERCENT, false, true, 0 );
 	container_month.add_component(pct_btn);
 	button_to_chart.append(pct_btn, &mchart, pct_curve_month);
 	container_month.end_table();
