@@ -3498,7 +3498,7 @@ void convoi_t::rdwr(loadsave_t *file)
 void convoi_t::set_use_electric(bool y) {
 	convoihandle_t c = self;
 	while(c.is_bound()) {
-		c->use_electric = y;
+		c->use_electric = y&&!c->get_schedule()->is_no_use_electric();
 		c=c->get_coupling_convoi();
 	}
 }
@@ -5962,7 +5962,7 @@ void convoi_t::check_electrification() {
 	// Are there electric cars?
 	while(  c.is_bound()  &&  !is_electric  ) {
 		for(uint8 i=0; i<c->get_vehicle_count(); i++) {
-			is_electric |= c->get_vehikel(i)->get_desc()->get_engine_type()==vehicle_desc_t::electric;
+			is_electric |= c->get_vehikel(i)->get_desc()->get_engine_type()==vehicle_desc_t::electric&&!c->get_schedule()->is_no_use_electric();
 		}
 		c = c->get_coupling_convoi();
 	}
@@ -5971,7 +5971,7 @@ void convoi_t::check_electrification() {
 	// If electric cars are, do they have other engine?
 	while(  c.is_bound()  &&  need_electric  ) {
 		for(uint8 i=0;  i<c->get_vehicle_count();  i++) {
-			need_electric &= !(c->get_vehikel(i)->get_desc()->get_engine_type()!=vehicle_desc_t::electric && c->get_vehikel(i)->get_desc()->get_power()>0);
+			need_electric &= !(c->get_vehikel(i)->get_desc()->get_engine_type()!=vehicle_desc_t::electric && c->get_vehikel(i)->get_desc()->get_power()>0 && !c->get_schedule()->is_no_use_electric());
 		}
 		c = c->get_coupling_convoi();
 	}
