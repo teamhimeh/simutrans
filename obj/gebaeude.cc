@@ -379,7 +379,7 @@ image_id gebaeude_t::get_image() const
 				return skinverwaltung_t::construction_site->get_image_id(0);
 			}
 			// 6 is special building, 7-9 is res com ind (our type)
-			return skinverwaltung_t::construction_site->get_count() > 7 ? skinverwaltung_t::construction_site->get_image_id(tile->get_desc()->get_type() - building_desc_t::city_res + 7) : skinverwaltung_t::construction_site->get_image_id(0);
+			return skinverwaltung_t::construction_site->get_count() > 9 ? skinverwaltung_t::construction_site->get_image_id(tile->get_desc()->get_type() - building_desc_t::city_res + 7) : skinverwaltung_t::construction_site->get_image_id(0);
 		}
 		else if(  env_t::hide_buildings == env_t::ALL_HIDDEN_BUILDING  &&  tile->get_desc()->get_type() < building_desc_t::others  ) {
 			// hide with transparency or tile without information
