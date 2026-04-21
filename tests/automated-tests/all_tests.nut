@@ -46,6 +46,9 @@ all_tests <- [
 	test_building_build_house_invalid_desc,
 	test_building_build_house_auto_rotation_attraction,
 	test_building_build_house_auto_rotation_citybuilding,
+	test_building_city_multitile_all_tiles_occupied,
+	test_building_city_multitile_removal_clears_all_tiles,
+	test_building_city_multitile_requires_city,
 	test_building_build_multi_tile_sloped,
 	test_building_buy_house_invalid_param,
 	test_building_buy_house_from_public_player,
@@ -229,12 +232,21 @@ all_tests <- [
 	test_schedule_entry_spacing,
 	test_schedule_entry_length_coupling_done,
 	test_schedule_entry_max_speed,
-	test_schedule_entry_balance_speed
+	test_schedule_entry_balance_speed,
+	test_schedule_flags,
+	test_schedule_max_speed,
+	test_schedule_departure_slot_group_id,
+	test_schedule_departure_slot_group_id_non_null,
+	test_schedule_next_line,
+	test_schedule_next_line_non_null,
+	test_schedule_current,
+	test_schedule_entry_time_statistics
 ]
 
 
 // Tests that are currently failing
 failing_tests <- [
+	test_building_city_multitile_replaces_existing,
 	test_city_change_size_to_minimum,
 	test_depot_build_invalid_pos,
 	test_depot_build_on_tunnel_entrance,

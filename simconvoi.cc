@@ -200,6 +200,7 @@ void convoi_t::init(player_t *player)
 	max_speed_kmh_of_convoi = 0;
 	max_balance_speed_convoi = 0;
 	unloading_done = false;
+	invalid_convoy = false;
 }
 
 
@@ -761,6 +762,7 @@ void convoi_t::add_running_cost( const weg_t *weg )
 	if(  weg  &&  weg->get_owner()!=get_owner()  &&  weg->get_owner()!=NULL  ) {
 		// running on non-public way costs toll (since running costs are positive => invert)
 		sint64 toll = -(base_sum_running_costs*welt->get_settings().get_way_toll_runningcost_percentage())/100l;
+		sint64 wayobj_toll = 0;
 		if(  welt->get_settings().get_way_toll_waycost_percentage()  ) {
 			if(  weg->is_electrified()  &&  needs_electrification()  ) {
 				// toll for using electricity
@@ -769,7 +771,8 @@ void convoi_t::add_running_cost( const weg_t *weg )
 					obj_t *d=gr->obj_bei(i);
 					if(  wayobj_t const* const wo = obj_cast<wayobj_t>(d)  )  {
 						if(  wo->get_waytype()==weg->get_waytype()  ) {
-							toll += (wo->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
+							wayobj_toll += (wo->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
+							wo->get_owner()->book_toll_received( wayobj_toll, get_schedule()->get_waytype() );
 							break;
 						}
 					}
@@ -779,9 +782,9 @@ void convoi_t::add_running_cost( const weg_t *weg )
 			toll += (weg->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
 		}
 		weg->get_owner()->book_toll_received( toll, get_schedule()->get_waytype() );
-		get_owner()->book_toll_paid(         -toll, get_schedule()->get_waytype() );
-		book( -toll, CONVOI_WAYTOLL);
-		book( -toll, CONVOI_PROFIT);
+		get_owner()->book_toll_paid(         -toll-wayobj_toll, get_schedule()->get_waytype() );
+		book( -toll-wayobj_toll, CONVOI_WAYTOLL);
+		book( -toll-wayobj_toll, CONVOI_PROFIT);
 
 	}
 	sint64 const sum_running_costs = base_sum_running_costs * (welt->get_settings().is_overloading_runningcost_increase()?(sint64) max(loading_level,100) : (sint64) 100)/ (sint64) 100;
@@ -3478,6 +3481,11 @@ void convoi_t::rdwr(loadsave_t *file)
 		max_balance_speed_convoi = 0;
 		unloading_done = false;
 	}
+	if(  file->get_OTRP_version()>=54  ) {
+		file->rdwr_bool(invalid_convoy);
+	} else {
+		invalid_convoy = false;
+	}
 
 	if(  file->is_loading()  ) {
 		// A try-coupling convoy waiting at a guide signal (WAITING_FOR_CLEARANCE etc.) has
@@ -3667,7 +3675,8 @@ void convoi_t::open_schedule_window( bool show )
  */
 bool convoi_t::pruefe_alle()
 {
-	bool ok = anz_vehikel == 0  ||  fahr[0]->get_desc()->can_follow(NULL);
+	if(  anz_vehikel==0  ) { return true; }
+	bool ok = fahr[0]->get_desc()->can_follow(NULL);
 	unsigned i;
 
 	const vehicle_t* pred = fahr[0];
@@ -3691,7 +3700,7 @@ uint32 convoi_t::get_total_sum_power() const{
 	uint32 temp_sum_power = 0;
 	convoihandle_t c = self;
 	while(c.is_bound()) {
-		temp_sum_power += c->sum_power;
+		temp_sum_power += c->is_invalid_convoy()? 0: c->sum_power;
 		c = c->get_coupling_convoi();
 	}
 	return temp_sum_power;
@@ -3818,7 +3827,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 		const bool loading_level_cond = (c->get_schedule()->get_current_entry().maximum_loading<c->get_schedule()->get_current_entry().minimum_loading)?(c->get_loading_level() >= e.minimum_loading):(c->get_capacity_left()<=0); // minimum loading
 		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  world()->get_ticks() - arrived_time > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
 		bool c_cond = loading_level_cond; // condition of this convoy
-		c_cond |= c->get_no_load(); // no load
+		c_cond |= c->get_no_load()||c->is_invalid_convoy(); // no load
 		c_cond |= waiting_time_cond;
 		loading_cond &= c_cond;
 		c = c->get_coupling_convoi();
@@ -3935,7 +3944,7 @@ void calc_reachable_halts(vector_tpl<haltestelle_t::reachable_halt_t>& reachable
 	const schedule_t* schedule = cnv->get_schedule();
 	const schedule_t* line_schedule = cnv->get_line().is_bound() ? cnv->get_line()->get_schedule() : schedule;
 	const player_t* owner = cnv->get_owner();
-	if (  cnv->get_no_load()  ||  schedule->get_current_entry().is_no_load()  ) {
+	if (  cnv->get_no_load()  ||  schedule->get_current_entry().is_no_load()  ||  cnv->is_invalid_convoy()  ) {
 		// Nothing is allowed to load here.
 		return;
 	}
@@ -4099,7 +4108,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 	// cargo type of previous vehicle that could not be filled
 	const goods_desc_t* cargo_type_prev = NULL;
-	bool loading_needed = !no_load  &&  !next_depot;
+	bool loading_needed = !get_no_load()  &&  !next_depot  &&  !is_invalid_convoy();
 	// When load_before_departure is enabled, load cargos only when the departure time condition is satisfied.
 	convoihandle_t leading_convoy = get_most_parent_convoi();
 	if(  leading_convoy->schedule->get_current_entry().get_wait_for_time()  &&  schedule->get_current_entry().is_load_before_departure()  ) {
@@ -5961,8 +5970,10 @@ void convoi_t::check_electrification() {
 	convoihandle_t c = most_parent_convoi;
 	// Are there electric cars?
 	while(  c.is_bound()  &&  !is_electric  ) {
-		for(uint8 i=0; i<c->get_vehicle_count(); i++) {
-			is_electric |= c->get_vehikel(i)->get_desc()->get_engine_type()==vehicle_desc_t::electric&&!c->get_schedule()->is_no_use_electric();
+		if(  !c->is_invalid_convoy() && !c->get_schedule()->is_no_use_electric()  ) {
+			for(uint8 i=0; i<c->get_vehicle_count(); i++) {
+				is_electric |= c->get_vehikel(i)->get_desc()->get_engine_type()==vehicle_desc_t::electric;
+			}
 		}
 		c = c->get_coupling_convoi();
 	}
@@ -5970,8 +5981,10 @@ void convoi_t::check_electrification() {
 	need_electric = is_electric;
 	// If electric cars are, do they have other engine?
 	while(  c.is_bound()  &&  need_electric  ) {
-		for(uint8 i=0;  i<c->get_vehicle_count();  i++) {
-			need_electric &= !(c->get_vehikel(i)->get_desc()->get_engine_type()!=vehicle_desc_t::electric && c->get_vehikel(i)->get_desc()->get_power()>0 && !c->get_schedule()->is_no_use_electric());
+		if(  !c->is_invalid_convoy() && !c->get_schedule()->is_no_use_electric()  ) {
+			for(uint8 i=0;  i<c->get_vehicle_count();  i++) {
+				need_electric &= !(c->get_vehikel(i)->get_desc()->get_engine_type()!=vehicle_desc_t::electric && c->get_vehikel(i)->get_desc()->get_power()>0 );
+			}
 		}
 		c = c->get_coupling_convoi();
 	}
