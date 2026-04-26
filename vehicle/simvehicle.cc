@@ -2423,19 +2423,22 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 				// end of stop: Is it long enough?
 				const uint32 length=cnv->get_length_in_steps();
 				ribi_t::ribi back_ribi=ribi_t::backward(ribi_type(dir));
-				uint32 stop_length=ribi_t::is_bend(gr->get_weg(get_waytype())->get_ribi_unmasked())?diagonal_vehicle_steps_per_tile/2:VEHICLE_STEPS_PER_TILE;
+				const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),ribi);
+				if(length>stop_length) {
+					// length not enough
+					return false;
+				}
 				uint8 empty_lane = target_halt->get_empty_lane(gr,cnv->self);
 				while(  gr->get_neighbour(to,get_waytype(),back_ribi) && to->get_halt().is_bound() && (to->get_halt()==target_halt)  ) {
 					if(  (empty_lane &= target_halt->get_empty_lane(to,cnv->self))==0  ) {
 						// there are other cars.
-						return stop_length>=length;
+						return false;
 					}
 					back_ribi = to->get_weg_ribi_unmasked(get_waytype()) & ~ribi_t::backward(back_ribi);
 					if(  !ribi_t::is_single(back_ribi)  ) {
 						// connecting direction something wrong
-						return stop_length>=length;
+						return false;
 					}
-					stop_length+=ribi_t::is_bend(to->get_weg(get_waytype())->get_ribi_unmasked())?diagonal_vehicle_steps_per_tile:VEHICLE_STEPS_PER_TILE;
 					gr = to;
 				}
 				return true;
