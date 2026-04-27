@@ -4253,8 +4253,8 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			if (weg_t* w = gr_current->get_weg(get_waytype())) {
 				// before start, we must check other cars
 				bool is_other_car_exist_in_front = false;
-				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
-					if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
+				for(  uint8 pos=1;  pos<(volatile uint8)gr_current->get_top();  pos++  ) {
+					if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr_current->obj_bei(pos))  ) {
 						if(  v->get_convoi()->get_most_parent_convoi()!=get_convoi()->get_most_parent_convoi()  ) {
 							// we find another car in same tile!
 							if(  (v->get_direction()&get_direction())>0  ) {
