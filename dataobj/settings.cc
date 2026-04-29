@@ -339,6 +339,8 @@ settings_t::settings_t() :
 	default_reverse=false;
 	allow_unload_longer_convoy=false;
 	allow_higher_flight = true;
+
+	use_route_cache = false;
 }
 
 
@@ -1022,12 +1024,13 @@ void settings_t::rdwr(loadsave_t *file)
 			overloading_runningcost_increase = true;
 			default_reverse = false;
 		}
-		uint32 credit_per_MWs;
 		if(  file->get_OTRP_version() >= 51  ) {
 			file->rdwr_bool(env_t::use_old_friction);
 			if(  file->get_OTRP_version() < 54  ) {
+				uint32 credit_per_MWs = cst_kw_per_credit>0? 1024/cst_kw_per_credit: 2;
 				// in standard 124.4, this value is set as cst_kw_per_credit
 				file->rdwr_long( credit_per_MWs );
+				cst_kw_per_credit = (credit_per_MWs>0)&&(credit_per_MWs<1025) ? 1024/credit_per_MWs : 512;
 			}
 			file->rdwr_bool(allow_unload_longer_convoy);
 			file->rdwr_bool(allow_higher_flight);
@@ -1037,6 +1040,11 @@ void settings_t::rdwr(loadsave_t *file)
 			env_t::use_old_friction = false;
 			allow_unload_longer_convoy = false;
 			allow_higher_flight=true;
+		}
+		if(  file->get_OTRP_version() >= 54  ) {
+			file->rdwr_bool(use_route_cache);
+		} else {
+			use_route_cache = false;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1082,12 +1090,8 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_long(way_count_maximum);
 		}
 
-		uint32 cst_kw_per_credit = 1024/credit_per_MWs;
 		if (file->is_version_atleast(124, 4)||file->get_OTRP_version()>=54) {
 			file->rdwr_long(cst_kw_per_credit);
-		}
-		else {
-			cst_kw_per_credit = 512;
 		}
 		// otherwise the default values of the last one will be used
 	}
@@ -1168,6 +1172,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	env_t::draw_outside_tile = contents.get_int( "draw_outside_tile", env_t::draw_outside_tile ) != 0;
 
 	// display stuff
+	env_t::night_shift                 = contents.get_int( "day_night_shift",                        env_t::night_shift ) != 0;
+	env_t::daynight_level              = contents.get_int_clamped( "daynight_level",                 env_t::daynight_level,            0, 9 );
 	env_t::show_names                  = contents.get_int_clamped( "show_names",                     env_t::show_names,                0, 7 );
 	env_t::show_month                  = contents.get_int_clamped( "show_month",                     env_t::show_month,                0, 8 );
 	env_t::show_vehicle_states         = contents.get_int_clamped( "show_vehicle_states",            env_t::show_vehicle_states,       0, env_t::MAX_SHOW_VEHICLE_STATES );
@@ -1859,6 +1865,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 		= contents.get_int("waiting_limit_for_first_come_first_serve", waiting_limit_for_first_come_first_serve);
 	
 	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
+	use_route_cache = contents.get_int("use_route_cache", use_route_cache);
 
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);

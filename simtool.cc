@@ -320,7 +320,7 @@ static halthandle_t suche_nahe_haltestelle(player_t *player, karte_t *welt, koor
 
 
 // converts a 2d koord to a suitable ground pointer
-static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, koord3d pos, waytype_t wt)
+static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, koord3d pos, waytype_t wt, bool check_wayobj=false)
 {
 	// check for valid ground
 	grund_t *gr=welt->lookup(pos);
@@ -357,6 +357,11 @@ static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, 
 	}
 	// check for ownership
 	if(gr->get_weg(wt)->is_deletable(player)!=NULL){
+		// way owner is different from activa player, but we must check wayobj if we need
+		if(  check_wayobj&&gr->get_wayobj(wt)&&gr->get_wayobj(wt)->is_deletable(player)==NULL  ) {
+			// wayobj owner is me. I can delete
+			return gr;
+		}
 		return NULL;
 	}
 	// ok, now we have a valid ground
@@ -1886,10 +1891,24 @@ const char *tool_transformer_t::work( player_t *player, koord3d pos )
 		underground = true;
 	}
 
+	bool in_city = false;
 	if( !fab  ) {
-		return "Transformer only next to factory!";
+		// Check if inside city limits (city substations don't require a factory)
+		if(!underground) {
+			stadt_t *city = welt->find_nearest_city(k);
+			if(city != NULL) {
+				const koord lo = city->get_linksoben();
+				const koord ur = city->get_rechtsunten();
+				if(k.x >= lo.x && k.x <= ur.x && k.y >= lo.y && k.y <= ur.y) {
+					in_city = true;
+				}
+			}
+		}
+		if(!in_city) {
+			return "Transformer only next to factory!";
+		}
 	}
-	if(  fab->is_transformer_connected()  ) {
+	if(  fab  &&  fab->is_transformer_connected()  ) {
 		return "Only one transformer per factory!";
 	}
 
@@ -1931,8 +1950,8 @@ const char *tool_transformer_t::work( player_t *player, koord3d pos )
 	}
 	// transformer will be build on tile pointed to by gr
 
-	// build source or drain depending on factory type
-	if(fab->get_desc()->is_electricity_producer()) {
+	// build source or drain depending on factory type; city substations are always drains
+	if(fab && fab->get_desc()->is_electricity_producer()) {
 		pumpe_t *p = new pumpe_t(gr->get_pos(), player);
 		gr->obj_add( p );
 		p->finish_rd();
@@ -3812,6 +3831,7 @@ public:
 	waytype_t get_waytype() const OVERRIDE { return wt; }
 	int get_cost(const grund_t*, const weg_t*, const sint32, ribi_t::ribi) const OVERRIDE { return 1; }
 	bool is_target(const grund_t*, const grund_t*) const OVERRIDE { return false; }
+	
 };
 
 class scenario_checker_t : public test_driver_t {
@@ -4231,7 +4251,7 @@ bool tool_build_wayobj_t::calc_route( route_t &verbindung, player_t *player, con
 uint8 tool_build_wayobj_t::is_valid_pos( player_t* player, const koord3d& pos, const char *&error, const koord3d & )
 {
 	// search for starting ground
-	grund_t *gr=tool_intern_koord_to_weg_grund(player, welt, pos, wt );
+	grund_t *gr=tool_intern_koord_to_weg_grund(player, welt, pos, wt, true );
 	if(  gr == NULL  ) {
 		DBG_MESSAGE("tool_build_wayobj_t::is_within_limits()", "no ground on %s",pos.get_str());
 		// wrong ground or not this way here => exit
@@ -6400,7 +6420,8 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 	else if(  default_param[1]=='A'  ) {
 		if(  desc->get_type()!=building_desc_t::attraction_land  &&  desc->get_type()!=building_desc_t::attraction_city  ) {
 			// auto rotation only valid for city buildings
-			rotation = stadt_t::orient_city_building( k, desc, desc->get_size() );
+			koord max_size(max(desc->get_size().x, desc->get_size().y), max(desc->get_size().x, desc->get_size().y));
+			rotation = stadt_t::orient_city_building( k, desc, max_size);
 			if(  rotation < 0 ) {
 				return NOTICE_UNSUITABLE_GROUND;
 			}
@@ -6415,6 +6436,11 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 
 	koord size = desc->get_size(rotation);
 
+	stadt_t* city = welt->find_nearest_city(k);
+	if(  desc->is_city_building()  &&  !city  ) {
+		return NOTICE_UNSUITABLE_GROUND;
+	}
+
 	// process ignore climates switch
 	climate_bits cl = (default_param  &&  default_param[0]=='1') ? ALL_CLIMATES : desc->get_allowed_climate_bits();
 
@@ -6428,14 +6454,11 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 	// Place found...
 	if(hat_platz) {
 		player_t *gb_player = desc->is_city_building() ? NULL : welt->get_public_player();
-		gebaeude_t *gb = hausbauer_t::build(gb_player, k, rotation, desc);
+		gebaeude_t *gb = hausbauer_t::build(gb_player, k, rotation, desc, city);
 		if(gb) {
 			// building successful
-			if(  desc->get_type()!=building_desc_t::attraction_land  &&  desc->get_type()!=building_desc_t::attraction_city  ) {
-				stadt_t *city = welt->find_nearest_city( k );
-				if(city) {
-					city->add_gebaeude_to_stadt(gb);
-				}
+			if(  desc->get_type()==building_desc_t::monument  &&  city  ) {
+				city->add_gebaeude_to_stadt(gb);
 			}
 			player_t::book_construction_costs(player, -desc->get_price(welt) * size.x * size.y, k, gb->get_waytype());
 			return NULL;
@@ -6881,6 +6904,14 @@ const char *tool_link_factory_t::do_work( player_t *, const koord3d &start, cons
 			last_fab->rem_supplier(fab->get_pos().get_2d());
 			last_fab->rem_lieferziel(fab->get_pos().get_2d());
 			return NULL;
+		}
+	}
+	else if(fab!=NULL  &&  last_fab!=NULL  &&  last_fab==fab  &&  is_shift_pressed()) {
+		// connect to all factories
+		fab->add_all_suppliers();
+		FOR(slist_tpl<fabrik_t*>, const f, welt->get_fab_list()) {
+			// connect to an existing one, if this is an producer
+			f->add_supplier(fab);
 		}
 	}
 	return "";
@@ -8649,6 +8680,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'c' : reversing coupling convoys
  * 'm' : apply max speed of convoy
  * 'b' : apply balance speed (limit power)
+ * 'i' : set invalid convoy
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -8919,6 +8951,11 @@ bool tool_change_convoi_t::init( player_t *player )
 			cnv->set_max_balance_speed_convoi(max_balance_speed_convoi);
 		}
 		break;
+
+		case 'i':
+		{
+			cnv->set_invalid_convoy(atoi(p)!=0);
+		}
 	}
 
 	if(  cnv->in_depot()  &&  (tool=='g'  ||  tool=='l')  ) {
@@ -9281,6 +9318,7 @@ bool tool_change_line_t::init( player_t *player )
  * 'd' : disassembles convoi
  * 's' : sells a vehicle
  * 'a' : appends a vehicle (+vehikel_name) uses the oldest
+ * 'A' : appends a vehicle (for invalid convoy)
  * 'i' : inserts a vehicle in front (+vehikel_name) uses the oldest
  * 's' : sells a vehikel (+vehikel_name) uses the newest
  * 'S' : sells all vehicles in this depot
@@ -9412,7 +9450,8 @@ bool tool_change_depot_t::init( player_t *player )
 			}
 			break;
 		}
-		case 'a':   // append a vehicle
+		case 'a':   // append a vehicle(with some vehicles)
+		case 'A':   // append a vehicle(for invalid convoy)
 		case 'i':   // insert a vehicle in front
 		case 's':   // sells a vehicle
 		case 'S':	// sells all vehicles
@@ -9425,13 +9464,18 @@ bool tool_change_depot_t::init( player_t *player )
 					int start_nr = atoi(p);
 					int nr = start_nr;
 
-					// find end
-					while(nr<cnv->get_vehicle_count()) {
-						const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
-						nr ++;
-						if(info->get_trailer_count()!=1) {
-							break;
+					// find end (for invalid convoy, only remove 1 vehicle at a time)
+					if(  !cnv->is_invalid_convoy()  ) {
+						while(nr<cnv->get_vehicle_count()) {
+							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
+							nr ++;
+							if(info->get_trailer_count()!=1) {
+								break;
+							}
 						}
+					}
+					else {
+						nr = start_nr + 1;
 					}
 					// now remove the vehicles
 					if(  cnv->get_vehicle_count()==nr-start_nr  ||  (tool=='R'  &&  start_nr==0)  ) {
@@ -9461,8 +9505,9 @@ bool tool_change_depot_t::init( player_t *player )
 					slist_tpl<const vehicle_desc_t *>new_vehicle_info;
 					const vehicle_desc_t *start_info = info;
 
-					if(tool!='a') {
-						// start of composition
+					const bool is_invalid = cnv.is_bound() && cnv->is_invalid_convoy();
+					if(tool!='a'&&tool!='A'&&!is_invalid) {
+						// start of composition (skipped for invalid convoy: insert only 1 vehicle)
 						while(  info->get_leader_count() == 1  &&  info->get_leader(0) != NULL  &&  info->get_leader(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_leader(0))) {
 							info = info->get_leader(0);
 							new_vehicle_info.insert(info);
@@ -9470,7 +9515,8 @@ bool tool_change_depot_t::init( player_t *player )
 						info = start_info;
 					}
 					new_vehicle_info.append( info );
-					if (tool != 'i') {
+					if (tool != 'i'&&tool!='A'&&!is_invalid) {
+						// trailer chain (skipped for invalid convoy: append only 1 vehicle)
 						while(info->get_trailer_count() == 1  &&  info->get_trailer(0) != NULL  &&  info->get_trailer(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_trailer(0))) {
 							info = info->get_trailer(0);
 							new_vehicle_info.append(info);
@@ -9526,6 +9572,9 @@ bool tool_change_depot_t::init( player_t *player )
 								}
 								depot->append_vehicle( cnv, veh, tool=='i', can_use_gui() );
 							}
+						}
+						if(  tool=='A'  ) {
+							cnv->set_invalid_convoy(true);
 						}
 					}
 				}
@@ -9838,7 +9887,27 @@ bool tool_change_roadsign_t::init( player_t* )
 				}
 			}
 		}
+		break;
 
+		case 'l':
+		// length based choose: do not enter first found tile, choose shortest halt that fits the convoy
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_length_based(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+			else if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				rs->set_length_based(inst);
+				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  sign_info_win  ) {
+					sign_info_win->update_data();
+				}
+			}
+		}
+		break;
 
 		default:
 		// do nothing

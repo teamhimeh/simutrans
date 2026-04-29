@@ -2152,6 +2152,19 @@ uint32 vehicle_t::calc_full_load_weight(const vehicle_desc_t* desc) {
 }
 
 
+uint32 vehicle_t::get_available_halt_length_in_vehicle_steps(const grund_t* gr, const ribi_t::ribi r) const
+{
+	grund_t* prev = NULL;
+	if(  gr==NULL || gr->get_weg(get_waytype())==NULL || !gr->get_neighbour(prev,get_waytype(),ribi_t::backward(r))  ) {
+		// no ground
+		return 0;
+	}
+	ribi_t::ribi front_dir = gr->get_weg(get_waytype())->get_ribi_unmasked() & ~(ribi_t::backward(r));
+	const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),front_dir); 
+	return stop_length;
+}
+
+
 
 road_vehicle_t::road_vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player, convoi_t* cn) :
 	vehicle_t(pos, desc, player)
@@ -2159,11 +2172,13 @@ road_vehicle_t::road_vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t
 	cnv = cn;
 	pos_prev = koord3d::invalid;
 	last_stop_for_intersection = koord3d::invalid;
+	sideways_image_steps = 0;
 }
 
 
 road_vehicle_t::road_vehicle_t(loadsave_t *file, bool is_first, bool is_last) : vehicle_t()
 {
+	sideways_image_steps = 0;
 	rdwr_from_convoi(file);
 
 	if(  file->is_loading()  ) {
@@ -2225,6 +2240,61 @@ void road_vehicle_t::calc_disp_lane()
 	ribi_t::ribi test_dir = welt->get_settings().is_drive_left() ? ribi_t::northeast : ribi_t::southwest;
 	disp_lane = get_direction() & test_dir ? 1 : 3;
 }
+
+void road_vehicle_t::calc_image()
+{
+	// Show sideways image when departing from a stop in the opposite direction.
+	// This happens when the vehicle turns 180° (e.g., departs a terminus in reverse).
+	if(  previous_direction != ribi_t::none
+		&&  direction == ribi_t::backward(previous_direction)  ) {
+		// Check if we departed from a halt tile
+		grund_t *prev_gr = welt->lookup(pos_prev);
+		if(  prev_gr  &&  prev_gr->is_halt()  ) {
+			// Determine effective drive side: drive-on-left XOR inverted_mode on current tile
+			strasse_t *str = (strasse_t*)welt->lookup(get_pos())->get_weg(road_wt);
+			const bool drives_left = welt->get_settings().is_drive_left();
+			const bool inverted    = str  &&  str->get_overtaking_mode() == inverted_mode;
+			const bool effective_drive_left = drives_left ^ inverted;
+
+			// Sideways direction: right side for drive-on-right, left side for drive-on-left
+			// rotate90l = CCW = right side of forward dir; rotate90 = CW = left side
+			ribi_t::ribi side_dir = effective_drive_left
+				? ribi_t::rotate90l(direction)  // left side -> turn left
+				: ribi_t::rotate90(direction);  // right side -> turn right
+
+			image_id old_image = get_image();
+			const bool is_reversed    = (cnv == NULL || cnv == (convoi_t*)1) ? false : cnv->is_reversed();
+			const bool is_no_electric = (cnv == NULL || cnv == (convoi_t*)1) ? false : !cnv->get_use_electric();
+			if(  fracht.empty()  ) {
+				set_image(desc->get_image_id(ribi_t::get_dir(side_dir), NULL, is_reversed, is_no_electric));
+			}
+			else {
+				set_image(desc->get_image_id(ribi_t::get_dir(side_dir), fracht.front().get_desc(), is_reversed, is_no_electric));
+			}
+			if(  old_image != get_image()  ) {
+				set_flag(obj_t::dirty);
+			}
+			sideways_image_steps = (sint16)(turned_length + get_desc()->get_length_in_steps());
+			return;
+		}
+	}
+	vehicle_t::calc_image();
+}
+
+
+uint32 road_vehicle_t::do_drive(uint32 dist)
+{
+	uint32 result = vehicle_base_t::do_drive(dist);
+	if(  sideways_image_steps > 0  ) {
+		sideways_image_steps -= (sint16)(result >> YARDS_PER_VEHICLE_STEP_SHIFT);
+		if(  sideways_image_steps <= 0  ) {
+			sideways_image_steps = 0;
+			vehicle_t::calc_image();
+		}
+	}
+	return result;
+}
+
 
 // need to reset halt reservation (if there was one)
 bool road_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route, bool pass_next)
@@ -2334,7 +2404,7 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 				// end of stop: Is it long enough?
 				const uint32 length=cnv->get_length_in_steps();
 				ribi_t::ribi back_ribi=ribi_t::backward(ribi_type(dir));
-				const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),ribi_type(dir));
+				const uint32 stop_length=cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),ribi);
 				if(length>stop_length) {
 					// length not enough
 					return false;
@@ -2370,7 +2440,7 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 	vehicle_base_t::get_screen_offset( xoff, yoff, raster_width );
 	const int dir = ribi_t::get_dir(get_direction());
 
-	if(  welt->get_settings().is_drive_left()  ) {
+	if(  welt->get_settings().is_drive_left() && sideways_image_steps==0  ) {
 		xoff += tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
 		yoff += tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
 	}
@@ -2382,11 +2452,11 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 		yoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),false,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
 		}
 		sint8 tiles_overtaking = prev_based ? cnv->get_prev_tiles_overtaking() : cnv->get_tiles_overtaking();
-		if(  tiles_overtaking>0  ) { /* This means the convoy is overtaking other vehicles. */
+		if(  tiles_overtaking>0 && sideways_image_steps==0 ) { /* This means the convoy is overtaking other vehicles. */
 			xoff += tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width);
 			yoff += tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][1], raster_width);
 		}
-		else if(  tiles_overtaking<0  ) { /* This means the convoy is overtaken by other vehicles. */
+		else if(  tiles_overtaking<0 && sideways_image_steps==0  ) { /* This means the convoy is overtaken by other vehicles. */
 			xoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width)/5;
 			yoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][1], raster_width)/5;
 		}
@@ -2395,7 +2465,7 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 
 
 // chooses a route at a choose sign; returns true on success
-bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index)
+bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based )
 {
 	if(  cnv->get_schedule_target()!=koord3d::invalid  ) {
 		// destination is a waypoint!
@@ -2448,7 +2518,7 @@ bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_dire
 			// now it make sense to search a route
 			route_t target_rt;
 			koord3d next3d = rt->at(index);
-			if(  !target_rt.find_route( welt, next3d, this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification() )  ) {
+			if(  !target_rt.find_route( welt, next3d, this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), length_based )  ) {
 				// nothing empty or not route with less than 33 tiles
 				target_halt = halthandle_t();
 				restart_speed = 0;
@@ -2519,7 +2589,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						if(  second_check_count  ) {
 							return false;
 						}
-						if(  !choose_route( restart_speed, direction90, route_index )  ) {
+						if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based() )  ) {
 							return false;
 						}
 					}
@@ -2732,7 +2802,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						if(  second_check_count  ) {
 							return false;
 						}
-						if(  !choose_route( restart_speed, curr_90direction, test_index )  ) {
+						if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based() )  ) {
 							return false;
 						}
 					}
@@ -3624,7 +3694,7 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 		}
 	}
 	// end of stop: Is it long enough?
-	const uint32 available_halt_length = cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(), ribi); // 256 units per a straight tile
+	const uint32 available_halt_length = cnv->calc_available_halt_length_in_vehicle_steps(gr->get_pos(),next_gr_ribi); // 256 units per a straight tile
 	return available_halt_length >= (((uint32)cnv->get_entire_convoy_length()) << 4)+(uint32)choose_margin*VEHICLE_STEPS_PER_TILE;
 }
 
@@ -3926,10 +3996,10 @@ skip_choose:
 		const int richtung = start_block<cnv->get_route()->get_count()-1?ribi_type(cnv->get_route()->at(start_block),cnv->get_route()->at(start_block+1)):ribi_t::all;	// to avoid confusion at diagonals
 		if(  try_coupling  ) {
 			// search for coupling point.
-			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), true, 0 );
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), false, true, 0 );
 			cnv->set_use_electric(cnv->is_electrification());
 			if (  !route_found  ) {
-				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), true, 0 );
+				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0 );
 				if(  route_found  ) {
 					cnv->set_use_electric(false);
 				}
@@ -3937,10 +4007,10 @@ skip_choose:
 		}
 		if(  !route_found  &&  (!sig->is_guide_signal()  ||  !try_coupling)  ) {
 			const uint8 margin_length=sig->get_margin_length();
-			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), false, margin_length );
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), sig->is_length_based(), false, margin_length );
 			cnv->set_use_electric(cnv->is_electrification());
 			if(  !route_found  ) {
-				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, margin_length );
+				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), sig->is_length_based(), false, margin_length );
 				if(  route_found  ) {
 					cnv->set_use_electric(false);
 				}
