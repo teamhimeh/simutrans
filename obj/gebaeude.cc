@@ -1015,7 +1015,12 @@ void gebaeude_t::rdwr(loadsave_t *file)
 	if(  file->is_version_atleast(99, 14)  ) {
 		sint32 city_index = -1;
 		if(  file->is_saving()  &&  ptr.stadt!=NULL  ) {
-			city_index = welt->get_cities().index_of( ptr.stadt );
+			if(  welt->get_cities().is_contained( ptr.stadt )  ) {
+				city_index = welt->get_cities().index_of( ptr.stadt );
+			}
+			else {
+				ptr.stadt = NULL;
+			}
 		}
 		file->rdwr_long(city_index);
 		if(  file->is_loading()  &&  (tile==NULL  ||  tile->get_desc()==NULL  ||  tile->get_desc()->is_connected_with_town())  ) {

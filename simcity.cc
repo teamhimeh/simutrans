@@ -989,6 +989,7 @@ stadt_t::~stadt_t()
 							tile_gb->set_stadt(NULL);
 						}
 					}
+					gb->set_stadt(NULL); // ensure the popped tile is also cleared
 					hausbauer_t::remove(welt->get_public_player(),gb);
 				}
 			}
