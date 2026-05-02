@@ -1018,9 +1018,7 @@ void gebaeude_t::rdwr(loadsave_t *file)
 			if(  welt->get_cities().is_contained( ptr.stadt )  ) {
 				city_index = welt->get_cities().index_of( ptr.stadt );
 			}
-			else {
-				ptr.stadt = NULL;
-			}
+			// else: city was removed; save city_index as -1 without touching ptr.stadt
 		}
 		file->rdwr_long(city_index);
 		if(  file->is_loading()  &&  (tile==NULL  ||  tile->get_desc()==NULL  ||  tile->get_desc()->is_connected_with_town())  ) {
