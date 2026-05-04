@@ -10349,51 +10349,97 @@ bool tool_change_factory_t::init( player_t* player )
 }
 
 
-// Change way overtaking mode, street flags, or vehicle offset without touching ribi or desc.
-// param format: "x,y,z,waytype,value,key"
-//   key 'o' = overtaking_mode  (strasse_t only; value = overtaking_mode_t cast to sint8)
-//   key 'f' = street_flags     (strasse_t only; value = full uint8 flag byte)
-//   key 'v' = vehicle_offset   (any weg_t;      value = raw sint8 packed byte)
-bool tool_change_way_settings_t::init(player_t* /*player*/)
+waytype_t tool_change_way_settings_t::get_waytype() const
 {
-	sint16 x, y, z, waytype, value;
-	char key;
-	if(  6 != sscanf(default_param, "%hi,%hi,%hi,%hi,%hi,%c", &x, &y, &z, &waytype, &value, &key)  ) {
-		return false;
-	}
-	grund_t *gr = welt->lookup(koord3d(x, y, z));
-	if(  !gr  ) {
-		return false;
-	}
-	weg_t *way = gr->get_weg((waytype_t)waytype);
-	if(  !way  ) {
-		return false;
-	}
+	return default_param ? (waytype_t)atoi(default_param) : invalid_wt;
+}
 
-	switch(key) {
-		case 'o': {
-			strasse_t *str = dynamic_cast<strasse_t*>(way);
-			if(  str  ) {
-				str->set_overtaking_mode((overtaking_mode_t)(sint8)value);
-				str->set_flag(obj_t::dirty);
-			}
-			break;
+
+void tool_change_way_settings_t::rdwr_custom_data(memory_rw_t *packet)
+{
+	two_click_tool_t::rdwr_custom_data(packet);
+	sint8 i = (sint8)overtaking_mode;
+	uint8 f = street_flags;
+	sint8 v = vehicle_offset;
+	packet->rdwr_byte(i);
+	packet->rdwr_byte(f);
+	packet->rdwr_byte(v);
+	overtaking_mode = (overtaking_mode_t)i;
+	street_flags = f;
+	vehicle_offset = v;
+}
+
+
+bool tool_change_way_settings_t::calc_route(route_t &verbindung, player_t *player, const koord3d &start, const koord3d &end)
+{
+	waytype_t wt = get_waytype();
+	if(  start == end  ) {
+		verbindung.clear();
+		grund_t *gr = welt->lookup(start);
+		if(  gr  &&  gr->get_weg(wt) != NULL  ) {
+			verbindung.append(start);
 		}
-		case 'f': {
-			strasse_t *str = dynamic_cast<strasse_t*>(way);
-			if(  str  ) {
-				str->set_street_flag((uint8)value);
-				str->set_flag(obj_t::dirty);
-			}
-			break;
-		}
-		case 'v': {
-			way->set_vehicle_offset((sint8)value);
-			way->set_flag(obj_t::dirty);
-			break;
-		}
-		default:
-			return false;
 	}
-	return true;
+	else {
+		way_checker_t *test_driver = new way_checker_t(wt);
+		test_driver_t *td = scenario_checker_t::apply(test_driver, player, this);
+		verbindung.calc_route(welt, start, end, td, 0, 0);
+		delete td;
+	}
+	return start == end ? verbindung.get_count() > 0 : verbindung.get_count() > 1;
+}
+
+
+uint8 tool_change_way_settings_t::is_valid_pos(player_t *player, const koord3d &pos, const char *&error, const koord3d &)
+{
+	waytype_t wt = get_waytype();
+	grund_t *gr = tool_intern_koord_to_weg_grund(player, welt, pos, wt);
+	if(  gr == NULL  ) {
+		return 0;
+	}
+	error = NULL;
+	return 2;
+}
+
+
+void tool_change_way_settings_t::mark_tiles(player_t *player, const koord3d &start, const koord3d &end)
+{
+	route_t verbindung;
+	if(  calc_route(verbindung, player, start, end)  ) {
+		FOR(vector_tpl<koord3d>, const& pos, verbindung.get_route()) {
+			zeiger_t *marker = new zeiger_t(pos, NULL);
+			marker->set_image(cursor);
+			marker->mark_image_dirty(marker->get_image(), 0);
+			marked.insert(marker);
+			welt->lookup(pos)->obj_add(marker);
+		}
+	}
+}
+
+
+char const* tool_change_way_settings_t::do_work(player_t *player, const koord3d &start, const koord3d &end)
+{
+	route_t verbindung;
+	if(  !calc_route(verbindung, player, start, end)  ) {
+		return "";
+	}
+	waytype_t wt = get_waytype();
+	FOR(koord3d_vector_t, const& pos, verbindung.get_route()) {
+		grund_t *gr = welt->lookup(pos);
+		if(  !gr  ) {
+			continue;
+		}
+		weg_t *way = gr->get_weg(wt);
+		if(  !way  ) {
+			continue;
+		}
+		way->set_vehicle_offset(vehicle_offset);
+		way->set_flag(obj_t::dirty);
+		strasse_t *str = dynamic_cast<strasse_t*>(way);
+		if(  str  ) {
+			str->set_overtaking_mode(overtaking_mode);
+			str->set_street_flag(street_flags);
+		}
+	}
+	return NULL;
 }

@@ -1492,16 +1492,35 @@ public:
 	bool is_work_network_safe() const OVERRIDE {return false;}
 };
 
-// internal tool: change way overtaking mode, street flags, or vehicle offset
-// param: "x,y,z,waytype,value,key"
-//   key 'o' = overtaking_mode (strasse_t only)
-//   key 'f' = street_flags    (strasse_t only)
-//   key 'v' = vehicle_offset  (any weg_t)
-class tool_change_way_settings_t : public tool_t {
+// Two-click route tool: change way settings (overtaking mode, street flags, vehicle offset)
+// along an existing way route without touching ribi or desc.
+// default_param encodes the waytype (as integer string, same as tool_wayremover_t).
+// Settings are stored as fields and synced via rdwr_custom_data for network play.
+class tool_change_way_settings_t : public two_click_tool_t {
+private:
+	overtaking_mode_t overtaking_mode;
+	uint8 street_flags;
+	sint8 vehicle_offset;  // packed raw byte: bits 7-1 = value, bit 0 = mode
+
+	bool calc_route(route_t &route, player_t *player, const koord3d &start, const koord3d &end);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
+
 public:
-	tool_change_way_settings_t() : tool_t(TOOL_CHANGE_WAY_SETTINGS | SIMPLE_TOOL) {}
-	bool init(player_t*) OVERRIDE;
-	bool is_init_network_safe() const OVERRIDE { return false; }
+	tool_change_way_settings_t() : two_click_tool_t(TOOL_CHANGE_WAY_SETTINGS | GENERAL_TOOL),
+		overtaking_mode(twoway_mode), street_flags(0), vehicle_offset(0) {}
+
+	waytype_t get_waytype() const OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
+
+	void set_overtaking_mode(overtaking_mode_t m) { overtaking_mode = m; }
+	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
+	void set_street_flags(uint8 f) { street_flags = f; }
+	uint8 get_street_flags() const { return street_flags; }
+	void set_vehicle_offset_raw(sint8 v) { vehicle_offset = v; }
+	sint8 get_vehicle_offset_raw() const { return vehicle_offset; }
 };
 
 #endif
