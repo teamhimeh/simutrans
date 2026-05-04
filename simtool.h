@@ -1492,4 +1492,16 @@ public:
 	bool is_work_network_safe() const OVERRIDE {return false;}
 };
 
+// internal tool: change way overtaking mode, street flags, or vehicle offset
+// param: "x,y,z,waytype,value,key"
+//   key 'o' = overtaking_mode (strasse_t only)
+//   key 'f' = street_flags    (strasse_t only)
+//   key 'v' = vehicle_offset  (any weg_t)
+class tool_change_way_settings_t : public tool_t {
+public:
+	tool_change_way_settings_t() : tool_t(TOOL_CHANGE_WAY_SETTINGS | SIMPLE_TOOL) {}
+	bool init(player_t*) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return false; }
+};
+
 #endif

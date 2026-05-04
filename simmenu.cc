@@ -352,6 +352,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_FIX_GAME_SPEED:	 tool = new tool_fix_game_speed_t(); break;
 		case TOOL_SHOW_WAY_OFFSET_LABEL: tool = new tool_show_way_offset_label_t(); break;
 		case TOOL_SHOW_ONLY_OWN_VEHICLE_STATES:		tool = new tool_only_own_vehicle_states_t(); break;
+		case TOOL_CHANGE_WAY_SETTINGS:   tool = new tool_change_way_settings_t(); break;
 		default:                    dbg->error("create_simple_tool()","cannot satisfy request for simple_tool[%i]!",toolnr);
 		                            return NULL;
 	}

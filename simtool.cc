@@ -22,6 +22,7 @@
 #include "boden/grund.h"
 #include "boden/wasser.h"
 #include "boden/wege/schiene.h"
+#include "boden/wege/strasse.h"
 #include "boden/tunnelboden.h"
 #include "boden/monorailboden.h"
 
@@ -10345,4 +10346,54 @@ bool tool_change_factory_t::init( player_t* player )
 		break;
 	}
 	return false;
+}
+
+
+// Change way overtaking mode, street flags, or vehicle offset without touching ribi or desc.
+// param format: "x,y,z,waytype,value,key"
+//   key 'o' = overtaking_mode  (strasse_t only; value = overtaking_mode_t cast to sint8)
+//   key 'f' = street_flags     (strasse_t only; value = full uint8 flag byte)
+//   key 'v' = vehicle_offset   (any weg_t;      value = raw sint8 packed byte)
+bool tool_change_way_settings_t::init(player_t* /*player*/)
+{
+	sint16 x, y, z, waytype, value;
+	char key;
+	if(  6 != sscanf(default_param, "%hi,%hi,%hi,%hi,%hi,%c", &x, &y, &z, &waytype, &value, &key)  ) {
+		return false;
+	}
+	grund_t *gr = welt->lookup(koord3d(x, y, z));
+	if(  !gr  ) {
+		return false;
+	}
+	weg_t *way = gr->get_weg((waytype_t)waytype);
+	if(  !way  ) {
+		return false;
+	}
+
+	switch(key) {
+		case 'o': {
+			strasse_t *str = dynamic_cast<strasse_t*>(way);
+			if(  str  ) {
+				str->set_overtaking_mode((overtaking_mode_t)(sint8)value);
+				str->set_flag(obj_t::dirty);
+			}
+			break;
+		}
+		case 'f': {
+			strasse_t *str = dynamic_cast<strasse_t*>(way);
+			if(  str  ) {
+				str->set_street_flag((uint8)value);
+				str->set_flag(obj_t::dirty);
+			}
+			break;
+		}
+		case 'v': {
+			way->set_vehicle_offset((sint8)value);
+			way->set_flag(obj_t::dirty);
+			break;
+		}
+		default:
+			return false;
+	}
+	return true;
 }
