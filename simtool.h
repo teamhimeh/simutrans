@@ -325,7 +325,6 @@ public:
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* get_default_param(player_t*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
 	bool init(player_t* player) OVERRIDE { return init(player, false); }
 	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
@@ -1179,6 +1178,19 @@ public:
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Toggle vehicle tooltips"); }
 	bool init( player_t * ) OVERRIDE {
 		env_t::show_vehicle_states = (env_t::show_vehicle_states+1)%env_t::MAX_SHOW_VEHICLE_STATES;
+		welt->set_dirty();
+		return false;
+	}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
+class tool_only_own_vehicle_states_t : public tool_t {
+public:
+	tool_only_own_vehicle_states_t() : tool_t(TOOL_SHOW_ONLY_OWN_VEHICLE_STATES | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("only own vehicle states"); }
+	bool init( player_t * ) OVERRIDE {
+		env_t::show_only_own_vehicle_states^=1;
 		welt->set_dirty();
 		return false;
 	}

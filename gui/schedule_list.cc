@@ -62,7 +62,8 @@ static const char *cost_type[MAX_LINE_COST] =
 	"Convoys",
 	"Distance",
 	"Maxspeed",
-	"Road toll"
+	"Road toll",
+	"Freight ton-kilo"
 };
 
 const uint8 cost_type_color[MAX_LINE_COST] =
@@ -75,7 +76,8 @@ const uint8 cost_type_color[MAX_LINE_COST] =
 	COL_CONVOI_COUNT,
 	COL_DISTANCE,
 	COL_MAXSPEED,
-	COL_TOLL
+	COL_TOLL,
+	COL_TONKILO
 };
 
 static uint8 tabs_to_lineindex[9];
@@ -90,7 +92,8 @@ static uint8 statistic[MAX_LINE_COST] = {
 	LINE_CONVOIS,
 	LINE_DISTANCE,
 	LINE_MAXSPEED,
-	LINE_WAYTOLL
+	LINE_WAYTOLL,
+	LINE_TONKILO
 };
 
 static uint8 statistic_type[MAX_LINE_COST] = {
@@ -102,7 +105,8 @@ static uint8 statistic_type[MAX_LINE_COST] = {
 	STANDARD,
 	STANDARD,
 	STANDARD,
-	MONEY
+	MONEY,
+	STANDARD
 };
 
 static uint8 copy_labels[3] = {
@@ -447,6 +451,7 @@ bool schedule_list_gui_t::infowin_event(const event_t *ev)
 		if(  ev->ev_code == WIN_CLOSE  ) {
 			// hide schedule on minimap (may not current, but for safe)
 			minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
+			minimap_t::get_instance()->set_displayed_line( linehandle_t() );
 		}
 		else if(  (ev->ev_code==WIN_OPEN  ||  ev->ev_code==WIN_TOP)  &&  line.is_bound() ) {
 			if(  line->count_convoys()>0  ) {
@@ -457,6 +462,7 @@ bool schedule_list_gui_t::infowin_event(const event_t *ev)
 				// set this schedule as current to show on minimap if possible
 				minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
 			}
+			minimap_t::get_instance()->set_displayed_line( line );
 		}
 	}
 	return gui_frame_t::infowin_event(ev);
@@ -489,8 +495,8 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 		tool_t *tmp_tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 		cbuffer_t buf;
 		int type = tabs_to_lineindex[tabs.get_active_tab_index()];
-		const sint64 departure_group_slot_id = schedule_t::issue_new_departure_slot_group_id();
-		buf.printf( "c,0,%i,0,0|%lli|%i|", type, departure_group_slot_id, type );
+		// departure_slot_group_id will be set to the new line's ID in TOOL_CHANGE_LINE 'c' handler
+		buf.printf( "c,0,%i,0,0|0|%i|", type, type );
 		tmp_tool->set_default_param(buf);
 		welt->set_tool( tmp_tool, player );
 		// since init always returns false, it is safe to delete immediately
@@ -888,6 +894,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		else {
 			minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
 		}
+		minimap_t::get_instance()->set_displayed_line( new_line );
 
 		delete last_schedule;
 		last_schedule = new_line->get_schedule()->copy();
@@ -920,6 +927,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 
 		// hide schedule on minimap (may not current, but for safe)
 		minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
+		minimap_t::get_instance()->set_displayed_line( linehandle_t() );
 
 		delete last_schedule;
 		last_schedule = NULL;

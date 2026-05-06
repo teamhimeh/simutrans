@@ -62,7 +62,8 @@ public:
 		CONVOI_PROFIT,             // total profit of this convoi
 		CONVOI_DISTANCE,           // total distance traveled this month
 		CONVOI_MAXSPEED,           // average max. possible speed
-		CONVOI_WAYTOLL,
+		CONVOI_WAYTOLL,			   // waytoll
+		CONVOI_TONKILO,			   // the amount of transported ware integrated by transported distance.
 		MAX_CONVOI_COST            // Total number of cost items
 	};
 
@@ -131,6 +132,11 @@ private:
 	 */
 	sint32 sum_gear_and_power;
 	sint32 sum_gear_and_power_electric;
+
+	/*
+	* use electric or not
+	* YOU MUST UPDATE THIS FLAG WHEN CALCULATE ROUTE!!!!!
+	*/
 	bool use_electric;
 
 	// 40 bytes
@@ -412,6 +418,13 @@ private:
 	 * The actual power is the minimum of gear_and_power of desc vs. the value calculated by this speed limit.
 	 */
 	uint16 max_balance_speed_convoi;
+
+	/**
+	 * invalid convoy: invalid coupling condition, etc..
+	 * if set "allow invalid convoy" in depot, it can be.
+	 * no load/ no engine.
+	 */
+	bool invalid_convoy;
 
 	/**
 	* Initialize all variables with default values.
@@ -725,7 +738,7 @@ public:
 	 * @return total power of this convoi
 	 */
 	const uint32 & get_sum_power() const {return sum_power;}
-	const sint32 get_sum_gear_and_power() const {return use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric;}
+	const sint32 get_sum_gear_and_power() const {return invalid_convoy?0:(use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric);}
 	const sint32 & get_min_top_speed() const {return min_top_speed;}
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
@@ -912,6 +925,12 @@ public:
 	bool in_depot() const { return state == INITIAL; }
 
 	/**
+	 * invalid convoy: invalid coupling condition
+	 */
+	bool is_invalid_convoy() const { return invalid_convoy; }
+	void set_invalid_convoy(bool y) { invalid_convoy = y; }
+
+	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
 	* vehicles.
 	*/
@@ -1032,7 +1051,7 @@ public:
 	 */
 	uint16 get_next_coupling_index() const {return next_coupling_index;}
 	uint8 get_next_coupling_steps() const {return next_coupling_steps;}
-	void set_next_coupling(uint16 n, uint8 m) { next_coupling_index = n; next_coupling_steps = m; }
+	void set_next_coupling(uint16 n, uint8 m) { next_coupling_index = n; next_reservation_index = n; next_coupling_steps = m; }
 
 	convoihandle_t get_coupling_convoi() const {return coupling_convoi;}
 	void set_coupling_convoi(convoihandle_t c) {coupling_convoi = c;}

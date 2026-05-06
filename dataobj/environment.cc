@@ -156,8 +156,10 @@ PIXVAL env_t::background_color;
 bool env_t::draw_earth_border;
 bool env_t::draw_outside_tile;
 uint8 env_t::show_vehicle_states;
+bool env_t::show_only_own_vehicle_states;
 bool env_t::show_line_colors;
 bool env_t::show_convoy_loadinglevel;
+sint8 env_t::clip_below;
 bool env_t::visualize_schedule;
 sint8 env_t::daynight_level;
 bool env_t::left_to_right_graphs;
@@ -312,8 +314,10 @@ void env_t::init()
 	draw_outside_tile = false;
 
 	show_vehicle_states = 1;
+	show_only_own_vehicle_states = false;
 	show_line_colors = true;
 	show_convoy_loadinglevel = true;
+	clip_below = CLIP_BELOW_PAK;
 
 	daynight_level = 0;
 
@@ -644,6 +648,12 @@ void env_t::rdwr(loadsave_t *file)
 	if(  file->get_OTRP_version()>=52  ) {
 		file->rdwr_bool(show_line_colors);
 		file->rdwr_bool(show_convoy_loadinglevel);
+	}
+	if(  file->get_OTRP_version()>=53  ) {
+		file->rdwr_bool(show_only_own_vehicle_states);
+	}
+	if(  file->get_OTRP_version()>=54  ) {
+		file->rdwr_byte((uint8&)clip_below);
 	}
 
 

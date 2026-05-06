@@ -224,7 +224,7 @@ depot_picker_t::depot_picker_t(convoihandle_t cnv, bool teleport)
 	depot_picker_item_t::sort_origin = cnv->get_pos();
 	depot_picker_item_t::sort_mode   = DEPOT_SORT_ORIGINAL;
 	name_filter[0] = '\0';
-	init_ui(translator::translate(teleport ? "Teleport to depot" : "Go to depot"));
+	init_ui(translator::translate(teleport ? "Teleport to Depot" : "Go to depot"));
 }
 
 
@@ -270,7 +270,7 @@ void depot_picker_t::fill_list()
 	scrolly.clear_elements();
 
 	FOR(slist_tpl<depot_t*>, const depot, depot_t::get_depot_list()) {
-		if (depot->get_owner() != owner || depot->get_waytype() != wt) {
+		if (depot->get_owner() != owner || !depot->can_accept_waytype(wt)) {
 			continue;
 		}
 		// Name filter (case-insensitive substring match)

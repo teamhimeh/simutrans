@@ -40,14 +40,18 @@ protected:
 	uint8 ticks_ow;
         uint8 ticks_yellow_ns, ticks_yellow_ow;
 	uint8 ticks_offset;
-	uint8 choose_sign_flag;
+	uint16 choose_sign_flag;
 	enum choose_sign_state {
 		NONE = 0,
 		guide_signal   = 1U<<0,// guide signal for coupling
 		choose_signal  = 1U<<1,// choose signal
 		advance_to_end = 1U<<2,// advance to end
 		end_of_choose  = 1U<<3,// end of choose signal
-		end_of_guide   = 1U<<4 // end of guide signal (for searching coupling target)
+		end_of_guide   = 1U<<4,// end of guide signal (for searching coupling target)
+		stop_before_check	= 1U<<5,//stop before check sign. for choose-sign and longblock-sign.
+		skip_default_route 	= 1U<<6,// use default calc_route() before call find_route().
+		start_signal		= 1U<<7,// if the next signal is start signal and state is RED, convoy stay there (not move to the end of the steps of signal tile).
+		length_based		= 1U<<8 // in choose signal, length based find_route(do not enter the first found tile, the shortest halt which can enter the convoys).
 	};
 
 	uint8 choose_signal_margin_length;
@@ -179,7 +183,15 @@ public:
 	void set_end_of_choose(bool tf) { tf? choose_sign_flag|=end_of_choose:choose_sign_flag&=~end_of_choose; }
 	bool is_flag_end_of_guide() const { return (choose_sign_flag&end_of_guide)>0; }
 	void set_end_of_guide(bool tf) { tf? choose_sign_flag|=end_of_guide:choose_sign_flag&=~end_of_guide; }
-	uint8 const get_choose_sign_flag() {return choose_sign_flag;}
+	bool is_stop_before_check() const { return (choose_sign_flag&stop_before_check)>0; }
+	void set_stop_before_check(bool tf) { tf? choose_sign_flag|=stop_before_check:choose_sign_flag&=~stop_before_check; }
+	bool is_skip_default_route() const { return (choose_sign_flag&skip_default_route)>0; }
+	void set_skip_default_route(bool tf) { tf? choose_sign_flag|=skip_default_route:choose_sign_flag&=~skip_default_route; }
+	bool is_start_signal() const { return (choose_sign_flag&start_signal)>0; }
+	void set_start_signal(bool tf) { tf? choose_sign_flag|=start_signal:choose_sign_flag&=~start_signal; }
+	bool is_length_based() const { return (choose_sign_flag&length_based)>0; }
+	void set_length_based(bool tf) { tf? choose_sign_flag|=length_based:choose_sign_flag&=~length_based; }
+	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
 	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
 	/**
