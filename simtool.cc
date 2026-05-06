@@ -5860,6 +5860,7 @@ void tool_build_roadsign_t::rdwr_custom_data(memory_rw_t *packet)
 	packet->rdwr_byte(current.spacing);
 	packet->rdwr_bool(current.remove_intermediate);
 	packet->rdwr_bool(current.replace_other);
+	packet->rdwr_bool(current.two_ways);
 }
 
 
@@ -6048,6 +6049,9 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 			if(rs == NULL) rs = gr->find<roadsign_t>();
 			assert(rs);
 			rs->set_dir(dir);
+			if(  signal_t* sig = gr->find<signal_t>()  ) {
+				sig->set_two_ways( current.two_ways );
+			}
 		}
 		else {
 			// Place no signal -> remove existing signal
@@ -6069,22 +6073,24 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 /*
  * Called by the GUI (gui/signal_spacing.*)
  */
-void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace )
+void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace, bool two_ways )
 {
 	signal_info& s = signal[player->get_player_nr()];
 	s.spacing             = spacing;
 	s.remove_intermediate = remove;
 	s.replace_other       = replace;
+	s.two_ways            = two_ways;
 	current = s;
 }
 
 
-void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace )
+void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace, bool &two_ways )
 {
 	signal_info const& s = signal[player->get_player_nr()];
-	spacing = s.spacing;
-	remove  = s.remove_intermediate;
-	replace = s.replace_other;
+	spacing   = s.spacing;
+	remove    = s.remove_intermediate;
+	replace   = s.replace_other;
+	two_ways  = s.two_ways;
 }
 
 

@@ -3556,7 +3556,7 @@ bool rail_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 }
 
 
-bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const
+bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const
 {
 	schiene_t const* const sch = obj_cast<schiene_t>(bd->get_weg(get_waytype()));
 	if(  !sch  ) {
@@ -3601,6 +3601,18 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 			if(  rs->get_desc()->get_wtyp()==get_waytype()  ) {
 				if(  (rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA) && (coupling?rs->is_flag_end_of_guide():rs->is_flag_end_of_choose())  ) {
 					return false;
+				}
+			}
+		}
+		if(  sch->has_signal()  ) {
+			const signal_t* sig = bd->find<signal_t>();
+			if(  sig  &&  sig->get_desc()->is_choose_sign()  &&  sig->get_desc()->get_wtyp()==get_waytype()  ) {
+				if(  coupling ? sig->is_guide_signal() : sig->is_choose_signal()  ) {
+					// signal only acts as choose-area boundary when facing our travel direction
+					const ribi_t::ribi approach = prev != koord3d::invalid ? ribi_type(prev, bd->get_pos()) : ribi_t::none;
+					if(  approach == ribi_t::none  ||  !ribi_t::is_single(sig->get_dir()) || ((bd->get_weg(get_waytype())->get_ribi_unmasked() & ~sig->get_dir()) & ~ribi_t::backward(approach))  ) {
+						return false;
+					}
 				}
 			}
 		}
