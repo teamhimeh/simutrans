@@ -9946,6 +9946,21 @@ bool tool_change_roadsign_t::init( player_t* )
 		}
 		break;
 
+		case 'w':
+		// two_ways: allow convoys to pass the signal from the reverse direction
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  signal_t *sig = gr->find<signal_t>()  ) {
+				if(  player_t::check_owner(sig->get_owner(), welt->get_active_player())  ) {
+					sig->set_two_ways(inst != 0);
+					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)sig);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
 		default:
 		// do nothing
 		break;

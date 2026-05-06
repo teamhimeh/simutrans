@@ -3958,7 +3958,8 @@ bool rail_vehicle_t::is_choose_signal_clear(signal_t *sig, const uint16 start_bl
 		}
 		if(  way->has_signal()  ) {
 			signal_t *sig = gr->find<signal_t>(1);
-			if(  sig  &&  sig->get_desc()->is_choose_sign()  &&  (try_coupling?sig->is_guide_signal():sig->is_choose_signal())  ) {
+			if(  sig  &&  sig->get_desc()->is_choose_sign()  &&  (try_coupling?sig->is_guide_signal():sig->is_choose_signal())
+			    &&  !(  sig->get_two_ways()  &&  !(ribi_type(cnv->get_route()->at(idx), cnv->get_route()->at(idx-1)) & sig->get_dir())  )  ) {
 				// second choose signal on route => not choosing here
 				choose_ok = false;
 			}
@@ -4492,11 +4493,14 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 		if(reserve) {
 			if(  sch1->has_signal()  &&  i<route->get_count()  ) {
 				if( i < route->get_count()-1 ) {
-					if(count) {
-						signs.append(gr);
+					signal_t* signal = gr->find<signal_t>();
+					if(  !(  signal->get_two_ways()  &&  i>start_index  &&  !(ribi_type(pos, route->at(i-1)) & signal->get_dir())  )  ) {
+						if(count) {
+							signs.append(gr);
+						}
+						count --;
+						next_signal_index = i;
 					}
-					count --;
-					next_signal_index = i;
 				}
 				else if (  signal_index_must_return  ) {
 					// we must find the signal on the last tile of the route(for longblock_signal_clear())
