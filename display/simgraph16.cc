@@ -2105,6 +2105,19 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 
 
 
+// set line color using PLAYER_UNOWNED slot (15), without mark_screen_dirty
+void display_set_line_color_scheme(const uint8 col1, const uint8 col2)
+{
+	if(  player_offsets[PLAYER_UNOWNED][0] != col1  ||  player_offsets[PLAYER_UNOWNED][1] != col2  ) {
+		player_offsets[PLAYER_UNOWNED][0] = col1;
+		player_offsets[PLAYER_UNOWNED][1] = col2;
+		for(  image_id n = 0;  n < anz_images;  n++  ) {
+			images[n].player_flags |= (1 << PLAYER_UNOWNED);
+		}
+	}
+}
+
+
 void register_image(image_t *image_in)
 {
 	struct imd *image;
