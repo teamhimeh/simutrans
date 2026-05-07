@@ -91,6 +91,8 @@ public:
 		COUPLED,
 		COUPLED_LOADING,
 		WAITING_FOR_LEAVING_DEPOT,
+		SUSPENSION,
+		SUSPENSION_LOADING,
 		MAX_STATES
 	};
 
@@ -638,6 +640,12 @@ public:
 	void reset_waiting() { state=WAITING_FOR_CLEARANCE; }
 
 	/**
+	* suspension
+	*/
+	bool is_suspended() const { return state==SUSPENSION || state==SUSPENSION_LOADING; }
+	void set_suspension( bool y );
+
+	/**
 	* The handle for ourselves. In Anlehnung an 'this' aber mit
 	* allen checks beim Zugriff.
 	*/
@@ -948,7 +956,7 @@ public:
 	*/
 	const uint32 &get_loading_waiting_time() const { return loading_waiting_time; }
 
-	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
+	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING  ||  state==SUSPENSION_LOADING; }
 
 	/**
 	* Schedule convois for self destruction. Will be executed
