@@ -215,15 +215,16 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 		xpos += tile_raster_scale_x(get_xoff(), raster_width);
 		ypos += tile_raster_scale_y(get_yoff(), raster_width);
 
-		// Determine effective player slot for drawing (line color overrides player color)
-		sint8 draw_player = owner_n;
+		// Determine if this vehicle should use its convoy's line color
+		uint8 line_colour = 0;
+		bool line_color_active = false;
 		if(  owner_n != PLAYER_UNOWNED  ) {
 			if(  vehicle_t const* const vt2 = obj_cast<vehicle_t>(this)  ) {
 				if(  convoi_t* cnv = vt2->get_convoi()  ) {
 					linehandle_t line = cnv->get_line();
 					if(  line.is_bound()  ) {
-						display_set_line_color_scheme( line->get_colour(), line->get_colour() );
-						draw_player = PLAYER_UNOWNED;
+						line_colour = line->get_colour();
+						line_color_active = true;
 					}
 				}
 			}
@@ -236,8 +237,12 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 				if(  obj_t::show_owner  ) {
 					display_blend( image, xpos, ypos, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
 				}
+				else if(  line_color_active  ) {
+					// per-object live color substitution: each vehicle uses its own line color
+					display_color_img_line( image, xpos, ypos, line_colour, true, is_dirty  CLIP_NUM_PAR);
+				}
 				else {
-					display_color( image, xpos, ypos, draw_player, true, is_dirty  CLIP_NUM_PAR);
+					display_color( image, xpos, ypos, owner_n, true, is_dirty  CLIP_NUM_PAR);
 				}
 			}
 			else {

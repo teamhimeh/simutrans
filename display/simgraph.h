@@ -176,8 +176,8 @@ void display_scroll_band( const scr_coord_val start_y, const scr_coord_val x_off
 // set first and second company color for player
 void display_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2 );
 
-// set line color using PLAYER_UNOWNED slot, without marking screen dirty
-void display_set_line_color_scheme(const uint8 col1, const uint8 col2);
+// draw image with per-object line color substitution (live rendering, no image cache slot used)
+void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const bool daynight, const bool dirty  CLIP_NUM_DEF);
 
 // only used for GUI, display image inside a rect
 void display_img_aligned( const image_id n, scr_rect area, int align, const bool dirty);
