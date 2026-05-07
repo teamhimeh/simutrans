@@ -144,6 +144,8 @@ public:
 
 class settings_routing_stats_t : protected settings_stats_t, public gui_aligned_container_t
 {
+private:
+	gui_combobox_t weight_mode_selector;
 public:
 	void init(settings_t const*);
 	void read(settings_t*);

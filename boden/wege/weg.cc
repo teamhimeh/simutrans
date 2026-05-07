@@ -305,6 +305,12 @@ void weg_t::info(cbuffer_t & buf) const
 	if( (get_waytype() != water_wt && get_waytype() != air_wt) && max_wayobj_speed ){
 		buf.printf("%s %u%s", translator::translate("Max. wayobj speed:"), max_wayobj_speed, translator::translate("km/h\n"));
 	}
+	if(  welt->get_settings().get_weight_mode() != settings_t::WEIGHT_UNLIMITED  ) {
+		const uint16 axle_load = get_desc()->get_axle_load();
+		if(  axle_load < 9999  ) {
+			buf.printf("%s %u t\n", translator::translate("Max. weight:"), axle_load);
+		}
+	}
 	buf.printf("%s%u",    translator::translate("\nRibi (unmasked)"), get_ribi_unmasked());
 	buf.printf("%s%u\n",  translator::translate("\nRibi (masked)"),   get_ribi());
 

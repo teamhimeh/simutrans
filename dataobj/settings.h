@@ -54,6 +54,13 @@ public:
 		MAP_BASED
 	} climate_generate_t;
 
+	typedef enum {
+		WEIGHT_UNLIMITED = 0,
+		WEIGHT_RUNNING_COST = 1,
+		WEIGHT_SPEED_LIMIT = 2,
+		WEIGHT_PROHIBIT = 3
+	} weight_mode_t;
+
 private:
 	sint32 size_x, size_y;
 	sint32 map_number;
@@ -303,6 +310,9 @@ private:
 	bool overloading_revenue_reduced;
 	/* if set, overcrowded car's running cost is increase*/
 	bool overloading_runningcost_increase;
+
+	/* way weight limit mode */
+	weight_mode_t weight_mode;
 
 	// lowest possible income with speedbonus (1000=1) default 125
 	sint32 bonus_basefactor;
@@ -612,6 +622,7 @@ public:
 	bool is_allow_overloading() const {return allow_overloading;}
 	bool is_overloading_revenue_reduced() const {return overloading_revenue_reduced;}
 	bool is_overloading_runningcost_increase() const {return overloading_runningcost_increase;}
+	weight_mode_t get_weight_mode() const { return weight_mode; }
 
 	sint16 get_river_number() const { return river_number; }
 	sint16 get_min_river_length() const { return min_river_length; }

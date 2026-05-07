@@ -802,7 +802,21 @@ void convoi_t::add_running_cost( const weg_t *weg )
 		book( -toll-wayobj_toll, CONVOI_PROFIT);
 
 	}
-	sint64 const sum_running_costs = base_sum_running_costs * (welt->get_settings().is_overloading_runningcost_increase()?(sint64) max(loading_level,100) : (sint64) 100)/ (sint64) 100;
+	sint64 sum_running_costs = base_sum_running_costs * (welt->get_settings().is_overloading_runningcost_increase()?(sint64) max(loading_level,100) : (sint64) 100)/ (sint64) 100;
+	// weight-based running cost increase
+	if(  weg  &&  welt->get_settings().get_weight_mode() == settings_t::WEIGHT_RUNNING_COST  ) {
+		const uint32 axle_load = weg->get_desc()->get_axle_load();
+		if(  axle_load < 9999  ) {
+			const uint32 axle_load_kg = axle_load * 1000u;
+			uint32 max_veh_weight = 0;
+			for(  uint16 i = 0;  i < anz_vehikel;  i++  ) {
+				max_veh_weight = max( max_veh_weight, fahr[i]->get_total_weight() );
+			}
+			if(  max_veh_weight > axle_load_kg  ) {
+				sum_running_costs = sum_running_costs * max_veh_weight / axle_load_kg;
+			}
+		}
+	}
 	get_owner()->book_running_costs( sum_running_costs, get_schedule()->get_waytype());
 
 	book( sum_running_costs, CONVOI_OPERATIONS );

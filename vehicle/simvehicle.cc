@@ -1320,6 +1320,17 @@ void vehicle_t::hop(grund_t* gr)
 		else{
 			speed_limit = kmh_to_speed( weg->get_max_speed() );
 		}
+		// apply weight-based speed reduction
+		if(  welt->get_settings().get_weight_mode() == settings_t::WEIGHT_SPEED_LIMIT  ) {
+			const uint32 axle_load = weg->get_desc()->get_axle_load();
+			if(  axle_load < 9999  ) {
+				const uint32 axle_load_kg = axle_load * 1000u;
+				const uint32 veh_weight   = get_total_weight();
+				if(  veh_weight > axle_load_kg  ) {
+					speed_limit = max( kmh_to_speed(10), (sint32)((sint64)speed_limit * axle_load_kg / veh_weight) );
+				}
+			}
+		}
 		if(  crossing_t* cr = gr->get_crossing()  ) {
 			cr->add_to_crossing(this);
 		}
@@ -2336,6 +2347,13 @@ bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 	}
 	if(need_electric  &&  !str->is_electrified()) {
 		return false;
+	}
+	// check weight limit
+	if(  welt->get_settings().get_weight_mode() == settings_t::WEIGHT_PROHIBIT  ) {
+		const uint32 axle_load = str->get_desc()->get_axle_load();
+		if(  axle_load < 9999  &&  get_total_weight() > axle_load * 1000u  ) {
+			return false;
+		}
 	}
 	// check for signs
 	if(str->has_sign()) {
@@ -3567,6 +3585,14 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 	// also allow driving on foreign tracks ...
 	if(  (need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  ) {
 		return false;
+	}
+
+	// check weight limit
+	if(  welt->get_settings().get_weight_mode() == settings_t::WEIGHT_PROHIBIT  ) {
+		const uint32 axle_load = sch->get_desc()->get_axle_load();
+		if(  axle_load < 9999  &&  get_total_weight() > axle_load * 1000u  ) {
+			return false;
+		}
 	}
 
 	if (depot_t *depot = bd->get_depot()) {
