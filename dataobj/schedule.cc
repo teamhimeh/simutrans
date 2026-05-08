@@ -680,7 +680,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	}
 	p++;
 	//  then next line
-	uint16 next_line_id = atoi( p );
+	uint32 next_line_id = (uint32)atoi( p );
 	next_line.set_id(next_line_id);
 	while(  *p  &&  *p!='|'  ) {
 		p++;
