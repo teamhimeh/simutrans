@@ -3376,7 +3376,7 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 			: (daynight ? specialcolormap_day_night           : specialcolormap_all_day);
 		PIXVAL line_col[8];
 		for(  int i = 0;  i < 8;  i++  ) {
-			line_col[i] = specmap[col + i];
+			line_col[i] = specmap[(col%8)*8 + i];
 		}
 
 		const PIXVAL *sp = images[n].base_data;
