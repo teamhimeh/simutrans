@@ -287,6 +287,7 @@ static PIXVAL *rgbmap_current = 0;
  * 16 sets of 16 colors
  */
 static PIXVAL specialcolormap_day_night[256];
+static PIXVAL specialcolormap_day_night_for_line[256];
 
 
 /*
@@ -295,6 +296,7 @@ static PIXVAL specialcolormap_day_night[256];
  * 16 sets of 16 colors
  */
 PIXVAL specialcolormap_all_day[256];
+static PIXVAL specialcolormap_all_day_for_line[256];
 
 
 /*
@@ -1992,16 +1994,20 @@ static void calc_base_pal_from_night_shift(const int night)
 		const int B = (int)(special_pal[i*3 + 2] * B_night_multiplier);
 
 		specialcolormap_day_night[i] = get_system_color(R, G, B);
+		// darker variant used for line colors based on player color families
+		specialcolormap_day_night_for_line[i] = get_system_color(R*3/4, G*3/4, B*3/4);
 	}
 
 	// special light colors (actually, only non-darkening greys should be used)
 	for(i=0;  i<LIGHT_COUNT;  i++  ) {
 		specialcolormap_day_night[SPECIAL_COLOR_COUNT+i] = get_system_color( display_day_lights[i*3 + 0], display_day_lights[i*3 + 1], display_day_lights[i*3 + 2] );
+		specialcolormap_day_night_for_line[SPECIAL_COLOR_COUNT+i] = specialcolormap_day_night[SPECIAL_COLOR_COUNT+i];
 	}
 
 	// init with black for forbidden colors
 	for(i=SPECIAL_COLOR_COUNT+LIGHT_COUNT;  i<256;  i++  ) {
 		specialcolormap_day_night[i] = 0;
+		specialcolormap_day_night_for_line[i] = 0;
 	}
 
 	// default player colors
@@ -3235,10 +3241,13 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 		}
 
 		// build local line-color ramp (no global state modified)
-		const PIXVAL *const specmap = daynight ? specialcolormap_day_night : specialcolormap_all_day;
+		// player-color-family-based line colors (col%8==0) use a darker palette to distinguish from player colors
+		const PIXVAL *const specmap = (col % 8 == 0)
+			? (daynight ? specialcolormap_day_night_for_line : specialcolormap_all_day_for_line)
+			: (daynight ? specialcolormap_day_night           : specialcolormap_all_day);
 		PIXVAL line_col[8];
 		for(  int i = 0;  i < 8;  i++  ) {
-			line_col[i] = specmap[col + i];
+			line_col[i] = specmap[(col/8)*8 + i];
 		}
 
 		const PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
@@ -5606,6 +5615,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	player_day = 0;
 	display_day_night_shift(0);
 	memcpy(specialcolormap_all_day, specialcolormap_day_night, 256 * sizeof(PIXVAL));
+	memcpy(specialcolormap_all_day_for_line, specialcolormap_day_night_for_line, 256 * sizeof(PIXVAL));
 	memcpy(rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL));
 	memcpy(transparent_map_all_day, transparent_map_day_night, lengthof(transparent_map_day_night) * sizeof(PIXVAL));
 	memcpy(transparent_map_all_day_rgb, transparent_map_day_night_rgb, lengthof(transparent_map_day_night_rgb) * sizeof(uint8));
