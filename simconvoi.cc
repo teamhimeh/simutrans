@@ -2077,14 +2077,19 @@ void convoi_t::ziel_erreicht()
 	// check for coupling
 	if(  next_coupling_index!=route_t::INVALID_INDEX  &&  next_coupling_index<=v->get_route_index()  ) {
 		const uint16 route_index = v->get_route_index();
-		const grund_t* grc[3];
+		// compute search depth from the longest vehicle across all coupled convoys
+		uint32 max_length_steps = max((uint32)convoi_coupling_in_progress->front()->get_desc()->get_length_in_steps(), (uint32)convoi_coupling_in_progress->back()->get_desc()->get_length_in_steps());
+		const uint8 depth = (uint8)(max_length_steps / vehicle_base_t::get_diagonal_vehicle_steps_per_tile()) + 1;
+		const uint8 grc_count = depth + 2;
+		const grund_t* grc[grc_count];  // depth is at most ~16 for any realistic vehicle
 		grc[0] = gr;
-		grc[1] = route_index>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index));
 		// for diagonal stops(tile length can be shorter than vehicle length!)
-		grc[2] = route_index+1>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index+1));
+		for(  uint8 k = 1;  k < grc_count;  k++  ) {
+			grc[k] = (route_index + k - 1) >= get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index + k - 1));
+		}
 		// find convoy to couple with
 		// convoy can be on the next tile of coupling_index.
-		for(  uint8 i=0;  i<3;  i++  ) {
+		for(  uint8 i=0;  i<grc_count;  i++  ) {
 			const grund_t* g = grc[i];
 			if(  !g  ) {
 				continue;
