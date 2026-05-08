@@ -239,7 +239,13 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 				}
 				else if(  line_color_active  ) {
 					// per-object live color substitution: each vehicle uses its own line color
-					display_color_img_line( image, xpos, ypos, line_colour, true, is_dirty  CLIP_NUM_PAR);
+					if(  display_normal == display_img_aux  ) {
+						display_color_img_line( image, xpos, ypos, line_colour, true, is_dirty  CLIP_NUM_PAR);
+					}
+					else {
+						// GUI viewport mode: use base-coord variant to match the viewport's coordinate system
+						display_base_img_line( image, xpos, ypos, line_colour, true, is_dirty  CLIP_NUM_PAR);
+					}
 				}
 				else {
 					display_color( image, xpos, ypos, owner_n, true, is_dirty  CLIP_NUM_PAR);

@@ -178,6 +178,8 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 
 // draw image with per-object line color substitution (live rendering, no image cache slot used)
 void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const bool daynight, const bool dirty  CLIP_NUM_DEF);
+// base-image variant: uses base coords when GUI viewport scale differs from game zoom
+void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const bool daynight, const bool dirty  CLIP_NUM_DEF);
 
 // only used for GUI, display image inside a rect
 void display_img_aligned( const image_id n, scr_rect area, int align, const bool dirty);

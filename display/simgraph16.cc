@@ -3340,6 +3340,68 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 }
 
 
+/**
+ * Draw Image using line color, using base image data when GUI viewport scale differs from game zoom.
+ * Parallel to display_base_img but substitutes player colors with line colors.
+ */
+void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+{
+	if(  base_tile_raster_width == tile_raster_width  ) {
+		// same scale: the zoomed-coord routine works correctly
+		display_color_img_line( n, xp, yp, col, daynight, dirty  CLIP_NUM_PAR );
+		return;
+	}
+	if(  n < anz_images  ) {
+		if(  (images[n].recode_flags & FLAG_HAS_PLAYER_COLOR) == 0  ) {
+			// no player color in image: fall back to plain base rendering
+			display_base_img( n, xp, yp, 0, daynight, dirty  CLIP_NUM_PAR );
+			return;
+		}
+
+		const scr_coord_val x = images[n].base_x + xp;
+		      scr_coord_val y = images[n].base_y + yp;
+		const scr_coord_val w = images[n].base_w;
+		      scr_coord_val h = images[n].base_h;
+
+		if(  h <= 0  ||  x >= CR.clip_rect.xx  ||  y >= CR.clip_rect.yy  ||  x + w <= CR.clip_rect.x  ||  y + h <= CR.clip_rect.y  ) {
+			return;
+		}
+
+		if(  dirty  ) {
+			mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
+		}
+
+		const PIXVAL *const specmap = (col % 8 == 0)
+			? (daynight ? specialcolormap_day_night_for_line : specialcolormap_all_day_for_line)
+			: (daynight ? specialcolormap_day_night           : specialcolormap_all_day);
+		PIXVAL line_col[8];
+		for(  int i = 0;  i < 8;  i++  ) {
+			line_col[i] = specmap[col + i];
+		}
+
+		const PIXVAL *sp = images[n].base_data;
+
+		scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
+		if(  h > 0  ) {
+			while(  yoff  ) {
+				yoff--;
+				do {
+					sp++;
+					sp += (*sp) & (~TRANSPARENT_RUN);
+					sp++;
+				} while(  *sp  );
+				sp++;
+			}
+			if(  CR.number_of_clips > 0  ) {
+				display_img_pc_line( h, x, y, sp, line_col  CLIP_NUM_PAR );
+			}
+			else {
+				display_color_img_wc_line( sp, x, y, h, line_col  CLIP_NUM_PAR );
+			}
+		}
+	}
+}
+
 
 // Blends two colors
 PIXVAL display_blend_colors(PIXVAL background, PIXVAL foreground, int percent_blend)
