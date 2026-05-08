@@ -3661,7 +3661,7 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 
 void convoi_t::open_schedule_window( bool show )
 {
-	DBG_MESSAGE("convoi_t::open_schedule_window()","Id = %hu, State = %d, Lock = %d", self.get_id(), (int)state, wait_lock);
+	DBG_MESSAGE("convoi_t::open_schedule_window()","Id = %u, State = %d, Lock = %d", self.get_id(), (int)state, wait_lock);
 
 	// manipulation of schedule not allowed while:
 	// - just starting
