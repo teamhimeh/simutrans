@@ -645,7 +645,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	}
 	p++;
 	// then departure_slot_group_id
-	departure_slot_group_id.set_id( (uint16)atoi( p ) );
+	departure_slot_group_id.set_id( (uint32)atoi( p ) );
 	while(  *p  &&  *p!='|'  ) {
 		p++;
 	}
