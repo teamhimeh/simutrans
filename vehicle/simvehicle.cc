@@ -1984,6 +1984,7 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 			case convoi_t::SUSPENSION:
 			case convoi_t::SUSPENSION_LOADING:
 				tstrncpy( states_text, translator::translate("suspended"), lengthof(states_text));
+				break;
 
 			case convoi_t::WAITING_FOR_CLEARANCE_ONE_MONTH:
 			case convoi_t::WAITING_FOR_CLEARANCE:
