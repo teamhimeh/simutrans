@@ -10706,6 +10706,9 @@ char const* tool_change_way_offset_t::do_work(player_t *player, const koord3d &s
 			continue;
 		}
 		weg_t *way = gr->get_weg(wt);
+		if(  way->is_deletable(player) != NULL  ) {
+			continue;
+		}
 		if(  way  ) {
 			way->set_vehicle_offset(vehicle_offset);
 			way->set_flag(obj_t::dirty);
