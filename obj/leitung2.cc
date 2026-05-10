@@ -15,6 +15,7 @@ static pthread_mutex_t senke_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 #include "leitung2.h"
 #include "../simdebug.h"
 #include "../simworld.h"
+#include "../simcity.h"
 #include "simobj.h"
 #include "../player/simplay.h"
 #include "../display/simimg.h"
@@ -647,6 +648,7 @@ void senke_t::step_all(uint32 delta_t)
 senke_t::senke_t(loadsave_t *file) : leitung_t( koord3d::invalid, NULL )
 {
 	fab = NULL;
+	city = NULL;
 	delta_sum = 0;
 	next_t = 0;
 	power_demand = 0;
@@ -662,6 +664,7 @@ senke_t::senke_t(loadsave_t *file) : leitung_t( koord3d::invalid, NULL )
 senke_t::senke_t(koord3d pos, player_t *player) : leitung_t(pos, player)
 {
 	fab = NULL;
+	city = NULL;
 	delta_sum = 0;
 	next_t = 0;
 	power_demand = 0;
@@ -684,6 +687,10 @@ senke_t::~senke_t()
 		fab->remove_transformer_connected(this);
 		fab = NULL;
 	}
+	if(city!=NULL && !welt->is_destroying()) {
+		city->remove_substation(this);
+		city = NULL;
+	}
 	if(  net != NULL  ) {
 		net->sub_demand(power_demand);
 	}
@@ -692,21 +699,57 @@ senke_t::~senke_t()
 
 void senke_t::step(uint32 delta_t)
 {
-	if(  fab == NULL  ) {
+	if(fab == NULL && city == NULL) {
 		return;
 	}
-	else if(  delta_t == 0  ) {
+	if(delta_t == 0) {
 		return;
 	}
 
-	// energy metering logic
-	energy_acc += ((uint64)power_demand * (uint64)get_net()->get_normal_supply() * (uint64)delta_t) / ((uint64)PRODUCTION_DELTA_T << powernet_t::FRACTION_PRECISION);
+	if(city != NULL) {
+		// Calculate city power demand and split across substations
+		const uint32 city_demand = city->get_power_demand();
+		const uint32 sub_count = city->get_substations_count();
+		const uint32 my_demand = sub_count > 0 ? city_demand / sub_count : city_demand;
+		
+		// Update demand on the power network
+		set_power_demand(my_demand);
+		// Calculate actual power load delivered
+		const uint32 power_load = get_power_load();
+
+		// Accumulate time-proportional energy, same pattern as factory energy_acc
+		const uint32 delivered = (uint32)(((uint64)power_load * delta_t) / ((uint64)PRODUCTION_DELTA_T * 5));
+		const uint32 demanded  = (uint32)(((uint64)my_demand  * delta_t) / ((uint64)PRODUCTION_DELTA_T * 5));
+		city->add_power(delivered);
+		city->add_power_demand(demanded);
+
+		// Revenue accumulation (unchanged)
+		energy_acc += ((uint64)my_demand * (uint64)get_net()->get_normal_supply() * (uint64)delta_t)
+					/ ((uint64)PRODUCTION_DELTA_T << powernet_t::FRACTION_PRECISION);
+	}
+	else {
+		// energy metering logic for factory substations
+		energy_acc += ((uint64)power_demand * (uint64)get_net()->get_normal_supply() * (uint64)delta_t) / ((uint64)PRODUCTION_DELTA_T << powernet_t::FRACTION_PRECISION);
+	}
+}
+
+uint32 senke_t::get_power_load() const
+{
+	const uint64 net_demand = get_net()->get_demand();
+	if(net_demand > 0) {
+		uint32 pl = (uint32)(((uint64)power_demand * get_net()->get_supply()) / net_demand);
+		return pl < power_demand ? pl : power_demand;
+	}
+	return 0;
 }
 
 void senke_t::pay_revenue()
 {
+	// megajoules (megawatt seconds) per cent
+	const uint64 mjpc = (1 << (POWER_TO_MW-10)) * world()->get_settings().get_cst_kw_per_credit();
+
 	// calculate payment in cent
-	const sint64 payment = (sint64)(energy_acc * world()->get_settings().get_credit_per_MWs() / (1 << POWER_TO_MW));
+	const sint64 payment = (sint64)(energy_acc / mjpc);
 
 	// make payment
 	if(  payment  >  0  ) {
@@ -714,7 +757,7 @@ void senke_t::pay_revenue()
 		get_owner()->book_revenue( payment, get_pos().get_2d(), powerline_wt );
 
 		// remove payment from accumulator
-		energy_acc = (energy_acc * world()->get_settings().get_credit_per_MWs() - payment * (1 << POWER_TO_MW))/world()->get_settings().get_credit_per_MWs();
+		energy_acc %= mjpc;
 	}
 }
 
@@ -752,7 +795,7 @@ sint32 senke_t::get_power_satisfaction() const
 
 sync_result senke_t::sync_step(uint32 delta_t)
 {
-	if(fab==NULL) {
+	if(fab==NULL && city==NULL) {
 		return SYNC_DELETE;
 	}
 
@@ -831,6 +874,24 @@ void senke_t::rdwr(loadsave_t *file)
 		delta_sum = 0;
 		next_t = 0;
 	}
+	if(  file->get_OTRP_version()>53  ) {
+		koord city_pos = koord::invalid;
+		if(  file->is_saving() && city!=NULL  ) {
+			city_pos = city->get_pos();
+		}
+		city_pos.rdwr(file);
+		if(  file->is_loading()  ) {
+			if(  city_pos==koord::invalid  ) {
+				city==NULL;
+			}
+			else {
+				city = welt->find_nearest_city(city_pos);
+				if(  city  ) {
+					city->add_substation(this);
+				}
+			}
+		}
+	}
 }
 
 void senke_t::finish_rd()
@@ -850,6 +911,20 @@ void senke_t::finish_rd()
 		}
 		if(  fab  ) {
 			fab->add_transformer_connected(this);
+		}
+	}
+
+	// If no factory found, check if inside city limits
+	if(city==NULL && fab==NULL) {
+		const koord k = get_pos().get_2d();
+		stadt_t *found_city = welt->find_nearest_city(k);
+		if(found_city != NULL) {
+			const koord lo = found_city->get_linksoben();
+			const koord ur = found_city->get_rechtsunten();
+			if(k.x >= lo.x && k.x <= ur.x && k.y >= lo.y && k.y <= ur.y) {
+				city = found_city;
+				city->add_substation(this);
+			}
 		}
 	}
 
