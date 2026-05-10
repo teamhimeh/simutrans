@@ -10469,7 +10469,7 @@ void tool_change_way_settings_t::mark_tiles(player_t *player, const koord3d &sta
 			if(  i < count-1  ) {
 				new_ribi = ribi_type(route[i], route[i+1]);
 			} else {
-				new_ribi = ribi_type(route[i], route[i-1]);
+				new_ribi = ribi_type(route[i-1], route[i]);
 			}
 			// include connecting ribi from unmasked road at both ends so arrows match
 			new_ribi |= (way->get_ribi_unmasked() & ~ribi_t::backward(new_ribi));
@@ -10512,6 +10512,9 @@ char const* tool_change_way_settings_t::do_work(player_t *player, const koord3d 
 		}
 		strasse_t *str = dynamic_cast<strasse_t*>(gr->get_weg(road_wt));
 		if(  !str  ) {
+			continue;
+		}
+		if(  str->is_deletable(player) != NULL  ) {
 			continue;
 		}
 		str->set_overtaking_mode(overtaking_mode);
@@ -10572,6 +10575,9 @@ void tool_change_way_offset_t::rdwr_custom_data(memory_rw_t *packet)
 	sint8 v = vehicle_offset;
 	packet->rdwr_byte(v);
 	vehicle_offset = v;
+	uint8 wt = (uint8)detected_wt;
+	packet->rdwr_byte(wt);
+	detected_wt = (waytype_t)wt;
 }
 
 
