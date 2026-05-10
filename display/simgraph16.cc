@@ -2168,7 +2168,7 @@ void register_image(image_t *image_in)
 			while(  runlen--  ) {
 				// get rgb components
 				PIXVAL s = *src++;
-				if(  s>=0x8000  &&  s<0x8010  ) {
+				if(  s>=0x8000  &&  s<0x8008  ) {
 					image->recode_flags |= FLAG_HAS_PLAYER_COLOR;
 				}
 			}
@@ -2432,8 +2432,8 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 	if (*src < 0x8020) {
 		while (src < end) {
 			const PIXVAL s = *src++;
-			if (s >= 0x8000 && s < 0x8010) {
-				*dest++ = line_col[s & 7];  // player color → line color
+			if (s >= 0x8000 && s < 0x8008) {
+				*dest++ = line_col[s & 7];  // player color 1 → line color
 			} else {
 				*dest++ = rgbmap_current[s];  // regular or special color
 			}
@@ -2442,8 +2442,8 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 		while (src < end) {
 			uint16 alpha = ((*src - 0x8020) % 31) + 1;
 			const uint16 idx = (*src++ - 0x8020) / 31;
-			if (idx < 16) {
-				// transparent player color → inline blend with line_col
+			if (idx < 8) {
+				// transparent player color 1 → inline blend with line_col
 				const PIXVAL colval = line_col[idx & 7];
 #ifdef RGB555
 				if ((alpha & 7) == 0) {

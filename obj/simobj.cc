@@ -206,7 +206,8 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 			// vehicles need finer steps to appear smoother
 			v->get_screen_offset( xpos, ypos, raster_width );
 		}
-		if(  vehicle_t const* const vt = obj_cast<vehicle_t>(this)  ) {
+		vehicle_t const* const vt = obj_cast<vehicle_t>(this)
+		if(  vt  ) {
 			// vehicles may need extra offset.
 			koord offset = repositioning_t::get_instance().get_offset(vt->get_desc()->get_name());
 			xpos += tile_raster_scale_x(offset.x, raster_width);
@@ -219,8 +220,8 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 		uint8 line_colour = 0;
 		bool line_color_active = false;
 		if(  owner_n != PLAYER_UNOWNED  ) {
-			if(  vehicle_t const* const vt2 = obj_cast<vehicle_t>(this)  ) {
-				if(  convoi_t* cnv = vt2->get_convoi()  ) {
+			if(  vt  ) {
+				if(  convoi_t* cnv = vt->get_convoi()  ) {
 					linehandle_t line = cnv->get_line();
 					if(  line.is_bound()  ) {
 						line_colour = line->get_colour();
