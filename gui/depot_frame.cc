@@ -212,10 +212,12 @@ public:
 
 	// boundary_veh: the vehicle at the front (is_insert) or back (!is_insert) of the current convoy.
 	// Pass NULL to skip compatibility filtering (new convoy or show_all/allow_invalid).
+	// target_wt: when not invalid_wt, only templates with exactly this waytype are shown.
 	void refresh(const char *name_filter, int sort_mode,
 	             const vehicle_desc_t *boundary_veh = NULL, bool is_insert = false,
 	             bool weg_electrified = true, bool show_all_flag = false,
-	             int month_now = 0, bool show_retired = false) {
+	             int month_now = 0, bool show_retired = false,
+	             waytype_t target_wt = invalid_wt) {
 		cur_month_now = month_now;
 		entries.clear();
 		for (uint i = 0; i < (uint)all_entries.size(); i++) {
@@ -223,6 +225,7 @@ public:
 			if (e.veh_count == 0) continue;
 			if (e.tmpl_waytype == invalid_wt) continue; // mixed or no vehicles found
 			if (e.tmpl_waytype != depot_wt && (depot_sec_wt == invalid_wt || e.tmpl_waytype != depot_sec_wt)) continue;
+			if (target_wt != invalid_wt && e.tmpl_waytype != target_wt) continue;
 			// Timeline filter: future vehicles are always hidden;
 			// retired vehicles are hidden unless show_retired is true.
 			if (month_now > 0) {
@@ -1352,7 +1355,15 @@ DBG_DEBUG("depot_frame_t::build_vehicle_lists()","finally %i passenger vehicle, 
 		    && (veh_action == va_append || veh_action == va_insert)) {
 			tmpl_boundary_veh = (tmpl_is_insert ? cnv_tmpl->front() : cnv_tmpl->back())->get_desc();
 		}
-		template_panel->refresh(name_filter_value, sort_by_action, tmpl_boundary_veh, tmpl_is_insert, weg_electrified, show_all, month_now, show_retired_vehicles);
+		// Determine which waytype templates to show.
+		// Existing convoy: use its waytype. Rail+tram depot with no convoy: use bt_show_tram.
+		waytype_t tmpl_target_wt = invalid_wt;
+		if (cnv_tmpl.is_bound() && cnv_tmpl->get_vehicle_count() > 0) {
+			tmpl_target_wt = cnv_tmpl->front()->get_desc()->get_waytype();
+		} else if (depot->get_secondary_waytype() != invalid_wt) {
+			tmpl_target_wt = bt_show_tram.pressed ? depot->get_secondary_waytype() : depot->get_waytype();
+		}
+		template_panel->refresh(name_filter_value, sort_by_action, tmpl_boundary_veh, tmpl_is_insert, weg_electrified, show_all, month_now, show_retired_vehicles, tmpl_target_wt);
 	}
 	update_data();
 	update_tabs();
@@ -2583,31 +2594,42 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 			sint64 cost = 0, run_cost = 0;
 			sint32 min_speed = 0;
 			bool any_speed = false;
-			// per-category capacity
+			uint32 veh_count = 0;
+			uint32 total_len_carunits = 0;
+			// per-goods capacity (catg==0 grouped by goods pointer, catg>0 grouped by catg)
 			struct catg_cap_t { uint8 catg; uint32 cap; const goods_desc_t *goods; };
 			catg_cap_t caps[16];
 			int n_caps = 0;
 			for (uint j = 0; j < (uint)entry->descs.size(); j++) {
 				const vehicle_desc_t *desc = entry->descs[j];
 				if (!desc) continue;
+				veh_count++;
+				total_len_carunits += desc->get_length();
 				cost += desc->get_price();
 				run_cost += desc->get_running_cost();
 				if (!any_speed || desc->get_topspeed() < min_speed) { min_speed = desc->get_topspeed(); any_speed = true; }
 				if (desc->get_capacity() > 0) {
-					uint8 catg = desc->get_freight_type()->get_catg();
+					const goods_desc_t *goods = desc->get_freight_type();
+					uint8 catg = goods->get_catg();
 					bool found = false;
 					for (int k = 0; k < n_caps; k++) {
-						if (caps[k].catg == catg) { caps[k].cap += desc->get_capacity(); found = true; break; }
+						bool same = (catg == 0) ? (caps[k].goods == goods) : (caps[k].catg == catg);
+						if (same) { caps[k].cap += desc->get_capacity(); found = true; break; }
 					}
 					if (!found && n_caps < 16) {
 						caps[n_caps].catg = catg;
 						caps[n_caps].cap  = desc->get_capacity();
-						caps[n_caps].goods = desc->get_freight_type();
+						caps[n_caps].goods = goods;
 						n_caps++;
 					}
 				}
 			}
 			buf.clear();
+			// vehicle count and platform length line
+			buf.printf(translator::translate("%i car(s),"), veh_count);
+			buf.printf("%s %u(%.4f)\n", translator::translate("Station tiles:"),
+				(total_len_carunits + CARUNITS_PER_TILE - 1) / CARUNITS_PER_TILE,
+				(double)total_len_carunits / CARUNITS_PER_TILE);
 			char tmp[128];
 			money_to_string(tmp, cost / 100.0, false);
 			if (env_t::show_yen) {
