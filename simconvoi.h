@@ -91,6 +91,8 @@ public:
 		COUPLED,
 		COUPLED_LOADING,
 		WAITING_FOR_LEAVING_DEPOT,
+		SUSPENSION,
+		SUSPENSION_LOADING,
 		MAX_STATES
 	};
 
@@ -444,6 +446,7 @@ private:
 	*/
 	bool insert_route_convoy_on();
 	koord3d const find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir);
+	koord3d const search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n);
 	bool insert_route_to_draw_diagonal();
 	// alte_richtung of coupled convoy is set by the head convoy.
 	void set_alte_richtung(ribi_t::ribi r) { alte_richtung = r; }
@@ -636,6 +639,12 @@ public:
 	* reset state to no error message
 	*/
 	void reset_waiting() { state=WAITING_FOR_CLEARANCE; }
+
+	/**
+	* suspension
+	*/
+	bool is_suspended() const { return state==SUSPENSION || state==SUSPENSION_LOADING; }
+	void set_suspension( bool y );
 
 	/**
 	* The handle for ourselves. In Anlehnung an 'this' aber mit
@@ -948,7 +957,7 @@ public:
 	*/
 	const uint32 &get_loading_waiting_time() const { return loading_waiting_time; }
 
-	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
+	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING  ||  state==SUSPENSION_LOADING; }
 
 	/**
 	* Schedule convois for self destruction. Will be executed
