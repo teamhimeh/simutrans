@@ -2077,7 +2077,7 @@ void convoi_t::ziel_erreicht()
 	// check for coupling
 	if(  next_coupling_index!=route_t::INVALID_INDEX  &&  next_coupling_index<=v->get_route_index()  ) {
 		const uint16 route_index = v->get_route_index();
-		// compute search depth from the longest vehicle across all coupled convoys
+		// compute search depth
 		uint32 max_length_steps = max((uint32)convoi_coupling_in_progress->front()->get_desc()->get_length_in_steps(), (uint32)convoi_coupling_in_progress->back()->get_desc()->get_length_in_steps());
 		const uint8 depth = (uint8)(max_length_steps / vehicle_base_t::get_diagonal_vehicle_steps_per_tile()) + 1;
 		const uint8 grc_count = depth + 2;
