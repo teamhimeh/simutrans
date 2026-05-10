@@ -176,11 +176,12 @@ void signal_t::calc_image()
 			}
 		}
 	}
-	if(  welt->get_settings().get_signal_reverse_front_back()  ) {
+	if(  welt->get_settings().get_signal_reverse_front_back() && (desc->get_flags()&roadsign_desc_t::ONLY_BACKIMAGE)==0  ) {
 		std::swap( image, foreground_image );
 		std::swap( xoff, after_xoffset );
 		std::swap( yoff, after_yoffset );
 	}
+	// only background image used.
 	if(  desc->get_flags()&roadsign_desc_t::ONLY_BACKIMAGE  ) {
 		if(foreground_image!=IMG_EMPTY) {
 			image = foreground_image;
