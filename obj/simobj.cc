@@ -206,7 +206,7 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 			// vehicles need finer steps to appear smoother
 			v->get_screen_offset( xpos, ypos, raster_width );
 		}
-		vehicle_t const* const vt = obj_cast<vehicle_t>(this)
+		vehicle_t const* const vt = obj_cast<vehicle_t>(this);
 		if(  vt  ) {
 			// vehicles may need extra offset.
 			koord offset = repositioning_t::get_instance().get_offset(vt->get_desc()->get_name());
