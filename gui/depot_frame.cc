@@ -132,7 +132,7 @@ private:
 			default: // sb_name and unsupported modes
 				break;
 		}
-		return strcmp(a.tmpl->name.c_str(), b.tmpl->name.c_str()) < 0;
+		return strcmp(translator::translate(a.tmpl->name.c_str()), translator::translate(b.tmpl->name.c_str())) < 0;
 	}
 
 public:
@@ -247,7 +247,7 @@ public:
 				continue;
 			}
 			if (name_filter && name_filter[0] != 0) {
-				if (!utf8caseutf8(e.tmpl->name.c_str(), name_filter)) {
+				if (!utf8caseutf8(e.tmpl->name.c_str(), name_filter) && !utf8caseutf8(translator::translate(e.tmpl->name.c_str()), name_filter)) {
 					continue;
 				}
 			}
@@ -311,7 +311,7 @@ public:
 				last_hovered_idx = (sint32)i;
 				display_fillbox_wh_clip_rgb(offset.x, y, get_size().w, rh, SYSCOL_LIST_BACKGROUND_SELECTED_NF, true);
 			}
-			display_proportional_clip_rgb(offset.x + D_H_SPACE, y + 1, e.tmpl->name.c_str(), ALIGN_LEFT, SYSCOL_TEXT, true);
+			display_proportional_clip_rgb(offset.x + D_H_SPACE, y + 1, translator::translate(e.tmpl->name.c_str()), ALIGN_LEFT, SYSCOL_TEXT, true);
 			scr_coord_val xpos = offset.x + 2;
 			const uint n = (uint)e.descs.size();
 			const scr_coord_val bar_y = y + LINESPACE + cell_h - 5;
@@ -2330,8 +2330,8 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			const gui_template_panel_t::entry_t *entry = template_panel->get_entry(idx);
 			if (entry && !entry->tmpl->vehicles.empty()) {
 				cbuffer_t veh_buf;
-				// First line: template name (used to name a newly created convoy)
-				veh_buf.append(entry->tmpl->name.c_str());
+				// First line: translated template name (used to name a newly created convoy)
+				veh_buf.append(translator::translate(entry->tmpl->name.c_str()));
 				veh_buf.append("\n");
 				const std::vector<std::string> &vehs = entry->tmpl->vehicles;
 				if (veh_action == va_insert) {
