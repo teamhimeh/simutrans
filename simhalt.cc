@@ -107,10 +107,10 @@ struct haltestelle_t::cargo_queue_t {
 			uint64 index;
 
 			// inverted indexes
-			uint16 zwischenziel_id;
+			uint32 zwischenziel_id;
 			// The iterator to this item's iterator in zwischenziel_index.
 			item_iterator_list::iterator zwischenziel_iter;
-			uint16 ziel_id;
+			uint32 ziel_id;
 			// The iterator to this item's iterator in ziel_index.
 			item_iterator_list::iterator ziel_iter;
 
@@ -125,16 +125,16 @@ struct haltestelle_t::cargo_queue_t {
 		std::list<item_t> cargos;
 
 		// key: halt id to get off, value: the vector of the cargo item iterators
-		std::unordered_map<uint16, item_iterator_list> zwischenziel_index;
+		std::unordered_map<uint32, item_iterator_list> zwischenziel_index;
 
 		// key: halt id of final destination, value: the vector of the cargo item iterators
-		std::unordered_map<uint16, item_iterator_list> ziel_index;
+		std::unordered_map<uint32, item_iterator_list> ziel_index;
 
 		// The set of the halt id whose ziel_index needs re-sorting.
-		std::unordered_set<uint16> ziel_index_resorting_halts;
+		std::unordered_set<uint32> ziel_index_resorting_halts;
 
 		// The set of the halt id whose zwischenziel_index needs re-sorting.
-		std::unordered_set<uint16> zwischenziel_index_resorting_halts;
+		std::unordered_set<uint32> zwischenziel_index_resorting_halts;
 
 	public:
 		// Iterator wrapper class
@@ -297,7 +297,7 @@ struct haltestelle_t::cargo_queue_t {
 		// Updates the storage internal index of the given iterator.
 		// IMPORTANT: Call sort_indices after calling update_index for all required iterators.
 		void update_index(const iterator& iter) {
-			const uint16 ziel_id = iter->get()->goods.get_ziel().get_id();
+			const uint32 ziel_id = iter->get()->goods.get_ziel().get_id();
 			if(  iter.it->ziel_id!=ziel_id  ) {
 				// Ziel changed
 				// Remove from old index
@@ -310,7 +310,7 @@ struct haltestelle_t::cargo_queue_t {
 				iter.it->ziel_iter = std::prev(ziel_itr_list.end());
 				ziel_index_resorting_halts.insert(ziel_id);
 			}
-			const uint16 zwischenziel_id = iter->get()->goods.get_zwischenziel().get_id();
+			const uint32 zwischenziel_id = iter->get()->goods.get_zwischenziel().get_id();
 			if(  iter.it->zwischenziel_id!=zwischenziel_id  ) {
 				// Zwischenziel changed
 				// Remove from old index
@@ -331,7 +331,7 @@ struct haltestelle_t::cargo_queue_t {
 
 		void sort_indices() {
 			// Sort the zwischenziel_index entries which need resorting
-			for (uint16 halt_id : zwischenziel_index_resorting_halts) {
+			for (uint32 halt_id : zwischenziel_index_resorting_halts) {
 				item_iterator_list& list = zwischenziel_index[halt_id];
 				if (list.size() <= 1) {
 					continue; // No need to sort
@@ -343,7 +343,7 @@ struct haltestelle_t::cargo_queue_t {
 			zwischenziel_index_resorting_halts.clear();
 
 			// Sort the ziel_index entries which need resorting
-			for (uint16 halt_id : ziel_index_resorting_halts) {
+			for (uint32 halt_id : ziel_index_resorting_halts) {
 				item_iterator_list& list = ziel_index[halt_id];
 				if (list.size() <= 1) {
 					continue; // No need to sort
@@ -869,17 +869,19 @@ haltestelle_t::~haltestelle_t()
 		lr.clip_min(pos);
 	}
 
-	// remove from all haltlists
-	uint16 const cov = welt->get_settings().get_station_coverage();
-	ul.x = max(0, ul.x - cov);
-	ul.y = max(0, ul.y - cov);
-	lr.x = min(welt->get_size().x, lr.x + 1 + cov);
-	lr.y = min(welt->get_size().y, lr.y + 1 + cov);
-	for(  int y=ul.y;  y<lr.y;  y++  ) {
-		for(  int x=ul.x;  x<lr.x;  x++  ) {
-			planquadrat_t *plan = welt->access(x,y);
-			if(plan->get_haltlist_count()>0) {
-				plan->remove_from_haltlist(self);
+	// remove from all haltlists — skip during map teardown, plan array is about to be deleted
+	if(  !welt->is_destroying()  ) {
+		uint16 const cov = welt->get_settings().get_station_coverage();
+		ul.x = max(0, ul.x - cov);
+		ul.y = max(0, ul.y - cov);
+		lr.x = min(welt->get_size().x, lr.x + 1 + cov);
+		lr.y = min(welt->get_size().y, lr.y + 1 + cov);
+		for(  int y=ul.y;  y<lr.y;  y++  ) {
+			for(  int x=ul.x;  x<lr.x;  x++  ) {
+				planquadrat_t *plan = welt->access(x,y);
+				if(plan->get_haltlist_count()>0) {
+					plan->remove_from_haltlist(self);
+				}
 			}
 		}
 	}
@@ -892,8 +894,10 @@ haltestelle_t::~haltestelle_t()
 
 	for(unsigned i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 		if(cargo[i]) {
-			for(const auto& w : *cargo[i]) {
-				fabrik_t::update_transit(&w->goods, false);
+			if(  !welt->is_destroying()  ) {
+				for(const auto& w : *cargo[i]) {
+					fabrik_t::update_transit(&w->goods, false);
+				}
 			}
 			delete cargo[i];
 		}
@@ -905,7 +909,9 @@ haltestelle_t::~haltestelle_t()
 	}
 
 	// routes may have changed without this station ...
-	verbinde_fabriken();
+	if(  !welt->is_destroying()  ) {
+		verbinde_fabriken();
+	}
 }
 
 
@@ -2135,7 +2141,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 	// initialisations for end halts => save some checking inside search loop
 	FOR(vector_tpl<halthandle_t>, const e, end_halts) {
-		uint16 const halt_id = e.get_id();
+		uint32 const halt_id = e.get_id();
 		halt_data[ halt_id ].best_weight = UINT32_MAX;
 		halt_data[ halt_id ].destination = 1u;
 		halt_data[ halt_id ].depth       = 1u; // to distinct them from start halts
@@ -2185,7 +2191,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 		// do not use aggregate_weight as it is _not_ the weight of the current_node
 		// there might be a heuristic weight added
 
-		const uint16 current_halt_id = current_node.halt.get_id();
+		const uint32 current_halt_id = current_node.halt.get_id();
 		halt_data_t & current_halt_data = halt_data[ current_halt_id ];
 		overcrowded_nodes -= current_halt_data.overcrowded;
 
@@ -2249,7 +2255,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 			// since these are pre-calculated, they should be always pointing to a valid ground
 			// (if not, we were just under construction, and will be fine after 16 steps)
-			const uint16 reachable_halt_id = current_conn.halt.get_id();
+			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
 			if(  markers[ reachable_halt_id ]!=current_marker  ) {
 				// Case : not processed before
@@ -2459,7 +2465,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 
 		route_node_t current_node = open_list.pop();
 
-		const uint16 current_halt_id = current_node.halt.get_id();
+		const uint32 current_halt_id = current_node.halt.get_id();
 		const uint32 current_weight = current_node.aggregate_weight;
 		halt_data_t & current_halt_data = halt_data[ current_halt_id ];
 
@@ -2502,7 +2508,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		}
 
 		FOR(vector_tpl<connection_t>, const& current_conn, current_node.halt->all_links[ware_catg_idx].connections) {
-			const uint16 reachable_halt_id = current_conn.halt.get_id();
+			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
 			const uint32 total_weight = current_weight + current_conn.weight;
 
@@ -2738,7 +2744,7 @@ void haltestelle_t::fetch_goods_FIFO(slist_tpl<ware_t> &load, const goods_desc_t
 	};
 
 	// Key: destination halt id, value: the iterator to the earliest cargo item to the destination.
-	std::unordered_map<uint16, cargo_queue_t::zwischenziel_iterator> dest_cargo_item_map;
+	std::unordered_map<uint32, cargo_queue_t::zwischenziel_iterator> dest_cargo_item_map;
 	// First, fill dest_cargo_item_map
 	FOR(vector_tpl<halthandle_t>, const& h, destination_halts) {
 		cargo_queue_t::zwischenziel_iterator first_item_itr = wares->zwischenziel_begin(h);
@@ -3662,15 +3668,29 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	// will restore halthandle_t after loading
 	if(file->is_version_atleast(110, 6)) {
-		if(file->is_saving()) {
-			uint16 halt_id = self.is_bound() ? self.get_id() : 0;
-			file->rdwr_short(halt_id);
+		if(  file->get_OTRP_version() >= 55  ) {
+			if(file->is_saving()) {
+				uint32 halt_id = self.is_bound() ? self.get_id() : 0;
+				file->rdwr_long(halt_id);
+			}
+			else {
+				uint32 halt_id;
+				file->rdwr_long(halt_id);
+				self.set_id(halt_id);
+				self = halthandle_t(this, halt_id);
+			}
 		}
 		else {
-			uint16 halt_id;
-			file->rdwr_short(halt_id);
-			self.set_id(halt_id);
-			self = halthandle_t(this, halt_id);
+			if(file->is_saving()) {
+				uint16 halt_id = self.is_bound() ? (uint16)self.get_id() : 0;
+				file->rdwr_short(halt_id);
+			}
+			else {
+				uint16 halt_id;
+				file->rdwr_short(halt_id);
+				self.set_id(halt_id);
+				self = halthandle_t(this, (uint32)halt_id);
+			}
 		}
 	}
 	else {
