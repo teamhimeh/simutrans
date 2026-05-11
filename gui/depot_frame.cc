@@ -40,7 +40,7 @@
 #include "../descriptor/goods_desc.h"
 #include "../descriptor/intro_dates.h"
 #include "../bauer/vehikelbauer.h"
-#include "../dataobj/convoy_template.h"
+#include "../dataobj/convoi_template.h"
 #include "../dataobj/schedule.h"
 #include "../dataobj/translator.h"
 #include "../dataobj/environment.h"
@@ -69,7 +69,7 @@ bool depot_frame_t::show_all = false;
 class gui_template_panel_t : public gui_action_creator_t, public gui_component_t {
 public:
 	struct entry_t {
-		const convoy_template_t *tmpl;
+		const convoi_template_t *tmpl;
 		std::vector<const vehicle_desc_t *> descs;
 		scr_coord_val row_h;
 		// stats for sorting
@@ -79,9 +79,10 @@ public:
 		uint32 total_capacity;
 		const goods_desc_t *primary_goods;
 		uint32 veh_count;
-		bool all_electric;       // true if every vehicle in this template is electric
-		bool internally_valid;   // true if all adjacent vehicle pairs in the template can connect
-		bool mixed_waytype;      // true if the template contains vehicles of different waytypes
+		bool all_electric;        // true if every vehicle in this template is electric
+		bool internally_valid;    // true if all originally-adjacent non-null pairs can connect
+		bool compacted_valid;     // true if all pairs adjacent after null-compaction can connect
+		bool mixed_waytype;       // true if the template contains vehicles of different waytypes
 		waytype_t tmpl_waytype;  // common waytype of all vehicles; invalid_wt if mixed
 	};
 
@@ -138,7 +139,7 @@ private:
 public:
 	gui_template_panel_t() : player_nr(0), last_hovered_idx(-1), cell_w(32), cell_h(32), cur_month_now(0), depot_wt(invalid_wt), depot_sec_wt(invalid_wt) {}
 
-	void init(const std::vector<convoy_template_t> &templates, sint8 onr, const depot_t *dep) {
+	void init(const std::vector<convoi_template_t> &templates, sint8 onr, const depot_t *dep) {
 		player_nr = onr;
 		cell_w = dep->get_x_grid() * get_base_tile_raster_width() / 64 + 4
 		       - dep->get_grid_dx() * get_base_tile_raster_width() / 64 / 2;
@@ -160,6 +161,10 @@ public:
 			bool has_non_electric = false;
 			for (uint j = 0; j < (uint)templates[i].vehicles.size(); j++) {
 				const vehicle_desc_t *desc = vehicle_builder_t::get_info(templates[i].vehicles[j].c_str());
+				if (!desc) {
+					dbg->error("gui_template_panel_t::init", "Convoy template \"%s\": vehicle[%u] \"%s\" not found.",
+						templates[i].name.c_str(), j, templates[i].vehicles[j].c_str());
+				}
 				e.descs.push_back(desc);
 				if (desc) {
 					e.cost += desc->get_price();
@@ -194,6 +199,12 @@ public:
 			}
 			e.mixed_waytype = mixed_waytype;
 			e.tmpl_waytype  = mixed_waytype ? invalid_wt : first_wt;
+			if (mixed_waytype) {
+				dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" contains vehicles of mixed waytypes.", templates[i].name.c_str());
+			}
+			if (e.veh_count == 0) {
+				dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" has no valid vehicles (all descriptors missing).", templates[i].name.c_str());
+			}
 			bool internally_valid = true;
 			for (int j = 0; j + 1 < (int)e.descs.size(); j++) {
 				const vehicle_desc_t *cur  = e.descs[j];
@@ -204,6 +215,20 @@ public:
 				}
 			}
 			e.internally_valid = internally_valid;
+			// Check compacted validity: after removing nulls, can all adjacent pairs connect?
+			bool compacted_valid = true;
+			const vehicle_desc_t *prev_non_null = NULL;
+			for (uint j = 0; j < (uint)e.descs.size(); j++) {
+				const vehicle_desc_t *d = e.descs[j];
+				if (d) {
+					if (prev_non_null && (!prev_non_null->can_lead(d) || !d->can_follow(prev_non_null))) {
+						compacted_valid = false;
+						break;
+					}
+					prev_non_null = d;
+				}
+			}
+			e.compacted_valid = compacted_valid;
 			e.row_h = LINESPACE + max(cell_h, (scr_coord_val)16) + 4;
 			all_entries.push_back(e);
 		}
@@ -240,7 +265,7 @@ public:
 				if (has_future) continue;
 				if (has_retired && !show_retired) continue;
 			}
-			if (!show_all_flag && !e.internally_valid) {
+			if (!show_all_flag && (!e.internally_valid || !e.compacted_valid)) {
 				continue;
 			}
 			if (!weg_electrified && e.all_electric) {
@@ -313,41 +338,35 @@ public:
 			}
 			display_proportional_clip_rgb(offset.x + D_H_SPACE, y + 1, translator::translate(e.tmpl->name.c_str()), ALIGN_LEFT, SYSCOL_TEXT, true);
 			scr_coord_val xpos = offset.x + 2;
-			const uint n = (uint)e.descs.size();
 			const scr_coord_val bar_y = y + LINESPACE + cell_h - 5;
-			for (uint j = 0; j < n; j++) {
-				const vehicle_desc_t *desc = e.descs[j];
-				if (desc) {
-					if (desc->get_base_image() != IMG_EMPTY) {
-						scr_coord_val ix, iy, iw, ih;
-						display_get_base_image_offset(desc->get_base_image(), &ix, &iy, &iw, &ih);
-						display_base_img(desc->get_base_image(), xpos - ix + 2, y + LINESPACE - iy + (cell_h - ih) - 6, player_nr, false, true);
-					}
-					// lcolor: connection from previous (or terminal if first)
-					PIXVAL lc, rc;
-					if (j == 0) {
-						lc = color_idx_to_rgb(desc->can_follow(NULL) ? COL_GREEN : COL_YELLOW);
-					} else {
-						const vehicle_desc_t *prev = e.descs[j - 1];
-						lc = prev ? color_idx_to_rgb((prev->can_lead(desc) && desc->can_follow(prev)) ? COL_GREEN : COL_RED)
-						          : color_idx_to_rgb(COL_YELLOW);
-					}
-					// rcolor: connection to next (or terminal if last)
-					if (j == n - 1) {
-						rc = color_idx_to_rgb(desc->can_lead(NULL) ? COL_GREEN : COL_YELLOW);
-					} else {
-						const vehicle_desc_t *next_d = e.descs[j + 1];
-						rc = next_d ? color_idx_to_rgb((desc->can_lead(next_d) && next_d->can_follow(desc)) ? COL_GREEN : COL_RED)
-						            : color_idx_to_rgb(COL_YELLOW);
-					}
-					// Change green bars to blue for retired vehicles (matching convoy display)
-					if (cur_month_now > 0 && desc->is_retired(cur_month_now)) {
-						if (lc == color_idx_to_rgb(COL_GREEN)) lc = gui_theme_t::gui_color_obsolete;
-						if (rc == color_idx_to_rgb(COL_GREEN)) rc = gui_theme_t::gui_color_obsolete;
-					}
-					display_fillbox_wh_clip_rgb(xpos + 1,            bar_y, cell_w / 2 - 1,            4, lc, true);
-					display_fillbox_wh_clip_rgb(xpos + cell_w / 2,   bar_y, cell_w - cell_w / 2 - 1,   4, rc, true);
+			// Build compacted list (skip missing descriptors) for display and color calculation
+			std::vector<const vehicle_desc_t *> compact;
+			for (uint j = 0; j < (uint)e.descs.size(); j++) {
+				if (e.descs[j]) compact.push_back(e.descs[j]);
+			}
+			const uint cn = (uint)compact.size();
+			for (uint j = 0; j < cn; j++) {
+				const vehicle_desc_t *desc = compact[j];
+				if (desc->get_base_image() != IMG_EMPTY) {
+					scr_coord_val ix, iy, iw, ih;
+					display_get_base_image_offset(desc->get_base_image(), &ix, &iy, &iw, &ih);
+					display_base_img(desc->get_base_image(), xpos - ix + 2, y + LINESPACE - iy + (cell_h - ih) - 6, player_nr, false, true);
 				}
+				// lcolor: connection from previous compacted vehicle, or terminal if first
+				PIXVAL lc = (j == 0)
+					? color_idx_to_rgb(desc->can_follow(NULL) ? COL_GREEN : COL_YELLOW)
+					: color_idx_to_rgb((compact[j-1]->can_lead(desc) && desc->can_follow(compact[j-1])) ? COL_GREEN : COL_RED);
+				// rcolor: connection to next compacted vehicle, or terminal if last
+				PIXVAL rc = (j == cn - 1)
+					? color_idx_to_rgb(desc->can_lead(NULL) ? COL_GREEN : COL_YELLOW)
+					: color_idx_to_rgb((desc->can_lead(compact[j+1]) && compact[j+1]->can_follow(desc)) ? COL_GREEN : COL_RED);
+				// Green bars turn blue for retired vehicles
+				if (cur_month_now > 0 && desc->is_retired(cur_month_now)) {
+					if (lc == color_idx_to_rgb(COL_GREEN)) lc = gui_theme_t::gui_color_obsolete;
+					if (rc == color_idx_to_rgb(COL_GREEN)) rc = gui_theme_t::gui_color_obsolete;
+				}
+				display_fillbox_wh_clip_rgb(xpos + 1,          bar_y, cell_w / 2 - 1,          4, lc, true);
+				display_fillbox_wh_clip_rgb(xpos + cell_w / 2, bar_y, cell_w - cell_w / 2 - 1, 4, rc, true);
 				xpos += cell_w;
 			}
 			y += rh;
@@ -570,11 +589,11 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	tram_waggons.add_listener(this);
 
 	// Convoy template tab setup
-	if (!convoy_template_manager_t::is_loaded()) {
-		convoy_template_manager_t::load(env_t::pak_dir);
+	if (!convoi_template_manager_t::is_loaded()) {
+		convoi_template_manager_t::load(env_t::pak_dir);
 	}
 	template_panel = new gui_template_panel_t();
-	template_panel->init(convoy_template_manager_t::get_templates(), (sint8)depot->get_owner_nr(), depot);
+	template_panel->init(convoi_template_manager_t::get_templates(), (sint8)depot->get_owner_nr(), depot);
 	template_panel->add_listener(this);
 	scrolly_template.set_component(template_panel);
 	scrolly_template.set_scrollbar_mode(scrollbar_t::show_disabled);
@@ -2334,17 +2353,26 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 				veh_buf.append(translator::translate(entry->tmpl->name.c_str()));
 				veh_buf.append("\n");
 				const std::vector<std::string> &vehs = entry->tmpl->vehicles;
+				// prefix: "i" for insert-at-front, "a" for append-at-back
+				// vehicle names containing ',' are enclosed in double quotes
 				if (veh_action == va_insert) {
 					veh_buf.append("i");
 					for (int i = (int)vehs.size() - 1; i >= 0; i--) {
 						veh_buf.append(",");
+						const bool needs_quote = vehs[i].find(',') != std::string::npos;
+						if (needs_quote) veh_buf.append("\"");
 						veh_buf.append(vehs[i].c_str());
+						if (needs_quote) veh_buf.append("\"");
 					}
 				}
 				else {
+					veh_buf.append("a");
 					for (uint i = 0; i < (uint)vehs.size(); i++) {
-						if (i > 0) veh_buf.append(",");
+						veh_buf.append(",");
+						const bool needs_quote = vehs[i].find(',') != std::string::npos;
+						if (needs_quote) veh_buf.append("\"");
 						veh_buf.append(vehs[i].c_str());
+						if (needs_quote) veh_buf.append("\"");
 					}
 				}
 				if (!cnv.is_bound() && !depot->get_owner()->is_locked()) {
@@ -2872,7 +2900,7 @@ void depot_frame_t::update_tabs()
 		tabs.add_tab(&scrolly_pas, translator::translate( depot->get_passenger_name() ) );
 	}
 
-	if (template_panel && !convoy_template_manager_t::get_templates().empty()) {
+	if (template_panel && !convoi_template_manager_t::get_templates().empty()) {
 		tabs.add_tab(&cont_template_tab, translator::translate("Templates"));
 	}
 

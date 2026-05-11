@@ -40,6 +40,7 @@ target_sources(simutrans PRIVATE
 		dataobj/route.cc
 		dataobj/scenario.cc
 		dataobj/schedule.cc
+		dataobj/convoi_template.cc
 		dataobj/settings.cc
 		dataobj/tabfile.cc
 		dataobj/translator.cc
