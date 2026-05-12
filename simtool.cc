@@ -5860,6 +5860,7 @@ void tool_build_roadsign_t::rdwr_custom_data(memory_rw_t *packet)
 	packet->rdwr_byte(current.spacing);
 	packet->rdwr_bool(current.remove_intermediate);
 	packet->rdwr_bool(current.replace_other);
+	packet->rdwr_bool(current.two_ways);
 }
 
 
@@ -6048,6 +6049,9 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 			if(rs == NULL) rs = gr->find<roadsign_t>();
 			assert(rs);
 			rs->set_dir(dir);
+			if(  signal_t* sig = gr->find<signal_t>()  ) {
+				sig->set_two_ways( current.two_ways );
+			}
 		}
 		else {
 			// Place no signal -> remove existing signal
@@ -6069,22 +6073,24 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 /*
  * Called by the GUI (gui/signal_spacing.*)
  */
-void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace )
+void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace, bool two_ways )
 {
 	signal_info& s = signal[player->get_player_nr()];
 	s.spacing             = spacing;
 	s.remove_intermediate = remove;
 	s.replace_other       = replace;
+	s.two_ways            = two_ways;
 	current = s;
 }
 
 
-void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace )
+void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace, bool &two_ways )
 {
 	signal_info const& s = signal[player->get_player_nr()];
-	spacing = s.spacing;
-	remove  = s.remove_intermediate;
-	replace = s.replace_other;
+	spacing   = s.spacing;
+	remove    = s.remove_intermediate;
+	replace   = s.replace_other;
+	two_ways  = s.two_ways;
 }
 
 
@@ -8718,6 +8724,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'm' : apply max speed of convoy
  * 'b' : apply balance speed (limit power)
  * 'i' : set invalid convoy
+ * 'u' : suspension
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -8994,6 +9001,13 @@ bool tool_change_convoi_t::init( player_t *player )
 		{
 			cnv->set_invalid_convoy(atoi(p)!=0);
 		}
+		break;
+
+		case 'u':
+		{
+			cnv->set_suspension(atoi(p)!=0);
+		}
+		break;
 	}
 
 	if(  cnv->in_depot()  &&  (tool=='g'  ||  tool=='l')  ) {
@@ -9942,6 +9956,21 @@ bool tool_change_roadsign_t::init( player_t* )
 				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
 				if(  sign_info_win  ) {
 					sign_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'w':
+		// two_ways: allow convoys to pass the signal from the reverse direction
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  signal_t *sig = gr->find<signal_t>()  ) {
+				if(  player_t::check_owner(sig->get_owner(), welt->get_active_player())  ) {
+					sig->set_two_ways(inst != 0);
+					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)sig);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
 				}
 			}
 		}
