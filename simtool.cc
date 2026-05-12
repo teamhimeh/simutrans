@@ -2684,9 +2684,26 @@ const way_desc_t *tool_build_way_t::defaults[17] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 
 const way_desc_t *tool_build_way_t::get_desc( uint16 timeline_year_month) const
 {
-	const way_desc_t *desc = default_param ? way_builder_t::get_desc(default_param,0) :NULL;
-	if(  desc==NULL  &&  default_param  ) {
-		waytype_t wt = (waytype_t)atoi(default_param);
+	if (!default_param) {
+		return NULL;
+	}
+	// Extract the way name (first segment before ',')
+	const char* comma = strchr(default_param, ',');
+	char name_buf[256];
+	const char* name;
+	if (comma) {
+		size_t len = (size_t)(comma - default_param);
+		if (len >= sizeof(name_buf)) { len = sizeof(name_buf) - 1; }
+		memcpy(name_buf, default_param, len);
+		name_buf[len] = '\0';
+		name = name_buf;
+	}
+	else {
+		name = default_param;
+	}
+	const way_desc_t *desc = name[0] ? way_builder_t::get_desc(name, 0) : NULL;
+	if(  desc==NULL  &&  name[0]  ) {
+		waytype_t wt = (waytype_t)atoi(name);
 		desc = defaults[wt&63];
 		if(desc==NULL  ||  !desc->is_available(timeline_year_month)) {
 			// search fastest way.
@@ -2706,7 +2723,7 @@ const way_desc_t *tool_build_way_t::get_desc( uint16 timeline_year_month) const
 
 image_id tool_build_way_t::get_icon(player_t *) const
 {
-	const way_desc_t *desc = way_builder_t::get_desc(default_param,0);
+	const way_desc_t *desc = get_desc(0);
 	image_id image = icon;
 	bool is_tram = false;
 	if(  desc  ) {
@@ -2736,6 +2753,8 @@ const char* tool_build_way_t::get_tooltip(const player_t *) const
 	return toolstr;
 }
 
+tool_build_way_t* get_build_way_tool_from_toolbar(const way_desc_t* desc);
+
 // default ways are not initialized synchronously for different clients
 // always return the name of a way, never the string containing the waytype
 const char* tool_build_way_t::get_default_param(player_t *player) const
@@ -2743,8 +2762,10 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 	if (player==NULL) {
 		return default_param;
 	}
+	// Determine the way name
+	const char* way_name = NULL;
 	if (desc) {
-		return desc->get_name();
+		way_name = desc->get_name();
 	}
 	else {
 		if (default_param == NULL) {
@@ -2753,12 +2774,41 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 		}
 		const way_desc_t* test_desc = get_desc(0);
 		if (test_desc) {
-			return test_desc->get_name();
+			way_name = test_desc->get_name();
 		}
 		else {
-			return default_param;
+			// Fallback: numeric waytype — extract first segment
+			static char name_buf[64];
+			const char* comma = strchr(default_param, ',');
+			if (comma) {
+				size_t len = (size_t)(comma - default_param);
+				if (len >= sizeof(name_buf)) { len = sizeof(name_buf) - 1; }
+				memcpy(name_buf, default_param, len);
+				name_buf[len] = '\0';
+				way_name = name_buf;
+			}
+			else {
+				way_name = default_param;
+			}
 		}
 	}
+	// If called from a shortcut key, use the toolbar tool's field values
+	overtaking_mode_t mode = overtaking_mode;
+	uint8 flag = street_flag;
+	sint8 hf = height_offset;
+	sint8 vo = vehicle_offset;
+	if (look_toolbar) {
+		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
+		if (toolbar_tool) {
+			mode = toolbar_tool->get_overtaking_mode();
+			flag = toolbar_tool->get_street_flag();
+			hf = toolbar_tool->get_height_offset();
+			vo = toolbar_tool->vehicle_offset;
+		}
+	}
+	static char buf[300];
+	sprintf(buf, "%s,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo);
+	return buf;
 }
 
 
@@ -2787,6 +2837,20 @@ bool tool_build_way_t::init( player_t *player, bool called_from_move )
 	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
 		// non available way => fail
 		return false;
+	}
+
+	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle")
+	if (default_param) {
+		const char* comma = strchr(default_param, ',');
+		if (comma) {
+			int mode, flag, hf, vo;
+			if (sscanf(comma + 1, "%d,%d,%d,%d", &mode, &flag, &hf, &vo) == 4) {
+				overtaking_mode = (overtaking_mode_t)mode;
+				street_flag = (uint8)flag;
+				height_offset = (sint8)hf;
+				vehicle_offset = (sint8)vo;
+			}
+		}
 	}
 
 	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
@@ -2997,33 +3061,6 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	return "";
 }
 
-
-void tool_build_way_t::rdwr_custom_data(memory_rw_t *packet)
-{
-	two_click_tool_t::rdwr_custom_data(packet);
-	sint8 i = overtaking_mode;
-	uint8 a = street_flag;
-	sint8 b = height_offset;
-	sint8 c = vehicle_offset;
-	// If this tool is called from a shortcut key, overtaking_mode of the tool in a toolbar has to be used.
-	if(  packet->is_saving()  &&  look_toolbar  ) {
-		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
-		if(  toolbar_tool  ) {
-			i = toolbar_tool->get_overtaking_mode();
-			a = toolbar_tool->get_street_flag();
-			b = toolbar_tool->get_height_offset();
-			c = toolbar_tool->vehicle_offset;
-		}
-	}
-	packet->rdwr_byte(i);
-	packet->rdwr_byte(a);
-	packet->rdwr_byte(b);
-	packet->rdwr_byte(c);
-	overtaking_mode = (overtaking_mode_t)i;
-	street_flag = a;
-	height_offset = b;
-	vehicle_offset = c;
-}
 
 
 void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, const koord3d &end )
@@ -5823,6 +5860,7 @@ void tool_build_roadsign_t::rdwr_custom_data(memory_rw_t *packet)
 	packet->rdwr_byte(current.spacing);
 	packet->rdwr_bool(current.remove_intermediate);
 	packet->rdwr_bool(current.replace_other);
+	packet->rdwr_bool(current.two_ways);
 }
 
 
@@ -6011,6 +6049,9 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 			if(rs == NULL) rs = gr->find<roadsign_t>();
 			assert(rs);
 			rs->set_dir(dir);
+			if(  signal_t* sig = gr->find<signal_t>()  ) {
+				sig->set_two_ways( current.two_ways );
+			}
 		}
 		else {
 			// Place no signal -> remove existing signal
@@ -6032,22 +6073,24 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 /*
  * Called by the GUI (gui/signal_spacing.*)
  */
-void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace )
+void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace, bool two_ways )
 {
 	signal_info& s = signal[player->get_player_nr()];
 	s.spacing             = spacing;
 	s.remove_intermediate = remove;
 	s.replace_other       = replace;
+	s.two_ways            = two_ways;
 	current = s;
 }
 
 
-void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace )
+void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace, bool &two_ways )
 {
 	signal_info const& s = signal[player->get_player_nr()];
-	spacing = s.spacing;
-	remove  = s.remove_intermediate;
-	replace = s.replace_other;
+	spacing   = s.spacing;
+	remove    = s.remove_intermediate;
+	replace   = s.replace_other;
+	two_ways  = s.two_ways;
 }
 
 
@@ -8681,18 +8724,19 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'm' : apply max speed of convoy
  * 'b' : apply balance speed (limit power)
  * 'i' : set invalid convoy
+ * 'u' : suspension
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
 	char tool=0;
-	uint16 convoi_id = 0;
+	uint32 convoi_id = 0;
 
 	// skip the rest of the command
 	const char *p = default_param;
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi", &tool, &convoi_id );
+	sscanf( p, "%c,%u", &tool, &convoi_id );
 
 	// skip to the commands ...
 	for(  int z = 2;  *p  &&  z>0;  p++  ) {
@@ -8773,8 +8817,9 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'l': // change line
 			{
 				// read out id and new current_stop index
-				uint16 id=0, current_stop=0;
-				int count=sscanf( p, "%hi,%hi", &id, &current_stop );
+				uint32 id=0;
+				uint16 current_stop=0;
+				int count=sscanf( p, "%u,%hi", &id, &current_stop );
 				linehandle_t l;
 				l.set_id( id );
 				if(  l.is_bound()  ) {
@@ -8956,6 +9001,13 @@ bool tool_change_convoi_t::init( player_t *player )
 		{
 			cnv->set_invalid_convoy(atoi(p)!=0);
 		}
+		break;
+
+		case 'u':
+		{
+			cnv->set_suspension(atoi(p)!=0);
+		}
+		break;
 	}
 
 	if(  cnv->in_depot()  &&  (tool=='g'  ||  tool=='l')  ) {
@@ -8991,7 +9043,7 @@ bool tool_change_convoi_t::init( player_t *player )
  */
 bool tool_change_line_t::init( player_t *player )
 {
-	uint16 line_id = 0;
+	uint32 line_id = 0;
 
 
 	// skip the rest of the command
@@ -9008,7 +9060,7 @@ bool tool_change_line_t::init( player_t *player )
 		return false;
 	}
 
-	line_id = atoi(p);
+	line_id = (uint32)strtoul(p, NULL, 10);
 
 
 	while(  *p  &&  *p++!=','  ) {
@@ -9338,14 +9390,14 @@ bool tool_change_depot_t::init( player_t *player )
 	char tool=0;
 	koord pos2d;
 	sint8 z;
-	uint16 convoi_id;
+	uint32 convoi_id;
 
 	// skip the rest of the command
 	const char *p = default_param;
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi,%hi,%hhi,%hi", &tool, &pos2d.x, &pos2d.y, &z, &convoi_id );
+	sscanf( p, "%c,%hi,%hi,%hhi,%u", &tool, &pos2d.x, &pos2d.y, &z, &convoi_id );
 
 	koord3d pos(pos2d, z);
 
@@ -9596,7 +9648,7 @@ bool tool_change_depot_t::init( player_t *player )
 		}
 		case 'u': { // coupling convoy in depot
 			convoihandle_t child = convoihandle_t();
-			uint16 coupled_cnv_id = atoi(p);
+			uint32 coupled_cnv_id = (uint32)strtoul(p, NULL, 10);
 			if( coupled_cnv_id != 0) {
 				child.set_id(coupled_cnv_id);
 			}
@@ -9909,6 +9961,21 @@ bool tool_change_roadsign_t::init( player_t* )
 		}
 		break;
 
+		case 'w':
+		// two_ways: allow convoys to pass the signal from the reverse direction
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  signal_t *sig = gr->find<signal_t>()  ) {
+				if(  player_t::check_owner(sig->get_owner(), welt->get_active_player())  ) {
+					sig->set_two_ways(inst != 0);
+					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)sig);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
 		default:
 		// do nothing
 		break;
@@ -9959,14 +10026,14 @@ bool tool_change_city_t::init( player_t *player )
  */
 bool tool_change_halt_t::init(player_t *player) {
 	char tool=0;
-	uint16 halt_id = 0;
+	uint32 halt_id = 0;
 
 	// skip the rest of the command
 	const char *p = default_param;
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi", &tool, &halt_id );
+	sscanf( p, "%c,%u", &tool, &halt_id );
 
 	// skip to the commands ...
 	for(  int z = 2;  *p  &&  z>0;  p++  ) {
@@ -10011,7 +10078,7 @@ bool tool_change_halt_t::init(player_t *player) {
  */
 bool tool_rename_t::init(player_t *player)
 {
-	uint16 id = 0;
+	uint32 id = 0;
 	koord3d pos = koord3d::invalid;
 
 	// skip the rest of the command
@@ -10023,7 +10090,7 @@ bool tool_rename_t::init(player_t *player)
 		case 'c':
 		case 't':
 		case 'p':
-			id = atoi(p);
+			id = (uint32)strtoul(p, NULL, 10);
 			while(  *p>0  &&  *p++!=','  ) {
 			}
 			break;

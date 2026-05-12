@@ -37,6 +37,9 @@ include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_wayobj")
 include("tests/test_schedule")
+include("tests/test_road_api")
+include("tests/test_road_choose")
+
 
 
 all_tests <- [
@@ -240,7 +243,14 @@ all_tests <- [
 	test_schedule_next_line,
 	test_schedule_next_line_non_null,
 	test_schedule_current,
-	test_schedule_entry_time_statistics
+	test_schedule_entry_time_statistics,
+	test_road_api,
+	test_road_choose_stop_behind_halt_mode,
+	test_road_choose_stop_behind_oneway_mode,
+	test_road_choose_stop_behind_twoway_mode,
+	test_road_choose_stop_behind_loading_only_mode,
+	test_road_choose_stop_behind_inverted_mode,
+	test_road_choose_no_stop_behind_prohibited_mode
 ]
 
 

@@ -325,7 +325,6 @@ public:
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* get_default_param(player_t*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
 	bool init(player_t* player) OVERRIDE { return init(player, false); }
 	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
@@ -536,11 +535,12 @@ private:
 	const char *place_sign_intern( player_t *, grund_t*, const roadsign_desc_t* b = NULL);
 
 	struct signal_info {
-		signal_info() : spacing(2), remove_intermediate(true), replace_other(true) {}
+		signal_info() : spacing(2), remove_intermediate(true), replace_other(true), two_ways(false) {}
 
 		uint8 spacing; // place signals every n tiles
 		bool  remove_intermediate;
 		bool  replace_other;
+		bool  two_ways;
 	};
 	// default values for this tool per player
 	signal_info signal[MAX_PLAYER_COUNT];
@@ -564,8 +564,9 @@ public:
 	bool init(player_t*) OVERRIDE;
 	bool exit(player_t*) OVERRIDE;
 
-	void set_values(player_t *player, uint8 spacing, bool remove, bool replace );
-	void get_values(player_t *player, uint8 &spacing, bool &remove, bool &replace );
+	const roadsign_desc_t* get_desc() const { return desc; }
+	void set_values(player_t *player, uint8 spacing, bool remove, bool replace, bool two_ways );
+	void get_values(player_t *player, uint8 &spacing, bool &remove, bool &replace, bool &two_ways );
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
