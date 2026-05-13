@@ -162,8 +162,8 @@ public:
 			for (uint j = 0; j < (uint)templates[i].vehicles.size(); j++) {
 				const vehicle_desc_t *desc = vehicle_builder_t::get_info(templates[i].vehicles[j].c_str());
 				if (!desc) {
-					dbg->error("gui_template_panel_t::init", "Convoy template \"%s\": vehicle[%u] \"%s\" not found.",
-						templates[i].name.c_str(), j, templates[i].vehicles[j].c_str());
+					dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" (%s): vehicle[%u] \"%s\" not found.",
+						templates[i].name.c_str(), templates[i].source_file.c_str(), j, templates[i].vehicles[j].c_str());
 				}
 				e.descs.push_back(desc);
 				if (desc) {
@@ -200,10 +200,12 @@ public:
 			e.mixed_waytype = mixed_waytype;
 			e.tmpl_waytype  = mixed_waytype ? invalid_wt : first_wt;
 			if (mixed_waytype) {
-				dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" contains vehicles of mixed waytypes.", templates[i].name.c_str());
+				dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" (%s) contains vehicles of mixed waytypes.",
+					templates[i].name.c_str(), templates[i].source_file.c_str());
 			}
 			if (e.veh_count == 0) {
-				dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" has no valid vehicles (all descriptors missing).", templates[i].name.c_str());
+				dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" (%s) has no valid vehicles (all descriptors missing).",
+					templates[i].name.c_str(), templates[i].source_file.c_str());
 			}
 			bool internally_valid = true;
 			for (int j = 0; j + 1 < (int)e.descs.size(); j++) {
@@ -590,7 +592,7 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 
 	// Convoy template tab setup
 	if (!convoi_template_manager_t::is_loaded()) {
-		convoi_template_manager_t::load(env_t::pak_dir);
+		convoi_template_manager_t::load(env_t::pak_dir, env_t::default_settings.get_with_private_paks());
 	}
 	template_panel = new gui_template_panel_t();
 	template_panel->init(convoi_template_manager_t::get_templates(), (sint8)depot->get_owner_nr(), depot);
@@ -2616,7 +2618,12 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 			}
 			display_proportional_clip_rgb(pos.x + D_MARGIN_LEFT, pos.y + D_TITLEBAR_HEIGHT + div_tabbottom.get_pos().y + div_tabbottom.get_size().h + 1, c, ALIGN_LEFT, SYSCOL_TEXT, true);
 		}
-		const sint32 hi = template_panel ? template_panel->get_hovered_index() : -1;
+		const int tmpl_mx = get_mouse_x();
+		const int tmpl_my = get_mouse_y();
+		const bool over_tabs = tabs.getroffen(tmpl_mx - pos.x, tmpl_my - pos.y - D_TITLEBAR_HEIGHT);
+		const int rel_y_in_tabs = tmpl_my - pos.y - D_TITLEBAR_HEIGHT - tabs.get_pos().y;
+		const bool over_tab_content = over_tabs && (rel_y_in_tabs >= tabs.get_required_size().h);
+		const sint32 hi = (template_panel && over_tab_content) ? template_panel->get_hovered_index() : -1;
 		const gui_template_panel_t::entry_t *entry = template_panel ? template_panel->get_entry(hi) : NULL;
 		if (entry) {
 			sint64 cost = 0, run_cost = 0;
@@ -2900,7 +2907,7 @@ void depot_frame_t::update_tabs()
 		tabs.add_tab(&scrolly_pas, translator::translate( depot->get_passenger_name() ) );
 	}
 
-	if (template_panel && !convoi_template_manager_t::get_templates().empty()) {
+	if (template_panel && template_panel->get_count() > 0) {
 		tabs.add_tab(&cont_template_tab, translator::translate("Templates"));
 	}
 

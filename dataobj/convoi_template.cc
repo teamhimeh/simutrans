@@ -4,9 +4,11 @@
  */
 
 #include "convoi_template.h"
+#include "environment.h"
 #include "tabfile.h"
 #include "../utils/searchfolder.h"
 #include "../simdebug.h"
+#include "../sys/simsys.h"
 
 std::vector<convoi_template_t> convoi_template_manager_t::s_templates;
 bool convoi_template_manager_t::s_loaded = false;
@@ -31,6 +33,10 @@ static void load_from_dir(const std::string &dir, std::vector<convoi_template_t>
 
 			convoi_template_t tmpl;
 			tmpl.name = name;
+			const char *sep1 = strrchr(*it, '/');
+			const char *sep2 = strrchr(*it, '\\');
+			const char *sep = sep1 > sep2 ? sep1 : sep2;
+			tmpl.source_file = sep ? sep + 1 : *it;
 
 			// vehicle[0], vehicle[1], ... — one descriptor name per entry
 			char key[32];
@@ -44,20 +50,23 @@ static void load_from_dir(const std::string &dir, std::vector<convoi_template_t>
 			if (!tmpl.vehicles.empty()) {
 				out.push_back(tmpl);
 			} else {
-				dbg->error("convoi_template_manager_t::load", "Convoy template \"%s\" has no vehicle entries.", tmpl.name.c_str());
+				dbg->error("convoi_template_manager_t::load", "Convoy template \"%s\" (%s) has no vehicle entries.",
+					tmpl.name.c_str(), tmpl.source_file.c_str());
 			}
 		}
 	}
 }
 
 
-void convoi_template_manager_t::load(const std::string &pak_dir)
+void convoi_template_manager_t::load(const std::string &pak_dir, bool load_addons)
 {
 	s_templates.clear();
 	s_loaded = true;
 
 	load_from_dir(pak_dir + "convoy_template/", s_templates);
-	load_from_dir(pak_dir + "addons/convoy_template/", s_templates);
-
-	dbg->message("convoi_template_manager_t::load", "Loaded %u convoy templates", (uint)s_templates.size());
+	if (load_addons) {
+		dr_chdir(env_t::user_dir);
+		load_from_dir("addons/" + env_t::objfilename + "convoy_template/", s_templates);
+		dr_chdir(env_t::data_dir);
+	}
 }
