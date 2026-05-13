@@ -9648,6 +9648,99 @@ bool tool_change_depot_t::init( player_t *player )
 			depot->set_name(p);
 			break;
 		}
+#if CONVOI_TEMPLATE
+		case 'T': {
+			// Apply a convoy template. Parameter format:
+			//   <convoi_name>\n<prefix>,<veh1>,<veh2>,...
+			//
+			// <convoi_name> : name assigned to a newly created convoy (omit line for no rename)
+			// <prefix>      : "a" = append at back, "i" = insert at front (reversed vehicle order)
+			// <vehN>        : pak descriptor name; names containing ',' must be enclosed in double quotes
+			//
+			// Example (append):  MyTrain\na,ICE_loco,ICE_car,ICE_car
+			// Example (insert):  \ni,ICE_car,ICE_car,ICE_loco
+			depot->clear_command_pending();
+			// First line of p is the convoy name; vehicle list follows after the '\n'
+			const char *line_end = strchr(p, '\n');
+			char convoi_name[256] = "";
+			if (line_end) {
+				int name_len = (int)(line_end - p);
+				if (name_len > 255) name_len = 255;
+				strncpy(convoi_name, p, name_len);
+				convoi_name[name_len] = '\0';
+				p = line_end + 1;
+			}
+			if (!cnv.is_bound()) {
+				if (convoihandle_t::is_exhausted()) {
+					if (can_use_gui()) {
+						create_win(new news_img("Convoi handles exhausted!"), w_time_delete, magic_none);
+					}
+					return false;
+				}
+				cnv = depot->add_convoi(can_use_gui());
+				if (!cnv.is_bound()) {
+					return false;
+				}
+				if (convoi_name[0]) {
+					cnv->set_name(convoi_name);
+				}
+			}
+			// parse prefix: "i," = insert at front, "a," = append at back
+			bool infront = false;
+			if (p[0] == 'i' && p[1] == ',') {
+				infront = true;
+				p += 2;
+			} else if (p[0] == 'a' && p[1] == ',') {
+				infront = false;
+				p += 2;
+			}
+			// parse comma-separated vehicle descriptor names; names in double quotes may contain ','
+			const char *vp = p;
+			while (*vp) {
+				while (*vp == ' ' || *vp == '\t') vp++;
+				if (!*vp) break;
+				const char *name_start, *name_end;
+				if (*vp == '"') {
+					vp++;
+					name_start = vp;
+					while (*vp && *vp != '"') vp++;
+					name_end = vp;
+					if (*vp == '"') vp++;
+				} else {
+					name_start = vp;
+					while (*vp && *vp != ',') vp++;
+					name_end = vp;
+					while (name_end > name_start && (name_end[-1] == ' ' || name_end[-1] == '\t')) name_end--;
+				}
+				while (*vp == ' ' || *vp == '\t') vp++;
+				if (name_end > name_start && cnv->get_vehicle_count() < depot->get_max_convoi_length()) {
+					char veh_name[256];
+					int len = (int)(name_end - name_start);
+					if (len > 255) len = 255;
+					strncpy(veh_name, name_start, len);
+					veh_name[len] = '\0';
+					const vehicle_desc_t *info = vehicle_builder_t::get_info(veh_name);
+					if (info) {
+						if (!info->is_available(welt->get_timeline_year_month()) && !welt->get_settings().get_allow_buying_obsolete_vehicles()) {
+							// skip obsolete vehicles not already in depot
+							if (!depot->find_oldest_newest(info, true)) {
+								if (*vp == ',') vp++;
+								continue;
+							}
+						}
+						vehicle_t *veh = depot->find_oldest_newest(info, true);
+						if (!veh) {
+							veh = depot->buy_vehicle(info);
+						}
+						depot->append_vehicle(cnv, veh, infront, can_use_gui());
+					}
+				}
+				if (*vp == ',') vp++;
+			}
+			depot->update_win();
+			break;
+		}
+#endif // CONVOI_TEMPLATE
 	}
 	return false;
 }
