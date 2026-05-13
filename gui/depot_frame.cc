@@ -600,6 +600,20 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	tram_waggons.set_player_nr(depot->get_owner_nr());
 	tram_waggons.add_listener(this);
 
+#if CONVOI_TEMPLATE
+	// Convoy template tab setup
+	if (!convoi_template_manager_t::is_loaded()) {
+		convoi_template_manager_t::load(env_t::pak_dir, env_t::default_settings.get_with_private_paks());
+	}
+	template_panel = new gui_template_panel_t();
+	template_panel->init(convoi_template_manager_t::get_templates(), (sint8)depot->get_owner_nr(), depot);
+	template_panel->add_listener(this);
+	scrolly_template.set_component(template_panel);
+	scrolly_template.set_scrollbar_mode(scrollbar_t::show_disabled);
+	scrolly_template.set_size_corner(false);
+	cont_template_tab.add_component(&scrolly_template);
+#endif
+
 	add_component(&tabs);
 	add_component(&div_tabbottom);
 	add_component(&lb_veh_action);
@@ -1073,6 +1087,16 @@ void depot_frame_t::layout(scr_size *size)
 	scrolly_tram_waggons.set_scroll_discrete_y(false);
 	scrolly_tram_waggons.set_size_corner(false);
 
+#if CONVOI_TEMPLATE
+	if (template_panel) {
+		const scr_coord_val template_content_h = PANEL_HEIGHT - TAB_HEADER_HEIGHT;
+		template_panel->set_size(scr_size(win_size.w, template_panel->get_size().h));
+		scrolly_template.set_pos(scr_coord(0, 0));
+		scrolly_template.set_size(scr_size(win_size.w, template_content_h));
+		cont_template_tab.set_size(scr_size(win_size.w, template_content_h));
+	}
+#endif
+
 	div_tabbottom.set_pos(scr_coord(0, PANEL_VSTART + PANEL_HEIGHT));
 	div_tabbottom.set_width(win_size.w);
 
@@ -1357,6 +1381,29 @@ void depot_frame_t::build_vehicle_lists()
 	}
 
 DBG_DEBUG("depot_frame_t::build_vehicle_lists()","finally %i passenger vehicle, %i  engines, %i good wagons",pas_vec.get_count(),loks_vec.get_count(),waggons_vec.get_count());
+#if CONVOI_TEMPLATE
+	if (template_panel) {
+		// Determine the boundary vehicle for template compatibility filtering.
+		// NULL means no filtering (new convoy, show_all, or allow_invalid mode).
+		const vehicle_desc_t *tmpl_boundary_veh = NULL;
+		convoihandle_t cnv_tmpl = depot->get_convoi(icnv);
+		const bool tmpl_is_insert = (veh_action == va_insert);
+		if (!show_all && !bt_allow_invalid_convoy.pressed
+		    && cnv_tmpl.is_bound() && cnv_tmpl->get_vehicle_count() > 0
+		    && (veh_action == va_append || veh_action == va_insert)) {
+			tmpl_boundary_veh = (tmpl_is_insert ? cnv_tmpl->front() : cnv_tmpl->back())->get_desc();
+		}
+		// Determine which waytype templates to show.
+		// Existing convoy: use its waytype. Rail+tram depot with no convoy: use bt_show_tram.
+		waytype_t tmpl_target_wt = invalid_wt;
+		if (cnv_tmpl.is_bound() && cnv_tmpl->get_vehicle_count() > 0) {
+			tmpl_target_wt = cnv_tmpl->front()->get_desc()->get_waytype();
+		} else if (depot->get_secondary_waytype() != invalid_wt) {
+			tmpl_target_wt = bt_show_tram.pressed ? depot->get_secondary_waytype() : depot->get_waytype();
+		}
+		template_panel->refresh(name_filter_value, sort_by_action, tmpl_boundary_veh, tmpl_is_insert, weg_electrified, show_all, month_now, show_retired_vehicles, tmpl_target_wt);
+	}
+#endif
 	update_data();
 	update_tabs();
 }
@@ -2314,6 +2361,49 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			}
 			return true;
 		}
+#if CONVOI_TEMPLATE
+		else if (comp == template_panel) {
+			if (veh_action == va_sell || veh_action == va_set_offset || veh_action == va_cancel_offset) {
+				return true;
+			}
+			const sint32 idx = p.i;
+			const gui_template_panel_t::entry_t *entry = template_panel->get_entry(idx);
+			if (entry && !entry->tmpl->vehicles.empty()) {
+				cbuffer_t veh_buf;
+				// First line: translated template name (used to name a newly created convoy)
+				veh_buf.append(translator::translate(entry->tmpl->name.c_str()));
+				veh_buf.append("\n");
+				const std::vector<std::string> &vehs = entry->tmpl->vehicles;
+				// prefix: "i" for insert-at-front, "a" for append-at-back
+				// vehicle names containing ',' are enclosed in double quotes
+				if (veh_action == va_insert) {
+					veh_buf.append("i");
+					for (int i = (int)vehs.size() - 1; i >= 0; i--) {
+						veh_buf.append(",");
+						const bool needs_quote = vehs[i].find(',') != std::string::npos;
+						if (needs_quote) veh_buf.append("\"");
+						veh_buf.append(vehs[i].c_str());
+						if (needs_quote) veh_buf.append("\"");
+					}
+				}
+				else {
+					veh_buf.append("a");
+					for (uint i = 0; i < (uint)vehs.size(); i++) {
+						veh_buf.append(",");
+						const bool needs_quote = vehs[i].find(',') != std::string::npos;
+						if (needs_quote) veh_buf.append("\"");
+						veh_buf.append(vehs[i].c_str());
+						if (needs_quote) veh_buf.append("\"");
+					}
+				}
+				if (!cnv.is_bound() && !depot->get_owner()->is_locked()) {
+					depot->set_command_pending();
+				}
+				depot->call_depot_tool('T', cnv, veh_buf);
+			}
+			return true;
+		}
+#endif // CONVOI_TEMPLATE
 		else if(  comp == &child_convoi_selector  ) {
 			if( !cnv.is_bound() ) {
 				// this is not convoy.
@@ -2536,6 +2626,95 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 	else if (tab == &scrolly_tram_loks)      lst = &tram_loks;
 	else if (tab == &scrolly_tram_waggons)   lst = &tram_waggons;
 	else                                     lst = &waggons;
+
+#if CONVOI_TEMPLATE
+	if (tab == &cont_template_tab) {
+		// Show vehicle count in depot
+		{
+			const char *c;
+			switch (const uint32 count = depot->get_vehicle_list().get_count()) {
+				case 0: c = translator::translate("Keine Einzelfahrzeuge im Depot"); break;
+				case 1: c = translator::translate("1 Einzelfahrzeug im Depot"); break;
+				default: buf.printf(translator::translate("%d Einzelfahrzeuge im Depot"), count); c = buf; break;
+			}
+			display_proportional_clip_rgb(pos.x + D_MARGIN_LEFT, pos.y + D_TITLEBAR_HEIGHT + div_tabbottom.get_pos().y + div_tabbottom.get_size().h + 1, c, ALIGN_LEFT, SYSCOL_TEXT, true);
+		}
+		const int tmpl_mx = get_mouse_x();
+		const int tmpl_my = get_mouse_y();
+		const bool over_tabs = tabs.getroffen(tmpl_mx - pos.x, tmpl_my - pos.y - D_TITLEBAR_HEIGHT);
+		const int rel_y_in_tabs = tmpl_my - pos.y - D_TITLEBAR_HEIGHT - tabs.get_pos().y;
+		const bool over_tab_content = over_tabs && (rel_y_in_tabs >= tabs.get_required_size().h);
+		const sint32 hi = (template_panel && over_tab_content) ? template_panel->get_hovered_index() : -1;
+		const gui_template_panel_t::entry_t *entry = template_panel ? template_panel->get_entry(hi) : NULL;
+		if (entry) {
+			sint64 cost = 0, run_cost = 0;
+			sint32 min_speed = 0;
+			bool any_speed = false;
+			uint32 veh_count = 0;
+			uint32 total_len_carunits = 0;
+			// per-goods capacity (catg==0 grouped by goods pointer, catg>0 grouped by catg)
+			struct catg_cap_t { uint8 catg; uint32 cap; const goods_desc_t *goods; };
+			catg_cap_t caps[16];
+			int n_caps = 0;
+			for (uint j = 0; j < (uint)entry->descs.size(); j++) {
+				const vehicle_desc_t *desc = entry->descs[j];
+				if (!desc) continue;
+				veh_count++;
+				total_len_carunits += desc->get_length();
+				cost += desc->get_price();
+				run_cost += desc->get_running_cost();
+				if (!any_speed || desc->get_topspeed() < min_speed) { min_speed = desc->get_topspeed(); any_speed = true; }
+				if (desc->get_capacity() > 0) {
+					const goods_desc_t *goods = desc->get_freight_type();
+					uint8 catg = goods->get_catg();
+					bool found = false;
+					for (int k = 0; k < n_caps; k++) {
+						bool same = (catg == 0) ? (caps[k].goods == goods) : (caps[k].catg == catg);
+						if (same) { caps[k].cap += desc->get_capacity(); found = true; break; }
+					}
+					if (!found && n_caps < 16) {
+						caps[n_caps].catg = catg;
+						caps[n_caps].cap  = desc->get_capacity();
+						caps[n_caps].goods = goods;
+						n_caps++;
+					}
+				}
+			}
+			buf.clear();
+			// vehicle count and platform length line
+			buf.printf(translator::translate("%i car(s),"), veh_count);
+			buf.printf("%s %u(%.4f)\n", translator::translate("Station tiles:"),
+				(total_len_carunits + CARUNITS_PER_TILE - 1) / CARUNITS_PER_TILE,
+				(double)total_len_carunits / CARUNITS_PER_TILE);
+			char tmp[128];
+			money_to_string(tmp, cost / 100.0, false);
+			if (env_t::show_yen) {
+				buf.printf(translator::translate("Cost: %8s (%d$/km)\n"), tmp, run_cost);
+			}
+			else {
+				buf.printf(translator::translate("Cost: %8s (%.2f$/km)\n"), tmp, run_cost / 100.0);
+			}
+			if (n_caps > 0) {
+				buf.printf("%s", translator::translate("Capacity:"));
+				for (int k = 0; k < n_caps; k++) {
+					const char *catg_name = caps[k].catg == 0
+						? translator::translate(caps[k].goods->get_name())
+						: translator::translate(caps[k].goods->get_catg_name());
+					if (k > 0) buf.printf(",");
+					buf.printf(" %u %s", caps[k].cap, catg_name);
+				}
+				buf.printf("\n");
+			}
+			buf.printf("%s %d km/h\n", translator::translate("Max. speed:"), min_speed);
+			int yyy = pos.y + D_TITLEBAR_HEIGHT + div_action_bottom.get_pos().y + div_action_bottom.get_size().h + 2;
+			display_multiline_text_rgb(pos.x + D_MARGIN_LEFT, yyy, buf, SYSCOL_TEXT);
+		}
+		new_vehicle_length_sb = 0;
+		txt_convoi_number.clear();
+		return;
+	}
+#endif // CONVOI_TEMPLATE
+
 	int x = get_mouse_x();
 	int y = get_mouse_y();
 	double resale_value = -1.0;
@@ -2749,6 +2928,12 @@ void depot_frame_t::update_tabs()
 		// add passenger as default
 		tabs.add_tab(&scrolly_pas, translator::translate( depot->get_passenger_name() ) );
 	}
+
+#if CONVOI_TEMPLATE
+	if (template_panel && template_panel->get_count() > 0) {
+		tabs.add_tab(&cont_template_tab, translator::translate("Templates"));
+	}
+#endif
 
 	// Look, if there is our old tab present again (otherwise it will be 0 by tabs.clear()).
 	for(  uint8 i = 0;  i < tabs.get_count();  i++  ) {
