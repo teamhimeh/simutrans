@@ -572,8 +572,13 @@ void pumpe_t::finish_rd()
 			fab = fabrik_t::get_fab(get_pos().get_2d());
 		}
 		if(  fab  ) {
-			// only add when factory there
-			fab->add_transformer_connected(this);
+			// only add when factory there and not already connected
+			if(  !fab->is_transformer_connected()  ) {
+				fab->add_transformer_connected(this);
+			}
+			else {
+				fab = NULL;
+			}
 		}
 	}
 
@@ -910,7 +915,12 @@ void senke_t::finish_rd()
 			fab = fabrik_t::get_fab(get_pos().get_2d());
 		}
 		if(  fab  ) {
-			fab->add_transformer_connected(this);
+			if(  !fab->is_transformer_connected()  ) {
+				fab->add_transformer_connected(this);
+			}
+			else {
+				fab = NULL;
+			}
 		}
 	}
 
