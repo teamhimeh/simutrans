@@ -2427,7 +2427,7 @@ static inline void colorpixcopydaytime(PIXVAL* dest, const PIXVAL* src, const PI
 /**
  * Copy pixel, replace player color using a local line-color ramp (thread-safe, no global state modified)
  */
-static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end, const PIXVAL line_col[8], const PIXVAL player_col2[8])
+static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end, const PIXVAL line_col[8], const PIXVAL player_col2[8], const bool daynight)
 {
 	if (*src < 0x8020) {
 		while (src < end) {
@@ -2479,9 +2479,9 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 				}
 #endif
 			} else {
-				// transparent non-player color (idx 16+): global table never modified during rendering
+				// transparent non-player color (idx 16+)
 				if ((alpha & 7) == 0) {
-					const PIXVAL colval = transparent_map_day_night[idx];
+					const PIXVAL colval = daynight ? transparent_map_day_night[idx] : transparent_map_all_day[idx];
 					alpha >>= 3;
 #ifdef RGB555
 					*dest = alpha * colval + (4 - alpha) * ((*dest >> 2) & TWO_OUT_15);
@@ -2489,7 +2489,7 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 					*dest = alpha * colval + (4 - alpha) * ((*dest >> 2) & TWO_OUT_16);
 #endif
 				} else {
-					const uint8* trans_rgb = transparent_map_day_night_rgb + idx * 4;
+					const uint8* trans_rgb = (daynight ? transparent_map_day_night_rgb : transparent_map_all_day_rgb) + idx * 4;
 					const PIXVAL r_src = *trans_rgb++;
 					const PIXVAL g_src = *trans_rgb++;
 					const PIXVAL b_src = *trans_rgb;
@@ -3089,7 +3089,7 @@ static void display_color_img_wc_daytime(const PIXVAL* sp, scr_coord_val x, scr_
 /**
  * Draw Image, replace player color using a local line-color ramp (thread-safe)
  */
-static void display_color_img_wc_line(const PIXVAL* sp, scr_coord_val x, scr_coord_val y, scr_coord_val h, const PIXVAL line_col[8], const PIXVAL player_col2[8]  CLIP_NUM_DEF)
+static void display_color_img_wc_line(const PIXVAL* sp, scr_coord_val x, scr_coord_val y, scr_coord_val h, const PIXVAL line_col[8], const PIXVAL player_col2[8], const bool daynight  CLIP_NUM_DEF)
 {
 	PIXVAL* tp = textur + y * disp_width;
 	do {
@@ -3101,7 +3101,7 @@ static void display_color_img_wc_line(const PIXVAL* sp, scr_coord_val x, scr_coo
 			if (xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx) {
 				const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
 				const int len  = (CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos);
-				colorpixcopy_line(tp + xpos + left, sp + left, sp + len, line_col, player_col2);
+				colorpixcopy_line(tp + xpos + left, sp + left, sp + len, line_col, player_col2, daynight);
 			}
 			sp += runlen;
 			xpos += runlen;
@@ -3114,7 +3114,7 @@ static void display_color_img_wc_line(const PIXVAL* sp, scr_coord_val x, scr_coo
 /**
  * Draw image with clipped polygons using a local line-color ramp (thread-safe)
  */
-static void display_img_pc_line(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL* sp, const PIXVAL line_col[8], const PIXVAL player_col2[8]  CLIP_NUM_DEF)
+static void display_img_pc_line(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const PIXVAL* sp, const PIXVAL line_col[8], const PIXVAL player_col2[8], const bool daynight  CLIP_NUM_DEF)
 {
 	if (h > 0) {
 		PIXVAL* tp = textur + yp * disp_width;
@@ -3131,7 +3131,7 @@ static void display_img_pc_line(scr_coord_val h, const scr_coord_val xp, const s
 				if (xmin < xmax && xpos + runlen > xmin && xpos < xmax) {
 					const int left = (xpos >= xmin ? 0 : xmin - xpos);
 					const int len  = (xmax - xpos >= runlen ? runlen : xmax - xpos);
-					colorpixcopy_line(tp + xpos + left, sp + left, sp + len, line_col, player_col2);
+					colorpixcopy_line(tp + xpos + left, sp + left, sp + len, line_col, player_col2, daynight);
 				}
 				sp += runlen;
 				xpos += runlen;
@@ -3275,10 +3275,10 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 			}
 
 			if(  CR.number_of_clips > 0  ) {
-				display_img_pc_line(h, x, y, sp, line_col, player_col2  CLIP_NUM_PAR);
+				display_img_pc_line(h, x, y, sp, line_col, player_col2, daynight  CLIP_NUM_PAR);
 			}
 			else {
-				display_color_img_wc_line(sp, x, y, h, line_col, player_col2  CLIP_NUM_PAR);
+				display_color_img_wc_line(sp, x, y, h, line_col, player_col2, daynight  CLIP_NUM_PAR);
 			}
 		}
 	}
@@ -3410,10 +3410,10 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 				sp++;
 			}
 			if(  CR.number_of_clips > 0  ) {
-				display_img_pc_line( h, x, y, sp, line_col, player_col2  CLIP_NUM_PAR );
+				display_img_pc_line( h, x, y, sp, line_col, player_col2, daynight  CLIP_NUM_PAR );
 			}
 			else {
-				display_color_img_wc_line( sp, x, y, h, line_col, player_col2  CLIP_NUM_PAR );
+				display_color_img_wc_line( sp, x, y, h, line_col, player_col2, daynight  CLIP_NUM_PAR );
 			}
 		}
 	}
