@@ -2138,6 +2138,43 @@ void convoi_t::ziel_erreicht()
 		set_next_coupling(route_t::INVALID_INDEX, 0);
 	}
 
+	// Water vehicle TRY_COUPLING: couple at stop without signal-based route reservation.
+	// can_enter_tile already ensured the waiting convoy is present on this tile.
+	if(  front()->get_waytype() == water_wt
+	  &&  schedule->get_current_entry().is_try_coupling()
+	  &&  !coupling_done  ) {
+		for(  uint8 pos = 1;  pos < (volatile uint8)gr->get_top();  pos++  ) {
+			vehicle_t* const vv = dynamic_cast<vehicle_t*>(gr->obj_bei(pos));
+			if(  !vv  ||  !can_start_coupling(vv->get_convoi())  ||  !vv->get_convoi()->is_loading()  ) {
+				continue;
+			}
+			akt_speed = 0;
+			if(  halt.is_bound()  &&  gr->get_weg_ribi(vv->get_waytype()) != 0  ) {
+				halt->book(1, HALT_CONVOIS_ARRIVED);
+			}
+			// For water vehicles: trying convoy (self) is the most-parent;
+			// swap parent/child if the schedule entry has REVERSE_COUPLING set.
+			// Always attach at the TAIL of the target chain so existing children are not orphaned.
+			convoihandle_t temp_parent_convoi;
+			if(  schedule->get_current_entry().is_reverse_convoi_coupling()  ) {
+				// trying becomes child: append trying chain at the tail of the waiting chain
+				temp_parent_convoi = vv->get_convoi()->get_most_parent_convoi();
+				vv->get_convoi()->get_most_parent_convoi()->find_most_child_convoi()->couple_convoi(self);
+			}
+			else {
+				// trying is parent: append waiting chain at the tail of the trying chain
+				temp_parent_convoi = self;
+				self->find_most_child_convoi()->couple_convoi(vv->get_convoi()->get_most_parent_convoi());
+			}
+			wait_lock = 0;
+			vv->get_convoi()->set_coupling_done(true);
+			coupling_done = true;
+			temp_parent_convoi->check_and_set_coupling_done_over_length();
+			check_electrification();
+			return;
+		}
+	}
+
 	// no depot reached, no coupling, check for stop!
 	if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0 && !schedule->get_current_entry().is_pass_stop()  ) {
 		// seems to be a stop, so book the money for the trip
@@ -4335,7 +4372,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if (  coupling_convoi.is_bound()  &&  !is_coupled()  &&  !is_waiting_for_coupling()  &&  !reverse_coupling_done  )
 	{
 		bool should_reverse_coupling_done = false;
-		if(world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default()) {
+		// Water vehicles do not use direction-based coupling reversal; only explicit REVERSE_COUPLING flag applies.
+		if(  front()->get_waytype() != water_wt
+		  &&  (world()->get_settings().is_default_reverse() || get_schedule()->is_reverse_default())  ) {
 			// the direction of the waiting vehicle is same? opposite?
 			route_t r;
 			route_t::route_result_t res = r.calc_route(welt, front()->get_pos(), get_schedule()->get_next_entry().pos, front(), speed_to_kmh(min_top_speed), 8888);
