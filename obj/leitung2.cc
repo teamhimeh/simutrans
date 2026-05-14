@@ -916,8 +916,8 @@ void senke_t::finish_rd()
 			fab = fabrik_t::get_fab(get_pos().get_2d());
 		}
 		if(  fab  ) {
-			fab_found = true;
 			if(  !fab->is_transformer_connected()  ) {
+				fab_found = true;
 				fab->add_transformer_connected(this);
 			}
 			else {
