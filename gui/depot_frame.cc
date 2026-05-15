@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This file is part of the Simutrans project under the Artistic License.
  * (see LICENSE.txt)
  */
@@ -73,7 +73,7 @@ class gui_template_panel_t : public gui_action_creator_t, public gui_component_t
 public:
 	struct entry_t {
 		const convoi_template_t *tmpl;
-		std::vector<const vehicle_desc_t *> descs;
+		vector_tpl<const vehicle_desc_t *> descs;
 		scr_coord_val row_h;
 		// stats for sorting
 		sint64 cost;
@@ -90,8 +90,8 @@ public:
 	};
 
 private:
-	std::vector<entry_t> all_entries;
-	std::vector<entry_t> entries;
+	vector_tpl<entry_t> all_entries;
+	vector_tpl<entry_t> entries;
 	sint8 player_nr;
 	sint32 last_hovered_idx;
 	scr_coord_val cell_w;
@@ -142,7 +142,7 @@ private:
 public:
 	gui_template_panel_t() : player_nr(0), last_hovered_idx(-1), cell_w(32), cell_h(32), cur_month_now(0), depot_wt(invalid_wt), depot_sec_wt(invalid_wt) {}
 
-	void init(const std::vector<convoi_template_t> &templates, sint8 onr, const depot_t *dep) {
+	void init(const vector_tpl<convoi_template_t> &templates, sint8 onr, const depot_t *dep) {
 		player_nr = onr;
 		cell_w = dep->get_x_grid() * get_base_tile_raster_width() / 64 + 4
 		       - dep->get_grid_dx() * get_base_tile_raster_width() / 64 / 2;
@@ -150,7 +150,7 @@ public:
 		depot_wt     = dep->get_waytype();
 		depot_sec_wt = dep->get_secondary_waytype();
 		all_entries.clear();
-		for (uint i = 0; i < (uint)templates.size(); i++) {
+		for (uint i = 0; i < (uint)templates.get_count(); i++) {
 			entry_t e;
 			e.tmpl = &templates[i];
 			e.cost = 0;
@@ -162,13 +162,13 @@ public:
 			e.all_electric = false;
 			bool any_speed = false;
 			bool has_non_electric = false;
-			for (uint j = 0; j < (uint)templates[i].vehicles.size(); j++) {
+			for (uint j = 0; j < (uint)templates[i].vehicles.get_count(); j++) {
 				const vehicle_desc_t *desc = vehicle_builder_t::get_info(templates[i].vehicles[j].c_str());
 				if (!desc) {
 					dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" (%s): vehicle[%u] \"%s\" not found.",
 						templates[i].name.c_str(), templates[i].source_file.c_str(), j, templates[i].vehicles[j].c_str());
 				}
-				e.descs.push_back(desc);
+				e.descs.append(desc);
 				if (desc) {
 					e.cost += desc->get_price();
 					e.run_cost += desc->get_running_cost();
@@ -189,7 +189,7 @@ public:
 			e.all_electric = (e.veh_count > 0) && !has_non_electric;
 			bool mixed_waytype = false;
 			waytype_t first_wt = invalid_wt;
-			for (uint j = 0; j < (uint)e.descs.size(); j++) {
+			for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
 				if (e.descs[j]) {
 					waytype_t wt = e.descs[j]->get_waytype();
 					if (first_wt == invalid_wt) {
@@ -211,7 +211,7 @@ public:
 					templates[i].name.c_str(), templates[i].source_file.c_str());
 			}
 			bool internally_valid = true;
-			for (int j = 0; j + 1 < (int)e.descs.size(); j++) {
+			for (int j = 0; j + 1 < (int)e.descs.get_count(); j++) {
 				const vehicle_desc_t *cur  = e.descs[j];
 				const vehicle_desc_t *next = e.descs[j + 1];
 				if (cur && next && (!cur->can_lead(next) || !next->can_follow(cur))) {
@@ -223,7 +223,7 @@ public:
 			// Check compacted validity: after removing nulls, can all adjacent pairs connect?
 			bool compacted_valid = true;
 			const vehicle_desc_t *prev_non_null = NULL;
-			for (uint j = 0; j < (uint)e.descs.size(); j++) {
+			for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
 				const vehicle_desc_t *d = e.descs[j];
 				if (d) {
 					if (prev_non_null && (!prev_non_null->can_lead(d) || !d->can_follow(prev_non_null))) {
@@ -235,7 +235,7 @@ public:
 			}
 			e.compacted_valid = compacted_valid;
 			e.row_h = LINESPACE + max(cell_h, (scr_coord_val)16) + 4;
-			all_entries.push_back(e);
+			all_entries.append(e);
 		}
 		refresh("", vehicle_builder_t::sb_name);
 	}
@@ -250,7 +250,7 @@ public:
 	             waytype_t target_wt = invalid_wt) {
 		cur_month_now = month_now;
 		entries.clear();
-		for (uint i = 0; i < (uint)all_entries.size(); i++) {
+		for (uint i = 0; i < (uint)all_entries.get_count(); i++) {
 			const entry_t &e = all_entries[i];
 			if (e.veh_count == 0) continue;
 			if (e.tmpl_waytype == invalid_wt) continue; // mixed or no vehicles found
@@ -260,7 +260,7 @@ public:
 			// retired vehicles are hidden unless show_retired is true.
 			if (month_now > 0) {
 				bool has_future = false, has_retired = false;
-				for (uint j = 0; j < (uint)e.descs.size(); j++) {
+				for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
 					const vehicle_desc_t *desc = e.descs[j];
 					if (desc) {
 						if (desc->is_future(month_now)) { has_future = true; break; }
@@ -286,7 +286,7 @@ public:
 				const vehicle_desc_t *tmpl_adj = NULL;
 				if (is_insert) {
 					// Last non-null template vehicle connects to convoy front
-					for (int j = (int)e.descs.size() - 1; j >= 0; j--) {
+					for (int j = (int)e.descs.get_count() - 1; j >= 0; j--) {
 						if (e.descs[j]) { tmpl_adj = e.descs[j]; break; }
 					}
 					if (!tmpl_adj || !(tmpl_adj->can_lead(boundary_veh) && boundary_veh->can_follow(tmpl_adj))) {
@@ -294,7 +294,7 @@ public:
 					}
 				} else {
 					// First non-null template vehicle connects to convoy back
-					for (uint j = 0; j < (uint)e.descs.size(); j++) {
+					for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
 						if (e.descs[j]) { tmpl_adj = e.descs[j]; break; }
 					}
 					if (!tmpl_adj || !(tmpl_adj->can_follow(boundary_veh) && boundary_veh->can_lead(tmpl_adj))) {
@@ -302,7 +302,7 @@ public:
 					}
 				}
 			}
-			entries.push_back(e);
+			entries.append(e);
 		}
 		std::sort(entries.begin(), entries.end(), [sort_mode](const entry_t &a, const entry_t &b) {
 			return compare_entries(a, b, sort_mode);
@@ -312,16 +312,16 @@ public:
 
 	void recalc_size() {
 		scr_coord_val total_h = 0;
-		for (uint i = 0; i < (uint)entries.size(); i++) {
+		for (uint i = 0; i < (uint)entries.get_count(); i++) {
 			total_h += entries[i].row_h;
 		}
 		set_size(scr_size(max(get_size().w, (scr_coord_val)100), total_h));
 	}
 
-	sint32 get_count() const { return (sint32)entries.size(); }
+	sint32 get_count() const { return (sint32)entries.get_count(); }
 	sint32 get_hovered_index() const { return last_hovered_idx; }
 	const entry_t* get_entry(sint32 idx) const {
-		return (idx >= 0 && (uint32)idx < entries.size()) ? &entries[idx] : NULL;
+		return (idx >= 0 && (uint32)idx < entries.get_count()) ? &entries[idx] : NULL;
 	}
 
 	scr_size get_min_size() const OVERRIDE { return get_size(); }
@@ -333,7 +333,7 @@ public:
 		const int my = get_mouse_y();
 		last_hovered_idx = -1;
 		scr_coord_val y = offset.y;
-		for (uint i = 0; i < (uint)entries.size(); i++) {
+		for (uint i = 0; i < (uint)entries.get_count(); i++) {
 			const entry_t &e = entries[i];
 			const scr_coord_val rh = e.row_h;
 			const bool hovered = (mx >= offset.x && mx < offset.x + get_size().w && my >= y && my < y + rh);
@@ -345,11 +345,11 @@ public:
 			scr_coord_val xpos = offset.x + 2;
 			const scr_coord_val bar_y = y + LINESPACE + cell_h - 5;
 			// Build compacted list (skip missing descriptors) for display and color calculation
-			std::vector<const vehicle_desc_t *> compact;
-			for (uint j = 0; j < (uint)e.descs.size(); j++) {
-				if (e.descs[j]) compact.push_back(e.descs[j]);
+			vector_tpl<const vehicle_desc_t *> compact;
+			for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
+				if (e.descs[j]) compact.append(e.descs[j]);
 			}
-			const uint cn = (uint)compact.size();
+			const uint cn = (uint)compact.get_count();
 			for (uint j = 0; j < cn; j++) {
 				const vehicle_desc_t *desc = compact[j];
 				if (desc->get_base_image() != IMG_EMPTY) {
