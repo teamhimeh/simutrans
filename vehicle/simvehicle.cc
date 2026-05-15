@@ -4977,8 +4977,10 @@ bool water_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, u
 					bool found_waiting = false;
 					for(  uint8 pos = 1;  pos < (volatile uint8)gr->get_top();  pos++  ) {
 						vehicle_t* const vv = dynamic_cast<vehicle_t*>(gr->obj_bei(pos));
-						if(  vv  &&  cnv->can_start_coupling(vv->get_convoi())  &&  vv->get_convoi()->is_loading()  ) {
+						if(  vv  &&  cnv->can_start_coupling(vv->get_convoi())  &&  vv->get_convoi()->is_loading()  &&  (!vv->get_convoi()->get_convoi_coupling_in_progress().is_bound()||vv->get_convoi()->get_convoi_coupling_in_progress()==cnv->self)  ) {
 							found_waiting = true;
+							vv->get_convoi()->set_convoi_coupling_in_progress(cnv->self);
+							cnv->self->set_convoi_coupling_in_progress(vv->get_convoi()->self);
 							break;
 						}
 					}

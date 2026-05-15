@@ -2169,6 +2169,7 @@ void convoi_t::ziel_erreicht()
 			wait_lock = 0;
 			vv->get_convoi()->set_coupling_done(true);
 			coupling_done = true;
+			unset_convoi_coupling_in_progress();
 			temp_parent_convoi->check_and_set_coupling_done_over_length();
 			check_electrification();
 			return;
