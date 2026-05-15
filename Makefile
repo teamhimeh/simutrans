@@ -270,13 +270,6 @@ ifdef KUTA_REVISION
   endif
 endif
 
-ifdef CONVOI_TEMPLATE
-  ifeq ($(shell expr $(CONVOI_TEMPLATE) \>= 1), 1)
-    CFLAGS  += -DCONVOI_TEMPLATE=$(CONVOI_TEMPLATE)
-  endif
-endif
-
-
 CFLAGS   += -Wall -Wextra -Wcast-qual -Wpointer-arith -Wcast-align $(FLAGS) -Wconversion
 CCFLAGS  += -ansi -Wstrict-prototypes -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64
 

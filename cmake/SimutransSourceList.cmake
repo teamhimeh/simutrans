@@ -23,7 +23,6 @@ target_sources(simutrans PRIVATE
 		boden/wege/schiene.cc
 		boden/wege/strasse.cc
 		boden/wege/weg.cc
-		dataobj/convoi_template.cc
 		dataobj/crossing_logic.cc
 		dataobj/environment.cc
 		dataobj/freelist.cc
