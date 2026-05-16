@@ -46,7 +46,6 @@ protected:
 	static uint16 diagonal_multiplier;
 
 	// [0]=xoff [1]=yoff
-	static sint8 driveleft_base_offsets[8][2];
 	static sint8 overtaking_base_offsets[8][2];
 
 	/**
@@ -274,6 +273,8 @@ protected:
 public:
 	void calc_image() OVERRIDE;
 
+	static sint8 vehicle_offset_defined_by_way(ribi_t::dir d, const sint8 offset, const bool is_x, const bool reverse, const sint16 raster_width);
+	static constexpr uint16 turned_length = VEHICLE_STEPS_PER_TILE / 32;
 
 	// the coordinates, where the vehicle was loaded the last time
 	koord3d last_stop_pos;
@@ -281,6 +282,8 @@ public:
 	convoi_t *get_convoi() const { return cnv; }
 
 	void rotate90() OVERRIDE;
+
+	uint32 get_available_halt_length_in_vehicle_steps(const grund_t *gr, const ribi_t::ribi) const OVERRIDE;
 
 	ribi_t::ribi get_previous_direction() const { return previous_direction; }
 
@@ -493,7 +496,7 @@ class road_vehicle_t : public vehicle_t
 private:
 	// called internally only from ist_weg_frei()
 	// returns true on success
-	bool choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index);
+	bool choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based );
 
 	koord3d last_stop_for_intersection;
 
@@ -504,6 +507,8 @@ protected:
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
 
 	koord3d pos_prev; //used in enter_tile()
+
+	sint16 sideways_image_steps; // >0 while showing sideways departure image
 
 public:
 	virtual void enter_tile(grund_t*) OVERRIDE;
@@ -541,6 +546,10 @@ public:
 
 	obj_t::typ get_typ() const OVERRIDE { return road_vehicle; }
 
+	uint32 do_drive(uint32 dist) OVERRIDE;
+
+	void set_sideways_image();
+
 	koord3d get_pos_prev() const { return pos_prev; }
 
 	schedule_t * generate_new_schedule() const OVERRIDE;
@@ -566,15 +575,19 @@ public:
 class rail_vehicle_t : public vehicle_t
 {
 protected:
-	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE;
-	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE { return check_next_tile(bd, need_electric, false, false); }
-	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false, false, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE { return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid); }
+	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE { return check_next_tile(bd, need_electric, false, false, koord3d::invalid); }
+	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd, false, false, false, koord3d::invalid); }
 	void enter_tile(grund_t*) OVERRIDE;
 
 	bool is_pre_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
 	bool is_priority_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
 	bool is_longblock_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
 	bool is_choose_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);
+
+private:
+	bool is_next_tile_already_reserved(uint16 index);
 
 public:
 	waytype_t get_waytype() const OVERRIDE { return track_wt; }
@@ -588,8 +601,8 @@ public:
 	uint32 get_cost_upslope() const OVERRIDE { return 25; }
 
 	// returns true for the way search to an unknown target.
-	bool is_target(const grund_t*, const grund_t*, const bool) const OVERRIDE;
-	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr);}
+	bool is_target(const grund_t*, const grund_t*, const bool, const uint8) const OVERRIDE;
+	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr,false,0);}
 	bool is_coupling_target(const grund_t *, const grund_t *) const OVERRIDE;
 
 	// handles all block stuff and route choosing ...
@@ -749,12 +762,7 @@ private:
 	sint16 altitude_level; // for AFHP
 	sint16 landing_distance; // for AFHP
 
-	void calc_altitude_level(sint32 speed_limit_kmh){
-		altitude_level = max(5, speed_limit_kmh/33);
-		altitude_level = min(altitude_level, 30);
-		// landing_distance = altitude_level - 1;
-		landing_distance = altitude_level - 2;
-	}
+	void calc_altitude_level(sint32 speed_limit_kmh);
 
 protected:
 	// jumps to next tile and correct the height ...

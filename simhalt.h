@@ -102,7 +102,8 @@ public:
 		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station
 		HS_NO_HANDLE_PAX				 = 1 << 1,// do not handle goods type passenger
 		HS_NO_HANDLE_POST				 = 1 << 2,// do not handle goods type post
-		HS_NO_HANDLE_WARE				 = 1 << 3 // do not handle goods type ware
+		HS_NO_HANDLE_WARE				 = 1 << 3,// do not handle goods type ware
+		HS_ALLOW_UNLOAD_LONGER_CONVOY	 = 1 << 4 // allow unload when the halt length is shorter than convoy length
 	};
 
 private:
@@ -539,7 +540,7 @@ private:
 	};
 
 	// store the best weight so far for a halt, and indicate whether it is a destination
-	static halt_data_t halt_data[65536];
+	static halt_data_t *halt_data;
 
 	// for efficient retrieval of the node with the smallest weight
 	static bucket_heap_tpl<route_node_t> open_list;
@@ -547,8 +548,11 @@ private:
 	/**
 	 * Markers used in route searching to avoid processing the same halt more than once
 	 */
-	static uint8 markers[65536];
+	static uint8 *markers;
 	static uint8 current_marker;
+
+	static uint32 halt_array_size;
+	static void resize_halt_arrays(uint32 new_size);
 
 	/**
 	 * Remember last route search start and catg to resume search
@@ -778,7 +782,7 @@ public:
 	 * @param goods_category_indexes The list of goods category indexes.
 	 * @param cnv The convoy which is requesting the destination halts.
 	 */
-	void calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const minivec_tpl<uint8> &goods_category_indexes, convoihandle_t cnv);
+	void calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const vector_tpl<reachable_halt_t> &temp_stop_halts, const minivec_tpl<uint8> &goods_category_indexes, convoihandle_t cnv);
 
 	struct loadable_fresh_goods_t {
 		ware_t::goods_amount_t amount;
@@ -835,11 +839,11 @@ public:
 	/**
 	 * @param[out] buf short list of the waiting goods (i.e. 110 Wood, 15 Coal)
 	 */
-	void get_short_freight_info(cbuffer_t & buf) const;
+	void get_short_freight_info(cbuffer_t & buf, const char* end="\n") const;
 
-	void get_throughput_info(cbuffer_t& buf) const;
+	void get_throughput_info(cbuffer_t& buf, const char* end="\n") const;
 	
-	void get_waiting_occupancy_info(cbuffer_t& buf) const;
+	void get_waiting_occupancy_info(cbuffer_t& buf, const char* end="\n") const;
 
 	/**
 	 * Opens an information window for this station.
@@ -852,6 +856,7 @@ public:
 	 */
 	stationtyp get_station_type() const { return station_type; }
 	void recalc_station_type();
+	stationtyp get_connected_station_type() const;
 
 	/**
 	 * fragt den namen der Haltestelle ab.
@@ -962,6 +967,10 @@ public:
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
 
 	void extinguish_all_waiting_goods();
+
+	// allow unloading from longer convoy
+	bool const is_allow_unload_longer_convoy();
+	void set_allow_unload_longer_convoy(const bool y) { y? flags|=HS_ALLOW_UNLOAD_LONGER_CONVOY: flags&=~HS_ALLOW_UNLOAD_LONGER_CONVOY; }
 };
 
 ENUM_BITSET(haltestelle_t::stationtyp)

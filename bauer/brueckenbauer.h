@@ -10,6 +10,7 @@
 #include "../simtypes.h"
 #include "../dataobj/koord.h"
 #include "../dataobj/koord3d.h"
+#include "../tpl/stringhashtable_tpl.h"
 
 class bridge_desc_t;
 class grund_t;
@@ -80,7 +81,7 @@ public:
 	 * @param overtaking_mode condition of overtaking. This is applied only to road.
 	 * @param beginning if this ramp is beginning of the bridge, be true. otherwise, be false. (for ribi_mask_oneway)
 	 */
-	static void build_ramp(player_t *player, koord3d end, ribi_t::ribi ribi_neu, slope_t::type weg_hang, const bridge_desc_t *desc, const way_desc_t *way_desc, overtaking_mode_t overtaking_mode, uint8 street_flag, bool beginning);
+	static void build_ramp(player_t *player, koord3d end, ribi_t::ribi ribi_neu, slope_t::type weg_hang, const bridge_desc_t *desc, const way_desc_t *way_desc, overtaking_mode_t overtaking_mode, uint8 street_flag, bool beginning, sint8 vehicle_offset);
 
 	/**
 	 * Actually builds the bridge without checks.
@@ -96,9 +97,9 @@ public:
 	 * @param way_desc description of the way to be built on the bridge
 	 * @param overtaking_mode condition of overtaking. This is applied only to road.
 	 */
-	static void build_bridge(player_t *player, const koord3d start, const koord3d end, koord zv, sint8 bridge_height, const bridge_desc_t *desc, const way_desc_t *way_desc, overtaking_mode_t overtaking_mode, uint8 street_flag);
+	static void build_bridge(player_t *player, const koord3d start, const koord3d end, koord zv, sint8 bridge_height, const bridge_desc_t *desc, const way_desc_t *way_desc, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset);
 
-	static void build_bridge(player_t *player, const koord3d start, const koord3d end, koord zv, sint8 bridge_height, const bridge_desc_t *desc, const way_desc_t *way_desc) { build_bridge(player,start,end,zv,bridge_height,desc,way_desc,twoway_mode,0); }
+	static void build_bridge(player_t *player, const koord3d start, const koord3d end, koord zv, sint8 bridge_height, const bridge_desc_t *desc, const way_desc_t *way_desc) { build_bridge(player,start,end,zv,bridge_height,desc,way_desc,twoway_mode,0,0); }
 
 	/**
 	 * Registers a new bridge type and adds it to the list of build tools.
@@ -114,6 +115,9 @@ public:
 	 */
 	static const bridge_desc_t *get_desc(const char *name);
 
+	/// @returns the full descriptor table (for iterating all registered bridges)
+	static const stringhashtable_tpl<const bridge_desc_t *>& get_desc_table();
+
 	/**
 	 * Builds the bridge and performs all checks.
 	 * This is the main construction routine.
@@ -124,7 +128,7 @@ public:
 	 * @param overtaking_mode condition of overtaking. This is applied only to road.
 	 * @return NULL on success or error message otherwise
 	 */
-	static const char *build( player_t *player, const koord3d pos, const bridge_desc_t *desc, overtaking_mode_t overtaking_mode, uint8 street_flag);
+	static const char *build( player_t *player, const koord3d pos, const bridge_desc_t *desc, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset);
 
 	/**
 	 * Removes a bridge

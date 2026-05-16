@@ -4965,6 +4965,27 @@ void display_filled_circle_rgb( scr_coord_val x0, scr_coord_val  y0, int radius,
 //	mark_rect_dirty_wc( x0-radius, y0-radius, x0+radius+1, y0+radius+1 );
 }
 
+void display_diamond_rgb(scr_coord_val x0, scr_coord_val y0, int radius, const PIXVAL colval)
+{
+    for (int dy = -radius; dy <= radius; dy++) {
+        int dx = radius - abs(dy);
+
+        display_pixel(x0 - dx, y0 + dy, colval);
+        if (dx > 0) {
+            display_pixel(x0 + dx, y0 + dy, colval);
+        }
+    }
+}
+
+
+void display_filled_diamond_rgb(scr_coord_val x0, scr_coord_val y0, int radius, const PIXVAL colval)
+{
+    for (int dy = -radius; dy <= radius; dy++) {
+        int dx = radius - abs(dy);
+        
+        display_fb_internal(x0 - dx, y0 + dy, dx + dx + 1, 1, colval, false, CR0.clip_rect.x, CR0.clip_rect.xx, CR0.clip_rect.y, CR0.clip_rect.yy);
+    }
+}
 
 
 void display_signal_direction_rgb(scr_coord_val x, scr_coord_val y, uint8 way_dir, uint8 sig_dir, PIXVAL col1, PIXVAL col1_dark, bool is_diagonal, uint8 slope )
@@ -5342,9 +5363,15 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	textur = dr_textur_init();
 
 	// init, load, and check fonts
-	if(  !display_load_font(env_t::fontname.c_str())  &&  !display_load_font(FONT_PATH_X "prop.fnt") ) {
-		dr_fatal_notify("No fonts found!");
-		return false;
+	if(  !display_load_font(env_t::fontname.c_str())  ) {
+		env_t::fontname = dr_get_system_font();
+		if(  !display_load_font(env_t::fontname.c_str())  ) {
+			env_t::fontname = FONT_PATH_X "prop.fnt";
+			if(  !display_load_font(env_t::fontname.c_str())  ) {
+				dr_fatal_notify("No fonts found!");
+				return false;
+			}
+		}
 	}
 
 	// allocate dirty tile flags
@@ -5514,11 +5541,11 @@ bool display_snapshot( const scr_rect &area )
 
 	raw_image_t img(clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888);
 
-	for (scr_coord_val y = clipped_area.y; y < clipped_area.y + clipped_area.h; ++y) {
+	for (scr_coord_val y = 0; y < clipped_area.h; ++y) {
 		uint8 *dst = img.access_pixel(0, y);
-		const PIXVAL *row = textur + 0 + y*disp_width;
+		const PIXVAL *row = textur + (clipped_area.x + 0) + (clipped_area.y + y) * disp_width;
 
-		for (scr_coord_val x = clipped_area.x; x < clipped_area.x + clipped_area.w; ++x) {
+		for (scr_coord_val x = 0; x < clipped_area.w; ++x) {
 			const PIXVAL pixel = *row++;
 
 #ifdef RGB555

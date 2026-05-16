@@ -20,6 +20,7 @@
 #define NO_UINT64_TYPES
 #endif
 
+#include "../dataobj/environment.h"
 #include "../macros.h"
 #include "../simmain.h"
 #include "simsys.h"
@@ -48,8 +49,15 @@
 #		include <unistd.h>
 #	endif
 #	ifdef __ANDROID__
-#		include <SDL2/SDL.h>
+#       include "../utils/searchfolder.h"
+#		include <SDL.h>
+#		include <android/font.h>
+#		include <android/font_matcher.h>
 #	endif
+#endif
+
+#ifdef USE_FONTCONFIG
+#include <fontconfig/fontconfig.h>
 #endif
 
 #ifdef MULTI_THREAD
@@ -354,6 +362,111 @@ int dr_stat(const char *path, struct stat *buf)
 #endif
 }
 
+bool check_and_set_dir( const char *path, const char *info, char *result, const char *testfile)
+{
+	if(  path  &&  *path  ) {
+		bool ok = !dr_chdir(path);
+		// Attempt to create it (if we aren't testing for an existing directory containing a file).
+		if(!ok && !testfile) {
+			dr_mkdir(path);
+			ok = !dr_chdir(path);
+		}
+		else if(testfile) {
+			FILE* testf = fopen(testfile,"r");
+			ok = ok && testf;
+			if(testf) {
+				fclose(testf);
+			}
+		}
+		if(!ok) {
+			printf("WARNING: Objects not found in %s \"%s\"!\n",  info, path);
+		}
+		else {
+			dr_getcwd( result, PATH_MAX-1 );
+			strcat( result, PATH_SEPARATOR );
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+* Simutrans has three directories:
+* data_dir: directory with default data (may be write protected)
+* install_dir: global writable directory where paksets are installed
+* user_dir: a user writable directory
+*
+* The directory will be determined in the following order
+* -set_XXXdir Path (command line option)
+* SIMUTRANS_XXXDIR (environment variable)
+* (in case of data_dir current path, then executable path)
+* (for user_dir and install_dir: machine dependent default directories)
+*
+* The pak_dir contains the complete path to the current pak, since it could be in different locations
+*
+*/
+bool dr_set_basedir(const char * data_dir_arg, char * executable_path)
+{
+	bool found_basedir = false;
+#ifdef __ANDROID__
+	found_basedir = check_and_set_dir( SDL_AndroidGetInternalStoragePath(), "Android Internal Storage", env_t::data_dir, "config/simuconf.tab");
+#else
+	found_basedir = check_and_set_dir( data_dir_arg, "-set_basedir", env_t::data_dir, "config/simuconf.tab");
+	if( !found_basedir ) {
+		found_basedir = check_and_set_dir( getenv("SIMUTRANS_BASEDIR"), "SIMUTRANS_BASEDIR", env_t::data_dir, "config/simuconf.tab");
+		if( !found_basedir ) {
+			dr_getcwd(env_t::data_dir, lengthof(env_t::data_dir));
+			strcat( env_t::data_dir, PATH_SEPARATOR );
+			// test if base installation
+			if (FILE* f = dr_fopen("config/simuconf.tab", "r")) {
+				fclose(f);
+				found_basedir = true;
+			}
+			else {
+				char testpath[PATH_MAX];
+				tstrncpy(testpath, executable_path, lengthof(testpath));
+				char* c = strrchr(testpath, *PATH_SEPARATOR);
+				if(c) {
+					*c = 0; // remove program name
+					found_basedir = check_and_set_dir(testpath, "program dir", env_t::data_dir, "config/simuconf.tab");
+					if(!found_basedir) {
+#ifdef __APPLE__
+						// Detect if the binary is started inside an application bundle
+						// Change working dir from MacOS to Resources dir
+						strcpy(env_t::data_dir, testpath);
+						if( strstr(env_t::data_dir, ".app/Contents/MacOS") != NULL ) {
+							while (env_t::data_dir[strlen(env_t::data_dir) - 1] != 's') {
+								env_t::data_dir[strlen(env_t::data_dir) - 1] = 0;
+							}
+							strcat(env_t::data_dir, "/Resources/simutrans/");
+							found_basedir = true;
+						}
+#else
+						// Detect if simutrans has been installed by the system and try to locate the installation relative to the binary location
+						char *c = strrchr(testpath, *PATH_SEPARATOR);
+						if(  c  &&  strcmp(c+1,"bin")==0  ) {
+							// replace bin with other paths
+							strcpy( c+1, "share/simutrans/" );
+							found_basedir = check_and_set_dir(testpath, "program dir", env_t::data_dir, "config/simuconf.tab");
+							if (!found_basedir) {
+								strcpy( c+1 , "share/games/simutrans/" );
+								found_basedir = check_and_set_dir(testpath, "share/games/simutrans", env_t::data_dir, "config/simuconf.tab");
+							}
+						}
+#endif
+					}
+				}
+			}
+		}
+	}
+#endif
+	if (!found_basedir) {
+		// try the installer dir next
+		found_basedir = check_and_set_dir(dr_query_installdir(), "install_dir", env_t::data_dir, "config/simuconf.tab");
+	}
+	return found_basedir;
+}
+
 char const *dr_query_homedir()
 {
 	static char buffer[PATH_MAX + 24];
@@ -403,6 +516,60 @@ char const *dr_query_homedir()
 #ifndef __ANDROID__
 	strcat(buffer, PATH_SEPARATOR);
 #endif
+	return buffer;
+}
+
+
+char const *dr_query_installdir()
+{
+	static char buffer[PATH_MAX + 24];
+
+#if defined _WIN32
+	WCHAR whomedir[MAX_PATH];
+	if(FAILED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA|CSIDL_FLAG_CREATE, NULL, SHGFP_TYPE_CURRENT, whomedir))) {
+		return NULL;
+	}
+
+	// Convert UTF-16 to UTF-8.
+	int const convert_size = WideCharToMultiByte(CP_UTF8, 0, whomedir, -1, buffer, sizeof(buffer), NULL, NULL);
+	if(convert_size == 0) {
+		return NULL;
+	}
+
+	// Append Simutrans folder.
+	char const foldername[] = "Simutrans";
+	if(lengthof(buffer) < strlen(buffer) + strlen(foldername) + 2 * strlen(PATH_SEPARATOR) + 1){
+		return NULL;
+	}
+	strcat(buffer, PATH_SEPARATOR);
+	strcat(buffer, foldername);
+#elif defined __APPLE__
+	int maxlen = PATH_MAX + 22;
+	unsigned n = snprintf(buffer, maxlen, "%s/Library/Simutrans/paksets", getenv("HOME"));
+	if (n >= maxlen) {
+		return NULL;
+	}
+#elif defined __HAIKU__
+	BPath userDir;
+	find_directory(B_USER_DIRECTORY, &userDir);
+	sprintf(buffer, "%s/simutrans/paksets", userDir.Path());
+#elif defined __ANDROID__
+	tstrncpy(buffer,SDL_AndroidGetExternalStoragePath(),lengthof(buffer));
+#else
+	int maxlen = PATH_MAX + 22;
+	int n;
+	if( getenv("XDG_DATA_HOME") == NULL ) {
+		n = snprintf(buffer, maxlen, "%s/simutrans/paksets", getenv("HOME"));
+	}
+	else {
+		n = snprintf(buffer, maxlen, "%s/simutrans/paksets", getenv("XDG_DATA_HOME"));
+	}
+	if (n >= maxlen) {
+		return NULL;
+	}
+#endif
+
+	strcat(buffer, PATH_SEPARATOR);
 	return buffer;
 }
 
@@ -499,6 +666,143 @@ const char *dr_query_fontpath(int which)
 		which_offset--;
 	}
 	return NULL;
+#endif
+}
+
+
+std::string dr_get_system_font()
+{
+#if COLOUR_DEPTH != 0
+#ifdef WIN32
+#define DEFAULT_FONT "arial.ttf"
+
+	NONCLIENTMETRICSW ncm;
+	ncm.cbSize = sizeof(NONCLIENTMETRICSW);
+	SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICSW), &ncm, 0);
+	std::wstring wsFaceName = ncm.lfMessageFont.lfFaceName;
+
+	LPCWSTR fontRegistryPath = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts";
+	HKEY hKey;
+	LONG result;
+
+	// Open Windows font registry key
+	result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, fontRegistryPath, 0, KEY_READ, &hKey);
+	if (result != ERROR_SUCCESS) {
+		return DEFAULT_FONT;
+	}
+
+	DWORD maxValueNameSize, maxValueDataSize;
+	result = RegQueryInfoKeyW(hKey, 0, 0, 0, 0, 0, 0, 0, &maxValueNameSize, &maxValueDataSize, 0, 0);
+	if (result != ERROR_SUCCESS) {
+		return DEFAULT_FONT;
+	}
+
+	DWORD valueIndex = 0;
+	LPWSTR valueName = new WCHAR[maxValueNameSize];
+	LPBYTE valueData = new BYTE[maxValueDataSize];
+	DWORD valueNameSize, valueDataSize, valueType;
+	std::wstring wsFontFile;
+	// So far best matching font name
+	std::wstring wsBestMatch;
+
+	do {
+
+		wsFontFile.clear();
+		valueDataSize = maxValueDataSize;
+		valueNameSize = maxValueNameSize;
+
+		result = RegEnumValueW(hKey, valueIndex, valueName, &valueNameSize, 0, &valueType, valueData, &valueDataSize);
+
+		valueIndex++;
+
+		if (result != ERROR_SUCCESS || valueType != REG_SZ) {
+			continue;
+		}
+
+		std::wstring wsValueName(valueName, valueNameSize);
+
+		// Found a match
+		if (_wcsnicmp(wsFaceName.c_str(), wsValueName.c_str(), wsFaceName.length()) == 0) {
+			// full match
+			wsFontFile.assign((LPWSTR)valueData, valueDataSize/2);
+			break;
+		}
+
+		// Sometimes the face name is a family name; then only a partial match will be possible
+		if (wcsstr(wsValueName.c_str(), wsFaceName.c_str())) {
+			wsBestMatch.assign((LPWSTR)valueData, valueDataSize/2);
+		}
+	} while (result != ERROR_NO_MORE_ITEMS);
+
+	delete[] valueName;
+	delete[] valueData;
+
+	RegCloseKey(hKey);
+
+	if (wsFontFile.empty()) {
+		if (wsBestMatch.empty()) {
+			dbg->warning("dr_get_system_font()", "%s not found!", std::string(wsFaceName.begin(), wsFaceName.end()).c_str());
+			return DEFAULT_FONT;
+		}
+		wsFontFile = wsBestMatch;
+		dbg->warning("dr_get_system_font()", "Using %s for %s", std::string(wsFontFile.begin(), wsFontFile.end()).c_str(), std::string(wsFaceName.begin(), wsFaceName.end()).c_str());
+	}
+
+	// Build full font file path
+	CHAR winDir[MAX_PATH];
+	GetWindowsDirectoryA(winDir, MAX_PATH);
+	strcat(winDir, "\\Fonts\\");
+	// luckily any TTF font in windows has an ASCII name ...
+	DBG_MESSAGE("dr_get_system_font()", "Using %s", std::string(wsFontFile.begin(), wsFontFile.end()).c_str());
+	return (std::string)winDir + std::string(wsFontFile.begin(), wsFontFile.end());
+#elif defined(ANDROID)
+#if __ANDROID_API__>28
+	// öж田た불
+	const unsigned char teststr[] = { 0xc3, 0xb6, 0xd0, 0xb6, 0xe7, 0x94, 0xb0, 0xe3, 0x81, 0x9f, 0xeb, 0xb6, 0x88, 0 };
+	AFontMatcher* AFM = AFontMatcher_create();
+	AFont* AF = AFontMatcher_match(AFM, "serif", teststr, lengthof(teststr), NULL);
+	const char* fp = AFont_getFontFilePath(AF);
+	AFont_close(AF);
+	AFontMatcher_destroy(AFM);
+#else
+	const char* addpath;
+	searchfolder_t fonts;
+	for (int i = 0; (addpath = dr_query_fontpath(i)); i++) {
+		fonts.search(addpath, "*.ttf", searchfolder_t::SF_NOADDONS | searchfolder_t::SF_PREPEND_PATH, 4);
+		for (const char* filename : fonts) {
+			return filename;
+		}
+	}
+	return "/system/fonts/DroidSans.ttf";
+#endif
+#elif defined(USE_FONTCONFIG)
+	std::string fontFile = FONT_PATH_X "prop.fnt";
+	FcInit();
+	FcConfig* config = FcInitLoadConfigAndFonts();
+	FcPattern* pat = FcNameParse((const FcChar8*)"Sans");
+	FcConfigSubstitute(config, pat, FcMatchPattern);
+	FcDefaultSubstitute(pat);
+
+	FcResult result;
+	FcPattern* font = FcFontMatch(config, pat, &result);
+
+	if (font) {
+		FcChar8* file = NULL; 
+
+		if (  FcPatternGetString(font, FC_FILE, 0, &file) == FcResultMatch  ) {
+			fontFile = (char*)file;
+		}
+	}
+	FcPatternDestroy(font);
+	FcPatternDestroy(pat);
+	FcConfigDestroy(config);
+	FcFini();
+	return fontFile;
+#else
+	return FONT_PATH_X "prop.fnt";
+#endif
+#else
+	return "";
 #endif
 }
 

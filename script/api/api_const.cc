@@ -4,11 +4,13 @@
  */
 
 #include "api.h"
+#include "../../boden/wege/strasse.h"
 
 /** @file api_const.cc exports constants */
 
 #include "../api_param.h"
 #include "../../obj/simobj.h"
+#include "../../obj/roadsign.h"
 #include "../../simmenu.h"
 #include "../../simunits.h"
 
@@ -47,6 +49,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_change_city_size", TOOL_CHANGE_CITY_SIZE | GENERAL_TOOL);
 	/// plant a tree
 	enum_slot(vm, "tool_plant_tree", TOOL_PLANT_TREE | GENERAL_TOOL);
+	/// build ground object
+	enum_slot(vm, "tool_build_groundobj", TOOL_PLANT_GROUNDOBJ | GENERAL_TOOL);
 	// not needed? enum__slot(vm, "tool_schedule_add", TOOL_SCHEDULE_ADD | GENERAL_TOOL);
 	// not needed? enum__slot(vm, "tool_schedule_ins", TOOL_SCHEDULE_INS | GENERAL_TOOL);
 	/// build ways
@@ -184,6 +188,40 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "st_tram", type_tram);
 	end_enum();
 
+	/**
+	 * Conditions for overtaking on roads.
+	 */
+	begin_enum("overtaking_modes");
+	/// vehicles can stop on passing lane
+	enum_slot(vm, "halt_mode", halt_mode);
+	/// condition for one-way road
+	enum_slot(vm, "oneway_mode", oneway_mode);
+	/// condition for two-way road
+	enum_slot(vm, "twoway_mode", twoway_mode);
+	/// overtake a loading convoy only
+	enum_slot(vm, "loading_only_mode", loading_only_mode);
+	/// overtaking is completely forbidden
+	enum_slot(vm, "prohibited_mode", prohibited_mode);
+	/// vehicles can go only on passing lane
+	enum_slot(vm, "inverted_mode", inverted_mode);
+	end_enum();
+
+	/**
+	 * Flags for roads.
+	 */
+	begin_enum("street_flags");
+	/// this street avoid becoming cityroad.
+	enum_slot(vm, "road_avoid_cityroad", strasse_t::AVOID_CITYROAD);
+	/// citycar cannot enter this road.
+	enum_slot(vm, "road_citycar_no_entry", strasse_t::CITYCAR_NO_ENTRY);
+	/// no building can be built adjacent to this road
+	enum_slot(vm, "road_no_building", strasse_t::NO_BUILDING);
+	/// allow branch cityroad from avoid-cityroad
+	enum_slot(vm, "road_allow_branch_cityroad", strasse_t::ALLOW_BRANCH_CITYROAD);
+	/// pedestrian cannot enter this road.
+	enum_slot(vm, "road_pedestrian_no_entry", strasse_t::PEDESTRIAN_NO_ENTRY);
+	end_enum();
+
 	// players
 	begin_enum("");
 	/// constant to forbid/allow tools for all players (except public player)
@@ -291,6 +329,18 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "cl_tundra", tundra_climate);
 	enum_slot(vm, "cl_rocky", rocky_climate);
 	enum_slot(vm, "cl_arctic", arctic_climate);
+	end_enum();
+
+	/**
+	 * Signal states.
+	 */
+	begin_enum("signal_states");
+	/// Signal shows red.
+	enum_slot(vm, "state_red",    (SQInteger)roadsign_t::STATE_RED);
+	/// Signal shows green.
+	enum_slot(vm, "state_green",  (SQInteger)roadsign_t::STATE_GREEN);
+	/// Signal shows yellow.
+	enum_slot(vm, "state_yellow", (SQInteger)roadsign_t::STATE_YELLOW);
 	end_enum();
 
 }

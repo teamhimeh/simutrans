@@ -28,7 +28,7 @@ static sint32 categories[MAX_MESG_TABS] =
 	(1 << message_t::chat),
 	(1 << message_t::scenario),
 	(1 << message_t::problems),
-	(1 << message_t::traffic_jams) | (1 << message_t::warnings),
+	(1 << message_t::traffic_jams) | (1 << message_t::warnings) | (1 << message_t::stop_length),
 	(1 << message_t::full),
 	(1 << message_t::city) | (1 << message_t::industry),
 	(1 << message_t::ai),
@@ -214,7 +214,10 @@ void message_frame_t::rdwr(loadsave_t *file)
 
 	scrolly.rdwr(file);
 	tabs.rdwr(file);
-	file->rdwr_str( ibuf, lengthof(ibuf) );
+
+	if (file->is_version_less(124, 1)) {
+		file->rdwr_str( ibuf, lengthof(ibuf) );
+	}
 
 	if(  file->is_loading()  ) {
 		fill_list();

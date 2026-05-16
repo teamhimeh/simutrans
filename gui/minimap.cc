@@ -58,6 +58,7 @@ karte_ptr_t minimap_t::world;
 minimap_t::MAP_DISPLAY_MODE minimap_t::mode = MAP_TOWN;
 minimap_t::MAP_DISPLAY_MODE minimap_t::last_mode = MAP_TOWN;
 bool minimap_t::is_visible = false;
+bool minimap_t::circle_halts = false;
 
 #define MAX_MAP_TYPE_LAND 31
 #define MAX_MAP_TYPE_WATER 5
@@ -120,7 +121,7 @@ const uint8 minimap_t::severity_color[MAX_SEVERITY_COLORS] =
 };
 
 
-minimap_t::line_segment_t::line_segment_t(koord s, uint8 so, koord e, uint8 eo, schedule_t* sched, player_t* p, uint8 cc, bool diagonal)
+minimap_t::line_segment_t::line_segment_t(koord s, uint8 so, koord e, uint8 eo, schedule_t* sched, player_t* p, uint8 cc, bool diagonal, bool is_highlighted)
 {
 	schedule = sched;
 	waytype = sched->get_waytype();
@@ -139,6 +140,7 @@ minimap_t::line_segment_t::line_segment_t(koord s, uint8 so, koord e, uint8 eo, 
 		start_offset = eo;
 		end_offset = so;
 	}
+	is_minimap_route_visible = is_highlighted;
 }
 
 
@@ -149,6 +151,7 @@ bool minimap_t::line_segment_t::operator==(const line_segment_t & other) const
 		start == other.start  &&
 		end == other.end  &&
 		player == other.player  &&
+		is_minimap_route_visible == other.is_minimap_route_visible &&
 		schedule->similar( other.schedule, player );
 }
 
@@ -176,7 +179,7 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 		return;
 	}
 	schedule_t *schedule = cnv->get_schedule();
-	if(  !show_network_load_factor  ) {
+	if(  network_color_mode==ORIGINAL  ) {
 		colore_idx += 8;
 		if(  colore_idx >= 208  ) {
 			colore_idx = (colore_idx % 8) + 1;
@@ -185,7 +188,7 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 			}
 		}
 	}
-	else {
+	else if(  network_color_mode==LOAD_FACTOR  ) {
 		//TODO: extract common part from with schedule_list_gui_t::display()
 		int capacity = 0, load = 0; // total capacity and load of line (=sum of all conv's cap/load)
 
@@ -220,6 +223,18 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 		}
 		else {
 			colore_idx = severity_color[MAX_SEVERITY_COLORS-1];
+		}
+	}
+	else if(  network_color_mode==PLAYER_COLOR  ) {
+		colore_idx = cnv->get_owner()->get_player_color1();
+	}
+	else if(  network_color_mode==LINE_COLOR  ) {
+		if(  cnv->get_line().is_bound()  ) {
+			// this convoy is belong to line, show line color
+			colore_idx = cnv->get_line()->get_colour();
+		} else {
+			// this convoy is not line's convoy. show player color
+			colore_idx = cnv->get_owner()->get_player_color1();
 		}
 	}
 
@@ -306,6 +321,93 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 	}
 }
 
+
+void minimap_t::add_to_schedule_cache_without_cnv( schedule_t* schedule, player_t* owner, bool with_waypoints, bool is_highlighted )
+{
+	if (!schedule) return;
+
+	// ok, add this schedule to map
+	int stops = 0;
+	uint8 old_offset = 0, first_offset = 0, temp_offset = 0;
+	koord old_stop, first_stop, temp_stop;
+	bool last_diagonal = false;
+	const bool add_schedule = schedule->get_waytype() != air_wt;
+
+	FOR(  minivec_tpl<schedule_entry_t>, cur, schedule->get_entries()  ){
+
+		//cycle on stops
+		//try to read station's coordinates if there's a station at this schedule stop
+		halthandle_t station = haltestelle_t::get_stoppable_halt( cur.pos, owner, schedule->get_waytype() );
+		if(  station.is_bound()  ) {
+			if (  is_highlighted  ) route_search_highlighted_halts.append_unique(station);
+			stop_cache.append_unique( station );
+			temp_stop = station->get_basis_pos();
+			stops ++;
+		}
+		else if(  with_waypoints  ) {
+			temp_stop = cur.pos.get_2d();
+			stops ++;
+		}
+		else {
+			continue;
+		}
+
+		const int key = temp_stop.x + temp_stop.y*world->get_size().x;
+		waypoint_hash.put( key );
+		// now get the offset
+		slist_tpl<schedule_t *>*pt_list = waypoint_hash.access(key);
+		if(  add_schedule  ) {
+			// init key
+			if(  !pt_list->is_contained( schedule )  ) {
+				// not known => append
+				temp_offset = pt_list->get_count();
+			}
+			else {
+				// how many times we reached here?
+				temp_offset = pt_list->index_of( schedule );
+			}
+		}
+		else {
+			temp_offset = 0;
+		}
+
+		if(  stops>1  ) {
+			last_diagonal ^= true;
+			if(  (temp_stop.x-old_stop.x)*(temp_stop.y-old_stop.y) == 0  ) {
+				last_diagonal = false;
+			}
+			if(  !schedule_cache.insert_unique_ordered( line_segment_t( temp_stop, temp_offset, old_stop, old_offset, schedule, owner, colore_idx, last_diagonal, is_highlighted ), LineSegmentOrdering() )  &&  add_schedule  ) {
+				// append if added and not yet there
+				if(  !pt_list->is_contained( schedule )  ) {
+					pt_list->append( schedule );
+				}
+				if(  stops == 2  ) {
+					// append first stop too, when this is called for the first time
+					const int key = first_stop.x + first_stop.y*world->get_size().x;
+					waypoint_hash.put( key );
+					slist_tpl<schedule_t *>*pt_list = waypoint_hash.access(key);
+					if(  !pt_list->is_contained( schedule )  ) {
+						pt_list->append( schedule );
+					}
+				}
+			}
+			old_stop = temp_stop;
+			old_offset = temp_offset;
+		}
+		else {
+			first_stop = temp_stop;
+			first_offset = temp_offset;
+			old_stop = temp_stop;
+			old_offset = temp_offset;
+		}
+	}
+
+	if(  stops > 2  ) {
+		// connect to start
+		last_diagonal ^= true;
+		schedule_cache.insert_unique_ordered( line_segment_t( first_stop, first_offset, old_stop, old_offset, schedule, owner, colore_idx, last_diagonal, is_highlighted ), LineSegmentOrdering() );
+	}
+}
 
 
 // some routines for the minimap with schedules
@@ -434,13 +536,18 @@ static void display_thick_line( scr_coord_val x1, scr_coord_val y1, scr_coord_va
 }
 
 
-static void line_segment_draw( waytype_t type, scr_coord start, const uint8 start_offset, scr_coord end, const uint8 end_offset, bool start_diagonal, const PIXVAL colore )
+static void line_segment_draw( waytype_t type, scr_coord start, const uint8 start_offset, scr_coord end, const uint8 end_offset, bool start_diagonal, const PIXVAL colore, bool is_highlighted = true )
 {
+	int draw = 5;
+	int dontDraw = 3;
+
 	// airplanes are different, so we must check for them first
 	if(  type ==  air_wt  ) {
+		scr_coord_val draw_bez = is_highlighted ? 5 : 3;
+		scr_coord_val dontDraw_bez = is_highlighted ? 5 : 10;
 		// ignore offset for airplanes
-		draw_bezier_rgb( start.x, start.y, end.x, end.y, 50, 50, 50, 50, colore, 5, 5 );
-		draw_bezier_rgb( start.x + 1, start.y + 1, end.x + 1, end.y + 1, 50, 50, 50, 50, colore, 5, 5 );
+		draw_bezier_rgb( start.x, start.y, end.x, end.y, 50, 50, 50, 50, colore, draw, dontDraw );
+		draw_bezier_rgb( start.x + 1, start.y + 1, end.x + 1, end.y + 1, 50, 50, 50, 50, colore, draw, dontDraw );
 	}
 	else {
 		// determine line style
@@ -464,6 +571,12 @@ static void line_segment_draw( waytype_t type, scr_coord start, const uint8 star
 			default:
 				thickness = 3;
 				dotted = true;
+		}
+
+		if (  !is_highlighted  ) {
+			dotted = true;
+			draw = 3;
+			dontDraw = 10;
 		}
 
 		// move to the correct locations
@@ -500,10 +613,10 @@ static void line_segment_draw( waytype_t type, scr_coord start, const uint8 star
 		const scr_coord mid=end-diag;
 
 		if(start!=mid) {
-			display_thick_line(start.x, start.y, mid.x, mid.y, colore, dotted, 5, 3, thickness);
+			display_thick_line(start.x, start.y, mid.x, mid.y, colore, dotted, (short)draw, (short)dontDraw, thickness);
 		}
 		if(mid!=end) {
-			display_thick_line(mid.x, mid.y, end.x, end.y, colore, dotted, 5, 3, thickness);
+			display_thick_line(mid.x, mid.y, end.x, end.y, colore, dotted, (short)draw, (short)dontDraw, thickness);
 		}
 	}
 }
@@ -1043,7 +1156,7 @@ minimap_t::minimap_t()
 	zoom_in = 1;
 	zoom_out = 1;
 	isometric = false;
-	show_network_load_factor = false;
+	network_color_mode = ORIGINAL;
 	mode = MAP_TOWN;
 	selected_city = NULL;
 	cur_off = new_off = scr_coord(0,0);
@@ -1080,6 +1193,7 @@ void minimap_t::init()
 	max_tourist_ziele = max_waiting = max_origin = max_transfer = max_service = 1;
 	last_schedule_counter = world->get_schedule_counter()-1;
 	set_selected_cnv(convoihandle_t());
+	set_selected_route(nullptr, nullptr);
 }
 
 
@@ -1172,13 +1286,32 @@ const fabrik_t* minimap_t::draw_factory_connections(const fabrik_t* const fab, b
 
 
 // show the schedule on the minimap
-void minimap_t::set_selected_cnv( convoihandle_t c )
+void minimap_t::set_selected_cnv( convoihandle_t c, bool const clear_cache )
 {
+	current_schedule = nullptr;
 	current_cnv = c;
-	schedule_cache.clear();
-	stop_cache.clear();
+	if(clear_cache) {
+		schedule_cache.clear();
+		stop_cache.clear();
+	}
 	colore_idx = 0;
 	add_to_schedule_cache( current_cnv, true );
+	last_schedule_counter = world->get_schedule_counter()-1;
+}
+
+
+void minimap_t::set_selected_route( schedule_t* schedule, player_t* owner, bool is_highlighted, bool const clear_cache )
+{
+	current_cnv = convoihandle_t();
+	current_schedule = schedule;
+	if(clear_cache) {
+		route_search_highlighted_halts.clear();
+		route_search_transfer_halts.clear();
+		schedule_cache.clear();
+		stop_cache.clear();
+	}
+	colore_idx = 0;
+	add_to_schedule_cache_without_cnv(schedule, owner, true, is_highlighted);
 	last_schedule_counter = world->get_schedule_counter()-1;
 }
 
@@ -1258,7 +1391,7 @@ void minimap_t::draw(scr_coord pos)
 	}
 	display_array_wh( cur_off.x+pos.x, new_off.y+pos.y, map_data->get_width(), map_data->get_height(), map_data->to_array());
 
-	if(  !current_cnv.is_bound()  &&  mode & MAP_LINES    ) {
+	if(  !current_cnv.is_bound() && !current_schedule  &&  mode & MAP_LINES    ) {
 		vector_tpl<linehandle_t> linee;
 
 		if(  last_schedule_counter != world->get_schedule_counter()  ) {
@@ -1395,12 +1528,12 @@ void minimap_t::draw(scr_coord pos)
 		FOR(  vector_tpl<line_segment_t>, seg, schedule_cache  ) {
 
 			uint8 color = seg.colorcount;
-			if(  event_get_last_control_shift()==2  ||  current_cnv.is_bound()  ) {
+			if(  event_get_last_control_shift()==2  ||  is_cnv_schedule_bound()  ) {
 				// on control / single convoi use only player colors
 				static uint8 last_color = color;
 				color = seg.player->get_player_color1()+1;
 				// all lines same thickness if same color
-				if(  color == last_color  ) {
+				if(  color == last_color || is_cnv_schedule_bound()  ) {
 					offset = 0;
 				}
 				last_color = color;
@@ -1416,7 +1549,11 @@ void minimap_t::draw(scr_coord pos)
 				diagonal = seg.start_diagonal;
 			}
 			// and finally draw ...
-			line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color_idx_to_rgb(color) );
+			if (  current_schedule  ) {
+				line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color_idx_to_rgb(color), seg.is_minimap_route_visible );
+			} else {
+				line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color_idx_to_rgb(color) );
+			}
 		}
 	}
 
@@ -1456,8 +1593,12 @@ void minimap_t::draw(scr_coord pos)
 			// maybe deleted in the meanwhile
 			continue;
 		}
+		if(  current_schedule && !route_search_highlighted_halts.is_contained(station) ) {
+			continue;
+		}
 
 		int radius = 0;
+		int radius_sq = 0;
 		PIXVAL color;
 		int diagonal_dist = 0;
 		scr_coord temp_stop = map_to_screen_coord( station->get_basis_pos() );
@@ -1516,18 +1657,25 @@ void minimap_t::draw(scr_coord pos)
 			radius = number_to_radius( transfer );
 		}
 		else {
-			const int stype = station->get_station_type();
+			const int stype = station->get_connected_station_type();
 			color = color_idx_to_rgb(station->get_owner()->get_player_color1()+3);
 
+			if (  route_search_transfer_halts.is_contained(station) && current_schedule && current_schedule->is_minimap_route_search_found()  ) {
+				radius = 6;
+			}
+			else if (route_search_from_halt == station || route_search_dest_halt == station) {
+				radius = 6;
+				radius_sq = 3;
+			}
 			// invalid=0, loadingbay=1, railstation = 2, dock = 4, busstop = 8, airstop = 16, monorailstop = 32, tramstop = 64, maglevstop=128, narrowgaugestop=256
-			if(  stype > 0  ) {
+			else if(  stype > 0  ) {
 				radius = 1;
 				if(  stype & ~(haltestelle_t::loadingbay | haltestelle_t::busstop | haltestelle_t::tramstop)  ) {
 					radius = 3;
 				}
 			}
 			// with control, show only circles
-			if(  event_get_last_control_shift()!=2  ) {
+			if(  !is_cnv_schedule_bound() && event_get_last_control_shift()!=2  ) {
 				// else elongate them ...
 				const int key = station->get_basis_pos().x + station->get_basis_pos().y * world->get_size().x;
 				diagonal_dist = waypoint_hash.get( key ).get_count();
@@ -1567,8 +1715,24 @@ void minimap_t::draw(scr_coord pos)
 		}
 
 		int out_radius = (radius == 0) ? 1 : radius;
-		display_filled_circle_rgb( temp_stop.x, temp_stop.y, radius, color );
-		display_circle_rgb( temp_stop.x, temp_stop.y, out_radius, color_idx_to_rgb(COL_BLACK) );
+
+		// halt is a route search transfer halt draw as diamond		 
+		if (  route_search_transfer_halts.is_contained(station) && current_schedule && current_schedule->is_minimap_route_search_found()  ) {
+			display_filled_diamond_rgb( temp_stop.x, temp_stop.y, radius, color );
+			display_diamond_rgb( temp_stop.x, temp_stop.y, out_radius, color_idx_to_rgb(COL_BLACK) );
+		}
+		// halt is a route search from/dest halt draw as diamond with square over top
+		else if (  route_search_from_halt == station || route_search_dest_halt == station  ) {
+			display_filled_diamond_rgb( temp_stop.x, temp_stop.y, radius, color );
+			display_diamond_rgb( temp_stop.x, temp_stop.y, out_radius, color_idx_to_rgb(COL_BLACK) );
+			display_fillbox_wh_clip_rgb( temp_stop.x-1-radius_sq, temp_stop.y-1-radius_sq, 2*radius_sq+2, 2*radius_sq+2, color_idx_to_rgb(COL_BLACK), false );
+			display_fillbox_wh_clip_rgb( temp_stop.x-radius_sq, temp_stop.y-radius_sq, 2*radius_sq, 2*radius_sq, color, false );
+		}
+		// otherwise draw as circle
+		else {
+			display_filled_circle_rgb( temp_stop.x, temp_stop.y, radius, color );
+			display_circle_rgb( temp_stop.x, temp_stop.y, out_radius, color_idx_to_rgb(COL_BLACK) );
+		}
 		if(  diagonal_dist>0  ) {
 			display_filled_circle_rgb( temp_stop.x+diagonal_dist, temp_stop.y+diagonal_dist, radius, color );
 			display_circle_rgb( temp_stop.x+diagonal_dist, temp_stop.y+diagonal_dist, out_radius, color_idx_to_rgb(COL_BLACK) );
@@ -1632,7 +1796,7 @@ void minimap_t::draw(scr_coord pos)
 					max_tourist_ziele = pax;
 				}
 				PIXVAL color = calc_severity_color_log(gb->get_passagier_level(), max_tourist_ziele);
-				int radius = max( (number_to_radius( pax*4 )*zoom_in)/zoom_out, 1 );
+				int radius = number_to_radius( pax*4 ) + 5;
 				display_filled_circle_rgb( gb_pos.x, gb_pos.y, radius, color );
 				display_circle_rgb( gb_pos.x, gb_pos.y, radius, color_idx_to_rgb(COL_BLACK) );
 			}
@@ -1658,7 +1822,7 @@ void minimap_t::draw(scr_coord pos)
 			PIXVAL color = calc_severity_color_log( citizens, max_city_citizens );
 
 			// Calculate radius based on citizens with zoom correction
-			int radius = max( (number_to_radius( citizens )*zoom_in)/zoom_out, 1 );
+			int radius = number_to_radius( 5 * citizens ) + 10;
 
 			// Draw filled circle with black outline
 			display_filled_circle_rgb( city_pos.x, city_pos.y, radius, color );
@@ -1688,7 +1852,7 @@ void minimap_t::draw(scr_coord pos)
 			PIXVAL color = color_idx_to_rgb(growth > 0 ? COL_LIGHT_RED : growth < 0 ? COL_DARK_GREEN : COL_YELLOW);
 
 			// Calculate radius based on absolute growth with zoom correction
-			int radius = max( (number_to_radius( 5 * abs_growth )*zoom_in)/zoom_out, 5 );
+			int radius = number_to_radius( 5 * abs_growth ) + 10;
 
 			// Draw filled circle with black outline
 			display_filled_circle_rgb( city_pos.x, city_pos.y, radius, color );
@@ -1794,6 +1958,63 @@ void minimap_t::draw(scr_coord pos)
 			}
 		}
 
+	}
+
+	// draw convoy positions for the displayed line
+	if(  displayed_line.is_bound()  ) {
+		const skin_desc_t *waytype_icon = NULL;
+		switch(  displayed_line->get_schedule()->get_waytype()  ) {
+			case track_wt:        waytype_icon = skinverwaltung_t::zughaltsymbol;          break;
+			case water_wt:        waytype_icon = skinverwaltung_t::schiffshaltsymbol;      break;
+			case road_wt:         waytype_icon = skinverwaltung_t::autohaltsymbol;         break;
+			case air_wt:          waytype_icon = skinverwaltung_t::airhaltsymbol;          break;
+			case monorail_wt:     waytype_icon = skinverwaltung_t::monorailhaltsymbol;     break;
+			case tram_wt:         waytype_icon = skinverwaltung_t::tramhaltsymbol;         break;
+			case maglev_wt:       waytype_icon = skinverwaltung_t::maglevhaltsymbol;       break;
+			case narrowgauge_wt:  waytype_icon = skinverwaltung_t::narrowgaugehaltsymbol;  break;
+			default:              waytype_icon = skinverwaltung_t::autohaltsymbol;         break;
+		}
+
+		image_id icon_img = (waytype_icon ? waytype_icon->get_image_id(0) : IMG_EMPTY);
+		scr_coord_val icon_xoff = 0, icon_yoff = 0, icon_xw = 12, icon_yw = 12;
+		if(  icon_img != IMG_EMPTY  ) {
+			display_get_image_offset(icon_img, &icon_xoff, &icon_yoff, &icon_xw, &icon_yw);
+		}
+
+		scr_coord hover_scr = map_to_screen_coord(last_world_pos);
+		convoihandle_t hover_cnv;
+		for(  uint32 i = 0;  i < displayed_line->count_convoys();  i++  ) {
+			convoihandle_t cnv = displayed_line->get_convoy(i);
+			if(  !cnv.is_bound()  ) continue;
+			koord cnv_pos = cnv->get_pos().get_2d();
+			if(  !world->is_within_limits(cnv_pos)  ) continue;
+
+			scr_coord cnv_scr = map_to_screen_coord(cnv_pos);
+			scr_coord draw_pos = cnv_scr + pos;
+
+			if(  icon_img != IMG_EMPTY  ) {
+				// center icon: display_color_img adds icon_xoff internally, so we subtract it back
+				display_color_img(icon_img, draw_pos.x - icon_xoff - icon_xw/2, draw_pos.y - icon_yoff - icon_yw/2, cnv->get_owner()->get_player_nr(), false, false);
+			}
+			else {
+				display_fillbox_wh_clip_rgb(draw_pos.x - 3, draw_pos.y - 3, 7, 7, color_idx_to_rgb(COL_BLACK), true);
+				display_fillbox_wh_clip_rgb(draw_pos.x - 2, draw_pos.y - 2, 5, 5, color_idx_to_rgb(cnv->get_owner()->get_player_color1() + 3), true);
+			}
+
+			if(  abs(cnv_scr.x - hover_scr.x) <= 8  &&  abs(cnv_scr.y - hover_scr.y) <= 8  ) {
+				hover_cnv = cnv;
+			}
+		}
+
+		if(  hover_cnv.is_bound()  ) {
+			scr_coord cnv_map_pos = map_to_screen_coord(hover_cnv->get_pos().get_2d());
+			const char *name = hover_cnv->get_name();
+			int name_width = proportional_string_width(name) + (LINESPACE / 2);
+			scr_coord boxpos = cnv_map_pos + scr_coord(10, 0);
+			boxpos.x = clamp(boxpos.x, 0, get_size().w - name_width);
+			boxpos += pos;
+			display_ddd_proportional_clip(boxpos.x, boxpos.y, color_idx_to_rgb(COL_GREY4), color_idx_to_rgb(COL_WHITE), name, true);
+		}
 	}
 
 	// if we do not do this here, vehicles would erase the town names

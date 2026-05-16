@@ -27,7 +27,8 @@
 #define LINE_DISTANCE          6 // distance covered by all convois
 #define LINE_MAXSPEED          7 // maximum speed for bonus calculation of all convois
 #define LINE_WAYTOLL           8 // way toll paid by vehicles of line
-#define MAX_LINE_COST          9 // Total number of cost items
+#define LINE_TONKILO		   9 // the amount of transported ware integrated by distance.
+#define MAX_LINE_COST          10 // Total number of cost items
 
 class karte_ptr_t;
 class loadsave_t;
@@ -88,6 +89,11 @@ private:
 	 * struct holds new financial history for line
 	 */
 	sint64 financial_history[MAX_MONTHS][MAX_LINE_COST];
+
+	/**
+	 * colour of line
+	 */
+	uint8 colour;
 
 	/**
 	 * creates empty schedule with type depending on line-type
@@ -151,6 +157,12 @@ public:
 	 */
 	char const* get_memo() const { return memo; }
 	void set_memo(const char *memo);
+
+	/**
+	 * get colour of line
+	 */
+	uint8 const get_colour() const { return colour; }
+	void set_colour(const uint8 colour);
 
 	/*
 	 * load or save the line

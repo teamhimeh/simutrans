@@ -138,8 +138,20 @@ void gameinfo_t::rdwr(loadsave_t *file)
 	file->rdwr_long( city_count );
 	file->rdwr_long( citizen_count );
 
-	file->rdwr_short( convoi_count );
-	file->rdwr_short( halt_count );
+	if(  file->get_OTRP_version() >= 55  ) {
+		file->rdwr_long( convoi_count );
+		file->rdwr_long( halt_count );
+	}
+	else {
+		uint16 tmp_convoi = (uint16)convoi_count;
+		uint16 tmp_halt   = (uint16)halt_count;
+		file->rdwr_short( tmp_convoi );
+		file->rdwr_short( tmp_halt );
+		if(  file->is_loading()  ) {
+			convoi_count = tmp_convoi;
+			halt_count   = tmp_halt;
+		}
+	}
 
 	file->rdwr_longlong( total_pass_transported );
 	file->rdwr_longlong( total_mail_transported );
@@ -171,6 +183,14 @@ void gameinfo_t::rdwr(loadsave_t *file)
 	file->rdwr_str( temp, lengthof(temp) ); // pak_name
 	if(  file->is_loading()  ) {
 		pak_name = temp;
+	}
+	if (file->is_version_atleast(124, 4)) {
+		//TODO: get motd from server (to keep paket small, max message is truncated to 1024 bytes)
+		// tstrncpy(temp, motd.c_str(), lengthof(temp));
+		file->rdwr_str(temp, lengthof(temp)); // motd for server
+		// if (file->is_loading()) {
+		// 	motd = temp;
+		// }
 	}
 	file->rdwr_long( game_engine_revision );
 

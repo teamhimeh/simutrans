@@ -56,6 +56,13 @@ const slist_tpl <weg_t *> & weg_t::get_alle_wege()
 }
 
 
+bool weg_t::is_clipping_below_needed() const
+{
+	// elevated no clip?
+	return desc->is_clip_below();
+}
+
+
 // returns a way with matching waytype
 weg_t* weg_t::alloc(waytype_t wt)
 {
@@ -116,6 +123,9 @@ void weg_t::set_desc(const way_desc_t *b)
 {
 	desc = b;
 
+	if(  desc == NULL  ) {
+		return;
+	}
 	if(  hat_gehweg() &&  desc->get_wtyp() == road_wt  &&  desc->get_topspeed() > 50  ) {
 		max_speed = 50;
 	}
@@ -152,6 +162,7 @@ void weg_t::init()
 	image = IMG_EMPTY;
 	foreground_image = IMG_EMPTY;
 	max_wayobj_speed = 0;
+	vehicle_offset = 0;
 }
 
 
@@ -238,6 +249,10 @@ void weg_t::rdwr(loadsave_t *file)
 			// DBG_DEBUG("weg_t::rdwr()", "statistics[%d][%d]=%d", month, type, statistics[month][type]);
 		}
 	}
+
+	if(  file->get_OTRP_version()>=52  ) {
+		file->rdwr_byte(vehicle_offset);
+	}
 }
 
 
@@ -296,6 +311,8 @@ void weg_t::info(cbuffer_t & buf) const
 	buf.printf("%s%u",    translator::translate("\nRibi (unmasked)"), get_ribi_unmasked());
 	buf.printf("%s%u\n",  translator::translate("\nRibi (masked)"),   get_ribi());
 
+	buf.printf("%s%i (%s %s)\n",	translator::translate("\nVehicle offset: "), get_vehicle_offset(), translator::translate("Offset mode:"), get_vehicle_offset_mode()?translator::translate("Direction"):translator::translate("Absolute"));
+	
 	if(  get_waytype() == road_wt  ) {
 		const strasse_t* str = (const strasse_t*) this;
 		assert(str);
@@ -333,6 +350,10 @@ void weg_t::info(cbuffer_t & buf) const
 
 		if(  str->get_citycar_no_entry()  ) {
 			buf.printf("%s\n", translator::translate("Citycars are excluded."));
+		}
+
+		if(  str->get_pedestrian_no_entry()  ) {
+			buf.printf("%s\n", translator::translate("Pedestrias are excluded."));
 		}
 
 

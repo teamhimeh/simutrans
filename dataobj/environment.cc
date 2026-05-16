@@ -16,7 +16,8 @@
 
 #include "../utils/simrandom.h"
 void rdwr_win_settings(loadsave_t *file); // simwin
-
+char env_t::install_dir[PATH_MAX];
+std::string env_t::pak_dir;
 sint16 env_t::menupos = MENU_TOP;
 sint16 env_t::fullscreen = WINDOWED;
 sint16 env_t::display_scale_percent = 100;
@@ -122,6 +123,7 @@ bool env_t::road_user_info;
 bool env_t::tree_info;
 bool env_t::ground_info;
 uint8 env_t::show_factory_storage_bar;
+bool env_t::show_way_offset_label = false;
 bool env_t::townhall_info;
 bool env_t::single_info;
 bool env_t::window_buttons_right;
@@ -154,6 +156,10 @@ PIXVAL env_t::background_color;
 bool env_t::draw_earth_border;
 bool env_t::draw_outside_tile;
 uint8 env_t::show_vehicle_states;
+bool env_t::show_only_own_vehicle_states;
+bool env_t::show_line_colors;
+bool env_t::show_convoy_loadinglevel;
+sint8 env_t::clip_below;
 bool env_t::visualize_schedule;
 sint8 env_t::daynight_level;
 bool env_t::left_to_right_graphs;
@@ -165,7 +171,7 @@ uint8 env_t::gui_player_color_dark = 1;
 uint8 env_t::gui_player_color_bright = 4;
 
 #ifndef __ANDROID__
-std::string env_t::fontname = FONT_PATH_X "prop.fnt";
+std::string env_t::fontname;
 uint8 env_t::fontsize = 11;
 #else
 std::string env_t::fontname = FONT_PATH_X "Roboto-Regular.ttf";
@@ -187,6 +193,7 @@ uint32 env_t::default_ai_construction_speed;
 
 
 bool env_t::previous_OTRP_data;
+bool env_t::use_old_friction;
 char env_t::otrp_statistics_log[PATH_MAX];
 
 bool  env_t::commandline_snapshot = false;
@@ -215,6 +222,7 @@ bool env_t::hide_keyboard = false;
 // Define default settings.
 void env_t::init()
 {
+	fontname = dr_get_system_font();
 	// settings for messages
 	message_flags[0] = 0x017F;
 	message_flags[1] = 0x0108;
@@ -306,6 +314,10 @@ void env_t::init()
 	draw_outside_tile = false;
 
 	show_vehicle_states = 1;
+	show_only_own_vehicle_states = false;
+	show_line_colors = true;
+	show_convoy_loadinglevel = true;
+	clip_below = CLIP_BELOW_PAK;
 
 	daynight_level = 0;
 
@@ -341,6 +353,7 @@ void env_t::init()
 	listen.append_unique("0.0.0.0");
 
 	previous_OTRP_data = false;
+	use_old_friction = false;
 	show_money_message = 0;
 	
 	sprintf(otrp_statistics_log, "");
@@ -524,7 +537,7 @@ void env_t::rdwr(loadsave_t *file)
 		file->rdwr_bool( second_open_closes_win );
 		file->rdwr_bool( remember_window_positions );
 	}
-	if(  file->is_version_atleast(112, 8)  ) {
+	if(  file->is_version_atleast(112, 8)  &&  file->is_version_less(123,2)  ) {
 		file->rdwr_bool( show_delete_buttons );
 	}
 	if(  file->is_version_atleast(120, 1)  ) {
@@ -579,7 +592,7 @@ void env_t::rdwr(loadsave_t *file)
 		file->rdwr_byte( gui_player_color_dark );
 		file->rdwr_byte( gui_player_color_bright );
 	}
-	
+
 	if (file->get_OTRP_version()>=25) {
 		file->rdwr_str(otrp_statistics_log, PATH_MAX);
 	}
@@ -610,11 +623,16 @@ void env_t::rdwr(loadsave_t *file)
 		file->rdwr_short( fullscreen );
 	}
 	if (file->get_OTRP_version()>=33) {
+		// this value is also saved in 123.1, however, the node is different!
 		file->rdwr_bool(scroll_infinite);
 	}
 
 	if(  file->is_version_atleast(123, 1)  ||  file->get_OTRP_version()>=33  ) {
 		file->rdwr_short(display_scale_percent);
+	}
+	if( file->is_version_atleast(123, 1) && file->get_OTRP_version()<33 ) {
+		// this value is also saved in OTRP v33, however, the node is different!
+		file->rdwr_bool(scroll_infinite);
 	}
 
 	if(  file->get_OTRP_version()>=44  ) {
@@ -627,10 +645,73 @@ void env_t::rdwr(loadsave_t *file)
 			// strncpy(new_server_name, buf, 2048);
 		}
 	}
+	if(  file->get_OTRP_version()>=52  ) {
+		file->rdwr_bool(show_line_colors);
+		file->rdwr_bool(show_convoy_loadinglevel);
+	}
+	if(  file->get_OTRP_version()>=53  ) {
+		file->rdwr_bool(show_only_own_vehicle_states);
+	}
+	if(  file->get_OTRP_version()>=54  ) {
+		file->rdwr_byte((uint8&)clip_below);
+	}
+
+
+	if( file->is_version_atleast(123, 2) ) {
+		//TODO: scroll_threshold
+		uint16 scroll_threshold;
+		file->rdwr_short(scroll_threshold);
+		//TODO: single toolbar mode
+		bool single_toolbar_mode;
+		file->rdwr_bool(single_toolbar_mode);
+		//TODO: dpi_scale
+		uint16 dpi_scale;
+		file->rdwr_short(dpi_scale);
+		// if( file->is_loading() ) {
+		// 	dr_set_screen_scale(dpi_scale);
+		// }
+		//TODO: pedestrian
+		bool random_pedestrians;
+		bool stop_pedestrians;
+		file->rdwr_bool(random_pedestrians);
+		file->rdwr_bool(stop_pedestrians);
+	}
+	if (file->is_version_atleast(124, 2)) {
+		//TODO: leftdrag_in_minipam
+		bool leftdrag_in_minimap;
+		file->rdwr_bool(leftdrag_in_minimap);
+	}
+	if (file->is_version_atleast(124, 3)) {
+		//TODO: currency
+		bool currency_left;
+		char currency_symbol[16];
+		file->rdwr_bool(currency_left);
+		file->rdwr_str(currency_symbol,lengthof(currency_symbol));
+	}
+
+	if (file->is_version_atleast(124, 4)) {
+		//TODO: show signle ways
+		bool show_single_ways;
+		file->rdwr_bool(show_single_ways);
+		//TODO: stack_toolbars
+		bool stack_toolbars;
+		file->rdwr_bool(stack_toolbars);
+	}
+	
 
 	// server settings are not saved, since they are server specific
 	// and could be different on different servers on the same computers
 }
+
+// Graphical offsets for all vehicles
+// the reading method is in setting_t, and these parameters are used in vehicle_t.
+sint8 env_t::vehicle_base_offsets[8][2][waytype_t::air_wt+1];
+// Graphical offsets for cars driving left
+// the reading method is in setting_t, and these parameters are used in vehicle_t.
+sint8 env_t::driveleft_base_offsets[8][2];
+// Graphical offsets for overtaking vehicles
+// the reading method is in setting_t, and these parameters are used in vehicle_t.
+sint8 env_t::overtaking_base_offsets[8][2];
 
 // Graphical offsets for reverseing vehicles
 // the reading method is in setting_t, and these parameters are used in vehicle_t.

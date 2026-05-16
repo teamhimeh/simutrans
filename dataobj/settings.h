@@ -64,6 +64,8 @@ private:
 	sint32 electric_promille;
 	sint32 tourist_attractions;
 
+	uint32 cst_kw_per_credit=512;
+
 	sint32 city_count;
 	sint32 mean_citizen_count;
 
@@ -77,6 +79,9 @@ private:
 	sint32 growthfactor_small;
 	sint32 growthfactor_medium;
 	sint32 growthfactor_large;
+
+	sint32 growthfactor_small_limit;
+	sint32 growthfactor_medium_limit;
 
 	sint16 special_building_distance; // distance between attraction to factory or other special buildings
 	uint32 minimum_city_distance;
@@ -320,6 +325,8 @@ private:
 
 	bool drive_on_left;
 	bool signals_on_left;
+	bool signal_reverse_front_back;
+	bool roadsign_reverse_front_back;
 
 	// fraction of running costs charged for going on other players way
 	sint32 way_toll_runningcost_percentage;
@@ -341,6 +348,12 @@ private:
 	bool advance_to_end;
 
 	bool first_come_first_serve;
+
+	// flying height calculation method
+	bool allow_higher_flight;
+
+	// use route cache
+	bool use_route_cache;
 
 	// The flag whether the time based goods routing is enabled for the goods.
 	// The array index is the goods category index.
@@ -367,6 +380,9 @@ private:
 	
 	// set default reversing or not, when the next direction is opposite.
 	bool default_reverse;
+
+	// can unload cargo even if stop length is too short
+	bool allow_unload_longer_convoy;
 
 public:
 	/* the big cost section */
@@ -465,6 +481,8 @@ public:
 	sint32 get_factory_count() const {return factory_count;}
 
 	sint32 get_electric_promille() const {return electric_promille;}
+
+	sint32 get_cst_kw_per_credit() const {return cst_kw_per_credit;}
 
 	void set_tourist_attractions( sint32 n ) { tourist_attractions = n; }
 	sint32 get_tourist_attractions() const {return tourist_attractions;}
@@ -620,6 +638,10 @@ public:
 	sint32 get_growthfactor_medium() const { return growthfactor_medium; }
 	sint32 get_growthfactor_large() const { return growthfactor_large; }
 
+	// the growthfactor threshold  
+	sint32 get_growthfactor_small_limit() const { return growthfactor_small_limit; }
+	sint32 get_growthfactor_medium_limit() const { return growthfactor_medium_limit; }
+
 	// percentage of passengers for different kinds of trips
 	sint16 get_factory_worker_percentage() const { return factory_worker_percentage; }
 	sint16 get_tourist_percentage() const { return tourist_percentage; }
@@ -699,6 +721,8 @@ public:
 
 	bool is_drive_left() const { return drive_on_left; }
 	bool is_signals_left() const { return signals_on_left; }
+	bool get_signal_reverse_front_back() const { return signal_reverse_front_back; }
+	bool get_roadsign_reverse_front_back() const { return roadsign_reverse_front_back; }
 
 	sint32 get_way_toll_runningcost_percentage() const { return way_toll_runningcost_percentage; }
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
@@ -728,6 +752,9 @@ public:
 	bool get_first_come_first_serve() const { return first_come_first_serve; }
 	uint32 get_waiting_limit_for_first_come_first_serve() const 
 		{ return waiting_limit_for_first_come_first_serve; }
+
+	bool get_allow_higher_flight() const { return allow_higher_flight; }
+	void set_allow_higher_flight(const bool y) { allow_higher_flight=y; }
 	
 	uint8 get_routecost_halt() const { return routecost_halt; }
 	uint8 get_routecost_wait() const { return routecost_wait; }
@@ -741,6 +768,10 @@ public:
 	}
 	// get default reverse
 	bool is_default_reverse() const {return default_reverse;}
+	// allow unload longer convoy
+	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+
+	bool is_using_route_cache() const { return use_route_cache; }
 };
 
 #endif

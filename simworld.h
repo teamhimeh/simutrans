@@ -22,6 +22,7 @@
 #include "dataobj/settings.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/rect.h"
+#include "dataobj/route_cache.h"
 
 #include "utils/checklist.h"
 #include "utils/sha1_hash.h"
@@ -124,6 +125,9 @@ public:
 	};
 
 private:
+	/// Route cache: maps (start, ziel, max_speed_kmh, need_electric) to a cached route_t.
+	route_cache_t route_cache;
+
 	/**
 	 * @name Map properties
 	 * Basic map properties are stored in this variables.
@@ -476,6 +480,12 @@ private:
 	uint32 time_multiplier;
 
 	uint8 step_mode;
+
+	/**
+	 *  fix game speed
+	 *  only for network mode!
+	 */
+	bool fix_game_speed;
 
 	/// @note variable used in interactive()
 	uint32 sync_steps;
@@ -873,6 +883,11 @@ public:
 	/// stops the game with interaction
 	void set_pause( bool );
 
+	/// fix game speed 
+	/// only for network mode
+	bool is_game_speed_fixed() const { return fix_game_speed; }
+	void set_game_speed_fixed( bool y ) { fix_game_speed = y; }
+
 	bool is_fast_forward() const { return step_mode == FAST_FORWARD; }
 	void set_fast_forward(bool ff);
 
@@ -1155,6 +1170,8 @@ public:
 
 	void set_copy_convoi(convoihandle_t cnv) { copy_convoi = cnv; };
 	convoihandle_t get_copy_convoi() { return copy_convoi; }
+
+	route_cache_t& get_route_cache() { return route_cache; }
 
 private:
 	/**

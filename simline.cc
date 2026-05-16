@@ -24,7 +24,7 @@
 
 
 uint8 convoi_to_line_catgory_[convoi_t::MAX_CONVOI_COST] = {
-	LINE_CAPACITY, LINE_TRANSPORTED_GOODS, LINE_REVENUE, LINE_OPERATIONS, LINE_PROFIT, LINE_DISTANCE, LINE_MAXSPEED, LINE_WAYTOLL
+	LINE_CAPACITY, LINE_TRANSPORTED_GOODS, LINE_REVENUE, LINE_OPERATIONS, LINE_PROFIT, LINE_DISTANCE, LINE_MAXSPEED, LINE_WAYTOLL, LINE_TONKILO
 };
 
 
@@ -45,6 +45,7 @@ simline_t::simline_t(player_t* player, linetype type)
 	sprintf(printname, "(%i) %s", self.get_id(), translator::translate("Line", welt->get_settings().get_name_language_id()));
 	name = printname;
 	memo = "";
+	colour = player->get_player_color1();
 
 	init_financial_history();
 	this->type = type;
@@ -106,7 +107,7 @@ simline_t::linetype simline_t::waytype_to_linetype(const waytype_t wt)
 
 const char *simline_t::get_linetype_name(const simline_t::linetype lt)
 {
-	static const char *lt2name[MAX_LINE_TYPE] = {"All", "Truck", "Train", "Ship", "Air", "Monorail", "Tram", "Maglev", "Narrowgauge" };
+	static const char *lt2name[MAX_LINE_TYPE] = {"All waytypes", "Truck", "Train", "Ship", "Air", "Monorail", "Tram", "Maglev", "Narrowgauge" };
 	return translator::translate( lt2name[lt] );
 }
 
@@ -143,6 +144,11 @@ void simline_t::set_name(const char *new_name)
 void simline_t::set_memo(const char* new_memo)
 {
 	memo = new_memo;
+}
+
+void simline_t::set_colour(const uint8 new_colour)
+{
+	colour = new_colour;
 }
 
 void simline_t::create_schedule()
@@ -229,9 +235,21 @@ void simline_t::remove_convoy(convoihandle_t cnv)
 
 void simline_t::rdwr_linehandle_t(loadsave_t *file, linehandle_t &line)
 {
+	if(  file->get_OTRP_version() >= 55  ) {
+		uint32 id = 0;
+		if(  file->is_saving()  ) {
+			id = line.is_bound() ? line.get_id() : 0;
+		}
+		file->rdwr_long(id);
+		if(  file->is_loading()  ) {
+			line.set_id(id);
+		}
+		return;
+	}
+
 	uint16 id;
 	if (file->is_saving()) {
-		id = line.is_bound() ? line.get_id() :
+		id = line.is_bound() ? (uint16)line.get_id() :
 			 (file->is_version_less(110, 0)  ? INVALID_LINE_ID_OLD : INVALID_LINE_ID);
 	}
 	else {
@@ -280,6 +298,7 @@ void simline_t::rdwr(loadsave_t *file)
 			financial_history[k][LINE_DISTANCE] = 0;
 			financial_history[k][LINE_MAXSPEED] = 0;
 			financial_history[k][LINE_WAYTOLL] = 0;
+			financial_history[k][LINE_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(111, 1)  ) {
@@ -291,6 +310,7 @@ void simline_t::rdwr(loadsave_t *file)
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][LINE_MAXSPEED] = 0;
 			financial_history[k][LINE_WAYTOLL] = 0;
+			financial_history[k][LINE_TONKILO] = 0;
 		}
 	}
 	else if(  file->is_version_less(112, 8)  ) {
@@ -301,6 +321,17 @@ void simline_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][LINE_WAYTOLL] = 0;
+			financial_history[k][LINE_TONKILO] = 0;
+		}
+	}
+	else if(  file->get_OTRP_version()<53  ) {
+		for (int j = 0; j<LINE_TONKILO; j++) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		for (size_t k = MAX_MONTHS; k-- != 0;) {
+			financial_history[k][LINE_TONKILO] = 0;
 		}
 	}
 	else {
@@ -325,6 +356,14 @@ void simline_t::rdwr(loadsave_t *file)
 	}
 	else {
 		memo = "";
+	}
+
+	if (file->get_OTRP_version() >= 51) {
+		file->rdwr_enum(colour);
+		// read colour of the line
+	}
+	else {
+		colour = player->get_player_color1();
 	}
 	// otherwise initialized to zero if loading ...
 	financial_history[0][LINE_CONVOIS] = count_convoys();

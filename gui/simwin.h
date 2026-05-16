@@ -49,6 +49,7 @@ enum magic_numbers {
 	magic_climate,
 	magic_reliefmap,
 	magic_farbengui_t,
+	magic_line_colour_gui_t,
 	magic_color_gui_t,
 	magic_ki_kontroll_t,
 	magic_optionen_gui_t,
@@ -127,6 +128,7 @@ enum magic_numbers {
 	magic_factory_edit,
 	magic_baum_edit,
 	magic_groundobj_edit,
+	magic_depot_picker,
 	magic_max
 };
 

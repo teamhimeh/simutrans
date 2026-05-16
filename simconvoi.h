@@ -62,7 +62,8 @@ public:
 		CONVOI_PROFIT,             // total profit of this convoi
 		CONVOI_DISTANCE,           // total distance traveled this month
 		CONVOI_MAXSPEED,           // average max. possible speed
-		CONVOI_WAYTOLL,
+		CONVOI_WAYTOLL,			   // waytoll
+		CONVOI_TONKILO,			   // the amount of transported ware integrated by transported distance.
 		MAX_CONVOI_COST            // Total number of cost items
 	};
 
@@ -90,6 +91,8 @@ public:
 		COUPLED,
 		COUPLED_LOADING,
 		WAITING_FOR_LEAVING_DEPOT,
+		SUSPENSION,
+		SUSPENSION_LOADING,
 		MAX_STATES
 	};
 
@@ -131,6 +134,11 @@ private:
 	 */
 	sint32 sum_gear_and_power;
 	sint32 sum_gear_and_power_electric;
+
+	/*
+	* use electric or not
+	* YOU MUST UPDATE THIS FLAG WHEN CALCULATE ROUTE!!!!!
+	*/
 	bool use_electric;
 
 	// 40 bytes
@@ -215,6 +223,12 @@ private:
 	* needed as int, since used by the gui
 	*/
 	sint32 loading_limit;
+
+	/**
+	 * The stopping time for waiting minimum_loading.
+	 * return: ticks value
+	 */
+	uint32 loading_waiting_time;
 
 	/*
 	 * a list of all catg_index, which can be transported by this convoy.
@@ -391,12 +405,28 @@ private:
 	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
 	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
 
+	bool unloading_done;//unload once in stop
+
 	/**
 	 * The temporary speed limit for this convoy.
 	 * For example, as limited by a speed limit sign.
 	 * This value is set from schedule_entry_t, and can be edited from convoy detail window by user anytime.
 	 */
 	uint16 max_speed_kmh_of_convoi;
+
+	/**
+	 * The limitation of balance speed
+	 * This speed limit define the limited power of convoys
+	 * The actual power is the minimum of gear_and_power of desc vs. the value calculated by this speed limit.
+	 */
+	uint16 max_balance_speed_convoi;
+
+	/**
+	 * invalid convoy: invalid coupling condition, etc..
+	 * if set "allow invalid convoy" in depot, it can be.
+	 * no load/ no engine.
+	 */
+	bool invalid_convoy;
 
 	/**
 	* Initialize all variables with default values.
@@ -416,6 +446,7 @@ private:
 	*/
 	bool insert_route_convoy_on();
 	koord3d const find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir);
+	koord3d const search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n);
 	bool insert_route_to_draw_diagonal();
 	// alte_richtung of coupled convoy is set by the head convoy.
 	void set_alte_richtung(ribi_t::ribi r) { alte_richtung = r; }
@@ -610,6 +641,12 @@ public:
 	void reset_waiting() { state=WAITING_FOR_CLEARANCE; }
 
 	/**
+	* suspension
+	*/
+	bool is_suspended() const { return state==SUSPENSION || state==SUSPENSION_LOADING; }
+	void set_suspension( bool y );
+
+	/**
 	* The handle for ourselves. In Anlehnung an 'this' aber mit
 	* allen checks beim Zugriff.
 	*/
@@ -710,7 +747,7 @@ public:
 	 * @return total power of this convoi
 	 */
 	const uint32 & get_sum_power() const {return sum_power;}
-	const sint32 get_sum_gear_and_power() const {return use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric;}
+	const sint32 get_sum_gear_and_power() const {return invalid_convoy?0:(use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric);}
 	const sint32 & get_min_top_speed() const {return min_top_speed;}
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
@@ -897,18 +934,30 @@ public:
 	bool in_depot() const { return state == INITIAL; }
 
 	/**
+	 * invalid convoy: invalid coupling condition
+	 */
+	bool is_invalid_convoy() const { return invalid_convoy; }
+	void set_invalid_convoy(bool y) { invalid_convoy = y; }
+
+	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
 	* vehicles.
 	*/
 	const sint32 &get_loading_level() const { return loading_level; }
 	sint32 get_capacity_left() const;
+	sint32 get_max_loading() const;
 
 	/**
 	* At which loading level is the train allowed to start? 0 during driving.
 	*/
 	const sint32 &get_loading_limit() const { return loading_limit; }
 
-	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
+	/**
+	* waiting time for loading level
+	*/
+	const uint32 &get_loading_waiting_time() const { return loading_waiting_time; }
+
+	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING  ||  state==SUSPENSION_LOADING; }
 
 	/**
 	* Schedule convois for self destruction. Will be executed
@@ -975,6 +1024,13 @@ public:
 	const char* send_to_depot_immediately(bool local);
 
 	/**
+	 * Sends convoi to a user-specified depot (by route or immediately).
+	 * @param depot_pos position of the target depot
+	 * @param immediate true = teleport (betrete_depot), false = route via schedule
+	 */
+	const char* send_to_specific_depot(koord3d depot_pos, bool immediate, bool local);
+
+	/**
 	 * this give the index of the next signal or the end of the route
 	 * convois will slow down before it, if this is not a waypoint or the cannot pass
 	 * The slowdown is done by the vehicle routines
@@ -1004,7 +1060,7 @@ public:
 	 */
 	uint16 get_next_coupling_index() const {return next_coupling_index;}
 	uint8 get_next_coupling_steps() const {return next_coupling_steps;}
-	void set_next_coupling(uint16 n, uint8 m) { next_coupling_index = n; next_coupling_steps = m; }
+	void set_next_coupling(uint16 n, uint8 m) { next_coupling_index = n; next_reservation_index = n; next_coupling_steps = m; }
 
 	convoihandle_t get_coupling_convoi() const {return coupling_convoi;}
 	void set_coupling_convoi(convoihandle_t c) {coupling_convoi = c;}
@@ -1072,6 +1128,7 @@ public:
 
 	void request_signal_check_in_step() {signal_check_in_step_request = true;}
 	void set_signal_check_in_step_request_invalid() { signal_check_in_step_request = false; };
+	const bool is_signal_check_in_step_needed() {return signal_check_in_step_request;}
 
 	void calc_crossing_reservation();
 	vector_tpl<std::pair< uint16, uint16> > get_crossing_reservation_index() const { return crossing_reservation_index; }
@@ -1094,6 +1151,7 @@ public:
 	void set_coupling_done(bool tf) { coupling_done = tf; }
 
 	void set_arrived_time(uint32 t) { arrived_time = t; }
+	uint32 get_arrived_time() const { return arrived_time; }
 	uint32 get_departure_time() const { return scheduled_departure_time; } // in ticks.
 	void reset_departure_time() { scheduled_departure_time = 0; }
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
@@ -1134,6 +1192,9 @@ public:
 	// if this bool value is true, reversing done, this convoy is no longer the leading (most parent) convoy.
 	bool reverse_convoy_coupling_at_waypoint();
 
+	// Reverse convoy coupling by user request
+	void reverse_convoy_coupling_by_user_request();
+
 	// coupling during running.
 	// Only for during leaving a depot
 	bool couple_convoi_during_running(convoihandle_t coupled);
@@ -1155,6 +1216,8 @@ public:
 
 	uint16 get_max_speed_kmh_of_convoi() const {return max_speed_kmh_of_convoi;}
 	void set_max_speed_kmh_of_convoi(uint16 n);
+	uint16 get_max_balance_speed_convoi() const {return max_balance_speed_convoi;}
+	void set_max_balance_speed_convoi(uint16 n) { max_balance_speed_convoi = n; }
 };
 
 #endif

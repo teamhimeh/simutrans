@@ -566,19 +566,54 @@ namespace script_api {
 
 	SQInteger param<schedule_entry_t>::push(HSQUIRRELVM vm, schedule_entry_t const& v)
 	{
-		if (&v) {
-			koord k = v.pos.get_2d();
-			// transform coordinates
-			coordinate_transform_t::koord_w2sq(k);
-			if (SQ_FAILED(push_instance(vm, "schedule_entry_x", k.x, k.y, v.pos.z))) {
-				return SQ_ERROR;
-			}
+		koord k = v.pos.get_2d();
+		// transform coordinates
+		coordinate_transform_t::koord_w2sq(k);
+		// Create instance without calling the Squirrel constructor
+		// (the Squirrel constructor expects a coord3d object as first arg, not integers)
+		if (SQ_FAILED(push_class(vm, "schedule_entry_x"))) {
+			return SQ_ERROR;
 		}
+		if (SQ_FAILED(sq_createinstance(vm, -1))) {
+			sq_pop(vm, 1); // remove class
+			return SQ_ERROR;
+		}
+		sq_remove(vm, -2); // remove class, leave instance on top
 
+		set_slot(vm, "x", k.x);
+		set_slot(vm, "y", k.y);
+		set_slot(vm, "z", v.pos.z);
 		set_slot(vm, "load", (sint32)v.minimum_loading);
+		set_slot(vm, "maximum_load", (sint32)v.maximum_loading);
 		set_slot(vm, "wait", (sint32)v.waiting_time_shift);
+		set_slot(vm, "flags", v.get_stop_flags());
+		set_slot(vm, "length_coupling_done", (sint32)v.length_coupling_done);
+		set_slot(vm, "max_speed", (sint32)v.max_speed_kmh_of_convoi);
+		set_slot(vm, "balance_speed", (sint32)v.balance_speed_kmh_of_convoi);
+		set_slot(vm, "spacing", (sint32)v.spacing);
+		set_slot(vm, "spacing_shift", (sint32)v.spacing_shift);
+		set_slot(vm, "delay_tolerance", (sint32)v.delay_tolerance);
 
-    return 1;
+		// time arrays: newest entry first (jt_at_index points to next-write slot)
+		vector_tpl<sint32> jt_arr(NUM_ARRIVAL_TIME_STORED);
+		for(int i = 0; i < NUM_ARRIVAL_TIME_STORED; i++) {
+			jt_arr.append((sint32)v.journey_time[(v.jt_at_index - 1 - i + NUM_ARRIVAL_TIME_STORED) % NUM_ARRIVAL_TIME_STORED]);
+		}
+		set_slot(vm, "journey_time", jt_arr);
+
+		vector_tpl<sint32> wt_arr(NUM_WAITING_TIME_STORED);
+		for(int i = 0; i < NUM_WAITING_TIME_STORED; i++) {
+			wt_arr.append((sint32)v.waiting_time[(v.wt_at_index - 1 - i + NUM_WAITING_TIME_STORED) % NUM_WAITING_TIME_STORED]);
+		}
+		set_slot(vm, "waiting_time", wt_arr);
+
+		vector_tpl<sint32> cs_arr(NUM_STOPPING_TIME_STORED);
+		for(int i = 0; i < NUM_STOPPING_TIME_STORED; i++) {
+			cs_arr.append((sint32)v.convoy_stopping_time[(v.cs_at_index - 1 - i + NUM_STOPPING_TIME_STORED) % NUM_STOPPING_TIME_STORED]);
+		}
+		set_slot(vm, "convoy_stopping_time", cs_arr);
+
+		return 1;
 	}
 
 
@@ -591,7 +626,30 @@ namespace script_api {
 	SQInteger param<const schedule_t*>::push(HSQUIRRELVM vm, const schedule_t* const& v)
 	{
 		if (v) {
-			return push_instance(vm, "schedule_x", v->get_waytype(), v->get_entries(), v->get_additional_base_waiting_time());
+			// When next_line is set, the last entry is a dummy appended by set_next_line().
+			// Exclude it from the Squirrel entries so the round-trip doesn't double-append it.
+			const minivec_tpl<schedule_entry_t>& src = v->get_entries();
+			SQInteger result;
+			if (v->get_next_line().is_bound() && src.get_count() > 0) {
+				// The dummy entry must have no_load and unload_all set (set by set_next_line()).
+				assert(src.back().is_no_load() && src.back().is_unload_all());
+				minivec_tpl<schedule_entry_t> filtered;
+				for (uint32 i = 0; i < src.get_count() - 1; i++) {
+					filtered.append(src[i]);
+				}
+				result = push_instance(vm, "schedule_x", v->get_waytype(), filtered, v->get_additional_base_waiting_time());
+			}
+			else {
+				result = push_instance(vm, "schedule_x", v->get_waytype(), src, v->get_additional_base_waiting_time());
+			}
+			if (result > 0) {
+				set_slot(vm, "current", (sint32)v->get_current_stop());
+				set_slot(vm, "flags", (sint32)v->get_flags());
+				set_slot(vm, "max_speed", (sint32)v->get_max_speed());
+				set_slot(vm, "departure_slot_group_id", v->get_departure_slot_group_id());
+				set_slot(vm, "next_line", v->get_next_line());
+			}
+			return result;
 		}
 		else {
 			sq_pushnull(vm); return 1;

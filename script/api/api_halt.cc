@@ -18,7 +18,6 @@
 #include "../../simconvoi.h"
 #include "../../vehicle/simvehicle.h"
 #include "../../linehandle_t.h"
-#include <iostream>
 
 halthandle_t get_halt_from_koord3d(koord3d pos, const player_t *player ); // api_schedule.cc, interfaces haltestelle_t::get_halt
 

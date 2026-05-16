@@ -26,6 +26,9 @@
 #include "../../obj/roadsign.h"
 #include "../../obj/signal.h"
 #include "../../obj/wayobj.h"
+#include "../../obj/bruecke.h"
+#include "../../obj/tunnel.h"
+#include "../../boden/wege/strasse.h"
 #include "../../player/simplay.h"
 
 // for depot tools
@@ -182,6 +185,7 @@ getpush_obj_pos(baum_t, obj_t::baum);
 getpush_obj_pos(gebaeude_t, obj_t::gebaeude);
 getpush_obj_pos(label_t, obj_t::label);
 getpush_obj_pos(weg_t, obj_t::way);
+getpush_obj_pos(strasse_t, obj_t::way);
 getpush_obj_pos(leitung_t, obj_t::leitung);
 getpush_obj_pos(field_t, obj_t::field);
 getpush_obj_pos(wayobj_t, obj_t::wayobj);
@@ -205,6 +209,10 @@ namespace script_api {
 	//  map all to one transformer class
 	declare_specialized_param(pumpe_t*,  "t|x|y", "transformer_x");
 	declare_specialized_param(senke_t*,  "t|x|y", "transformer_x");
+
+	// bridges and tunnels
+	declare_specialized_param(bruecke_t*, "t|x|y", "bridge_x");
+	declare_specialized_param(tunnel_t*,  "t|x|y", "tunnel_x");
 };
 
 // base depot class, use old_airdepot as identifier here
@@ -224,6 +232,9 @@ getpush_obj_pos(signal_t, obj_t::signal);
 //  powerlines
 getpush_obj_pos(pumpe_t, obj_t::pumpe);
 getpush_obj_pos(senke_t, obj_t::senke);
+// bridges and tunnels
+getpush_obj_pos(bruecke_t, obj_t::bruecke);
+getpush_obj_pos(tunnel_t, obj_t::tunnel);
 
 
 #define case_resolve_obj(D) \
@@ -242,7 +253,12 @@ SQInteger script_api::param<obj_t*>::push(HSQUIRRELVM vm, obj_t* const& obj)
 		case_resolve_obj(baum_t);
 		case_resolve_obj(gebaeude_t);
 		case_resolve_obj(label_t);
-		case_resolve_obj(weg_t);
+		case bind_code<weg_t>::objtype:
+		if (((weg_t*)obj)->get_waytype() == road_wt) {
+			return script_api::param<strasse_t*>::push(vm, (strasse_t*)obj);
+		}
+		return script_api::param<weg_t*>::push(vm, (weg_t*)obj);
+
 		case_resolve_obj(roadsign_t);
 		case_resolve_obj(signal_t);
 		case_resolve_obj(field_t);
@@ -261,6 +277,8 @@ SQInteger script_api::param<obj_t*>::push(HSQUIRRELVM vm, obj_t* const& obj)
 		case_resolve_obj(senke_t);
 
 		case_resolve_obj(wayobj_t);
+		case_resolve_obj(bruecke_t);
+		case_resolve_obj(tunnel_t);
 		default:
 			return access_objs<obj_t>::push_with_pos(vm, obj);
 	}
@@ -280,6 +298,24 @@ static SQInteger get_way_ribi(HSQUIRRELVM vm)
 	ribi_t::ribi ribi = w ? (masked ? w->get_ribi() : w->get_ribi_unmasked() ) : 0;
 
 	return param<my_ribi_t>::push(vm, ribi);
+}
+
+static SQInteger get_overtaking_mode(HSQUIRRELVM vm)
+{
+	strasse_t *w = param<strasse_t*>::get(vm, 1);
+	if (w) {
+		return param<sint8>::push(vm, w->get_overtaking_mode());
+	}
+	return param<sint8>::push(vm, twoway_mode);
+}
+
+static SQInteger get_street_flags(HSQUIRRELVM vm)
+{
+	strasse_t *w = param<strasse_t*>::get(vm, 1);
+	if (w) {
+		return param<uint8>::push(vm, w->get_street_flag());
+	}
+	return param<uint8>::push(vm, 0);
 }
 
 // create class
@@ -348,6 +384,11 @@ bool roadsign_can_pass(const roadsign_t* rs, player_t* player)
 	return player  &&  rs->get_desc()->is_private_way()  ?  (rs->get_player_mask() & (1<<player->get_player_nr()))!=0 : true;
 }
 
+sint32 roadsign_get_state(roadsign_t* rs)
+{
+	return (sint32)rs->get_state();
+}
+
 // depot
 call_tool_init depot_append_vehicle(depot_t *depot, player_t *player, convoihandle_t cnv, const vehicle_desc_t *desc)
 {
@@ -357,7 +398,7 @@ call_tool_init depot_append_vehicle(depot_t *depot, player_t *player, convoihand
 	// see depot_frame_t::image_from_storage_list: tool = 'a'
 	// see depot_t::call_depot_tool for command string composition
 	cbuffer_t buf;
-	buf.printf( "%c,%s,%hu,%s", 'a', depot->get_pos().get_str(), cnv.get_id(), desc->get_name());
+	buf.printf( "%c,%s,%u,%s", 'a', depot->get_pos().get_str(), cnv.get_id(), desc->get_name());
 
 	return call_tool_init(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
 }
@@ -368,10 +409,10 @@ call_tool_init depot_start_convoy(depot_t *depot, player_t *player, convoihandle
 	// see depot_t::call_depot_tool for command string composition
 	cbuffer_t buf;
 	if (cnv.is_bound()) {
-		buf.printf( "%c,%s,%hu", 'b', depot->get_pos().get_str(), cnv->self.get_id());
+		buf.printf( "%c,%s,%u", 'b', depot->get_pos().get_str(), cnv->self.get_id());
 	}
 	else {
-		buf.printf( "%c,%s,%hu", 'B', depot->get_pos().get_str(), 0);
+		buf.printf( "%c,%s,%u", 'B', depot->get_pos().get_str(), 0);
 	}
 
 	return call_tool_init(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
@@ -681,6 +722,19 @@ void export_map_objects(HSQUIRRELVM vm)
 	register_method_fv(vm, &get_way_stat, "get_convoys_passed",    freevariable<sint32>(WAY_STAT_CONVOIS), true);
 	end_class(vm);
 
+	/**
+	 * Streets (roads)
+	 */
+	begin_obj_class<strasse_t>(vm, "street_x", "way_x");
+	/**
+	 * @return overtaking mode
+	 */
+	register_function(vm, &get_overtaking_mode, "get_overtaking_mode", 1, "x");
+	/**
+	 * @return street flags
+	 */
+	register_function(vm, &get_street_flags, "get_street_flags", 1, "x");
+	end_class(vm);
 
 	/**
 	 * Labels.
@@ -723,6 +777,31 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @param player
 	 */
 	register_method(vm, &roadsign_can_pass, "can_pass", true);
+
+	/**
+	 * Get signal state.
+	 * @returns signal state: 0 = red, 1 = green, 2 = yellow
+	 */
+	register_method(vm, &roadsign_get_state, "get_state", true);
+
+	/**
+	 * Get "stop before check" flag of a signal.
+	 * Applicable to simple signals, longblock signals and choose signals.
+	 * When true, the signal forces the convoy to stop completely before the
+	 * block-clearance check is performed (signal_clear is held false and
+	 * restart_speed is set to -1 until the convoy is waiting).
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_stop_before_check, "is_stop_before_check");
+	/**
+	 * Get "start signal" flag of a signal.
+	 * When true, a convoy in CAN_START or CAN_START_ONE_MONTH state will check
+	 * whether the next signal ahead is clear before departing.  If that signal
+	 * is RED the convoy stays at its current position (does not advance to the
+	 * signal tile).
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_start_signal, "is_start_signal");
 	end_class(vm);
 
 	/**
@@ -775,5 +854,25 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @returns object descriptor.
 	 */
 	register_method(vm, &wayobj_t::get_desc, "get_desc");
+	end_class(vm);
+
+	/**
+	 * Bridges: bridge objects of bridge ramps and tiles
+	 */
+	begin_obj_class<bruecke_t>(vm, "bridge_x", "map_object_x");
+	/**
+	 * @returns object descriptor.
+	 */
+	register_method(vm, &bruecke_t::get_desc, "get_desc");
+	end_class(vm);
+
+	/**
+	 * Tunnels
+	 */
+	begin_obj_class<tunnel_t>(vm, "tunnel_x", "map_object_x");
+	/**
+	 * @returns object descriptor.
+	 */
+	register_method(vm, &tunnel_t::get_desc, "get_desc");
 	end_class(vm);
 }

@@ -120,6 +120,9 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_REMOVE_SIGNAL);
 		CASE_TO_STRING(TOOL_CHANGE_CITY_OF_BUILDING);
 		CASE_TO_STRING(TOOL_PIPETTE);
+		CASE_TO_STRING(TOOL_RECREATE_HALT_NAME);
+		CASE_TO_STRING(TOOL_CHANGE_WAY_SETTINGS);
+		CASE_TO_STRING(TOOL_CHANGE_WAY_OFFSET);
 		}
 	}
 	else if (id & SIMPLE_TOOL) {
@@ -162,6 +165,9 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_ROLLUP_ALL_WIN);
 		CASE_TO_STRING(TOOL_RECOLOUR_TOOL);
 		CASE_TO_STRING(TOOL_CHANGE_FACTORY);
+		CASE_TO_STRING(TOOL_RESET_GAME_SPEED);
+		CASE_TO_STRING(TOOL_FIX_GAME_SPEED);
+		CASE_TO_STRING(TOOL_SHOW_WAY_OFFSET_LABEL);
 		CASE_TO_STRING(UNUSED_TOOL_ADD_MESSAGE);
 		CASE_TO_STRING(UNUSED_WKZ_PWDHASH_TOOL);
 		}
@@ -280,6 +286,9 @@ tool_t *create_general_tool(int toolnr)
 		case TOOL_EXTINGUISH_WAITING_GOODS:    tool = new tool_extinguish_waiting_goods_t(); break;
 		case TOOL_CHANGE_CITY_OF_BUILDING: 	   tool = new tool_change_city_of_building_t(); break;
 		case TOOL_PIPETTE:                     tool = new tool_pipette_t();             break;
+		case TOOL_RECREATE_HALT_NAME:          tool = new tool_recreate_halt_name_t();  break;
+		case TOOL_CHANGE_WAY_SETTINGS:         tool = new tool_change_way_settings_t(); break;
+		case TOOL_CHANGE_WAY_OFFSET:           tool = new tool_change_way_offset_t();  break;
 		default:
 			dbg->error("create_general_tool()","cannot satisfy request for general_tool[%i]!",toolnr);
 			return NULL;
@@ -343,6 +352,10 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_MERGE_PLAYER:      tool = new tool_merge_player_t(); break;
 		case TOOL_CHANGE_HALT:       tool = new tool_change_halt_t(); break;
 		case TOOL_CHANGE_FACTORY:	 tool = new tool_change_factory_t(); break;
+		case TOOL_RESET_GAME_SPEED:	 tool = new tool_reset_game_speed_t(); break;
+		case TOOL_FIX_GAME_SPEED:	 tool = new tool_fix_game_speed_t(); break;
+		case TOOL_SHOW_WAY_OFFSET_LABEL: tool = new tool_show_way_offset_label_t(); break;
+		case TOOL_SHOW_ONLY_OWN_VEHICLE_STATES:		tool = new tool_only_own_vehicle_states_t(); break;
 		default:                    dbg->error("create_simple_tool()","cannot satisfy request for simple_tool[%i]!",toolnr);
 		                            return NULL;
 	}
@@ -578,6 +591,10 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 		// END
 		if (strstart(str, "END")) {
 			return SIM_KEY_END;
+		}
+		// SPACE
+		if (strstart(str, "SPACE")) {
+			return SIM_KEY_SPACE;
 		}
 		// END
 		if (strstart(str, "ESC")) {
