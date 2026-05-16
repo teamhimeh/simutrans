@@ -39,7 +39,7 @@ static void load_from_dir(const std::string &dir, vector_tpl<convoi_template_t> 
 				snprintf(key, sizeof(key), "vehicle[%d]", i);
 				const char *veh = obj.get(key);
 				if (!*veh) break;
-				tmpl.vehicles.append(veh);
+				tmpl.vehicles.push_back(veh);
 			}
 
 			if (!tmpl.vehicles.empty()) {

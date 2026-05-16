@@ -7,12 +7,13 @@
 #define DATAOBJ_CONVOI_TEMPLATE_H
 
 #include <string>
+#include <vector>
 #include "../tpl/vector_tpl.h"
 
 struct convoi_template_t {
 	std::string name;
-	std::string source_file;           // tab file this template was loaded from
-	vector_tpl<std::string> vehicles;  // pak descriptor names
+	std::string source_file;            // tab file this template was loaded from
+	std::vector<std::string> vehicles;  // pak descriptor names
 };
 
 // Load convoy templates into `out` from pak_dir/convoy_template/ and
