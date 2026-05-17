@@ -29,17 +29,11 @@ SQInteger schedule_constructor(HSQUIRRELVM vm) // instance, wt, entries
 	waytype_t wt = param<waytype_t>::get(vm, 2);
 	SQInteger res = set_slot(vm, "waytype", wt, 1);
 	uint16 wait = 0;
-	uint16 wait = 0;
 
 	if (SQ_SUCCEEDED(res)) {
 		sq_pushstring(vm, "entries", -1);
 		sq_push(vm, 3); // entries
 		res = sq_set(vm, 1);
-
-		if (sq_gettop(vm) >= 4) {
-			wait = param<uint16>::get(vm, 4);
-		}
-		set_slot(vm, "base_waiting_time", wait, 1);
 
 		if (sq_gettop(vm) >= 4) {
 			wait = param<uint16>::get(vm, 4);
@@ -63,7 +57,6 @@ SQInteger schedule_constructor(HSQUIRRELVM vm) // instance, wt, entries
 				sq_raise_error(vm, "Invalid waytype %d", wt);
 				return SQ_ERROR;
 		}
-		sched->set_additional_base_waiting_time(wait);
 		sched->set_additional_base_waiting_time(wait);
 		attach_instance(vm, 1, sched);
 	}
@@ -209,25 +202,6 @@ void export_schedule(HSQUIRRELVM vm)
 	create_slot(vm, "y", 0);
 	create_slot(vm, "z", 0);
 
-#ifdef SQAPI_DOC //document members
-	/**
-	 * X-coordinate of entry position
-	 */
-	integer x;
-	/**
-	 * Y-coordinate of entry position
-	 */
-	integer y;
-	/**
-	 * Z-coordinate of entry position
-	 */
-	integer z;
-#endif
-
-	create_slot(vm, "x", 0);
-	create_slot(vm, "y", 0);
-	create_slot(vm, "z", 0);
-
 #ifdef SQAPI_DOC // document members
 	/**
 	 * Minimum loading percentage.
@@ -294,7 +268,6 @@ void export_schedule(HSQUIRRELVM vm)
 	 * Constructor
 	 * @typemask command_x(way_types)
 	 */
-	register_function(vm, schedule_constructor, "constructor", -3, "xi.i");
 	register_function(vm, schedule_constructor, "constructor", -3, "xi.i");
 	sq_settypetag(vm, -1, param<schedule_t*>::tag());
 

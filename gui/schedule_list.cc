@@ -294,7 +294,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 	add_component(&bt_copy_data);
 
 	// lower left corner: halt list of selected line
-	scrolly_haltestellen.set_pos(scr_coord(0, bt_y + D_BUTTON_HEIGHT*2+ D_V_SPACE*2));
+	scrolly_haltestellen.set_pos(scr_coord(0, bt_y + 3*(D_BUTTON_HEIGHT+ D_V_SPACE)));
 	scrolly_haltestellen.set_show_scroll_x(true);
 	scrolly_haltestellen.set_scroll_amount_y(28);
 	scrolly_haltestellen.set_visible(false);
@@ -516,6 +516,9 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 			delete tmp_tool;
 			depot_t::update_all_win();
 		}
+	}
+	else if (  comp == &bt_copy_data  ) {
+		copy_csv_format();
 	}
 	else if(  comp == &bt_withdraw_line  ) {
 		bt_withdraw_line.pressed ^= 1;
@@ -842,6 +845,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		scrolly_convois.set_size(scrolly_convois.get_size());
 
 		bt_delete_line.disable();
+		bt_copy_data.enable();
 		add_component(&bt_withdraw_line);
 		add_component(&bt_teleport_line_to_depot);
 		bt_withdraw_line.disable();
@@ -913,6 +917,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		bt_delete_line.disable();
 		bt_edit_line.disable();
 		bt_copy_line.disable();
+		bt_copy_data.disable();
 		bt_show_journey_time.disable();
 		bt_goods_waiting_time.disable();
 		for(  int i=0; i<MAX_LINE_COST; i++  )  {
