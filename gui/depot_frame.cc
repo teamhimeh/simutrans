@@ -2378,7 +2378,7 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 				// vehicle names containing ',' are enclosed in double quotes
 				if (veh_action == va_insert) {
 					veh_buf.append("i");
-					for (int i = (int)vehs.get_count() - 1; i >= 0; i--) {
+					for (int i = (int)vehs.size() - 1; i >= 0; i--) {
 						veh_buf.append(",");
 						const bool needs_quote = vehs[i].find(',') != std::string::npos;
 						if (needs_quote) veh_buf.append("\"");
@@ -2388,7 +2388,7 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 				}
 				else {
 					veh_buf.append("a");
-					for (uint i = 0; i < (uint)vehs.get_count(); i++) {
+					for (uint i = 0; i < (uint)vehs.size(); i++) {
 						veh_buf.append(",");
 						const bool needs_quote = vehs[i].find(',') != std::string::npos;
 						if (needs_quote) veh_buf.append("\"");
