@@ -162,7 +162,7 @@ public:
 			e.all_electric = false;
 			bool any_speed = false;
 			bool has_non_electric = false;
-			for (uint j = 0; j < (uint)templates[i].vehicles.get_count(); j++) {
+			for (uint j = 0; j < (uint)templates[i].vehicles.size(); j++) {
 				const vehicle_desc_t *desc = vehicle_builder_t::get_info(templates[i].vehicles[j].c_str());
 				if (!desc) {
 					dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" (%s): vehicle[%u] \"%s\" not found.",
