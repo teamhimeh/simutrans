@@ -14,6 +14,7 @@ include("tests/test_climate")
 include("tests/test_depot")
 include("tests/test_dir")
 include("tests/test_factory")
+include("tests/test_convoy_cargo")
 include("tests/test_good")
 include("tests/test_groundobj")
 include("tests/test_halt")
@@ -38,6 +39,7 @@ include("tests/test_way_tunnel")
 include("tests/test_wayobj")
 include("tests/test_schedule")
 include("tests/test_road_api")
+include("tests/test_road_choose")
 
 
 
@@ -92,6 +94,8 @@ all_tests <- [
 	test_factory_build_with_fields,
 	test_factory_build_climate,
 	test_factory_link,
+	test_convoy_cargo_empty,
+	test_convoy_cargo_loaded,
 	test_good_is_interchangeable,
 	test_good_speed_bonus,
 	test_groundobj_build_invalid_param,
@@ -243,7 +247,13 @@ all_tests <- [
 	test_schedule_next_line_non_null,
 	test_schedule_current,
 	test_schedule_entry_time_statistics,
-	test_road_api
+	test_road_api,
+	test_road_choose_stop_behind_halt_mode,
+	test_road_choose_stop_behind_oneway_mode,
+	test_road_choose_stop_behind_twoway_mode,
+	test_road_choose_stop_behind_loading_only_mode,
+	test_road_choose_stop_behind_inverted_mode,
+	test_road_choose_no_stop_behind_prohibited_mode
 ]
 
 

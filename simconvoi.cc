@@ -313,7 +313,7 @@ void convoi_t::reserve_route()
 		// reservation is controlled by reserved_tiles
 		for(  uint32 idx = 0;  idx < reserved_tiles.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( reserved_tiles[idx] )  ) {
-				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
 					sch->reserve( self, ribi_type( reserved_tiles[max(1u,idx)-1u], reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)] ) );
 				}
 			}
@@ -323,9 +323,9 @@ void convoi_t::reserve_route()
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
-		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < next_reservation_index  /*&&  idx < route.get_count()*/;  idx++  ) {
+		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
-				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
 					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
 				}
 			}
@@ -336,9 +336,9 @@ void convoi_t::reserve_route()
 		// Reserve only the tiles the convoy physically occupies (rear to front).
 		// Start one step back from back()'s route_index so the rear car's current tile
 		// is also reserved with the correct ribi (individual loading uses ribi_t::none).
-		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < front()->get_route_index();  idx++  ) {
+		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < front()->get_route_index()  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
-				if(  schiene_t *sch = (schiene_t *)gr->get_weg( front()->get_waytype() )  ) {
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
 					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
 				}
 			}
@@ -1123,6 +1123,7 @@ sync_result convoi_t::sync_step(uint32 delta_t)
 		case CAN_START:
 		case CAN_START_ONE_MONTH:
 		case CAN_START_TWO_MONTHS:
+		case SUSPENSION:
 			// this is an async task, see step()
 			break;
 
@@ -1231,6 +1232,7 @@ sync_result convoi_t::sync_step(uint32 delta_t)
 			break;
 
 		case LOADING:
+		case SUSPENSION_LOADING:
 			// loading is an async task, see laden()
 			break;
 
@@ -1531,6 +1533,7 @@ void convoi_t::step()
 	switch(state) {
 
 		case LOADING:
+		case SUSPENSION_LOADING:
 			laden();
 			//When loading, vehicle should not be on passing lane.
 			str = (strasse_t*)welt->lookup(get_pos())->get_weg(road_wt);
@@ -1539,6 +1542,7 @@ void convoi_t::step()
 
 		case DUMMY4:
 		case DUMMY5:
+		case SUSPENSION:
 			break;
 
 		case EDIT_SCHEDULE:
@@ -2077,14 +2081,19 @@ void convoi_t::ziel_erreicht()
 	// check for coupling
 	if(  next_coupling_index!=route_t::INVALID_INDEX  &&  next_coupling_index<=v->get_route_index()  ) {
 		const uint16 route_index = v->get_route_index();
-		const grund_t* grc[3];
+		// compute search depth
+		uint32 max_length_steps = max((uint32)convoi_coupling_in_progress->front()->get_desc()->get_length_in_steps(), (uint32)convoi_coupling_in_progress->back()->get_desc()->get_length_in_steps());
+		const uint8 depth = (uint8)(max_length_steps / vehicle_base_t::get_diagonal_vehicle_steps_per_tile()) + 1;
+		const uint8 grc_count = depth + 2;
+		const grund_t* grc[grc_count];  // depth is at most ~16 for any realistic vehicle
 		grc[0] = gr;
-		grc[1] = route_index>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index));
 		// for diagonal stops(tile length can be shorter than vehicle length!)
-		grc[2] = route_index+1>=get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index+1));
+		for(  uint8 k = 1;  k < grc_count;  k++  ) {
+			grc[k] = (route_index + k - 1) >= get_route()->get_count() ? NULL : welt->lookup(get_route()->at(route_index + k - 1));
+		}
 		// find convoy to couple with
 		// convoy can be on the next tile of coupling_index.
-		for(  uint8 i=0;  i<3;  i++  ) {
+		for(  uint8 i=0;  i<grc_count;  i++  ) {
 			const grund_t* g = grc[i];
 			if(  !g  ) {
 				continue;
@@ -2486,6 +2495,50 @@ schedule_t *convoi_t::create_schedule()
 
 
 
+// Searches for the next tile occupied by a vehicle of `inspecting` starting from `g`,
+// Searches for the next tile occupied by `inspecting` convoy, starting from tile `g`,
+// looking in all directions except `back_dir`. When depth > 0 and a direct search fails,
+// steps one tile further in each candidate direction and recurses at depth-1.
+// Intermediate tiles are collected into buf[0..n-1] in outermost-first order
+// (buf[0] is adjacent to g, buf[n-1] is adjacent to the found vehicle tile).
+koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n)
+{
+	n = 0;
+	if(  !g  ) {
+		return koord3d::invalid;
+	}
+	const weg_t* w = g->get_weg(inspecting->front()->get_waytype());
+	ribi_t::ribi weg_dir = w ? w->get_ribi_unmasked() : ribi_t::none;
+
+	for(  uint8 i = 0;  i < 4;  i++  ) {
+		ribi_t::ribi next_dir = ribi_t::nesw[i];
+		if(  (next_dir & weg_dir) == 0  ||  next_dir == back_dir  ) {
+			continue;
+		}
+		koord3d pos = find_tiles_convoy_on(inspecting, g, next_dir);
+		if(  pos != koord3d::invalid  ) {
+			return pos;
+		}
+		if(  depth > 0  ) {
+			// try one more tile in this direction (needed for diagonals or long vehicles)
+			grund_t* gn;
+			g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
+			if(  !gn  ) {
+				continue;
+			}
+			uint8 sub_n = 0;
+			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n);
+			if(  pos2 != koord3d::invalid  ) {
+				buf[0] = gn->get_pos();  // outermost intermediate (adjacent to g)
+				n = 1 + sub_n;
+				return pos2;
+			}
+		}
+	}
+	return koord3d::invalid;
+}
+
+
 // a helper function for convoi_t::vorfahren()
 bool convoi_t::insert_route_convoy_on()
 {
@@ -2503,55 +2556,26 @@ bool convoi_t::insert_route_convoy_on()
 	}
 	else {
 		while(  inspecting.is_bound()  ) {
+			// determine search depth from the longest vehicle across all coupled convoys
+			uint32 max_length_steps = 0;
+			for(  uint8 i = 0;  i < inspecting->get_vehicle_count();  i++  ) {
+				max_length_steps = max(max_length_steps, (uint32)inspecting->get_vehikel(i)->get_desc()->get_length_in_steps());
+			}
+			const uint8 depth = (uint8)(max_length_steps / vehicle_base_t::get_diagonal_vehicle_steps_per_tile()) + 1;
+
 			// if there are no connecting tiles with vehicles of this convoy, end search
 			bool searching_end = false;
 			while( !searching_end ) {
-				// if vehicle of this convoy, we get the position
-				koord3d pos_to_insert = koord3d::invalid;
 				const grund_t* g = welt->lookup(route.front());
-				const weg_t* w = g ? g->get_weg(front()->get_waytype()) : NULL;
-				ribi_t::ribi weg_dir = w ? w->get_ribi_unmasked() : ribi_t::none;// way direction
-				ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());// direction which already added route 
-				for( uint8 i=0;i<4;i++ ) {
-					//search for all 4 direction
-					ribi_t::ribi next_dir = ribi_t::nesw[i];// searching direction
-					if (  !g || (next_dir&weg_dir) == 0 || next_dir == back_dir  ) {
-						// wrong direction or already added to route, skip
-						continue;
-					}
-					pos_to_insert = find_tiles_convoy_on(inspecting,g,next_dir);
-					if ( pos_to_insert != koord3d::invalid ) {
-						// the vehicle found, break for searching neighbour tile.
-						break;
-					}
-					// if not find, try to search one more tiles
-					// this process is needed when diagonal tiles or vehicle length is longer than 16.
-					grund_t* gn;
-					g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-					const weg_t* neighbour_w = gn->get_weg(inspecting->front()->get_waytype());
-					ribi_t::ribi neighbour_weg_dir = neighbour_w? neighbour_w->get_ribi_unmasked() : ribi_t::none;// way direction
-					ribi_t::ribi neighbour_back_dir = ribi_t::backward(next_dir);// direction which already added route 
-					for( uint8 j=0;j<4;j++ ) {
-						//search for all 4 direction
-						ribi_t::ribi neighbour_next_dir = ribi_t::nesw[j];// searching direction
-						if (  !gn || (neighbour_next_dir&neighbour_weg_dir) == 0 || neighbour_next_dir == neighbour_back_dir  ) {
-							// wrong direction or already added to route, skip
-							continue;
-						}
-						pos_to_insert = find_tiles_convoy_on(inspecting,gn,neighbour_next_dir);
-						if ( pos_to_insert != koord3d::invalid ) {
-							// the vehicle found, break for searching neighbour tile.
-							route.insert(gn->get_pos());
-							break;
-						}
-					}
-					if ( pos_to_insert != koord3d::invalid ) {
-						// the vehicle found, break for searching neighbour tile.
-						break;
-					}
-				}
+				ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());
+				koord3d intermediate_buf[256];
+				uint8 intermediate_n = 0;
+				koord3d pos_to_insert = search_next_convoy_tile(inspecting, g, back_dir, depth, intermediate_buf, intermediate_n);
 				if(  pos_to_insert != koord3d::invalid  ) {
-					// add this tile for route and search next tile
+					// insert intermediate tiles outermost-first (adjacent to g first)
+					for(  uint8 k = 0;  k < intermediate_n;  k++  ) {
+						route.insert(intermediate_buf[k]);
+					}
 					route.insert(pos_to_insert);
 				} else {
 					// there are no another position which is convoy on, searching end.
@@ -2854,22 +2878,15 @@ void convoi_t::vorfahren()
 	// finally reserve route (if needed)
 	if(  fahr[0]->get_waytype()!=air_wt  &&  !at_dest  ) {
 		// do not pre-reserve for airplanes
-		convoihandle_t inspecting = self;
-		while(  inspecting.is_bound()  ) {
-			for(unsigned i=0; i<inspecting->anz_vehikel; i++) {
-				// eventually reserve this
-				vehicle_t const& v = *inspecting->fahr[i];
-				if (schiene_t* const sch0 = obj_cast<schiene_t>(welt->lookup(v.get_pos())->get_weg(v.get_waytype()))) {
-					sch0->reserve(self,ribi_t::none);
-					if(  v.get_pos()!=front()->get_pos()  ) {
-						unreserve_pos(v.get_pos());
-					}
-				}
-				else {
-					break;
-				}
+		const uint16 back_index = find_most_child_convoi()->back()->get_route_index()-1;
+		for(uint16 i=back_index; i<min(get_route()->get_count(),front()->get_route_index()); i++) {
+			// eventually reserve this
+			if (schiene_t* const sch0 = obj_cast<schiene_t>(welt->lookup(get_route()->at(i))->get_weg(front()->get_waytype()))) {
+				sch0->reserve(self,ribi_t::none);
 			}
-			inspecting=inspecting->get_coupling_convoi();
+			else {
+				break;
+			}
 		}
 	}
 	// and calculate crossing reservation.
@@ -2904,10 +2921,19 @@ void convoi_t::clear_reserved_tile_if_not_matching_route()
 void convoi_t::rdwr_convoihandle_t(loadsave_t *file, convoihandle_t &cnv)
 {
 	if(  file->is_version_atleast(112, 3)  ) {
-		uint16 id = (file->is_saving()  &&  cnv.is_bound()) ? cnv.get_id() : 0;
-		file->rdwr_short( id );
-		if (file->is_loading()) {
-			cnv.set_id( id );
+		if(  file->get_OTRP_version() >= 55  ) {
+			uint32 id = (file->is_saving()  &&  cnv.is_bound()) ? cnv.get_id() : 0;
+			file->rdwr_long( id );
+			if (file->is_loading()) {
+				cnv.set_id( id );
+			}
+		}
+		else {
+			uint16 id = (file->is_saving()  &&  cnv.is_bound()) ? (uint16)cnv.get_id() : 0;
+			file->rdwr_short( id );
+			if (file->is_loading()) {
+				cnv.set_id( id );
+			}
 		}
 	}
 }
@@ -2939,15 +2965,26 @@ void convoi_t::rdwr(loadsave_t *file)
 		if(  file->is_version_less(112, 3)  ) {
 			self = convoihandle_t( this );
 		}
+		else if(  file->get_OTRP_version() >= 55  ) {
+			uint32 id;
+			file->rdwr_long( id );
+			self = convoihandle_t( this, id );
+		}
 		else {
 			uint16 id;
 			file->rdwr_short( id );
-			self = convoihandle_t( this, id );
+			self = convoihandle_t( this, (uint32)id );
 		}
 	}
 	else if(  file->is_version_atleast(112, 3)  ) {
-		uint16 id = self.get_id();
-		file->rdwr_short( id );
+		if(  file->get_OTRP_version() >= 55  ) {
+			uint32 id = self.get_id();
+			file->rdwr_long( id );
+		}
+		else {
+			uint16 id = (uint16)self.get_id();
+			file->rdwr_short( id );
+		}
 	}
 
 	dummy = anz_vehikel;
@@ -2981,6 +3018,10 @@ void convoi_t::rdwr(loadsave_t *file)
 			s = LOADING;
 		} else if(  s==WAITING_FOR_LEAVING_DEPOT  ) {
 			s = INITIAL;
+		} else if(  s==SUSPENSION  ) {
+			s = EDIT_SCHEDULE;
+		} else if(  s==SUSPENSION_LOADING  ) {
+			s = LOADING;
 		}
 		file->rdwr_enum(s);
 	} else {
@@ -3647,7 +3688,7 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 
 void convoi_t::open_schedule_window( bool show )
 {
-	DBG_MESSAGE("convoi_t::open_schedule_window()","Id = %hu, State = %d, Lock = %d", self.get_id(), (int)state, wait_lock);
+	DBG_MESSAGE("convoi_t::open_schedule_window()","Id = %u, State = %d, Lock = %d", self.get_id(), (int)state, wait_lock);
 
 	// manipulation of schedule not allowed while:
 	// - just starting
@@ -4312,7 +4353,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 	}
 
-	if(  scheduled_departure_time==0  ) {
+	if(  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
 		bool need_coupling_at_this_stop = false;
 		// departure judgement is done in a helper function.
 		departure_cond = can_depart(self, halt, arrived_time,
@@ -4323,6 +4364,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			// to load cargo and do coupling.
 			departure_cond = false;
 		}
+	}
+
+	if(  state==SUSPENSION_LOADING  ) {
+		departure_cond = false;
 	}
 
 	// loading is finished => maybe drive on
@@ -4463,6 +4508,34 @@ sint64 convoi_t::calc_restwert() const
 		result += fahr[i]->calc_sale_value();
 	}
 	return result;
+}
+
+
+void convoi_t::set_suspension( bool y )
+{
+	if( is_coupled() ) {
+		// nothing to do
+		return;
+	}
+	if( is_loading() ) {
+		state = y? SUSPENSION_LOADING: LOADING;
+		return;
+	}
+	// end suspension
+	if( !y ) {
+		// re-driving
+		if( state==EDIT_SCHEDULE ) {
+			// please close schedule window.
+			return;
+		}
+		state = DRIVING;
+		return;
+	}
+	// set 
+	if( state!=EDIT_SCHEDULE ) {
+		state = SUSPENSION;
+		return;
+	}
 }
 
 
