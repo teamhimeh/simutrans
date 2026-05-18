@@ -42,6 +42,7 @@
 #include "../bauer/vehikelbauer.h"
 #if CONVOI_TEMPLATE
 #include "../dataobj/convoi_template.h"
+#include <vector>
 #endif
 #include "../dataobj/schedule.h"
 #include "../dataobj/translator.h"
@@ -73,7 +74,7 @@ class gui_template_panel_t : public gui_action_creator_t, public gui_component_t
 public:
 	struct entry_t {
 		const convoi_template_t *tmpl;
-		vector_tpl<const vehicle_desc_t *> descs;
+		std::vector<const vehicle_desc_t *> descs;
 		scr_coord_val row_h;
 		// stats for sorting
 		sint64 cost;
@@ -168,7 +169,7 @@ public:
 					dbg->error("gui_template_panel_t::init", "Convoy template \"%s\" (%s): vehicle[%u] \"%s\" not found.",
 						templates[i].name.c_str(), templates[i].source_file.c_str(), j, templates[i].vehicles[j].c_str());
 				}
-				e.descs.append(desc);
+				e.descs.push_back(desc);
 				if (desc) {
 					e.cost += desc->get_price();
 					e.run_cost += desc->get_running_cost();
@@ -189,7 +190,7 @@ public:
 			e.all_electric = (e.veh_count > 0) && !has_non_electric;
 			bool mixed_waytype = false;
 			waytype_t first_wt = invalid_wt;
-			for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
+			for (uint j = 0; j < (uint)e.descs.size(); j++) {
 				if (e.descs[j]) {
 					waytype_t wt = e.descs[j]->get_waytype();
 					if (first_wt == invalid_wt) {
@@ -211,7 +212,7 @@ public:
 					templates[i].name.c_str(), templates[i].source_file.c_str());
 			}
 			bool internally_valid = true;
-			for (int j = 0; j + 1 < (int)e.descs.get_count(); j++) {
+			for (int j = 0; j + 1 < (int)e.descs.size(); j++) {
 				const vehicle_desc_t *cur  = e.descs[j];
 				const vehicle_desc_t *next = e.descs[j + 1];
 				if (cur && next && (!cur->can_lead(next) || !next->can_follow(cur))) {
@@ -223,7 +224,7 @@ public:
 			// Check compacted validity: after removing nulls, can all adjacent pairs connect?
 			bool compacted_valid = true;
 			const vehicle_desc_t *prev_non_null = NULL;
-			for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
+			for (uint j = 0; j < (uint)e.descs.size(); j++) {
 				const vehicle_desc_t *d = e.descs[j];
 				if (d) {
 					if (prev_non_null && (!prev_non_null->can_lead(d) || !d->can_follow(prev_non_null))) {
@@ -260,7 +261,7 @@ public:
 			// retired vehicles are hidden unless show_retired is true.
 			if (month_now > 0) {
 				bool has_future = false, has_retired = false;
-				for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
+				for (uint j = 0; j < (uint)e.descs.size(); j++) {
 					const vehicle_desc_t *desc = e.descs[j];
 					if (desc) {
 						if (desc->is_future(month_now)) { has_future = true; break; }
@@ -286,7 +287,7 @@ public:
 				const vehicle_desc_t *tmpl_adj = NULL;
 				if (is_insert) {
 					// Last non-null template vehicle connects to convoy front
-					for (int j = (int)e.descs.get_count() - 1; j >= 0; j--) {
+					for (int j = (int)e.descs.size() - 1; j >= 0; j--) {
 						if (e.descs[j]) { tmpl_adj = e.descs[j]; break; }
 					}
 					if (!tmpl_adj || !(tmpl_adj->can_lead(boundary_veh) && boundary_veh->can_follow(tmpl_adj))) {
@@ -294,7 +295,7 @@ public:
 					}
 				} else {
 					// First non-null template vehicle connects to convoy back
-					for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
+					for (uint j = 0; j < (uint)e.descs.size(); j++) {
 						if (e.descs[j]) { tmpl_adj = e.descs[j]; break; }
 					}
 					if (!tmpl_adj || !(tmpl_adj->can_follow(boundary_veh) && boundary_veh->can_lead(tmpl_adj))) {
@@ -346,7 +347,7 @@ public:
 			const scr_coord_val bar_y = y + LINESPACE + cell_h - 5;
 			// Build compacted list (skip missing descriptors) for display and color calculation
 			vector_tpl<const vehicle_desc_t *> compact;
-			for (uint j = 0; j < (uint)e.descs.get_count(); j++) {
+			for (uint j = 0; j < (uint)e.descs.size(); j++) {
 				if (e.descs[j]) compact.append(e.descs[j]);
 			}
 			const uint cn = (uint)compact.get_count();
