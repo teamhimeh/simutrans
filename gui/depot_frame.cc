@@ -2656,7 +2656,7 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 			struct catg_cap_t { uint8 catg; uint32 cap; const goods_desc_t *goods; };
 			catg_cap_t caps[16];
 			int n_caps = 0;
-			for (uint j = 0; j < (uint)entry->descs.get_count(); j++) {
+			for (uint j = 0; j < (uint)entry->descs.size(); j++) {
 				const vehicle_desc_t *desc = entry->descs[j];
 				if (!desc) continue;
 				veh_count++;
