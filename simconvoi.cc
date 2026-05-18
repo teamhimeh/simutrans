@@ -5592,7 +5592,6 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 				}
 			}
 		}
-		delete route;
 		DBG_MESSAGE("shortest route has ", "%i hops", shortest_route->get_count()-1);
 		find_depot_route = !shortest_route->empty();
 	}
@@ -5603,6 +5602,7 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 		}
 	}
 	// we teleport convoys, so we do not use route.
+	delete route;
 	delete shortest_route;
 	// if route to a depot has been found, update the convoi's schedule
 	if(  find_depot_route  ) {
