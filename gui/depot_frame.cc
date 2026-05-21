@@ -2370,30 +2370,22 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			const gui_template_panel_t::entry_t *entry = template_panel->get_entry(idx);
 			if (entry && !entry->tmpl->vehicles.empty()) {
 				cbuffer_t veh_buf;
-				// First line: translated template name (used to name a newly created convoy)
+				// Format: [convoi_name]=<prefix>=<veh1>[=<veh2>...]
 				veh_buf.append(translator::translate(entry->tmpl->name.c_str()));
-				veh_buf.append("\n");
+				veh_buf.append("=");
 				const std::vector<std::string> &vehs = entry->tmpl->vehicles;
-				// prefix: "i" for insert-at-front, "a" for append-at-back
-				// vehicle names containing ',' are enclosed in double quotes
 				if (veh_action == va_insert) {
 					veh_buf.append("i");
 					for (int i = (int)vehs.size() - 1; i >= 0; i--) {
-						veh_buf.append(",");
-						const bool needs_quote = vehs[i].find(',') != std::string::npos;
-						if (needs_quote) veh_buf.append("\"");
+						veh_buf.append("=");
 						veh_buf.append(vehs[i].c_str());
-						if (needs_quote) veh_buf.append("\"");
 					}
 				}
 				else {
 					veh_buf.append("a");
 					for (uint i = 0; i < (uint)vehs.size(); i++) {
-						veh_buf.append(",");
-						const bool needs_quote = vehs[i].find(',') != std::string::npos;
-						if (needs_quote) veh_buf.append("\"");
+						veh_buf.append("=");
 						veh_buf.append(vehs[i].c_str());
-						if (needs_quote) veh_buf.append("\"");
 					}
 				}
 				if (!cnv.is_bound() && !depot->get_owner()->is_locked()) {
