@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../sys/simsys.h"
+
 #include "../simunits.h"
 #include "../simworld.h"
 #include "../vehicle/simvehicle.h"
@@ -2306,6 +2308,15 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 					if(  event_get_last_control_shift() == 2  ) {
 						// ctrl pressed -> copy to clipboard
 						welt->set_copy_convoi(cnv);
+					} else if(  event_get_last_control_shift() == 1  ) {
+						// shift pressed -> copy vehicle list as convoy template format to clipboard
+						cbuffer_t buf;
+						for(  uint16 i = 0;  i < cnv->get_vehicle_count();  i++  ) {
+							buf.printf("vehicle[%u]=%s\n", i, cnv->get_vehikel(i)->get_desc()->get_name());
+						}
+						if(  buf.len() > 0  ) {
+							dr_copy(buf, buf.len());
+						}
 					} else {
 						depot->call_depot_tool('c', cnv, NULL);
 					}
