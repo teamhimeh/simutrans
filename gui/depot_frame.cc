@@ -421,6 +421,7 @@ depot_frame_t::depot_frame_t(depot_t* depot) :
 	lb_vehicle_filter("Filter:", SYSCOL_TEXT, gui_label_t::right)
 #if CONVOI_TEMPLATE
 	,template_panel(NULL)
+	,scrolly_template(NULL)
 #endif
 {
 	if (depot) {
