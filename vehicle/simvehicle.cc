@@ -3615,12 +3615,12 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 				}
 			}
 		}
-		if(  sch->has_signal()  ) {
+		if(  sch->has_signal() && prev != koord3d::invalid  ) {
 			const signal_t* sig = bd->find<signal_t>();
 			if(  sig  &&  sig->get_desc()->is_choose_sign()  &&  sig->get_desc()->get_wtyp()==get_waytype()  ) {
 				if(  coupling ? sig->is_guide_signal() : sig->is_choose_signal()  ) {
 					// signal only acts as choose-area boundary when facing our travel direction
-					const ribi_t::ribi approach = prev != koord3d::invalid ? ribi_type(prev, bd->get_pos()) : ribi_t::none;
+					const ribi_t::ribi approach = ribi_type(prev, bd->get_pos()); // we already check that prev is not invalid.
 					if(  approach == ribi_t::none  ||  !ribi_t::is_single(sig->get_dir()) || ((bd->get_weg(get_waytype())->get_ribi_unmasked() & ~sig->get_dir()) & ~ribi_t::backward(approach))  ) {
 						return false;
 					}
@@ -4715,7 +4715,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			cnv->set_convoi_coupling_in_progress(coupling_target);
 			coupling_index = i;
 			// if the target vehicle overlaps another tile, fix index and steps
-			c_step -= ((coupling_target_ribi&dir)==0) ? env_t::reverse_base_offsets[coupling_target_ribi][2] + VEHICLE_STEPS_PER_TILE / 2 : 0;
+			c_step -= ((coupling_target_ribi&dir)==0) ? env_t::reverse_base_offsets[ribi_t::get_dir(coupling_target_ribi)][2] + VEHICLE_STEPS_PER_TILE / 2 : 0;
 			while(c_step<0&&coupling_index>0) {
 				coupling_index--;
 				grund_t* gr_coupling = welt->lookup(route->at(coupling_index));
