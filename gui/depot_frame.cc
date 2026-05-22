@@ -338,11 +338,13 @@ public:
 		const int mx = get_mouse_x();
 		const int my = get_mouse_y();
 		last_hovered_idx = -1;
+		clip_dimension const clip = display_get_clip_wh();
 		scr_coord_val y = offset.y;
 		for (uint i = 0; i < (uint)entries.get_count(); i++) {
 			const entry_t &e = entries[i];
 			const scr_coord_val rh = e.row_h;
-			const bool hovered = (mx >= offset.x && mx < offset.x + get_size().w && my >= y && my < y + rh);
+			const bool hovered = (mx >= offset.x && mx < offset.x + get_size().w && my >= y && my < y + rh
+			                      && my >= clip.y && my < clip.yy);
 			if (hovered) {
 				last_hovered_idx = (sint32)i;
 				display_fillbox_wh_clip_rgb(offset.x, y, get_size().w, rh, SYSCOL_LIST_BACKGROUND_SELECTED_NF, true);
