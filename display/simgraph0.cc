@@ -19,6 +19,11 @@ PIXVAL color_idx_to_rgb(PIXVAL idx)
 	return idx;
 }
 
+PIXVAL color_idx_to_rgb_daynight(PIXVAL idx)
+{
+	return idx;
+}
+
 PIXVAL color_rgb_to_idx(PIXVAL color)
 {
 	return color;

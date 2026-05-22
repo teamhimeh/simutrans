@@ -741,6 +741,11 @@ PIXVAL color_idx_to_rgb(PIXVAL idx)
 	return (specialcolormap_all_day[(idx)&0x00FF]);
 }
 
+PIXVAL color_idx_to_rgb_daynight(PIXVAL idx)
+{
+	return (specialcolormap_day_night[(idx)&0x00FF]);
+}
+
 PIXVAL color_rgb_to_idx(PIXVAL color)
 {
 	for(PIXVAL i=0; i<=0xff; i++) {
@@ -3260,6 +3265,8 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 			player_col2[i] = specmap2[player_offsets[p2][1] + i];
 		}
 
+		activate_player_color( player_nr, daynight );
+
 		const PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
 		scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -3395,6 +3402,8 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 		for(  int i = 0;  i < 8;  i++  ) {
 			player_col2[i] = specmap2[player_offsets[p2][1] + i];
 		}
+
+		activate_player_color( player_nr, daynight );
 
 		const PIXVAL *sp = images[n].base_data;
 
