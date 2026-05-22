@@ -92,7 +92,6 @@ display_set_clip_wh(p_cr.x, p_cr.y, p_cr.w, p_cr.h); \
  *
  */
 PIXVAL color_idx_to_rgb(PIXVAL idx);
-PIXVAL color_idx_to_rgb_daynight(PIXVAL idx);
 PIXVAL color_rgb_to_idx(PIXVAL color);
 
 /*

@@ -741,11 +741,6 @@ PIXVAL color_idx_to_rgb(PIXVAL idx)
 	return (specialcolormap_all_day[(idx)&0x00FF]);
 }
 
-PIXVAL color_idx_to_rgb_daynight(PIXVAL idx)
-{
-	return (specialcolormap_day_night[(idx)&0x00FF]);
-}
-
 PIXVAL color_rgb_to_idx(PIXVAL color)
 {
 	for(PIXVAL i=0; i<=0xff; i++) {
