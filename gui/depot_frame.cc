@@ -75,6 +75,7 @@ public:
 	struct entry_t {
 		const convoi_template_t *tmpl;
 		std::vector<const vehicle_desc_t *> descs;
+		std::vector<const vehicle_desc_t *> compact; // descs with nulls removed
 		scr_coord_val row_h;
 		// stats for sorting
 		sint64 cost;
@@ -236,6 +237,9 @@ public:
 				}
 			}
 			e.compacted_valid = compacted_valid;
+			for (size_t j = 0; j < e.descs.size(); j++) {
+				if (e.descs[j]) e.compact.push_back(e.descs[j]);
+			}
 			e.row_h = LINESPACE + max(cell_h, (scr_coord_val)16) + 4;
 			all_entries.append(e);
 		}
@@ -346,12 +350,8 @@ public:
 			display_proportional_clip_rgb(offset.x + D_H_SPACE, y + 1, translator::translate(e.tmpl->name.c_str()), ALIGN_LEFT, SYSCOL_TEXT, true);
 			scr_coord_val xpos = offset.x + 2;
 			const scr_coord_val bar_y = y + LINESPACE + cell_h - 5;
-			// Build compacted list (skip missing descriptors) for display and color calculation
-			vector_tpl<const vehicle_desc_t *> compact;
-			for (uint j = 0; j < (uint)e.descs.size(); j++) {
-				if (e.descs[j]) compact.append(e.descs[j]);
-			}
-			const uint cn = (uint)compact.get_count();
+			const std::vector<const vehicle_desc_t *> &compact = e.compact;
+			const uint cn = (uint)compact.size();
 			for (uint j = 0; j < cn; j++) {
 				const vehicle_desc_t *desc = compact[j];
 				if (desc->get_base_image() != IMG_EMPTY) {
@@ -419,6 +419,9 @@ depot_frame_t::depot_frame_t(depot_t* depot) :
 	scrolly_tram_waggons(&tram_waggons),
 	line_selector(line_scrollitem_t::compare),
 	lb_vehicle_filter("Filter:", SYSCOL_TEXT, gui_label_t::right)
+#if CONVOI_TEMPLATE
+	,template_panel(NULL)
+#endif
 {
 	if (depot) {
 		init(depot);
@@ -706,6 +709,9 @@ depot_frame_t::~depot_frame_t()
 	clear_ptr_vector(tram_electrics_vec);
 	clear_ptr_vector(tram_loks_vec);
 	clear_ptr_vector(tram_waggons_vec);
+#if CONVOI_TEMPLATE
+	delete template_panel;
+#endif
 }
 
 
