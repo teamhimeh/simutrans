@@ -96,17 +96,23 @@ bool loadsave_frame_t::item_action(const char *filename)
 			// and now we need to copy the servergame to the map ...
 #endif
 		}
+		static char otrp_ver_str[32];
+		const bool use_old_otrp_ver = (otrp_version_input.get_value() < OTRP_VERSION_MAJOR);
 		if(  save_as_standard.pressed  ) {
 			// save as standard data
 			#define STD_SAVEGAME_VER_NR "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR)
 			env_t::savegame_version_str = STD_SAVEGAME_VER_NR;
+		}
+		else if(  use_old_otrp_ver  ) {
+			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", otrp_version_input.get_value() );
+			env_t::savegame_version_str = otrp_ver_str;
 		}
 		long start_save = dr_time();
 		welt->save( filename, loadsave_t::save_mode, env_t::savegame_version_str, false );
 		DBG_MESSAGE( "loadsave_frame_t::item_action", "save world %li ms", dr_time() - start_save );
 		welt->set_dirty();
 		welt->reset_timer();
-		if(  save_as_standard.pressed  ) {
+		if(  save_as_standard.pressed  ||  use_old_otrp_ver  ) {
 			// restore savegame_version_str
 			env_t::savegame_version_str = SAVEGAME_VER_NR;
 		}
@@ -140,6 +146,15 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 	else {
 		save_as_standard.init( button_t::square_automatic, "Readable by standard.");
 		bottom_left_frame.add_component(&save_as_standard);
+		{
+			gui_aligned_container_t *row = bottom_left_frame.add_table(2, 1);
+			row->add_component(&otrp_version_label);
+			otrp_version_label.buf().append(translator::translate("Save as OTRP version:"));
+			otrp_version_label.update();
+			otrp_version_input.init(OTRP_VERSION_MAJOR, 54, OTRP_VERSION_MAJOR, 1, false, 3, true);
+			row->add_component(&otrp_version_input);
+			bottom_left_frame.end_table();
+		}
 		env_t::previous_OTRP_data = false;
 		set_filename(welt->get_settings().get_filename());
 		set_name(translator::translate("Speichern"));
