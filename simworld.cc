@@ -72,6 +72,7 @@
 #include "network/network_file_transfer.h"
 #include "network/network_socket_list.h"
 #include "network/network_cmd_ingame.h"
+#include "network/mcp_server.h"
 
 #include "dataobj/height_map_loader.h"
 #include "dataobj/ribi.h"
@@ -417,6 +418,7 @@ void karte_t::destroy()
 		dbg->fatal( "karte_t::destroy()","Map cannot be cleanly destroyed in any rotation!" );
 	}
 
+	route_cache.clear();
 	goods_in_game.clear();
 
 	DBG_MESSAGE("karte_t::destroy()", "label clear");
@@ -534,6 +536,12 @@ void karte_t::add_convoi(convoihandle_t const cnv)
 void karte_t::rem_convoi(convoihandle_t const cnv)
 {
 	convoi_array.remove(cnv);
+}
+
+
+void karte_t::load_convoy_templates()
+{
+	convoi_template_load(env_t::pak_dir, env_t::default_settings.get_with_private_paks(), convoy_templates);
 }
 
 
@@ -6076,10 +6084,17 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 	// rdwr convois
 	if (file->is_loading()) {
 		DBG_MESSAGE("karte_t::rdwr_gamestate()", "load convois");
-		uint16 convoi_nr = 65535;
-		uint16 max_convoi = 65535;
+		uint32 convoi_nr = 65535;
+		uint32 max_convoi = 65535;
 		if(  file->is_version_atleast(101, 0)  ) {
-			file->rdwr_short(convoi_nr);
+			if(  file->get_OTRP_version() >= 55  ) {
+				file->rdwr_long(convoi_nr);
+			}
+			else {
+				uint16 tmp = 65535;
+				file->rdwr_short(tmp);
+				convoi_nr = tmp;
+			}
 			max_convoi = convoi_nr;
 		}
 
@@ -6120,8 +6135,14 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 	else {
 		// save number of convois
 		if(  file->is_version_atleast(101, 0)  ) {
-			uint16 i=convoi_array.get_count();
-			file->rdwr_short(i);
+			if(  file->get_OTRP_version() >= 55  ) {
+				uint32 i = convoi_array.get_count();
+				file->rdwr_long(i);
+			}
+			else {
+				uint16 i = convoi_array.get_count();
+				file->rdwr_short(i);
+			}
 		}
 		FOR(vector_tpl<convoihandle_t>, const cnv, convoi_array) {
 			// one MUST NOT call INT_CHECK here or else the convoi will be broken during reloading!
@@ -6988,7 +7009,7 @@ void karte_t::change_time_multiplier(sint32 delta)
 		if(time_multiplier<=0) {
 			time_multiplier = 1;
 		}
-		if(step_mode!=NORMAL) {
+		if(  !env_t::networkmode  &&  step_mode!=NORMAL  ) {
 			step_mode = NORMAL;
 			reset_timer();
 		}
@@ -7336,7 +7357,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					// already waiting longer than how far we're ahead, so set wait time shorter to the time ahead.
 					next_step_time = (sint64)timems - frame_timediff;
 			}
-			else if(  nwcid == NWC_CHECK  ) {
+			else {
 					// gentle slowing down
 					*ms_difference = timediff;
 				}
@@ -7348,7 +7369,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					next_step_time = timems;
 					*ms_difference = frame_timediff;
 				}
-				else if(  nwcid == NWC_CHECK  ) {
+				else {
 					// gentle catching up
 					*ms_difference = timediff;
 				}
@@ -7560,6 +7581,9 @@ bool karte_t::interactive(uint32 quit_month)
 		if (env_t::quit_simutrans){
 			break;
 		}
+
+		// poll MCP server (accept connections, read/dispatch/write) – main thread, no locks needed
+		mcp_server_t::step(this);
 
 		if(  env_t::networkmode  ) {
 			process_network_commands(&ms_difference);

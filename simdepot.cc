@@ -141,7 +141,7 @@ void depot_t::call_depot_tool( char tool, convoihandle_t cnv, const char *extra)
 	// call depot tool
 	tool_t *tmp_tool = create_tool( TOOL_CHANGE_DEPOT | SIMPLE_TOOL );
 	cbuffer_t buf;
-	buf.printf( "%c,%s,%hu", tool, get_pos().get_str(), cnv.get_id() );
+	buf.printf( "%c,%s,%u", tool, get_pos().get_str(), cnv.get_id() );
 	if(  extra  ) {
 		buf.append( "," );
 		buf.append( extra );
@@ -520,6 +520,18 @@ bool depot_t::start_convoi(convoihandle_t cnv, bool local_execution)
 			}
 		}
 	}
+	// check invalid convoy
+	convoihandle_t c = cnv;
+	while (c.is_bound())
+	{
+		if(  c->pruefe_alle()  ) {
+			// if the coupoling condition is good, this is valid convoy.
+			// we set invalid_convoy only fron depot_frame_t
+			c->set_invalid_convoy(false);
+		}
+		c = c->get_coupling_convoi();
+	}
+
 	// Check the start condition
 	if(  !can_start_convoi(cnv, local_execution)  ) {
 		return false;
@@ -585,7 +597,7 @@ bool depot_t::can_start_convoi(convoihandle_t cnv, bool local_execution)
 		}
 
 		// check if convoi is complete
-		if( front_cnv->get_total_sum_power() == 0 || !cnv->pruefe_alle()) {
+		if( front_cnv->get_total_sum_power() == 0 || ( !cnv->pruefe_alle() && !cnv->is_invalid_convoy() ) ) {
 			if (local_execution) {
 				create_win( new news_img("Diese Zusammenstellung kann nicht fahren!\n"), w_time_delete, magic_none);
 			}
