@@ -1810,13 +1810,13 @@ void depot_frame_t::update_data()
 #endif
 	for(int i = 0; i < vehicle_builder_t::sb_length; i++) {
 #if CONVOI_TEMPLATE
-		const bool tmpl_disabled = tmpl_tab_active
-		    && (i == vehicle_builder_t::sb_power || i == vehicle_builder_t::sb_weight
-		        || i == vehicle_builder_t::sb_intro_date || i == vehicle_builder_t::sb_retire_date);
-		sort_by.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(vehicle_builder_t::vehicle_sort_by[i]), tmpl_disabled ? SYSCOL_TEXT_UNUSED : SYSCOL_TEXT);
-#else
-		sort_by.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(vehicle_builder_t::vehicle_sort_by[i]), SYSCOL_TEXT);
+		if(  tmpl_tab_active
+		  && (i == vehicle_builder_t::sb_power || i == vehicle_builder_t::sb_weight
+		      || i == vehicle_builder_t::sb_intro_date || i == vehicle_builder_t::sb_retire_date)  ) {
+			continue; // not meaningful for convoy templates
+		}
 #endif
+		sort_by.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(vehicle_builder_t::vehicle_sort_by[i]), SYSCOL_TEXT);
 	}
 	if(  depot->selected_sort_by > sort_by.count_elements()  ) {
 		depot->selected_sort_by = vehicle_builder_t::sb_name;
@@ -2290,17 +2290,6 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			}
 		}
 		else if(  comp == &sort_by  ) {
-#if CONVOI_TEMPLATE
-			if(  tabs.get_aktives_tab() == &cont_template_tab  ) {
-				using vb = vehicle_builder_t;
-				const int sel = sort_by.get_selection();
-				if(  sel == vb::sb_power || sel == vb::sb_weight
-				  || sel == vb::sb_intro_date || sel == vb::sb_retire_date  ) {
-					sort_by.set_selection(depot->selected_sort_by); // revert
-					return true;
-				}
-			}
-#endif
 			depot->selected_sort_by = sort_by.get_selection();
 		}
 		else if(  comp == &bt_copy_convoi  ) {
