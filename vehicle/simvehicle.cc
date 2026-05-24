@@ -3776,6 +3776,10 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 		// success, and there is a signal before end of route => finished
 		sig->set_state( roadsign_t::STATE_GREEN );
 		cnv->set_next_stop_index( min( next_crossing, next_signal ) );
+		// block_reserver(use_vector=true) sets next_reservation_index past the next signal.
+		// Restore it to start_block+1 so the step-check re-examines this longblock signal,
+		// not whatever lies beyond it.
+		cnv->set_next_reservation_index( start_block + 1 );
 		return true;
 	}
 
@@ -4149,7 +4153,20 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 		if(  next_signal == route_t::INVALID_INDEX  ||  cnv->get_route()->at(next_signal) == cnv->get_route()->back()  ||  is_signal_clear( next_signal, restart_speed, call_by_step )  ) {
 			// ok, end of route => we can go
 			sig->set_state( roadsign_t::STATE_GREEN );
-			cnv->set_next_stop_index( min( next_signal, next_crossing ) );
+			{
+				const uint16 candidate = min( next_signal, next_crossing );
+				// A downstream longblock/choose signal may have set next_stop_index further
+				// ahead than next_signal. Preserve that advancement unless there is a crossing
+				// between here and next_signal that the convoy must stop at first.
+				// (candidate == next_signal means no crossing was found before next_signal.)
+				const bool downstream_advanced =
+					(next_signal != route_t::INVALID_INDEX)
+					&&  (candidate == next_signal)
+					&&  (cnv->get_next_stop_index() > (uint16)(candidate + 1));
+				if(  !downstream_advanced  ) {
+					cnv->set_next_stop_index( candidate );
+				}
+			}
 
 			return true;
 		}
