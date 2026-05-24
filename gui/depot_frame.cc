@@ -614,6 +614,7 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	cont_template_tab.add_component(&scrolly_template);
 #endif
 
+	tabs.add_listener(this);
 	add_component(&tabs);
 	add_component(&div_tabbottom);
 	add_component(&lb_veh_action);
@@ -2273,6 +2274,10 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 		else if(  comp == &name_filter_input  ) {
 			depot->set_name_filter(name_filter_input.get_text());
 			depot_t::update_all_win();
+		}
+		else if(  comp == &tabs  ) {
+			// Rebuild sort options (Templates tab hides some modes) and reset forbidden selection
+			update_data();
 		}
 		else if(  comp == &bt_veh_action  ) {
 #if CONVOI_TEMPLATE
