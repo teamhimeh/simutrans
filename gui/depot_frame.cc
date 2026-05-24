@@ -1797,8 +1797,26 @@ void depot_frame_t::update_data()
 	vehicle_filter.set_selection(depot->selected_filter);
 
 	sort_by.clear_elements();
+#if CONVOI_TEMPLATE
+	// On the Templates tab, power/weight/intro/retire sort modes are not meaningful
+	const bool tmpl_tab_active = (tabs.get_aktives_tab() == &cont_template_tab);
+	if (tmpl_tab_active) {
+		using vb = vehicle_builder_t;
+		if (depot->selected_sort_by == vb::sb_power || depot->selected_sort_by == vb::sb_weight
+		    || depot->selected_sort_by == vb::sb_intro_date || depot->selected_sort_by == vb::sb_retire_date) {
+			depot->selected_sort_by = vb::sb_name;
+		}
+	}
+#endif
 	for(int i = 0; i < vehicle_builder_t::sb_length; i++) {
+#if CONVOI_TEMPLATE
+		const bool tmpl_disabled = tmpl_tab_active
+		    && (i == vehicle_builder_t::sb_power || i == vehicle_builder_t::sb_weight
+		        || i == vehicle_builder_t::sb_intro_date || i == vehicle_builder_t::sb_retire_date);
+		sort_by.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(vehicle_builder_t::vehicle_sort_by[i]), tmpl_disabled ? SYSCOL_TEXT_UNUSED : SYSCOL_TEXT);
+#else
 		sort_by.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(vehicle_builder_t::vehicle_sort_by[i]), SYSCOL_TEXT);
+#endif
 	}
 	if(  depot->selected_sort_by > sort_by.count_elements()  ) {
 		depot->selected_sort_by = vehicle_builder_t::sb_name;
@@ -2257,6 +2275,13 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			depot_t::update_all_win();
 		}
 		else if(  comp == &bt_veh_action  ) {
+#if CONVOI_TEMPLATE
+			if(  tabs.get_aktives_tab() == &cont_template_tab  ) {
+				// Only append/insert are valid when Templates tab is active
+				veh_action = (veh_action == va_append) ? va_insert : va_append;
+			}
+			else
+#endif
 			if(  veh_action == va_cancel_offset  ||  (get_base_tile_raster_width()!=128  &&  veh_action ==va_sell)  ) {
 				veh_action = va_append;
 			}
@@ -2265,6 +2290,17 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			}
 		}
 		else if(  comp == &sort_by  ) {
+#if CONVOI_TEMPLATE
+			if(  tabs.get_aktives_tab() == &cont_template_tab  ) {
+				using vb = vehicle_builder_t;
+				const int sel = sort_by.get_selection();
+				if(  sel == vb::sb_power || sel == vb::sb_weight
+				  || sel == vb::sb_intro_date || sel == vb::sb_retire_date  ) {
+					sort_by.set_selection(depot->selected_sort_by); // revert
+					return true;
+				}
+			}
+#endif
 			depot->selected_sort_by = sort_by.get_selection();
 		}
 		else if(  comp == &bt_copy_convoi  ) {
@@ -2371,6 +2407,7 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			if (entry && !entry->tmpl->vehicles.empty()) {
 				cbuffer_t veh_buf;
 				// Format: [convoi_name]=<prefix>=<veh1>[=<veh2>...]
+				// '=' is used as the field separator throughout.
 				veh_buf.append(translator::translate(entry->tmpl->name.c_str()));
 				veh_buf.append("=");
 				const std::vector<std::string> &vehs = entry->tmpl->vehicles;
@@ -2922,7 +2959,9 @@ void depot_frame_t::update_tabs()
 	}
 
 #if CONVOI_TEMPLATE
-	if (template_panel && template_panel->get_count() > 0) {
+	// Templates tab is not meaningful in sell/offset modes
+	if (template_panel && template_panel->get_count() > 0
+	    && veh_action != va_sell && veh_action != va_set_offset && veh_action != va_cancel_offset) {
 		tabs.add_tab(&cont_template_tab, translator::translate("Templates"));
 	}
 #endif
