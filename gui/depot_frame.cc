@@ -83,7 +83,7 @@ public:
 		sint32 min_speed;
 		uint32 total_capacity;
 		const goods_desc_t *primary_goods;
-		uint32 veh_count;
+		uint8 veh_count;
 		bool all_electric;        // true if every vehicle in this template is electric
 		bool internally_valid;    // true if all originally-adjacent non-null pairs can connect
 		bool compacted_valid;     // true if all pairs adjacent after null-compaction can connect
@@ -192,7 +192,7 @@ public:
 			e.all_electric = (e.veh_count > 0) && !has_non_electric;
 			bool mixed_waytype = false;
 			waytype_t first_wt = invalid_wt;
-			for (uint j = 0; j < (uint)e.descs.size(); j++) {
+			for (uint32 j = 0; j < (uint32)e.descs.size(); j++) {
 				if (e.descs[j]) {
 					waytype_t wt = e.descs[j]->get_waytype();
 					if (first_wt == invalid_wt) {
@@ -1801,13 +1801,6 @@ void depot_frame_t::update_data()
 #if CONVOI_TEMPLATE
 	// On the Templates tab, power/weight/intro/retire sort modes are not meaningful
 	const bool tmpl_tab_active = (tabs.get_aktives_tab() == &cont_template_tab);
-	if (tmpl_tab_active) {
-		using vb = vehicle_builder_t;
-		if (depot->selected_sort_by == vb::sb_power || depot->selected_sort_by == vb::sb_weight
-		    || depot->selected_sort_by == vb::sb_intro_date || depot->selected_sort_by == vb::sb_retire_date) {
-			depot->selected_sort_by = vb::sb_name;
-		}
-	}
 #endif
 	for(int i = 0; i < vehicle_builder_t::sb_length; i++) {
 #if CONVOI_TEMPLATE
@@ -2276,7 +2269,17 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			depot_t::update_all_win();
 		}
 		else if(  comp == &tabs  ) {
-			// Rebuild sort options (Templates tab hides some modes) and reset forbidden selection
+			// Rebuild sort dropdown to add/remove modes that are meaningless on Templates tab.
+			// Reset forbidden sort selection exactly once, here on tab switch to Templates.
+#if CONVOI_TEMPLATE
+			if(  tabs.get_aktives_tab() == &cont_template_tab  ) {
+				using vb = vehicle_builder_t;
+				if(  depot->selected_sort_by == vb::sb_power || depot->selected_sort_by == vb::sb_weight
+				  || depot->selected_sort_by == vb::sb_intro_date || depot->selected_sort_by == vb::sb_retire_date  ) {
+					depot->selected_sort_by = vb::sb_name;
+				}
+			}
+#endif
 			update_data();
 		}
 		else if(  comp == &bt_veh_action  ) {
@@ -2400,8 +2403,9 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 			const gui_template_panel_t::entry_t *entry = template_panel->get_entry(idx);
 			if (entry && !entry->tmpl->vehicles.empty()) {
 				cbuffer_t veh_buf;
-				// Format: [convoi_name]=<prefix>=<veh1>[=<veh2>...]
+				// Format: <convoi_name>=<prefix>=<veh1>[=<veh2>...]
 				// '=' is used as the field separator throughout.
+				// convoi_name is applied only when creating a new convoy.
 				veh_buf.append(translator::translate(entry->tmpl->name.c_str()));
 				veh_buf.append("=");
 				const std::vector<std::string> &vehs = entry->tmpl->vehicles;
@@ -2670,16 +2674,16 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 		const sint32 hi = (template_panel && over_tab_content) ? template_panel->get_hovered_index() : -1;
 		const gui_template_panel_t::entry_t *entry = template_panel ? template_panel->get_entry(hi) : NULL;
 		if (entry) {
-			sint64 cost = 0, run_cost = 0;
+			sint64 cost = 0;
+			uint64 run_cost = 0;
 			sint32 min_speed = 0;
 			bool any_speed = false;
-			uint32 veh_count = 0;
+			uint8 veh_count = 0;
 			uint32 total_len_carunits = 0;
 			// per-goods capacity (catg==0 grouped by goods pointer, catg>0 grouped by catg)
 			struct catg_cap_t { uint8 catg; uint32 cap; const goods_desc_t *goods; };
-			catg_cap_t caps[16];
-			int n_caps = 0;
-			for (uint j = 0; j < (uint)entry->descs.size(); j++) {
+			std::vector<catg_cap_t> caps;
+			for (uint32 j = 0; j < (uint32)entry->descs.size(); j++) {
 				const vehicle_desc_t *desc = entry->descs[j];
 				if (!desc) continue;
 				veh_count++;
@@ -2691,15 +2695,12 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 					const goods_desc_t *goods = desc->get_freight_type();
 					uint8 catg = goods->get_catg();
 					bool found = false;
-					for (int k = 0; k < n_caps; k++) {
+					for (uint32 k = 0; k < (uint32)caps.size(); k++) {
 						bool same = (catg == 0) ? (caps[k].goods == goods) : (caps[k].catg == catg);
 						if (same) { caps[k].cap += desc->get_capacity(); found = true; break; }
 					}
-					if (!found && n_caps < 16) {
-						caps[n_caps].catg = catg;
-						caps[n_caps].cap  = desc->get_capacity();
-						caps[n_caps].goods = goods;
-						n_caps++;
+					if (!found) {
+						caps.push_back({ catg, desc->get_capacity(), goods });
 					}
 				}
 			}
@@ -2712,14 +2713,14 @@ void depot_frame_t::draw_vehicle_info_text(scr_coord pos)
 			char tmp[128];
 			money_to_string(tmp, cost / 100.0, false);
 			if (env_t::show_yen) {
-				buf.printf(translator::translate("Cost: %8s (%d$/km)\n"), tmp, run_cost);
+				buf.printf(translator::translate("Cost: %8s (%llu$/km)\n"), tmp, run_cost);
 			}
 			else {
 				buf.printf(translator::translate("Cost: %8s (%.2f$/km)\n"), tmp, run_cost / 100.0);
 			}
-			if (n_caps > 0) {
+			if (!caps.empty()) {
 				buf.printf("%s", translator::translate("Capacity:"));
-				for (int k = 0; k < n_caps; k++) {
+				for (uint32 k = 0; k < (uint32)caps.size(); k++) {
 					const char *catg_name = caps[k].catg == 0
 						? translator::translate(caps[k].goods->get_name())
 						: translator::translate(caps[k].goods->get_catg_name());
