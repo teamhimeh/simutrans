@@ -7375,7 +7375,8 @@ const char *tool_stop_mover_t::do_work( player_t *player, const koord3d &last_po
 						}
 						const ribi_t::ribi new_dir = ribi & ~(ribi_t::backward(dir));
 						if( new_dir==0 ) {
-							// maybe reach last tile
+							// reached the far end of platform
+							start_pos = gr->get_pos();
 							break;
 						}
 						dir = new_dir;
@@ -7394,7 +7395,8 @@ const char *tool_stop_mover_t::do_work( player_t *player, const koord3d &last_po
 						}
 						const ribi_t::ribi new_dir = ribi & ~(ribi_t::backward(dir));
 						if( new_dir==0 ) {
-							// maybe reach last tile
+							// reached the near end of platform
+							old_platform.append(gr->get_pos());
 							break;
 						}
 						dir = new_dir;
