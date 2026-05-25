@@ -6949,6 +6949,10 @@ const char *tool_link_factory_t::do_work( player_t *, const koord3d &start, cons
 			}
 		}
 		else {
+			if(  welt->get_settings().is_crossconnect_factories()  ) {
+				// crossconnect factories->we cannot remove connections
+				return "";
+			}
 			// remove connections
 			fab->rem_supplier(last_fab->get_pos().get_2d());
 			fab->rem_lieferziel(last_fab->get_pos().get_2d());
