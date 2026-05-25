@@ -264,10 +264,19 @@ void interaction_t::interactive_event( const event_t &ev )
 }
 
 void interaction_t::zoom_view(const event_t &ev, const bool isOut) {
-	const koord3d cursor_pos = world->get_zeiger()->get_pos();
-	// old screen position of centered tile
+	// Compute the tile under the mouse directly from screen coordinates instead of
+	// using the zeiger, which may be stale after minimap navigation.
+	// The zeiger is only updated by move_cursor() on EVENT_MOVE/DRAG/RELEASE events,
+	// not on the EVENT_CLICK (mouse wheel) event that triggers zoom_view.
+	// If the viewport was moved via minimap click without subsequent mouse movement,
+	// the zeiger would still hold the old pre-navigation position, causing a wild
+	// viewport jump when zooming.
+	tool_t *tool = world->get_tool(world->get_active_player_nr());
+	const koord3d cursor_pos = viewport->get_new_cursor_position(
+		scr_coord(ev.mx, ev.my), tool->is_grid_tool());
+	// old screen position of tile under mouse
 	const scr_coord s = viewport->get_screen_coord(cursor_pos, koord(0,0));
-	
+
 	if(  !win_change_zoom_factor(isOut)  ) {
 		// zoom failed.
 		return;
