@@ -3831,6 +3831,7 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 				sig->set_state( roadsign_t::STATE_GREEN );
 				// we stop at the end of the route.
 				cnv->set_next_stop_index( min( min( next_crossing, next_signal ), cnv->get_route()->get_count()-1 ) );
+				cnv->set_next_reservation_index( start_block + 1 );
 				return true;
 			}
 		}
@@ -3880,6 +3881,7 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 	if(  cnv->get_next_stop_index()-1 <= route_index  ) {
 		cnv->set_next_stop_index( cnv->get_route()->get_count()-1 );
 	}
+	cnv->set_next_reservation_index( start_block + 1 );
 	return true;
 }
 
@@ -4162,7 +4164,7 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 				const bool downstream_advanced =
 					(next_signal != route_t::INVALID_INDEX)
 					&&  (candidate == next_signal)
-					&&  (cnv->get_next_stop_index() > (uint16)(candidate + 1));
+					&&  (cnv->get_next_stop_index() > candidate);
 				if(  !downstream_advanced  ) {
 					cnv->set_next_stop_index( candidate );
 				}
