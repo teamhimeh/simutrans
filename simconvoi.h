@@ -91,6 +91,8 @@ public:
 		COUPLED,
 		COUPLED_LOADING,
 		WAITING_FOR_LEAVING_DEPOT,
+		SUSPENSION,
+		SUSPENSION_LOADING,
 		MAX_STATES
 	};
 
@@ -132,6 +134,11 @@ private:
 	 */
 	sint32 sum_gear_and_power;
 	sint32 sum_gear_and_power_electric;
+
+	/*
+	* use electric or not
+	* YOU MUST UPDATE THIS FLAG WHEN CALCULATE ROUTE!!!!!
+	*/
 	bool use_electric;
 
 	// 40 bytes
@@ -415,6 +422,13 @@ private:
 	uint16 max_balance_speed_convoi;
 
 	/**
+	 * invalid convoy: invalid coupling condition, etc..
+	 * if set "allow invalid convoy" in depot, it can be.
+	 * no load/ no engine.
+	 */
+	bool invalid_convoy;
+
+	/**
 	* Initialize all variables with default values.
 	* Each constructor must call this method first!
 	*/
@@ -432,6 +446,7 @@ private:
 	*/
 	bool insert_route_convoy_on();
 	koord3d const find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir);
+	koord3d const search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n);
 	bool insert_route_to_draw_diagonal();
 	// alte_richtung of coupled convoy is set by the head convoy.
 	void set_alte_richtung(ribi_t::ribi r) { alte_richtung = r; }
@@ -626,6 +641,12 @@ public:
 	void reset_waiting() { state=WAITING_FOR_CLEARANCE; }
 
 	/**
+	* suspension
+	*/
+	bool is_suspended() const { return state==SUSPENSION || state==SUSPENSION_LOADING; }
+	void set_suspension( bool y );
+
+	/**
 	* The handle for ourselves. In Anlehnung an 'this' aber mit
 	* allen checks beim Zugriff.
 	*/
@@ -726,7 +747,7 @@ public:
 	 * @return total power of this convoi
 	 */
 	const uint32 & get_sum_power() const {return sum_power;}
-	const sint32 get_sum_gear_and_power() const {return use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric;}
+	const sint32 get_sum_gear_and_power() const {return invalid_convoy?0:(use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric);}
 	const sint32 & get_min_top_speed() const {return min_top_speed;}
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
@@ -913,6 +934,12 @@ public:
 	bool in_depot() const { return state == INITIAL; }
 
 	/**
+	 * invalid convoy: invalid coupling condition
+	 */
+	bool is_invalid_convoy() const { return invalid_convoy; }
+	void set_invalid_convoy(bool y) { invalid_convoy = y; }
+
+	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
 	* vehicles.
 	*/
@@ -930,7 +957,7 @@ public:
 	*/
 	const uint32 &get_loading_waiting_time() const { return loading_waiting_time; }
 
-	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
+	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING  ||  state==SUSPENSION_LOADING; }
 
 	/**
 	* Schedule convois for self destruction. Will be executed

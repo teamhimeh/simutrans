@@ -270,7 +270,6 @@ ifdef KUTA_REVISION
   endif
 endif
 
-
 CFLAGS   += -Wall -Wextra -Wcast-qual -Wpointer-arith -Wcast-align $(FLAGS) -Wconversion
 CCFLAGS  += -ansi -Wstrict-prototypes -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64
 
@@ -299,6 +298,7 @@ SOURCES += boden/wege/runway.cc
 SOURCES += boden/wege/schiene.cc
 SOURCES += boden/wege/strasse.cc
 SOURCES += boden/wege/weg.cc
+SOURCES += dataobj/convoi_template.cc
 SOURCES += dataobj/crossing_logic.cc
 SOURCES += dataobj/environment.cc
 SOURCES += dataobj/freelist.cc
@@ -339,6 +339,7 @@ SOURCES += descriptor/reader/ground_reader.cc
 SOURCES += descriptor/reader/groundobj_reader.cc
 SOURCES += descriptor/reader/image_reader.cc
 SOURCES += descriptor/reader/imagelist2d_reader.cc
+SOURCES += descriptor/reader/imagelist3d_reader.cc
 SOURCES += descriptor/reader/imagelist_reader.cc
 SOURCES += descriptor/reader/obj_reader.cc
 SOURCES += descriptor/reader/pedestrian_reader.cc
@@ -509,6 +510,8 @@ SOURCES += network/network_cmp_pakset.cc
 SOURCES += network/network_file_transfer.cc
 SOURCES += network/network_packet.cc
 SOURCES += network/network_socket_list.cc
+SOURCES += network/mcp_server.cc
+SOURCES += network/mcp_tools.cc
 SOURCES += network/pakset_info.cc
 SOURCES += obj/baum.cc
 SOURCES += obj/bruecke.cc
@@ -539,6 +542,7 @@ SOURCES += script/api/api_const.cc
 SOURCES += script/api/api_control.cc
 SOURCES += script/api/api_convoy.cc
 SOURCES += script/api/api_factory.cc
+SOURCES += script/api/api_good.cc
 SOURCES += script/api/api_gui.cc
 SOURCES += script/api/api_halt.cc
 SOURCES += script/api/api_include.cc

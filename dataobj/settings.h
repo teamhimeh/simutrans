@@ -64,7 +64,7 @@ private:
 	sint32 electric_promille;
 	sint32 tourist_attractions;
 
-	uint32 credit_per_MWs;
+	uint32 cst_kw_per_credit=512;
 
 	sint32 city_count;
 	sint32 mean_citizen_count;
@@ -325,6 +325,8 @@ private:
 
 	bool drive_on_left;
 	bool signals_on_left;
+	bool signal_reverse_front_back;
+	bool roadsign_reverse_front_back;
 
 	// fraction of running costs charged for going on other players way
 	sint32 way_toll_runningcost_percentage;
@@ -349,6 +351,9 @@ private:
 
 	// flying height calculation method
 	bool allow_higher_flight;
+
+	// use route cache
+	bool use_route_cache;
 
 	// The flag whether the time based goods routing is enabled for the goods.
 	// The array index is the goods category index.
@@ -477,7 +482,7 @@ public:
 
 	sint32 get_electric_promille() const {return electric_promille;}
 
-	sint32 get_credit_per_MWs() const {return credit_per_MWs;}
+	sint32 get_cst_kw_per_credit() const {return cst_kw_per_credit;}
 
 	void set_tourist_attractions( sint32 n ) { tourist_attractions = n; }
 	sint32 get_tourist_attractions() const {return tourist_attractions;}
@@ -716,6 +721,8 @@ public:
 
 	bool is_drive_left() const { return drive_on_left; }
 	bool is_signals_left() const { return signals_on_left; }
+	bool get_signal_reverse_front_back() const { return signal_reverse_front_back; }
+	bool get_roadsign_reverse_front_back() const { return roadsign_reverse_front_back; }
 
 	sint32 get_way_toll_runningcost_percentage() const { return way_toll_runningcost_percentage; }
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
@@ -763,6 +770,8 @@ public:
 	bool is_default_reverse() const {return default_reverse;}
 	// allow unload longer convoy
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+
+	bool is_using_route_cache() const { return use_route_cache; }
 };
 
 #endif
