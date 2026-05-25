@@ -97,14 +97,17 @@ bool loadsave_frame_t::item_action(const char *filename)
 #endif
 		}
 		static char otrp_ver_str[32];
-		const bool use_old_otrp_ver = (otrp_version_input.get_value() < OTRP_VERSION_MAJOR);
-		if(  save_as_standard.pressed  ) {
-			// save as standard data
+		const int sel = save_version_combo.get_selection();
+		const int last_idx = (int)save_ver_labels.size() - 1;
+		const bool version_overridden = (sel != 0);
+		if(  sel == last_idx  ) {
+			// "Readable by standard."
 			#define STD_SAVEGAME_VER_NR "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR)
 			env_t::savegame_version_str = STD_SAVEGAME_VER_NR;
 		}
-		else if(  use_old_otrp_ver  ) {
-			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", otrp_version_input.get_value() );
+		else if(  sel > 0  ) {
+			// older OTRP version: index 1 => v(OTRP_VERSION_MAJOR-1), index 2 => v(OTRP_VERSION_MAJOR-2), ...
+			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", OTRP_VERSION_MAJOR - sel );
 			env_t::savegame_version_str = otrp_ver_str;
 		}
 		long start_save = dr_time();
@@ -112,7 +115,7 @@ bool loadsave_frame_t::item_action(const char *filename)
 		DBG_MESSAGE( "loadsave_frame_t::item_action", "save world %li ms", dr_time() - start_save );
 		welt->set_dirty();
 		welt->reset_timer();
-		if(  save_as_standard.pressed  ||  use_old_otrp_ver  ) {
+		if(  version_overridden  ) {
 			// restore savegame_version_str
 			env_t::savegame_version_str = SAVEGAME_VER_NR;
 		}
@@ -144,17 +147,23 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 		bottom_left_frame.add_component(&show_unused_addons);
 	}
 	else {
-		save_as_standard.init( button_t::square_automatic, "Readable by standard.");
-		bottom_left_frame.add_component(&save_as_standard);
-		{
-			gui_aligned_container_t *row = bottom_left_frame.add_table(2, 1);
-			row->add_component(&otrp_version_label);
-			otrp_version_label.buf().append(translator::translate("Save as OTRP version:"));
-			otrp_version_label.update();
-			otrp_version_input.init(OTRP_VERSION_MAJOR, 54, OTRP_VERSION_MAJOR, 1, false, 3, true);
-			row->add_component(&otrp_version_input);
-			bottom_left_frame.end_table();
+		// Build combo labels: index 0 = current, 1..N-1 = older OTRP versions descending, N = standard
+		char buf[32];
+		sprintf( buf, "current version (v%d)", OTRP_VERSION_MAJOR );
+		save_ver_labels.push_back( buf );
+		for(  int v = OTRP_VERSION_MAJOR - 1;  v >= 54;  v--  ) {
+			sprintf( buf, "v%d", v );
+			save_ver_labels.push_back( buf );
 		}
+		save_ver_labels.push_back( "Readable by standard." );
+
+		save_version_combo.set_unsorted();
+		for(  const std::string &s : save_ver_labels  ) {
+			save_version_combo.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( s.c_str(), SYSCOL_TEXT );
+		}
+		save_version_combo.set_selection( 0 );
+		bottom_left_frame.add_component( &save_version_combo );
+
 		env_t::previous_OTRP_data = false;
 		set_filename(welt->get_settings().get_filename());
 		set_name(translator::translate("Speichern"));
