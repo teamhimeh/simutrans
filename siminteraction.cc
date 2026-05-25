@@ -266,8 +266,7 @@ void interaction_t::interactive_event( const event_t &ev )
 void interaction_t::zoom_view(const event_t &ev, const bool isOut) {
 	// use mouse screen pos directly: zeiger may be stale after minimap navigation
 	tool_t *tool = world->get_tool(world->get_active_player_nr());
-	const koord3d cursor_pos = viewport->get_new_cursor_position(
-		scr_coord(ev.mx, ev.my), tool->is_grid_tool());
+	const koord3d cursor_pos = viewport->get_new_cursor_position(scr_coord(ev.mx,ev.my), tool->is_grid_tool());
 	// old screen position of tile under mouse
 	const scr_coord s = viewport->get_screen_coord(cursor_pos, koord(0,0));
 
