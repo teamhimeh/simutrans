@@ -100,6 +100,7 @@ bool loadsave_frame_t::item_action(const char *filename)
 		const int sel = save_version_combo.get_selection();
 		const int last_idx = (int)save_ver_labels.size() - 1;
 		const bool version_overridden = (sel != 0);
+		const char *const original_version_str = env_t::savegame_version_str;
 		if(  sel == last_idx  ) {
 			// "Readable by standard."
 			#define STD_SAVEGAME_VER_NR "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR)
@@ -116,8 +117,7 @@ bool loadsave_frame_t::item_action(const char *filename)
 		welt->set_dirty();
 		welt->reset_timer();
 		if(  version_overridden  ) {
-			// restore savegame_version_str
-			env_t::savegame_version_str = SAVEGAME_VER_NR;
+			env_t::savegame_version_str = original_version_str;
 		}
 	}
 
@@ -148,14 +148,14 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 	}
 	else {
 		// Build combo labels: index 0 = current, 1..N-1 = older OTRP versions descending, N = standard
-		char buf[32];
-		sprintf( buf, "current version (v%d)", OTRP_VERSION_MAJOR );
+		char buf[64];
+		sprintf( buf, translator::translate("current version (v%d)"), OTRP_VERSION_MAJOR );
 		save_ver_labels.push_back( buf );
 		for(  int v = OTRP_VERSION_MAJOR - 1;  v >= 54;  v--  ) {
 			sprintf( buf, "v%d", v );
 			save_ver_labels.push_back( buf );
 		}
-		save_ver_labels.push_back( "Readable by standard." );
+		save_ver_labels.push_back( translator::translate("Readable by standard.") );
 
 		save_version_combo.set_unsorted();
 		for(  const std::string &s : save_ver_labels  ) {
