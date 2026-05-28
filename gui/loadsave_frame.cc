@@ -149,10 +149,10 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 	else {
 		// Build combo labels: index 0 = current, 1..N-1 = older OTRP versions descending, N = standard
 		char buf[64];
-		sprintf( buf, translator::translate("current version (v%d)"), OTRP_VERSION_MAJOR );
+		snprintf( buf, sizeof(buf), translator::translate("v%d (current version)"), OTRP_VERSION_MAJOR );
 		save_ver_labels.push_back( buf );
 		for(  int v = OTRP_VERSION_MAJOR - 1;  v >= 54;  v--  ) {
-			sprintf( buf, "v%d", v );
+			snprintf( buf, sizeof(buf), "v%d", v );
 			save_ver_labels.push_back( buf );
 		}
 		save_ver_labels.push_back( translator::translate("Readable by standard.") );
