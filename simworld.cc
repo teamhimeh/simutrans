@@ -3470,7 +3470,7 @@ bool karte_t::rem_fab(fabrik_t *fab)
 				// first remove all the tiles that do not connect
 				plan->remove_from_haltlist( list[i] );
 				// then reconnect
-				list[i]->verbinde_fabriken();
+				list[i]->reconnect_factories();
 			}
 		}
 
@@ -7085,6 +7085,12 @@ void karte_t::remove_player(uint8 player_nr)
 		players[player_nr]->ai_bankrupt();
 		delete players[player_nr];
 		players[player_nr] = 0;
+		// Clear removed player's bit from all halt permissions
+		for(  halthandle_t const& h : haltestelle_t::get_alle_haltestellen()  ) {
+			if(  h.is_bound()  &&  !h->is_allow_other_player_connection()  ) {
+				h->set_permissions( h->get_permissions() & ~(1 << player_nr) );
+			}
+		}
 		nwc_chg_player_t::company_removed(player_nr);
 		// if default human, create new instace of it (to avoid crashes)
 		if(  player_nr == 0  ) {

@@ -351,6 +351,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_SENDING_MONEY:             tool = new tool_sending_money_t(); break;
 		case TOOL_MERGE_PLAYER:      tool = new tool_merge_player_t(); break;
 		case TOOL_CHANGE_HALT:       tool = new tool_change_halt_t(); break;
+		case TOOL_HALT_PERMISSION:   tool = new tool_change_permission_t(); break;
 		case TOOL_CHANGE_FACTORY:	 tool = new tool_change_factory_t(); break;
 		case TOOL_RESET_GAME_SPEED:	 tool = new tool_reset_game_speed_t(); break;
 		case TOOL_FIX_GAME_SPEED:	 tool = new tool_fix_game_speed_t(); break;
