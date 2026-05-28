@@ -3319,6 +3319,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 	// change owner of halt
 	player_t* const prev_owner = owner;
 	owner = player;
+	set_permissions(0xFFFF);
 	rebuild_connections();
 	rebuild_linked_connections();
 	rebuild_connected_components();
