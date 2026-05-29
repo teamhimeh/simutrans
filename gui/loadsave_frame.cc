@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 
 #include "loadsave_frame.h"
+#include "unused_addons_frame.h"
+#include "simwin.h"
 
 #include "../sys/simsys.h"
 #include "../simworld.h"
@@ -71,8 +73,13 @@ bool loadsave_frame_t::item_action(const char *filename)
 		if(  !welt->load(filename)  ) {
 			welt->switch_server( false, true );
 		}
-		else if(  env_t::server  ) {
-			welt->announce_server(karte_t::SERVER_ANNOUNCE_HELLO);
+		else {
+			if(  env_t::server  ) {
+				welt->announce_server(karte_t::SERVER_ANNOUNCE_HELLO);
+			}
+			if(  show_unused_addons.pressed  ) {
+				create_win( new unused_addons_frame_t(), w_info, magic_none );
+			}
 		}
 		DBG_MESSAGE( "loadsave_frame_t::item_action", "load world %li ms", dr_time() - start_load );
 	}
@@ -89,19 +96,28 @@ bool loadsave_frame_t::item_action(const char *filename)
 			// and now we need to copy the servergame to the map ...
 #endif
 		}
-		if(  save_as_standard.pressed  ) {
-			// save as standard data
+		static char otrp_ver_str[32];
+		const int sel = save_version_combo.get_selection();
+		const int last_idx = (int)save_ver_labels.size() - 1;
+		const bool version_overridden = (sel != 0);
+		const char *const original_version_str = env_t::savegame_version_str;
+		if(  sel == last_idx  ) {
+			// "Readable by standard."
 			#define STD_SAVEGAME_VER_NR "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR)
 			env_t::savegame_version_str = STD_SAVEGAME_VER_NR;
+		}
+		else if(  sel > 0  ) {
+			// older OTRP version: index 1 => v(OTRP_VERSION_MAJOR-1), index 2 => v(OTRP_VERSION_MAJOR-2), ...
+			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", OTRP_VERSION_MAJOR - sel );
+			env_t::savegame_version_str = otrp_ver_str;
 		}
 		long start_save = dr_time();
 		welt->save( filename, loadsave_t::save_mode, env_t::savegame_version_str, false );
 		DBG_MESSAGE( "loadsave_frame_t::item_action", "save world %li ms", dr_time() - start_save );
 		welt->set_dirty();
 		welt->reset_timer();
-		if(  save_as_standard.pressed  ) {
-			// restore savegame_version_str
-			env_t::savegame_version_str = SAVEGAME_VER_NR;
+		if(  version_overridden  ) {
+			env_t::savegame_version_str = original_version_str;
 		}
 	}
 
@@ -127,10 +143,27 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 		bottom_left_frame.add_component(&easy_server);
 		previous_OTRP.init( button_t::square_automatic, "This is a data of OTRP v12 or v13.");
 		bottom_left_frame.add_component(&previous_OTRP);
+		show_unused_addons.init( button_t::square_automatic, "Show unused addons list");
+		bottom_left_frame.add_component(&show_unused_addons);
 	}
 	else {
-		save_as_standard.init( button_t::square_automatic, "Readable by standard.");
-		bottom_left_frame.add_component(&save_as_standard);
+		// Build combo labels: index 0 = current, 1..N-1 = older OTRP versions descending, N = standard
+		char buf[64];
+		snprintf( buf, sizeof(buf), translator::translate("v%d (current version)"), OTRP_VERSION_MAJOR );
+		save_ver_labels.push_back( buf );
+		for(  int v = OTRP_VERSION_MAJOR - 1;  v >= 54;  v--  ) {
+			snprintf( buf, sizeof(buf), "v%d", v );
+			save_ver_labels.push_back( buf );
+		}
+		save_ver_labels.push_back( translator::translate("Readable by standard.") );
+
+		save_version_combo.set_unsorted();
+		for(  const std::string &s : save_ver_labels  ) {
+			save_version_combo.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( s.c_str(), SYSCOL_TEXT );
+		}
+		save_version_combo.set_selection( 0 );
+		bottom_left_frame.add_component( &save_version_combo );
+
 		env_t::previous_OTRP_data = false;
 		set_filename(welt->get_settings().get_filename());
 		set_name(translator::translate("Speichern"));
@@ -238,6 +271,7 @@ const char *loadsave_frame_t::get_info(const char *fname)
 	date[lengthof(date)-1] = 0;
 	return date;
 }
+
 
 
 loadsave_frame_t::~loadsave_frame_t()

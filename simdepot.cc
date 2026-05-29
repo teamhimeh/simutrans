@@ -28,6 +28,7 @@
 #include "obj/gebaeude.h"
 
 #include "bauer/vehikelbauer.h"
+#include "simcity.h"
 
 #include "descriptor/building_desc.h"
 
@@ -70,6 +71,20 @@ depot_t::~depot_t()
 	destroy_win((ptrdiff_t)this);
 	all_depots.remove(this);
 }
+
+const char *depot_t::make_depot_name(const char *type_name) const
+{
+	static char buf[256];
+	if (get_pos() != koord3d::invalid) {
+		if (stadt_t *city = welt->find_nearest_city(get_pos().get_2d())) {
+			snprintf(buf, sizeof(buf), "%s %s", city->get_name(), type_name);
+			return buf;
+		}
+	}
+	snprintf(buf, sizeof(buf), "%s", type_name);
+	return buf;
+}
+
 
 void depot_t::set_name(const char* new_name){
 	name = new_name;
@@ -126,7 +141,7 @@ void depot_t::call_depot_tool( char tool, convoihandle_t cnv, const char *extra)
 	// call depot tool
 	tool_t *tmp_tool = create_tool( TOOL_CHANGE_DEPOT | SIMPLE_TOOL );
 	cbuffer_t buf;
-	buf.printf( "%c,%s,%hu", tool, get_pos().get_str(), cnv.get_id() );
+	buf.printf( "%c,%s,%u", tool, get_pos().get_str(), cnv.get_id() );
 	if(  extra  ) {
 		buf.append( "," );
 		buf.append( extra );
@@ -484,6 +499,39 @@ bool depot_t::start_convoi(convoihandle_t cnv, bool local_execution)
 		create_win( new news_img(buf), w_time_delete, magic_none);
 		return false;
 	}
+	if (!cnv->get_schedule()) {
+		dbg->warning("depot_t::start_convoi()","No schedule for convoi.");
+		create_win( new news_img("Noch kein Fahrzeug\nmit Fahrplan\nvorhanden\n"), w_time_delete, magic_none);
+		return false;
+	}
+	// If this convoy has only 1 stop:another depot, teleport to there.
+	if(  cnv->get_schedule()->get_count()==1  ) {
+		if(grund_t *gr_depot = welt->lookup(cnv->get_schedule()->at(0).pos)) {
+			depot_t *dep = gr_depot->get_depot();
+			if(  dep && dep->get_owner()==get_owner() && dep->can_accept_waytype(cnv->front()->get_desc()->get_waytype())  ) {
+				// find depot! move to there
+				convoihandle_t c = cnv;
+				while( c.is_bound() ){
+					remove_convoi(c);
+					c->betrete_depot(dep, true);
+					c=c->get_coupling_convoi();
+				}
+				return true;
+			}
+		}
+	}
+	// check invalid convoy
+	convoihandle_t c = cnv;
+	while (c.is_bound())
+	{
+		if(  c->pruefe_alle()  ) {
+			// if the coupoling condition is good, this is valid convoy.
+			// we set invalid_convoy only fron depot_frame_t
+			c->set_invalid_convoy(false);
+		}
+		c = c->get_coupling_convoi();
+	}
+
 	// Check the start condition
 	if(  !can_start_convoi(cnv, local_execution)  ) {
 		return false;
@@ -549,7 +597,7 @@ bool depot_t::can_start_convoi(convoihandle_t cnv, bool local_execution)
 		}
 
 		// check if convoi is complete
-		if( front_cnv->get_total_sum_power() == 0 || !cnv->pruefe_alle()) {
+		if( front_cnv->get_total_sum_power() == 0 || ( !cnv->pruefe_alle() && !cnv->is_invalid_convoy() ) ) {
 			if (local_execution) {
 				create_win( new news_img("Diese Zusammenstellung kann nicht fahren!\n"), w_time_delete, magic_none);
 			}

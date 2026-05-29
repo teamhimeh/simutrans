@@ -49,6 +49,7 @@
 
 
 #include "minimap.h"
+#include "depot_picker.h"
 
 
 static const char *cost_type[MAX_LINE_COST] =
@@ -61,7 +62,8 @@ static const char *cost_type[MAX_LINE_COST] =
 	"Convoys",
 	"Distance",
 	"Maxspeed",
-	"Road toll"
+	"Road toll",
+	"Freight ton-kilo"
 };
 
 const uint8 cost_type_color[MAX_LINE_COST] =
@@ -74,7 +76,8 @@ const uint8 cost_type_color[MAX_LINE_COST] =
 	COL_CONVOI_COUNT,
 	COL_DISTANCE,
 	COL_MAXSPEED,
-	COL_TOLL
+	COL_TOLL,
+	COL_TONKILO
 };
 
 static uint8 tabs_to_lineindex[9];
@@ -89,7 +92,8 @@ static uint8 statistic[MAX_LINE_COST] = {
 	LINE_CONVOIS,
 	LINE_DISTANCE,
 	LINE_MAXSPEED,
-	LINE_WAYTOLL
+	LINE_WAYTOLL,
+	LINE_TONKILO
 };
 
 static uint8 statistic_type[MAX_LINE_COST] = {
@@ -101,7 +105,8 @@ static uint8 statistic_type[MAX_LINE_COST] = {
 	STANDARD,
 	STANDARD,
 	STANDARD,
-	MONEY
+	MONEY,
+	STANDARD
 };
 
 static uint8 copy_labels[3] = {
@@ -355,7 +360,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 
 	bt_teleport_line_to_depot.init(button_t::roundbox_state, "Teleport All to Depot",
 		scr_coord(RIGHT_COLUMN_OFFSET, bt_y+D_BUTTON_HEIGHT+D_V_SPACE), scr_size(D_BUTTON_WIDTH, D_BUTTON_HEIGHT));
-	bt_teleport_line_to_depot.set_tooltip("Convoys are teleported to depot immediately");
+	bt_teleport_line_to_depot.set_tooltip(translator::translate("Convoys are teleported to depot immediately (Ctrl+click to choose depot)"));
 	bt_teleport_line_to_depot.set_visible(false);
 	bt_teleport_line_to_depot.add_listener(this);
 	add_component(&bt_teleport_line_to_depot);
@@ -446,6 +451,7 @@ bool schedule_list_gui_t::infowin_event(const event_t *ev)
 		if(  ev->ev_code == WIN_CLOSE  ) {
 			// hide schedule on minimap (may not current, but for safe)
 			minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
+			minimap_t::get_instance()->set_displayed_line( linehandle_t() );
 		}
 		else if(  (ev->ev_code==WIN_OPEN  ||  ev->ev_code==WIN_TOP)  &&  line.is_bound() ) {
 			if(  line->count_convoys()>0  ) {
@@ -456,6 +462,7 @@ bool schedule_list_gui_t::infowin_event(const event_t *ev)
 				// set this schedule as current to show on minimap if possible
 				minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
 			}
+			minimap_t::get_instance()->set_displayed_line( line );
 		}
 	}
 	return gui_frame_t::infowin_event(ev);
@@ -470,8 +477,15 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 		}
 	}
 	else if(  comp == &bt_teleport_line_to_depot  &&  line->get_convoys().get_count()>0  ) {
-		for (size_t i = line->get_convoys().get_count(); i-- != 0;) {
-			line->get_convoy(i)->call_convoi_tool( 'y', NULL );
+		if(  event_get_last_control_shift() & 2  ) {
+			// Ctrl+click: open depot picker so the player chooses which depot
+			waytype_t wt = simline_t::linetype_to_waytype(line->get_linetype());
+			create_win(new depot_picker_t(line, wt, player), w_info, magic_depot_picker);
+		}
+		else {
+			for (size_t i = line->get_convoys().get_count(); i-- != 0;) {
+				line->get_convoy(i)->call_convoi_tool( 'y', NULL );
+			}
 		}
 	}
 	else if(  comp == &bt_new_line  ) {
@@ -481,8 +495,8 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 		tool_t *tmp_tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 		cbuffer_t buf;
 		int type = tabs_to_lineindex[tabs.get_active_tab_index()];
-		const sint64 departure_group_slot_id = schedule_t::issue_new_departure_slot_group_id();
-		buf.printf( "c,0,%i,0,0|%lli|%i|", type, departure_group_slot_id, type );
+		// departure_slot_group_id will be set to the new line's ID in TOOL_CHANGE_LINE 'c' handler
+		buf.printf( "c,0,%i,0,0|0|%i|", type, type );
 		tmp_tool->set_default_param(buf);
 		welt->set_tool( tmp_tool, player );
 		// since init always returns false, it is safe to delete immediately
@@ -880,6 +894,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		else {
 			minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
 		}
+		minimap_t::get_instance()->set_displayed_line( new_line );
 
 		delete last_schedule;
 		last_schedule = new_line->get_schedule()->copy();
@@ -912,6 +927,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 
 		// hide schedule on minimap (may not current, but for safe)
 		minimap_t::get_instance()->set_selected_cnv( convoihandle_t() );
+		minimap_t::get_instance()->set_displayed_line( linehandle_t() );
 
 		delete last_schedule;
 		last_schedule = NULL;

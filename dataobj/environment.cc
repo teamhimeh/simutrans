@@ -16,7 +16,8 @@
 
 #include "../utils/simrandom.h"
 void rdwr_win_settings(loadsave_t *file); // simwin
-
+char env_t::install_dir[PATH_MAX];
+std::string env_t::pak_dir;
 sint16 env_t::menupos = MENU_TOP;
 sint16 env_t::fullscreen = WINDOWED;
 sint16 env_t::display_scale_percent = 100;
@@ -122,6 +123,7 @@ bool env_t::road_user_info;
 bool env_t::tree_info;
 bool env_t::ground_info;
 uint8 env_t::show_factory_storage_bar;
+bool env_t::show_way_offset_label = false;
 bool env_t::townhall_info;
 bool env_t::single_info;
 bool env_t::window_buttons_right;
@@ -154,8 +156,10 @@ PIXVAL env_t::background_color;
 bool env_t::draw_earth_border;
 bool env_t::draw_outside_tile;
 uint8 env_t::show_vehicle_states;
+bool env_t::show_only_own_vehicle_states;
 bool env_t::show_line_colors;
 bool env_t::show_convoy_loadinglevel;
+sint8 env_t::clip_below;
 bool env_t::visualize_schedule;
 sint8 env_t::daynight_level;
 bool env_t::left_to_right_graphs;
@@ -310,8 +314,10 @@ void env_t::init()
 	draw_outside_tile = false;
 
 	show_vehicle_states = 1;
+	show_only_own_vehicle_states = false;
 	show_line_colors = true;
 	show_convoy_loadinglevel = true;
+	clip_below = CLIP_BELOW_PAK;
 
 	daynight_level = 0;
 
@@ -642,6 +648,12 @@ void env_t::rdwr(loadsave_t *file)
 	if(  file->get_OTRP_version()>=52  ) {
 		file->rdwr_bool(show_line_colors);
 		file->rdwr_bool(show_convoy_loadinglevel);
+	}
+	if(  file->get_OTRP_version()>=53  ) {
+		file->rdwr_bool(show_only_own_vehicle_states);
+	}
+	if(  file->get_OTRP_version()>=54  ) {
+		file->rdwr_byte((uint8&)clip_below);
 	}
 
 

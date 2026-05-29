@@ -56,6 +56,13 @@ const slist_tpl <weg_t *> & weg_t::get_alle_wege()
 }
 
 
+bool weg_t::is_clipping_below_needed() const
+{
+	// elevated no clip?
+	return desc->is_clip_below();
+}
+
+
 // returns a way with matching waytype
 weg_t* weg_t::alloc(waytype_t wt)
 {
@@ -116,6 +123,9 @@ void weg_t::set_desc(const way_desc_t *b)
 {
 	desc = b;
 
+	if(  desc == NULL  ) {
+		return;
+	}
 	if(  hat_gehweg() &&  desc->get_wtyp() == road_wt  &&  desc->get_topspeed() > 50  ) {
 		max_speed = 50;
 	}

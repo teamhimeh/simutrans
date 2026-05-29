@@ -22,6 +22,7 @@
 #include "boden/grund.h"
 #include "boden/wasser.h"
 #include "boden/wege/schiene.h"
+#include "boden/wege/strasse.h"
 #include "boden/tunnelboden.h"
 #include "boden/monorailboden.h"
 
@@ -320,7 +321,7 @@ static halthandle_t suche_nahe_haltestelle(player_t *player, karte_t *welt, koor
 
 
 // converts a 2d koord to a suitable ground pointer
-static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, koord3d pos, waytype_t wt)
+static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, koord3d pos, waytype_t wt, bool check_wayobj=false)
 {
 	// check for valid ground
 	grund_t *gr=welt->lookup(pos);
@@ -357,6 +358,11 @@ static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, 
 	}
 	// check for ownership
 	if(gr->get_weg(wt)->is_deletable(player)!=NULL){
+		// way owner is different from activa player, but we must check wayobj if we need
+		if(  check_wayobj&&gr->get_wayobj(wt)&&gr->get_wayobj(wt)->is_deletable(player)==NULL  ) {
+			// wayobj owner is me. I can delete
+			return gr;
+		}
 		return NULL;
 	}
 	// ok, now we have a valid ground
@@ -1886,11 +1892,32 @@ const char *tool_transformer_t::work( player_t *player, koord3d pos )
 		underground = true;
 	}
 
+	bool in_city = false;
 	if( !fab  ) {
-		return "Transformer only next to factory!";
+		// Check if inside city limits (city substations don't require a factory)
+		if(!underground) {
+			stadt_t *city = welt->find_nearest_city(k);
+			if(city != NULL) {
+				const koord lo = city->get_linksoben();
+				const koord ur = city->get_rechtsunten();
+				if(k.x >= lo.x && k.x <= ur.x && k.y >= lo.y && k.y <= ur.y) {
+					in_city = true;
+				}
+			}
+		}
+		if(!in_city) {
+			return "Transformer only next to factory!";
+		}
 	}
-	if(  fab->is_transformer_connected()  ) {
+	if(  fab  &&  fab->is_transformer_connected()  ) {
 		return "Only one transformer per factory!";
+	}
+
+	// check for existing transformer on the target surface tile (catches cross-player placement)
+	if(  gr->find<pumpe_t>()  ||  gr->find<senke_t>()  ) {
+		if(  const char *fail = gr->kann_alle_obj_entfernen(player)  ) {
+			return fail;
+		}
 	}
 
 	// underground: first build tunnel tile at coordinate pos
@@ -1931,8 +1958,8 @@ const char *tool_transformer_t::work( player_t *player, koord3d pos )
 	}
 	// transformer will be build on tile pointed to by gr
 
-	// build source or drain depending on factory type
-	if(fab->get_desc()->is_electricity_producer()) {
+	// build source or drain depending on factory type; city substations are always drains
+	if(fab && fab->get_desc()->is_electricity_producer()) {
 		pumpe_t *p = new pumpe_t(gr->get_pos(), player);
 		gr->obj_add( p );
 		p->finish_rd();
@@ -2665,9 +2692,26 @@ const way_desc_t *tool_build_way_t::defaults[17] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 
 const way_desc_t *tool_build_way_t::get_desc( uint16 timeline_year_month) const
 {
-	const way_desc_t *desc = default_param ? way_builder_t::get_desc(default_param,0) :NULL;
-	if(  desc==NULL  &&  default_param  ) {
-		waytype_t wt = (waytype_t)atoi(default_param);
+	if (!default_param) {
+		return NULL;
+	}
+	// Extract the way name (first segment before ',')
+	const char* comma = strchr(default_param, ',');
+	char name_buf[256];
+	const char* name;
+	if (comma) {
+		size_t len = (size_t)(comma - default_param);
+		if (len >= sizeof(name_buf)) { len = sizeof(name_buf) - 1; }
+		memcpy(name_buf, default_param, len);
+		name_buf[len] = '\0';
+		name = name_buf;
+	}
+	else {
+		name = default_param;
+	}
+	const way_desc_t *desc = name[0] ? way_builder_t::get_desc(name, 0) : NULL;
+	if(  desc==NULL  &&  name[0]  ) {
+		waytype_t wt = (waytype_t)atoi(name);
 		desc = defaults[wt&63];
 		if(desc==NULL  ||  !desc->is_available(timeline_year_month)) {
 			// search fastest way.
@@ -2687,7 +2731,7 @@ const way_desc_t *tool_build_way_t::get_desc( uint16 timeline_year_month) const
 
 image_id tool_build_way_t::get_icon(player_t *) const
 {
-	const way_desc_t *desc = way_builder_t::get_desc(default_param,0);
+	const way_desc_t *desc = get_desc(0);
 	image_id image = icon;
 	bool is_tram = false;
 	if(  desc  ) {
@@ -2717,6 +2761,8 @@ const char* tool_build_way_t::get_tooltip(const player_t *) const
 	return toolstr;
 }
 
+tool_build_way_t* get_build_way_tool_from_toolbar(const way_desc_t* desc);
+
 // default ways are not initialized synchronously for different clients
 // always return the name of a way, never the string containing the waytype
 const char* tool_build_way_t::get_default_param(player_t *player) const
@@ -2724,8 +2770,10 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 	if (player==NULL) {
 		return default_param;
 	}
+	// Determine the way name
+	const char* way_name = NULL;
 	if (desc) {
-		return desc->get_name();
+		way_name = desc->get_name();
 	}
 	else {
 		if (default_param == NULL) {
@@ -2734,12 +2782,41 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 		}
 		const way_desc_t* test_desc = get_desc(0);
 		if (test_desc) {
-			return test_desc->get_name();
+			way_name = test_desc->get_name();
 		}
 		else {
-			return default_param;
+			// Fallback: numeric waytype — extract first segment
+			static char name_buf[64];
+			const char* comma = strchr(default_param, ',');
+			if (comma) {
+				size_t len = (size_t)(comma - default_param);
+				if (len >= sizeof(name_buf)) { len = sizeof(name_buf) - 1; }
+				memcpy(name_buf, default_param, len);
+				name_buf[len] = '\0';
+				way_name = name_buf;
+			}
+			else {
+				way_name = default_param;
+			}
 		}
 	}
+	// If called from a shortcut key, use the toolbar tool's field values
+	overtaking_mode_t mode = overtaking_mode;
+	uint8 flag = street_flag;
+	sint8 hf = height_offset;
+	sint8 vo = vehicle_offset;
+	if (look_toolbar) {
+		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
+		if (toolbar_tool) {
+			mode = toolbar_tool->get_overtaking_mode();
+			flag = toolbar_tool->get_street_flag();
+			hf = toolbar_tool->get_height_offset();
+			vo = toolbar_tool->vehicle_offset;
+		}
+	}
+	static char buf[300];
+	sprintf(buf, "%s,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo);
+	return buf;
 }
 
 
@@ -2768,6 +2845,20 @@ bool tool_build_way_t::init( player_t *player, bool called_from_move )
 	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
 		// non available way => fail
 		return false;
+	}
+
+	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle")
+	if (default_param) {
+		const char* comma = strchr(default_param, ',');
+		if (comma) {
+			int mode, flag, hf, vo;
+			if (sscanf(comma + 1, "%d,%d,%d,%d", &mode, &flag, &hf, &vo) == 4) {
+				overtaking_mode = (overtaking_mode_t)mode;
+				street_flag = (uint8)flag;
+				height_offset = (sint8)hf;
+				vehicle_offset = (sint8)vo;
+			}
+		}
 	}
 
 	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
@@ -2978,33 +3069,6 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	return "";
 }
 
-
-void tool_build_way_t::rdwr_custom_data(memory_rw_t *packet)
-{
-	two_click_tool_t::rdwr_custom_data(packet);
-	sint8 i = overtaking_mode;
-	uint8 a = street_flag;
-	sint8 b = height_offset;
-	sint8 c = vehicle_offset;
-	// If this tool is called from a shortcut key, overtaking_mode of the tool in a toolbar has to be used.
-	if(  packet->is_saving()  &&  look_toolbar  ) {
-		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
-		if(  toolbar_tool  ) {
-			i = toolbar_tool->get_overtaking_mode();
-			a = toolbar_tool->get_street_flag();
-			b = toolbar_tool->get_height_offset();
-			c = toolbar_tool->vehicle_offset;
-		}
-	}
-	packet->rdwr_byte(i);
-	packet->rdwr_byte(a);
-	packet->rdwr_byte(b);
-	packet->rdwr_byte(c);
-	overtaking_mode = (overtaking_mode_t)i;
-	street_flag = a;
-	height_offset = b;
-	vehicle_offset = c;
-}
 
 
 void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, const koord3d &end )
@@ -3805,10 +3869,11 @@ class electron_t : public test_driver_t {
 class way_checker_t : public test_driver_t {
 private:
 	waytype_t wt;
+	bool unmasked;
 public:
-	way_checker_t(waytype_t w) : wt(w) {}
+	way_checker_t(waytype_t w, bool unmasked_ = false) : wt(w), unmasked(unmasked_) {}
 	bool check_next_tile(const grund_t* gr) const OVERRIDE { return gr->hat_weg(wt); }
-	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return gr->get_weg_ribi(wt); }
+	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return unmasked ? gr->get_weg_ribi_unmasked(wt) : gr->get_weg_ribi(wt); }
 	waytype_t get_waytype() const OVERRIDE { return wt; }
 	int get_cost(const grund_t*, const weg_t*, const sint32, ribi_t::ribi) const OVERRIDE { return 1; }
 	bool is_target(const grund_t*, const grund_t*) const OVERRIDE { return false; }
@@ -4231,7 +4296,7 @@ bool tool_build_wayobj_t::calc_route( route_t &verbindung, player_t *player, con
 uint8 tool_build_wayobj_t::is_valid_pos( player_t* player, const koord3d& pos, const char *&error, const koord3d & )
 {
 	// search for starting ground
-	grund_t *gr=tool_intern_koord_to_weg_grund(player, welt, pos, wt );
+	grund_t *gr=tool_intern_koord_to_weg_grund(player, welt, pos, wt, true );
 	if(  gr == NULL  ) {
 		DBG_MESSAGE("tool_build_wayobj_t::is_within_limits()", "no ground on %s",pos.get_str());
 		// wrong ground or not this way here => exit
@@ -5803,6 +5868,7 @@ void tool_build_roadsign_t::rdwr_custom_data(memory_rw_t *packet)
 	packet->rdwr_byte(current.spacing);
 	packet->rdwr_bool(current.remove_intermediate);
 	packet->rdwr_bool(current.replace_other);
+	packet->rdwr_bool(current.two_ways);
 }
 
 
@@ -5991,6 +6057,9 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 			if(rs == NULL) rs = gr->find<roadsign_t>();
 			assert(rs);
 			rs->set_dir(dir);
+			if(  signal_t* sig = gr->find<signal_t>()  ) {
+				sig->set_two_ways( current.two_ways );
+			}
 		}
 		else {
 			// Place no signal -> remove existing signal
@@ -6012,22 +6081,24 @@ const char *tool_build_roadsign_t::do_work( player_t *player, const koord3d &sta
 /*
  * Called by the GUI (gui/signal_spacing.*)
  */
-void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace )
+void tool_build_roadsign_t::set_values( player_t *player, uint8 spacing, bool remove, bool replace, bool two_ways )
 {
 	signal_info& s = signal[player->get_player_nr()];
 	s.spacing             = spacing;
 	s.remove_intermediate = remove;
 	s.replace_other       = replace;
+	s.two_ways            = two_ways;
 	current = s;
 }
 
 
-void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace )
+void tool_build_roadsign_t::get_values( player_t *player, uint8 &spacing, bool &remove, bool &replace, bool &two_ways )
 {
 	signal_info const& s = signal[player->get_player_nr()];
-	spacing = s.spacing;
-	remove  = s.remove_intermediate;
-	replace = s.replace_other;
+	spacing   = s.spacing;
+	remove    = s.remove_intermediate;
+	replace   = s.replace_other;
+	two_ways  = s.two_ways;
 }
 
 
@@ -6400,7 +6471,8 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 	else if(  default_param[1]=='A'  ) {
 		if(  desc->get_type()!=building_desc_t::attraction_land  &&  desc->get_type()!=building_desc_t::attraction_city  ) {
 			// auto rotation only valid for city buildings
-			rotation = stadt_t::orient_city_building( k, desc, desc->get_size() );
+			koord max_size(max(desc->get_size().x, desc->get_size().y), max(desc->get_size().x, desc->get_size().y));
+			rotation = stadt_t::orient_city_building( k, desc, max_size);
 			if(  rotation < 0 ) {
 				return NOTICE_UNSUITABLE_GROUND;
 			}
@@ -6415,6 +6487,11 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 
 	koord size = desc->get_size(rotation);
 
+	stadt_t* city = welt->find_nearest_city(k);
+	if(  desc->is_city_building()  &&  !city  ) {
+		return NOTICE_UNSUITABLE_GROUND;
+	}
+
 	// process ignore climates switch
 	climate_bits cl = (default_param  &&  default_param[0]=='1') ? ALL_CLIMATES : desc->get_allowed_climate_bits();
 
@@ -6428,14 +6505,11 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 	// Place found...
 	if(hat_platz) {
 		player_t *gb_player = desc->is_city_building() ? NULL : welt->get_public_player();
-		gebaeude_t *gb = hausbauer_t::build(gb_player, k, rotation, desc);
+		gebaeude_t *gb = hausbauer_t::build(gb_player, k, rotation, desc, city);
 		if(gb) {
 			// building successful
-			if(  desc->get_type()!=building_desc_t::attraction_land  &&  desc->get_type()!=building_desc_t::attraction_city  ) {
-				stadt_t *city = welt->find_nearest_city( k );
-				if(city) {
-					city->add_gebaeude_to_stadt(gb);
-				}
+			if(  desc->get_type()==building_desc_t::monument  &&  city  ) {
+				city->add_gebaeude_to_stadt(gb);
 			}
 			player_t::book_construction_costs(player, -desc->get_price(welt) * size.x * size.y, k, gb->get_waytype());
 			return NULL;
@@ -6863,6 +6937,10 @@ uint8 tool_link_factory_t::is_valid_pos( player_t *, const koord3d &pos, const c
 
 const char *tool_link_factory_t::do_work( player_t *, const koord3d &start, const koord3d &pos )
 {
+	if(  welt->get_settings().is_crossconnect_factories()  ) {
+		// crossconnect factories->we cannot edit connections
+		return "crossconnect_factories is enabled!";
+	}
 	fabrik_t *last_fab = fabrik_t::get_fab( start.get_2d() );
 	fabrik_t *fab = fabrik_t::get_fab( pos.get_2d() );
 
@@ -6881,6 +6959,14 @@ const char *tool_link_factory_t::do_work( player_t *, const koord3d &start, cons
 			last_fab->rem_supplier(fab->get_pos().get_2d());
 			last_fab->rem_lieferziel(fab->get_pos().get_2d());
 			return NULL;
+		}
+	}
+	else if(fab!=NULL  &&  last_fab!=NULL  &&  last_fab==fab  &&  is_shift_pressed()) {
+		// connect to all factories
+		fab->add_all_suppliers();
+		FOR(slist_tpl<fabrik_t*>, const f, welt->get_fab_list()) {
+			// connect to an existing one, if this is an producer
+			f->add_supplier(fab);
 		}
 	}
 	return "";
@@ -7287,13 +7373,14 @@ const char *tool_stop_mover_t::do_work( player_t *player, const koord3d &last_po
 					grund_t *gr = welt->lookup(start_pos);
 					while(true) {
 						gr->get_neighbour(gr, wt, dir);
-						if(  !gr  ||  !gr->is_halt()  ||  !gr->get_weg(wt)  || (ribi=gr->get_weg_ribi_unmasked(wt))==0  ||  gr->get_pos()==last_pos  ) {
+						if(  !gr  ||  !gr->is_halt()  ||  gr->get_halt()!=last_halt  ||  !gr->get_weg(wt)  || (ribi=gr->get_weg_ribi_unmasked(wt))==0  ||  gr->get_pos()==last_pos  ) {
 							// maybe reach last tile
 							break;
 						}
 						const ribi_t::ribi new_dir = ribi & ~(ribi_t::backward(dir));
 						if( new_dir==0 ) {
-							// maybe reach last tile
+							// reached the far end of platform
+							start_pos = gr->get_pos();
 							break;
 						}
 						dir = new_dir;
@@ -7306,13 +7393,14 @@ const char *tool_stop_mover_t::do_work( player_t *player, const koord3d &last_po
 					while(true) {
 						old_platform.append(start_pos);
 						gr->get_neighbour(gr, wt, dir);
-						if(!gr  ||  !gr->is_halt()  ||  !gr->get_weg(wt)  || (ribi=gr->get_weg_ribi_unmasked(wt))==0  ||  gr->get_pos()==end_pos  ) {
+						if(!gr  ||  !gr->is_halt()  ||  gr->get_halt()!=last_halt  ||  !gr->get_weg(wt)  || (ribi=gr->get_weg_ribi_unmasked(wt))==0  ||  gr->get_pos()==end_pos  ) {
 							// maybe reach last tile
 							break;
 						}
 						const ribi_t::ribi new_dir = ribi & ~(ribi_t::backward(dir));
 						if( new_dir==0 ) {
-							// maybe reach last tile
+							// reached the near end of platform
+							old_platform.append(gr->get_pos());
 							break;
 						}
 						dir = new_dir;
@@ -8637,6 +8725,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'w' : toggle withdraw
  * 's' : change state to [number] (and maybe set open schedule flag)
  * 'l' : apply new line [number]
+ * 'L' : create new line
  * 'd' : go to nearest depot
  * 'y' : move to depoot immediately
  * 'r' : release the child convoy
@@ -8645,20 +8734,23 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'e' : toggle delay recovery
  * 't' : go to next stop
  * 'v' : reversing convoi direction
+ * 'c' : reversing coupling convoys
  * 'm' : apply max speed of convoy
  * 'b' : apply balance speed (limit power)
+ * 'i' : set invalid convoy
+ * 'u' : suspension
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
 	char tool=0;
-	uint16 convoi_id = 0;
+	uint32 convoi_id = 0;
 
 	// skip the rest of the command
 	const char *p = default_param;
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi", &tool, &convoi_id );
+	sscanf( p, "%c,%u", &tool, &convoi_id );
 
 	// skip to the commands ...
 	for(  int z = 2;  *p  &&  z>0;  p++  ) {
@@ -8739,8 +8831,9 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'l': // change line
 			{
 				// read out id and new current_stop index
-				uint16 id=0, current_stop=0;
-				int count=sscanf( p, "%hi,%hi", &id, &current_stop );
+				uint32 id=0;
+				uint16 current_stop=0;
+				int count=sscanf( p, "%u,%hi", &id, &current_stop );
 				linehandle_t l;
 				l.set_id( id );
 				if(  l.is_bound()  ) {
@@ -8758,6 +8851,28 @@ bool tool_change_convoi_t::init( player_t *player )
 					cnv->get_schedule()->set_current_stop((uint8)current_stop);
 					cnv->get_schedule()->finish_editing();
 				}
+			}
+			break;
+		
+		case 'L': // create new line
+			{
+				schedule_t* schedule=cnv->get_schedule();
+				int ltype = schedule->get_type();
+				if(ltype < simline_t::truckline  ||  ltype > simline_t::narrowgaugeline) {
+					// invalid line type
+					break;
+				}
+				linehandle_t line = player->simlinemgmt.create_line( ltype, player, schedule );
+
+				// check scenario conditions
+				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
+					player->simlinemgmt.delete_line(line);
+					break;
+				}
+
+				line->get_schedule()->finish_editing();
+				
+				cnv->set_line(line);
 			}
 			break;
 
@@ -8797,10 +8912,34 @@ bool tool_change_convoi_t::init( player_t *player )
 
 		case 'y': // move to depot immediately
 		{
-			const char* msg = cnv->send_to_depot_immediately(is_local_execution());
+			const char* msg = cnv->get_most_parent_convoi()->send_to_depot_immediately(is_local_execution());
 
 			if (is_local_execution()) {
 				create_win( new news_img(msg), w_time_delete, magic_none);
+			}
+		}
+		break;
+
+		case 'D': // route to user-specified depot
+		{
+			sint16 x, y, z;
+			if (p && sscanf(p, "%hi,%hi,%hi", &x, &y, &z) == 3) {
+				const char* msg = cnv->send_to_specific_depot(koord3d(x, y, z), false, is_local_execution());
+				if (is_local_execution()) {
+					create_win(new news_img(msg), w_time_delete, magic_none);
+				}
+			}
+		}
+		break;
+
+		case 'Y': // teleport to user-specified depot
+		{
+			sint16 x, y, z;
+			if (p && sscanf(p, "%hi,%hi,%hi", &x, &y, &z) == 3) {
+				const char* msg = cnv->send_to_specific_depot(koord3d(x, y, z), true, is_local_execution());
+				if (is_local_execution()) {
+					create_win(new news_img(msg), w_time_delete, magic_none);
+				}
 			}
 		}
 		break;
@@ -8850,6 +8989,12 @@ bool tool_change_convoi_t::init( player_t *player )
 		}
 		break;
 
+		case 'c':
+		{
+			cnv->get_most_parent_convoi()->reverse_convoy_coupling_by_user_request();
+		}
+		break;
+
 		case 'm':
 		{
 			uint16 max_speed_kmh_of_convoi=0;
@@ -8863,6 +9008,18 @@ bool tool_change_convoi_t::init( player_t *player )
 			uint16 max_balance_speed_convoi=0;
 			int count=sscanf( p, "%hi", &max_balance_speed_convoi);
 			cnv->set_max_balance_speed_convoi(max_balance_speed_convoi);
+		}
+		break;
+
+		case 'i':
+		{
+			cnv->set_invalid_convoy(atoi(p)!=0);
+		}
+		break;
+
+		case 'u':
+		{
+			cnv->set_suspension(atoi(p)!=0);
 		}
 		break;
 	}
@@ -8900,7 +9057,7 @@ bool tool_change_convoi_t::init( player_t *player )
  */
 bool tool_change_line_t::init( player_t *player )
 {
-	uint16 line_id = 0;
+	uint32 line_id = 0;
 
 
 	// skip the rest of the command
@@ -8917,7 +9074,7 @@ bool tool_change_line_t::init( player_t *player )
 		return false;
 	}
 
-	line_id = atoi(p);
+	line_id = (uint32)strtoul(p, NULL, 10);
 
 
 	while(  *p  &&  *p++!=','  ) {
@@ -8949,6 +9106,8 @@ bool tool_change_line_t::init( player_t *player )
 				}
 
 				line->get_schedule()->sscanf_schedule( p );
+				// departure_slot_group_id is always the line's own ID for a newly created line
+				line->get_schedule()->set_departure_slot_group_id(line);
 				// check scenario conditions
 				if (!no_check()  &&  !scenario_check_schedule(welt, player, line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(line);
@@ -8981,6 +9140,23 @@ bool tool_change_line_t::init( player_t *player )
 					if(w) {
 						destroy_win( w );
 					}
+					// If the departure slot group changed, cascade-update all lines that were following this line.
+					linehandle_t new_group = linehandle_t();
+					for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+						player_t *pl = welt->get_player(pi);
+						if(  !pl  ) { continue; }
+						FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+							if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+								if(  !new_group.is_bound()  ) {
+									// set this line as a new group id for us.
+									new_group = other;
+								} else {
+									// set new departure slot group
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
+					}
 					player->simlinemgmt.delete_line(line);
 				}
 			}
@@ -8998,9 +9174,20 @@ bool tool_change_line_t::init( player_t *player )
 					}
 					schedule_t *schedule = line->get_schedule()->copy();
 					if (schedule->sscanf_schedule( p )  &&  (no_check()  ||  scenario_check_schedule(welt, player, schedule, can_use_gui())) ) {
+						const linehandle_t new_group = schedule->get_departure_slot_group_id();
 						schedule->finish_editing();
 						line->set_schedule( schedule );
 						line->get_owner()->simlinemgmt.update_line(line);
+						// If the departure slot group changed, cascade-update all lines that were following this line.
+						for(  int pi = 0;  pi < MAX_PLAYER_COUNT;  pi++  ) {
+							player_t *pl = welt->get_player(pi);
+							if(  !pl  ) { continue; }
+							FOR(  vector_tpl<linehandle_t>, const other,  pl->simlinemgmt.get_line_list()  ) {
+								if(  other != line  &&  other->get_schedule()->get_departure_slot_group_id() == line  ) {
+									other->get_schedule()->set_departure_slot_group_id(new_group);
+								}
+							}
+						}
 					}
 					else {
 						// could not read schedule, do not assign
@@ -9118,6 +9305,7 @@ bool tool_change_line_t::init( player_t *player )
 					// if there is more than one convois => new line
 					if(  cnvs[i].get_count()>1  ) {
 						line = player->simlinemgmt.create_line( cnvs[i][0]->get_schedule()->get_type(), player, cnvs[i][0]->get_schedule() );
+						line->get_schedule()->set_departure_slot_group_id(line);
 						FOR(vector_tpl<convoihandle_t>, cnv, cnvs[i] ) {
 							line->add_convoy( cnv );
 							cnv->set_line( line );
@@ -9141,6 +9329,8 @@ bool tool_change_line_t::init( player_t *player )
 					break;
 				}
 				linehandle_t new_line = player->simlinemgmt.create_line( line->get_linetype(), player , line->get_schedule());
+				// copied line starts in its own departure slot group
+				new_line->get_schedule()->set_departure_slot_group_id(new_line);
 				// check scenario conditions
 				if (!scenario_check_schedule(welt, player, new_line->get_schedule(), can_use_gui())) {
 					player->simlinemgmt.delete_line(new_line);
@@ -9194,6 +9384,7 @@ bool tool_change_line_t::init( player_t *player )
  * 'd' : disassembles convoi
  * 's' : sells a vehicle
  * 'a' : appends a vehicle (+vehikel_name) uses the oldest
+ * 'A' : appends a vehicle (for invalid convoy)
  * 'i' : inserts a vehicle in front (+vehikel_name) uses the oldest
  * 's' : sells a vehikel (+vehikel_name) uses the newest
  * 'S' : sells all vehicles in this depot
@@ -9207,20 +9398,21 @@ bool tool_change_line_t::init( player_t *player )
  * 'V' : sell all convoys
  * 't' : reverse convoy direction
  * 'N' : change depot name
+ * 'T' : apply convoy template; format: [convoi_name]=<a|i>=<veh1>[=<veh2>...]
  */
 bool tool_change_depot_t::init( player_t *player )
 {
 	char tool=0;
 	koord pos2d;
 	sint8 z;
-	uint16 convoi_id;
+	uint32 convoi_id;
 
 	// skip the rest of the command
 	const char *p = default_param;
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi,%hi,%hhi,%hi", &tool, &pos2d.x, &pos2d.y, &z, &convoi_id );
+	sscanf( p, "%c,%hi,%hi,%hhi,%u", &tool, &pos2d.x, &pos2d.y, &z, &convoi_id );
 
 	koord3d pos(pos2d, z);
 
@@ -9325,7 +9517,8 @@ bool tool_change_depot_t::init( player_t *player )
 			}
 			break;
 		}
-		case 'a':   // append a vehicle
+		case 'a':   // append a vehicle(with some vehicles)
+		case 'A':   // append a vehicle(for invalid convoy)
 		case 'i':   // insert a vehicle in front
 		case 's':   // sells a vehicle
 		case 'S':	// sells all vehicles
@@ -9338,13 +9531,18 @@ bool tool_change_depot_t::init( player_t *player )
 					int start_nr = atoi(p);
 					int nr = start_nr;
 
-					// find end
-					while(nr<cnv->get_vehicle_count()) {
-						const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
-						nr ++;
-						if(info->get_trailer_count()!=1) {
-							break;
+					// find end (for invalid convoy, only remove 1 vehicle at a time)
+					if(  !cnv->is_invalid_convoy()  ) {
+						while(nr<cnv->get_vehicle_count()) {
+							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
+							nr ++;
+							if(info->get_trailer_count()!=1) {
+								break;
+							}
 						}
+					}
+					else {
+						nr = start_nr + 1;
 					}
 					// now remove the vehicles
 					if(  cnv->get_vehicle_count()==nr-start_nr  ||  (tool=='R'  &&  start_nr==0)  ) {
@@ -9374,8 +9572,9 @@ bool tool_change_depot_t::init( player_t *player )
 					slist_tpl<const vehicle_desc_t *>new_vehicle_info;
 					const vehicle_desc_t *start_info = info;
 
-					if(tool!='a') {
-						// start of composition
+					const bool is_invalid = cnv.is_bound() && cnv->is_invalid_convoy();
+					if(tool!='a'&&tool!='A'&&!is_invalid) {
+						// start of composition (skipped for invalid convoy: insert only 1 vehicle)
 						while(  info->get_leader_count() == 1  &&  info->get_leader(0) != NULL  &&  info->get_leader(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_leader(0))) {
 							info = info->get_leader(0);
 							new_vehicle_info.insert(info);
@@ -9383,7 +9582,8 @@ bool tool_change_depot_t::init( player_t *player )
 						info = start_info;
 					}
 					new_vehicle_info.append( info );
-					if (tool != 'i') {
+					if (tool != 'i'&&tool!='A'&&!is_invalid) {
+						// trailer chain (skipped for invalid convoy: append only 1 vehicle)
 						while(info->get_trailer_count() == 1  &&  info->get_trailer(0) != NULL  &&  info->get_trailer(0) != vehicle_desc_t::any_vehicle  &&  !new_vehicle_info.is_contained(info->get_trailer(0))) {
 							info = info->get_trailer(0);
 							new_vehicle_info.append(info);
@@ -9440,6 +9640,9 @@ bool tool_change_depot_t::init( player_t *player )
 								depot->append_vehicle( cnv, veh, tool=='i', can_use_gui() );
 							}
 						}
+						if(  tool=='A'  ) {
+							cnv->set_invalid_convoy(true);
+						}
 					}
 				}
 			}
@@ -9460,7 +9663,7 @@ bool tool_change_depot_t::init( player_t *player )
 		}
 		case 'u': { // coupling convoy in depot
 			convoihandle_t child = convoihandle_t();
-			uint16 coupled_cnv_id = atoi(p);
+			uint32 coupled_cnv_id = (uint32)strtoul(p, NULL, 10);
 			if( coupled_cnv_id != 0) {
 				child.set_id(coupled_cnv_id);
 			}
@@ -9473,6 +9676,85 @@ bool tool_change_depot_t::init( player_t *player )
 		}
 		case 'N': { // change depot name
 			depot->set_name(p);
+			break;
+		}
+		case 'T': {
+			// Apply a convoy template. Parameter format:
+			//   [convoi_name]=<prefix>=<veh1>[=<veh2>...]
+			//
+			// convoi_name : optional; assigned only when creating a new convoy
+			// prefix      : "a" = append at back, "i" = insert at front (reversed vehicle order)
+			// vehN        : pak descriptor name
+			//
+			// Example (append):  MyTrain=a=ICE_loco=ICE_car=ICE_car
+			// Example (insert):  =i=ICE_car=ICE_car=ICE_loco
+			depot->clear_command_pending();
+			// Parse convoy name (everything before the first '=')
+			const char *eq = strchr(p, '=');
+			char convoi_name[256] = "";
+			if (eq) {
+				int name_len = (int)(eq - p);
+				if (name_len > 0 && name_len <= 255) {
+					strncpy(convoi_name, p, name_len);
+					convoi_name[name_len] = '\0';
+				}
+				p = eq + 1;
+			}
+			// Apply convoy name only when creating a new convoy
+			if (!cnv.is_bound()) {
+				if (convoihandle_t::is_exhausted()) {
+					if (can_use_gui()) {
+						create_win(new news_img("Convoi handles exhausted!"), w_time_delete, magic_none);
+					}
+					return false;
+				}
+				cnv = depot->add_convoi(can_use_gui());
+				if (!cnv.is_bound()) {
+					return false;
+				}
+				if (convoi_name[0]) {
+					cnv->set_name(convoi_name);
+				}
+			}
+			// parse prefix: "i=" = insert at front, "a=" = append at back
+			bool infront = false;
+			if (p[0] == 'i' && p[1] == '=') {
+				infront = true;
+				p += 2;
+			} else if (p[0] == 'a' && p[1] == '=') {
+				infront = false;
+				p += 2;
+			}
+			// parse =-separated vehicle descriptor names
+			const char *vp = p;
+			while (*vp) {
+				const char *name_start = vp;
+				while (*vp && *vp != '=') vp++;
+				const char *name_end = vp;
+				if (name_end > name_start && cnv->get_vehicle_count() < depot->get_max_convoi_length()) {
+					char veh_name[256];
+					int len = (int)(name_end - name_start);
+					if (len > 255) len = 255;
+					strncpy(veh_name, name_start, len);
+					veh_name[len] = '\0';
+					const vehicle_desc_t *info = vehicle_builder_t::get_info(veh_name);
+					if (info) {
+						if (!info->is_available(welt->get_timeline_year_month()) && !welt->get_settings().get_allow_buying_obsolete_vehicles()) {
+							if (!depot->find_oldest_newest(info, true)) {
+								if (*vp == '=') vp++;
+								continue;
+							}
+						}
+						vehicle_t *veh = depot->find_oldest_newest(info, true);
+						if (!veh) {
+							veh = depot->buy_vehicle(info);
+						}
+						depot->append_vehicle(cnv, veh, infront, can_use_gui());
+					}
+				}
+				if (*vp == '=') vp++;
+			}
+			depot->update_win();
 			break;
 		}
 	}
@@ -9606,6 +9888,9 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * c:set end of choose signal
  * g:set end of guide signal
  * m:set margin of the stoplength of choose signal
+ * t:set stop before check(for choose/longblock signs)
+ * d:set use default route for choose signal
+ * p:set start signal(do not start from stops if this flag is true)
  * 
  */
 bool tool_change_roadsign_t::init( player_t* )
@@ -9711,6 +9996,79 @@ bool tool_change_roadsign_t::init( player_t* )
 		}
 		break;
 
+		case 't':
+		// set advance to end state for signal
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_stop_before_check(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'd':
+		// use default route for choose signal(before call find_route())
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_skip_default_route(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'p':
+		// when state is RED, do not move even if convoy is not reached the end of the signal tile.
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if( roadsign_t *rs = gr->find<signal_t>() ) {
+				rs->set_start_signal(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'l':
+		// length based choose: do not enter first found tile, choose shortest halt that fits the convoy
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_length_based(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+			else if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				rs->set_length_based(inst);
+				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  sign_info_win  ) {
+					sign_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'w':
+		// two_ways: allow convoys to pass the signal from the reverse direction
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  signal_t *sig = gr->find<signal_t>()  ) {
+				if(  player_t::check_owner(sig->get_owner(), welt->get_active_player())  ) {
+					sig->set_two_ways(inst != 0);
+					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)sig);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
+				}
+			}
+		}
+		break;
 
 		default:
 		// do nothing
@@ -9762,14 +10120,14 @@ bool tool_change_city_t::init( player_t *player )
  */
 bool tool_change_halt_t::init(player_t *player) {
 	char tool=0;
-	uint16 halt_id = 0;
+	uint32 halt_id = 0;
 
 	// skip the rest of the command
 	const char *p = default_param;
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi", &tool, &halt_id );
+	sscanf( p, "%c,%u", &tool, &halt_id );
 
 	// skip to the commands ...
 	for(  int z = 2;  *p  &&  z>0;  p++  ) {
@@ -9814,7 +10172,7 @@ bool tool_change_halt_t::init(player_t *player) {
  */
 bool tool_rename_t::init(player_t *player)
 {
-	uint16 id = 0;
+	uint32 id = 0;
 	koord3d pos = koord3d::invalid;
 
 	// skip the rest of the command
@@ -9826,7 +10184,7 @@ bool tool_rename_t::init(player_t *player)
 		case 'c':
 		case 't':
 		case 'p':
-			id = atoi(p);
+			id = (uint32)strtoul(p, NULL, 10);
 			while(  *p>0  &&  *p++!=','  ) {
 			}
 			break;
@@ -10148,4 +10506,306 @@ bool tool_change_factory_t::init( player_t* player )
 		break;
 	}
 	return false;
+}
+
+
+bool tool_change_way_settings_t::init(player_t *player)
+{
+	two_click_tool_t::init(player);
+	if(  is_ctrl_pressed()  &&  can_use_gui()  ) {
+		create_win(new overtaking_mode_frame_t(player, this), w_info, (ptrdiff_t)this);
+	}
+	return true;
+}
+
+
+bool tool_change_way_settings_t::exit(player_t *player)
+{
+	destroy_win((ptrdiff_t)this);
+	return two_click_tool_t::exit(player);
+}
+
+
+void tool_change_way_settings_t::rdwr_custom_data(memory_rw_t *packet)
+{
+	two_click_tool_t::rdwr_custom_data(packet);
+	sint8 i = (sint8)overtaking_mode;
+	uint8 f = street_flag;
+	packet->rdwr_byte(i);
+	packet->rdwr_byte(f);
+	overtaking_mode = (overtaking_mode_t)i;
+	street_flag = f;
+}
+
+
+bool tool_change_way_settings_t::calc_route(route_t &verbindung, player_t *player, const koord3d &start, const koord3d &end)
+{
+	if(  start == end  ) {
+		verbindung.clear();
+		grund_t *gr = welt->lookup(start);
+		if(  gr  &&  gr->get_weg(road_wt) != NULL  ) {
+			verbindung.append(start);
+		}
+	}
+	else {
+		way_checker_t *test_driver = new way_checker_t(road_wt, true);
+		test_driver_t *td = scenario_checker_t::apply(test_driver, player, this);
+		verbindung.calc_route(welt, start, end, td, 0, 0);
+		delete td;
+	}
+	return start == end ? verbindung.get_count() > 0 : verbindung.get_count() > 1;
+}
+
+
+uint8 tool_change_way_settings_t::is_valid_pos(player_t *player, const koord3d &pos, const char *&error, const koord3d &)
+{
+	if(  tool_intern_koord_to_weg_grund(player, welt, pos, road_wt) == NULL  ) {
+		return 0;
+	}
+	error = NULL;
+	return 2;
+}
+
+
+void tool_change_way_settings_t::mark_tiles(player_t *player, const koord3d &start, const koord3d &end)
+{
+	route_t verbindung;
+	if(  !calc_route(verbindung, player, start, end)  ) {
+		return;
+	}
+	const koord3d_vector_t &route = verbindung.get_route();
+	const uint32 count = route.get_count();
+	for(  uint32 i = 0;  i < count;  i++  ) {
+		const koord3d &pos = route[i];
+		grund_t *gr = welt->lookup(pos);
+		if(  !gr  ) {
+			continue;
+		}
+		weg_t *way = gr->get_weg(road_wt);
+		if(  !way  ) {
+			continue;
+		}
+		// build up the ribi that will result from the new overtaking_mode
+		ribi_t::ribi new_ribi;
+		if(  overtaking_mode <= oneway_mode  &&  count > 1  ) {
+			// show the allowed direction (start→end)
+			if(  i < count-1  ) {
+				new_ribi = ribi_type(route[i], route[i+1]);
+			} else {
+				new_ribi = ribi_type(route[i-1], route[i]);
+			}
+			// include connecting ribi from unmasked road at both ends so arrows match
+			new_ribi |= (way->get_ribi_unmasked() & ~ribi_t::backward(new_ribi));
+		} else {
+			new_ribi = way->get_ribi_unmasked();
+		}
+
+		const way_desc_t *desc = way->get_desc();
+		zeiger_t *marker = new zeiger_t(pos, player);
+		if(  gr->get_weg_hang()  ) {
+			marker->set_image(desc->get_slope_image_id(gr->get_weg_hang(), 0));
+		} else if(  ribi_t::is_bend(new_ribi)  &&  desc->has_diagonal_image()  ) {
+			marker->set_image(desc->get_diagonal_image_id(new_ribi, 0));
+		} else {
+			marker->set_image(desc->get_image_id(new_ribi, 0));
+		}
+		if(  skinverwaltung_t::ribi_arrow != NULL  ) {
+			marker->set_foreground_image(skinverwaltung_t::ribi_arrow->get_image_id(new_ribi));
+		}
+		marker->set_yoff(-gr->get_weg_yoff());
+		marker->mark_image_dirty(marker->get_image(), 0);
+		marked.insert(marker);
+		gr->obj_add(marker);
+	}
+}
+
+
+char const* tool_change_way_settings_t::do_work(player_t *player, const koord3d &start, const koord3d &end)
+{
+	route_t verbindung;
+	if(  !calc_route(verbindung, player, start, end)  ) {
+		return "";
+	}
+	const koord3d_vector_t &route = verbindung.get_route();
+	const uint32 count = route.get_count();
+	for(  uint32 i = 0;  i < count;  i++  ) {
+		grund_t *gr = welt->lookup(route[i]);
+		if(  !gr  ) {
+			continue;
+		}
+		strasse_t *str = dynamic_cast<strasse_t*>(gr->get_weg(road_wt));
+		if(  !str  ) {
+			continue;
+		}
+		if(  str->is_deletable(player) != NULL  ) {
+			continue;
+		}
+		str->set_overtaking_mode(overtaking_mode);
+		str->set_street_flag(street_flag);
+		if(  overtaking_mode > oneway_mode  ) {
+			// non-directional mode: clear any existing oneway mask
+			str->set_ribi_mask_oneway(ribi_t::none);
+		}
+		else if(  count > 1  ) {
+			// oneway/halt: set mask based on route direction (start→end = allowed)
+			koord3d const& prev = route[i > 0       ? i-1 : i+1];
+			koord3d const& next = route[i < count-1 ? i+1 : i-1];
+			if(  i == 0  ) {
+				str->update_ribi_mask_oneway(ribi_t::none,         ribi_type(route[i], next));
+			}
+			else if(  i == count-1  ) {
+				str->update_ribi_mask_oneway(ribi_type(route[i], prev), ribi_t::none);
+			}
+			else {
+				str->update_ribi_mask_oneway(ribi_type(route[i], prev), ribi_type(route[i], next));
+			}
+		}
+		str->set_flag(obj_t::dirty);
+	}
+	return NULL;
+}
+
+
+// --- tool_change_way_offset_t ---
+
+waytype_t tool_change_way_offset_t::get_waytype() const
+{
+	return detected_wt != invalid_wt ? detected_wt : (default_param ? (waytype_t)atoi(default_param) : invalid_wt);
+}
+
+
+bool tool_change_way_offset_t::init(player_t *player)
+{
+	detected_wt = invalid_wt;
+	two_click_tool_t::init(player);
+	if(  is_ctrl_pressed()  &&  can_use_gui()  ) {
+		create_win(new overtaking_mode_frame_t(player, this), w_info, (ptrdiff_t)this);
+	}
+	return true;
+}
+
+
+bool tool_change_way_offset_t::exit(player_t *player)
+{
+	destroy_win((ptrdiff_t)this);
+	return two_click_tool_t::exit(player);
+}
+
+
+void tool_change_way_offset_t::rdwr_custom_data(memory_rw_t *packet)
+{
+	two_click_tool_t::rdwr_custom_data(packet);
+	sint8 v = vehicle_offset;
+	packet->rdwr_byte(v);
+	vehicle_offset = v;
+	uint8 wt = (uint8)detected_wt;
+	packet->rdwr_byte(wt);
+	detected_wt = (waytype_t)wt;
+}
+
+
+bool tool_change_way_offset_t::calc_route(route_t &verbindung, player_t *player, const koord3d &start, const koord3d &end)
+{
+	waytype_t wt = get_waytype();
+	if(  start == end  ) {
+		verbindung.clear();
+		grund_t *gr = welt->lookup(start);
+		if(  gr  &&  gr->get_weg(wt) != NULL  ) {
+			verbindung.append(start);
+		}
+	}
+	else {
+		way_checker_t *test_driver = new way_checker_t(wt, true);
+		test_driver_t *td = scenario_checker_t::apply(test_driver, player, this);
+		verbindung.calc_route(welt, start, end, td, 0, 0);
+		delete td;
+	}
+	return start == end ? verbindung.get_count() > 0 : verbindung.get_count() > 1;
+}
+
+
+uint8 tool_change_way_offset_t::is_valid_pos(player_t *player, const koord3d &pos, const char *&error, const koord3d &start)
+{
+	grund_t *gr = welt->lookup(pos);
+	if(  !gr  ) {
+		return 0;
+	}
+	if(  start == koord3d::invalid  ) {
+		// First click: detect waytype from tile.
+		// Shift picks alternate waytype (e.g. tram_wt at a road+tram crossing).
+		waytype_t preferred_wt = default_param ? (waytype_t)atoi(default_param) : invalid_wt;
+		waytype_t wt = invalid_wt;
+		if(  is_shift_pressed()  ) {
+			for(  int i = 0;  i < 2;  i++  ) {
+				weg_t *w = gr->get_weg_nr(i);
+				if(  w  &&  w->get_waytype() != preferred_wt  ) {
+					wt = w->get_waytype();
+					break;
+				}
+			}
+			if(  wt == invalid_wt  ) {
+				wt = preferred_wt;
+			}
+		}
+		else {
+			if(  preferred_wt != invalid_wt  &&  gr->get_weg(preferred_wt)  ) {
+				wt = preferred_wt;
+			}
+			else {
+				weg_t *w = gr->get_weg_nr(0);
+				if(  w  ) {
+					wt = w->get_waytype();
+				}
+			}
+		}
+		if(  wt == invalid_wt  ) {
+			return 0;
+		}
+		detected_wt = wt;
+	}
+	if(  tool_intern_koord_to_weg_grund(player, welt, pos, get_waytype()) == NULL  ) {
+		return 0;
+	}
+	error = NULL;
+	return 2;
+}
+
+
+void tool_change_way_offset_t::mark_tiles(player_t *player, const koord3d &start, const koord3d &end)
+{
+	route_t verbindung;
+	if(  calc_route(verbindung, player, start, end)  ) {
+		FOR(vector_tpl<koord3d>, const& pos, verbindung.get_route()) {
+			zeiger_t *marker = new zeiger_t(pos, NULL);
+			marker->set_image(cursor);
+			marker->mark_image_dirty(marker->get_image(), 0);
+			marked.insert(marker);
+			welt->lookup(pos)->obj_add(marker);
+		}
+	}
+}
+
+
+char const* tool_change_way_offset_t::do_work(player_t *player, const koord3d &start, const koord3d &end)
+{
+	route_t verbindung;
+	if(  !calc_route(verbindung, player, start, end)  ) {
+		return "";
+	}
+	waytype_t wt = get_waytype();
+	FOR(koord3d_vector_t, const& pos, verbindung.get_route()) {
+		grund_t *gr = welt->lookup(pos);
+		if(  !gr  ) {
+			continue;
+		}
+		weg_t *way = gr->get_weg(wt);
+		if(  way->is_deletable(player) != NULL  ) {
+			continue;
+		}
+		if(  way  ) {
+			way->set_vehicle_offset(vehicle_offset);
+			way->set_flag(obj_t::dirty);
+		}
+	}
+	return NULL;
 }
