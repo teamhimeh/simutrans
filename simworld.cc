@@ -3935,8 +3935,41 @@ void karte_t::new_month()
 	{
 		if(fab_list.is_contained(fab))
 		{
+			const factory_desc_t* upgrade_desc = fab->get_pending_upgrade();
+			const koord3d old_pos = fab->get_pos();
 			gebaeude_t* gb = lookup_kartenboden( fab->get_pos().get_2d() )->find<gebaeude_t>();
+			const uint8 old_rot = gb ? gb->get_tile()->get_layout() : 0;
+
+			// Save connection lists before the factory is destroyed.
+			vector_tpl<koord> old_lieferziele;
+			vector_tpl<koord> old_suppliers;
+			if(  upgrade_desc  ) {
+				old_lieferziele = fab->get_lieferziele();
+				old_suppliers   = fab->get_suppliers();
+			}
+
 			hausbauer_t::remove(get_public_player(), gb);
+			// fab pointer is invalid from here on.
+
+			if(  upgrade_desc  ) {
+				fabrik_t* new_fab = factory_builder_t::build_factory(NULL, upgrade_desc, -1, old_rot, old_pos, get_public_player());
+				if(  new_fab  ) {
+					// Re-link to former consumers: check if new factory produces what each consumer needs.
+					FOR(vector_tpl<koord>, consumer_pos, old_lieferziele) {
+						fabrik_t* consumer = fabrik_t::get_fab(consumer_pos);
+						if(  consumer  ) {
+							consumer->add_supplier(new_fab);
+						}
+					}
+					// Re-link to former suppliers: check if new factory needs what each supplier produces.
+					FOR(vector_tpl<koord>, supplier_pos, old_suppliers) {
+						fabrik_t* supplier = fabrik_t::get_fab(supplier_pos);
+						if(  supplier  ) {
+							new_fab->add_supplier(supplier);
+						}
+					}
+				}
+			}
 		}
 	}
 	INT_CHECK("simworld 1278");

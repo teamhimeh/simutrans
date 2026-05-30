@@ -307,6 +307,9 @@ obj_desc_t *factory_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 	desc->sound_id = NO_SOUND;
 	desc->sound_interval = 0xFFFFFFFFul;
 	desc->smokerotations = 0;
+	desc->upgrade_probability = 0;
+	desc->upgrade_to_name = NULL;
+	desc->upgrade_to = NULL;
 
 	typedef factory_desc_t::site_t site_t;
 	if(version == 5) {
@@ -460,6 +463,23 @@ obj_desc_t *factory_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->mail_demand = 65535;
 	}
 
+	// Extended pak fields (appended after any standard version block)
+	if(  extended  ) {
+		if(  extended_version > 1  ) {
+			dbg->fatal("factory_reader_t::read_node()", "Incompatible Extended pak version %i", extended_version);
+		}
+		if(  extended_version >= 1  ) {
+			desc->upgrade_probability = decode_uint16(p);
+			const uint8 len = decode_uint8(p);
+			if(  len > 0  ) {
+				char *name = new char[len + 1];
+				for(  uint8 i = 0;  i < len;  i++  ) { name[i] = decode_sint8(p); }
+				name[len] = '\0';
+				desc->upgrade_to_name = name;
+			}
+		}
+	}
+
 	DBG_DEBUG("factory_reader_t::read_node()",
 		"version=%i, place=%i, productivity=%i, suppliers=%i, products=%i, fields=%i, range=%i, level=%i"
 		"Demands: pax=%i / mail=%i / electric=%i,"
@@ -509,6 +529,9 @@ DBG_MESSAGE("vehicle_reader_t::register_obj()","old sound %i to %i",old_id,desc-
 }
 
 
+// Factories that have an upgrade_to_name needing resolution after all descs are loaded.
+static vector_tpl<factory_desc_t*> pending_upgrade_resolution;
+
 void factory_reader_t::register_obj(obj_desc_t *&data)
 {
 	factory_desc_t* desc = static_cast<factory_desc_t*>(data);
@@ -516,10 +539,25 @@ void factory_reader_t::register_obj(obj_desc_t *&data)
 	desc->electricity_producer = ( fab_name_len>11   &&  (strcmp(desc->get_name()+fab_name_len-9, "kraftwerk")==0  ||  strcmp(desc->get_name()+fab_name_len-11, "Power Plant")==0) );
 	desc->correct_smoke();
 	factory_builder_t::register_desc(desc);
+	if(  desc->upgrade_to_name  ) {
+		pending_upgrade_resolution.append(desc);
+	}
 }
 
 
 bool factory_reader_t::successfully_loaded() const
 {
+	// Resolve upgrade targets now that all factory descs are registered.
+	FOR(vector_tpl<factory_desc_t*>, desc, pending_upgrade_resolution) {
+		desc->upgrade_to = factory_builder_t::get_desc(desc->upgrade_to_name);
+		if(  !desc->upgrade_to  ) {
+			dbg->warning("factory_reader_t::successfully_loaded()",
+				"upgrade target '%s' not found for factory '%s'",
+				desc->upgrade_to_name, desc->get_name());
+		}
+		delete[] desc->upgrade_to_name;
+		desc->upgrade_to_name = NULL;
+	}
+	pending_upgrade_resolution.clear();
 	return factory_builder_t::successfully_loaded();
 }

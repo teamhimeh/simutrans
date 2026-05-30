@@ -235,6 +235,11 @@ private:
 	sint8  sound_id;
 	uint32 sound_interval;
 
+	// Extended pak: automatic upgrade when retiring
+	uint16 upgrade_probability; // 0 = never upgrade; 1-10000 = chance out of 10000
+	char*  upgrade_to_name;     // temporary during loading; freed after resolution
+	const factory_desc_t* upgrade_to; // resolved target, NULL = no upgrade
+
 public:
 	const char *get_name() const { return get_building()->get_name(); }
 	const char *get_copyright() const { return get_building()->get_copyright(); }
@@ -299,6 +304,9 @@ public:
 	// more effects when producing
 	sint8 get_sound() const { return sound_id; }
 	uint32 get_sound_interval_ms() const { return sound_interval; }
+
+	uint16 get_upgrade_probability() const { return upgrade_probability; }
+	const factory_desc_t* get_upgrade_to() const { return upgrade_to; }
 
 	void calc_checksum(checksum_t *chk) const;
 };
