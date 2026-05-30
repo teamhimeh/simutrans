@@ -3941,12 +3941,8 @@ void karte_t::new_month()
 			const uint8 old_rot = gb ? gb->get_tile()->get_layout() : 0;
 
 			// Save connection lists before the factory is destroyed.
-			vector_tpl<koord> old_lieferziele;
-			vector_tpl<koord> old_suppliers;
-			if(  upgrade_desc  ) {
-				old_lieferziele = fab->get_lieferziele();
-				old_suppliers   = fab->get_suppliers();
-			}
+			vector_tpl<koord> old_lieferziele( upgrade_desc ? fab->get_lieferziele() : vector_tpl<koord>() );
+			vector_tpl<koord> old_suppliers(   upgrade_desc ? fab->get_suppliers()   : vector_tpl<koord>() );
 
 			hausbauer_t::remove(get_public_player(), gb);
 			// fab pointer is invalid from here on.
