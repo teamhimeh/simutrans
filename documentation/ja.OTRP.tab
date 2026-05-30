@@ -83,6 +83,12 @@ coupled (loading)
 連結運転中(停車中)
 driving
 運転中
+suspended
+抑止中
+Suspend this convoy
+この編成をこの場で抑止します(信号等の予約を保ったまま停車し続けます)
+Suspension
+抑止
 #------Convoy coupling related stuff------
 #------増解結関連のエントリ------
 Reset coupling
@@ -115,6 +121,8 @@ tiles length of the margin to stop when choosing. Set this margin to the stop si
 振分使用時に、停車する際にこのタイル分の余裕を空けて停車します．「ホーム終端まで進む」がオンのときは奥側に，オフの時は手前側に停車余白をとります．
 Starting signal
 出発信号機
+Length based choose
+短いホームを優先
 Stop before check
 一時停止後に信号開通
 Do not use default route
@@ -123,6 +131,10 @@ try coupling convoy not enter here
 連結試行時の進入禁止
 remove signal
 この信号を撤去する
+allow reverse passage
+信号の逆向き通行を許可
+Allow reverse passage for convoys
+列車が信号を逆向きに通過可能になります(逆向きに通行する場合は信号をチェックしません)
 release back
 後ろを解放
 A convoy waits for other convoy to couple.
@@ -345,6 +357,10 @@ Revert to original schedule
 編集前のスケジュールに戻します．
 Additional goods routing waiting time
 所要時間を加算します
+Not use electricity
+電気を使用しない
+Not use electricity in this schedule
+このスケジュールでは電気を使用しません(電車の出力が0となります)
 #------円表記------
 $
  円
@@ -496,6 +512,12 @@ Trams
 軌道用機関車
 Tram Trailers
 軌道用貨車
+allow invalid convoy
+連結の不完全な編成を許可
+allow invalid coupling convoy start. If start invalid convoy, the power set as 0, and no load permitted!
+連結の不完全な編成を許可します．連結の不完全な編成は出力0となり、営業運転できません．
+Out of service
+回送中
 #------編成最高速度機能------
 Set Max Speed
 編成最高速度を設定
@@ -577,6 +599,16 @@ Show convoy loading level
 編成の乗車率を表示
 show only own vehicle states
 自社の車両のみ表示
+use_route_cache
+ルートキャッシュを使用(use_route_cache)
+Clip below elevated ways
+高架下の道の描画を省略(Clip below elevated ways)
+no cut
+省略しない
+all cut
+全て省略
+pak dependence
+アドオンの設定を使用
 #------通知設定------
 New Year
 新年
@@ -631,6 +663,8 @@ Electrified
 Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
 #------その他の翻訳------
+v%d (current version)
+v%d (現在のバージョン)
 Freight ton-kilo
 輸送量(人キロ/トンキロ)
 Rotate Building
@@ -679,6 +713,10 @@ Factory %s has closed.
 %sは閉業しました．
 ** This Factory Will Close Soon! **
 ** この産業はまもなく閉業します **
+Electricity %
+電力使用率[%]
+Power demand
+電力使用量
 shipment size:
 出荷単位:
 Set shipment size.(default:10)
@@ -741,3 +779,7 @@ Unused addons
 未使用アドオン
 Show unused addons list
 未使用アドオンリストを表示
+Templates
+テンプレ
+crossconnect_factories is enabled!
+全産業が接続済みです!

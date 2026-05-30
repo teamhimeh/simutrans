@@ -79,6 +79,8 @@ settings_t::settings_t() :
 	// since the turning rules are different, driving must now be saved here
 	drive_on_left = false;
 	signals_on_left = false;
+	signal_reverse_front_back = false;
+	roadsign_reverse_front_back = false;
 
 	// forest setting ...
 	forest_base_size = 36;                 // Base forest size - minimal size of forest - map independent
@@ -1024,12 +1026,13 @@ void settings_t::rdwr(loadsave_t *file)
 			overloading_runningcost_increase = true;
 			default_reverse = false;
 		}
-		uint32 credit_per_MWs;
 		if(  file->get_OTRP_version() >= 51  ) {
 			file->rdwr_bool(env_t::use_old_friction);
 			if(  file->get_OTRP_version() < 54  ) {
+				uint32 credit_per_MWs = cst_kw_per_credit>0? 1024/cst_kw_per_credit: 2;
 				// in standard 124.4, this value is set as cst_kw_per_credit
 				file->rdwr_long( credit_per_MWs );
+				cst_kw_per_credit = (credit_per_MWs>0)&&(credit_per_MWs<1025) ? 1024/credit_per_MWs : 512;
 			}
 			file->rdwr_bool(allow_unload_longer_convoy);
 			file->rdwr_bool(allow_higher_flight);
@@ -1044,6 +1047,13 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_bool(use_route_cache);
 		} else {
 			use_route_cache = false;
+		}
+		if(  file->get_OTRP_version() >= 55  ) {
+			file->rdwr_bool(signal_reverse_front_back);
+			file->rdwr_bool(roadsign_reverse_front_back);
+		} else {
+			signal_reverse_front_back = false;
+			roadsign_reverse_front_back = false;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1089,12 +1099,8 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_long(way_count_maximum);
 		}
 
-		uint32 cst_kw_per_credit = 1024/credit_per_MWs;
 		if (file->is_version_atleast(124, 4)||file->get_OTRP_version()>=54) {
 			file->rdwr_long(cst_kw_per_credit);
-		}
-		else {
-			cst_kw_per_credit = 512;
 		}
 		// otherwise the default values of the last one will be used
 	}
@@ -1351,6 +1357,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	drive_on_left                  = contents.get_int( "drive_left",                     drive_on_left ) != 0;
 	signals_on_left                = contents.get_int( "signals_on_left",                signals_on_left ) != 0;
+	signal_reverse_front_back      = contents.get_int( "signal_reverse_front_back",      signal_reverse_front_back ) != 0;
+	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
 

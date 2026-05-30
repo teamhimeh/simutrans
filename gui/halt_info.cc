@@ -105,17 +105,13 @@ class gui_halt_detail_t : public gui_aligned_container_t, private action_listene
 		bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE
 		{
 			player_t *player = welt->get_active_player();
-			if(  player == line->get_owner()  ) {
-				player->simlinemgmt.show_lineinfo(player, line);
-			}
+			player->simlinemgmt.show_lineinfo(line->get_owner(), line);
 			return true;
 		}
 
 		void draw(scr_coord offset) OVERRIDE
 		{
-			if (line->get_owner() == welt->get_active_player()) {
-				button_t::draw(offset);
-			}
+			button_t::draw(offset);
 		}
 	};
 
@@ -613,31 +609,31 @@ bool gui_halt_detail_t::action_triggered(gui_action_creator_t *comp, value_t)
 {
 	if(comp == &other_players_connection_button) {
 		cbuffer_t buf;
-		buf.printf("c,%hu", halt.get_id());
+		buf.printf("c,%u", halt.get_id());
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_CHANGE_HALT], world()->get_active_player());
 	}
 	else if(comp == &bt_no_handle_pax) {
 		cbuffer_t buf;
-		buf.printf("p,%hu", halt.get_id());
+		buf.printf("p,%u", halt.get_id());
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_CHANGE_HALT], world()->get_active_player());
 	}
 	else if(comp == &bt_no_handle_post) {
 		cbuffer_t buf;
-		buf.printf("m,%hu", halt.get_id());
+		buf.printf("m,%u", halt.get_id());
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_CHANGE_HALT], world()->get_active_player());
 	}
 	else if(comp == &bt_no_handle_ware) {
 		cbuffer_t buf;
-		buf.printf("w,%hu", halt.get_id());
+		buf.printf("w,%u", halt.get_id());
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_CHANGE_HALT], world()->get_active_player());
 	}
 	else if(comp == &bt_allow_unload_longer_convoy) {
 		cbuffer_t buf;
-		buf.printf("l,%hu", halt.get_id());
+		buf.printf("l,%u", halt.get_id());
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_CHANGE_HALT], world()->get_active_player());
 	}

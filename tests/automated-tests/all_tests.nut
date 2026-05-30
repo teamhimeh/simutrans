@@ -14,6 +14,7 @@ include("tests/test_climate")
 include("tests/test_depot")
 include("tests/test_dir")
 include("tests/test_factory")
+include("tests/test_convoy_cargo")
 include("tests/test_good")
 include("tests/test_groundobj")
 include("tests/test_halt")
@@ -37,6 +38,9 @@ include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_wayobj")
 include("tests/test_schedule")
+include("tests/test_road_api")
+include("tests/test_road_choose")
+
 
 
 all_tests <- [
@@ -46,6 +50,9 @@ all_tests <- [
 	test_building_build_house_invalid_desc,
 	test_building_build_house_auto_rotation_attraction,
 	test_building_build_house_auto_rotation_citybuilding,
+	test_building_city_multitile_all_tiles_occupied,
+	test_building_city_multitile_removal_clears_all_tiles,
+	test_building_city_multitile_requires_city,
 	test_building_build_multi_tile_sloped,
 	test_building_buy_house_invalid_param,
 	test_building_buy_house_from_public_player,
@@ -87,6 +94,8 @@ all_tests <- [
 	test_factory_build_with_fields,
 	test_factory_build_climate,
 	test_factory_link,
+	test_convoy_cargo_empty,
+	test_convoy_cargo_loaded,
 	test_good_is_interchangeable,
 	test_good_speed_bonus,
 	test_groundobj_build_invalid_param,
@@ -229,12 +238,28 @@ all_tests <- [
 	test_schedule_entry_spacing,
 	test_schedule_entry_length_coupling_done,
 	test_schedule_entry_max_speed,
-	test_schedule_entry_balance_speed
+	test_schedule_entry_balance_speed,
+	test_schedule_flags,
+	test_schedule_max_speed,
+	test_schedule_departure_slot_group_id,
+	test_schedule_departure_slot_group_id_non_null,
+	test_schedule_next_line,
+	test_schedule_next_line_non_null,
+	test_schedule_current,
+	test_schedule_entry_time_statistics,
+	test_road_api,
+	test_road_choose_stop_behind_halt_mode,
+	test_road_choose_stop_behind_oneway_mode,
+	test_road_choose_stop_behind_twoway_mode,
+	test_road_choose_stop_behind_loading_only_mode,
+	test_road_choose_stop_behind_inverted_mode,
+	test_road_choose_no_stop_behind_prohibited_mode
 ]
 
 
 // Tests that are currently failing
 failing_tests <- [
+	test_building_city_multitile_replaces_existing,
 	test_city_change_size_to_minimum,
 	test_depot_build_invalid_pos,
 	test_depot_build_on_tunnel_entrance,

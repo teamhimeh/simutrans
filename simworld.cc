@@ -418,6 +418,7 @@ void karte_t::destroy()
 		dbg->fatal( "karte_t::destroy()","Map cannot be cleanly destroyed in any rotation!" );
 	}
 
+	route_cache.clear();
 	goods_in_game.clear();
 
 	DBG_MESSAGE("karte_t::destroy()", "label clear");
@@ -535,6 +536,12 @@ void karte_t::add_convoi(convoihandle_t const cnv)
 void karte_t::rem_convoi(convoihandle_t const cnv)
 {
 	convoi_array.remove(cnv);
+}
+
+
+void karte_t::load_convoy_templates()
+{
+	convoi_template_load(env_t::pak_dir, env_t::default_settings.get_with_private_paks(), convoy_templates);
 }
 
 
@@ -1840,8 +1847,11 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	dbg->message("karte_t::enlarge_map()","heightfield name is %s",settings.heightfield.c_str());
 	if(  !settings.heightfield.empty()  ) {
 		// init from file
-		for(  sint16 y = 0;  y<=new_size_y;  y++  ) {
-			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<=new_size_x;  x++  ) {
+		// h_field has new_size_x * new_size_y pixels; the grid has one extra row and column.
+		// The rightmost column is mirrored by the per-row copy below; the bottom row is
+		// mirrored by the memcpy below — so the inner loops must stay within h_field bounds.
+		for(  sint16 y = 0;  y<new_size_y;  y++  ) {
+			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<new_size_x;  x++  ) {
 				grid_hgts[x + y*(cached_grid_size.x+1)] = h_field[x+(y*(sint32)cached_grid_size.x)]+1;
 			}
 			grid_hgts[cached_grid_size.x + y*(cached_grid_size.x+1)] = grid_hgts[cached_grid_size.x-1 + y*(cached_grid_size.x+1)];
@@ -6077,10 +6087,17 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 	// rdwr convois
 	if (file->is_loading()) {
 		DBG_MESSAGE("karte_t::rdwr_gamestate()", "load convois");
-		uint16 convoi_nr = 65535;
-		uint16 max_convoi = 65535;
+		uint32 convoi_nr = 65535;
+		uint32 max_convoi = 65535;
 		if(  file->is_version_atleast(101, 0)  ) {
-			file->rdwr_short(convoi_nr);
+			if(  file->get_OTRP_version() >= 55  ) {
+				file->rdwr_long(convoi_nr);
+			}
+			else {
+				uint16 tmp = 65535;
+				file->rdwr_short(tmp);
+				convoi_nr = tmp;
+			}
 			max_convoi = convoi_nr;
 		}
 
@@ -6121,8 +6138,14 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 	else {
 		// save number of convois
 		if(  file->is_version_atleast(101, 0)  ) {
-			uint16 i=convoi_array.get_count();
-			file->rdwr_short(i);
+			if(  file->get_OTRP_version() >= 55  ) {
+				uint32 i = convoi_array.get_count();
+				file->rdwr_long(i);
+			}
+			else {
+				uint16 i = convoi_array.get_count();
+				file->rdwr_short(i);
+			}
 		}
 		FOR(vector_tpl<convoihandle_t>, const cnv, convoi_array) {
 			// one MUST NOT call INT_CHECK here or else the convoi will be broken during reloading!
@@ -6989,7 +7012,7 @@ void karte_t::change_time_multiplier(sint32 delta)
 		if(time_multiplier<=0) {
 			time_multiplier = 1;
 		}
-		if(step_mode!=NORMAL) {
+		if(  !env_t::networkmode  &&  step_mode!=NORMAL  ) {
 			step_mode = NORMAL;
 			reset_timer();
 		}
@@ -7337,7 +7360,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					// already waiting longer than how far we're ahead, so set wait time shorter to the time ahead.
 					next_step_time = (sint64)timems - frame_timediff;
 			}
-			else if(  nwcid == NWC_CHECK  ) {
+			else {
 					// gentle slowing down
 					*ms_difference = timediff;
 				}
@@ -7349,7 +7372,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					next_step_time = timems;
 					*ms_difference = frame_timediff;
 				}
-				else if(  nwcid == NWC_CHECK  ) {
+				else {
 					// gentle catching up
 					*ms_difference = timediff;
 				}
