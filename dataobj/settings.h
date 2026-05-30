@@ -384,6 +384,11 @@ private:
 	// can unload cargo even if stop length is too short
 	bool allow_unload_longer_convoy;
 
+	// transit by foot between overlapping pax stops
+	bool transit_by_foot;
+	uint32 foot_path_weight;      // added to route cost for walking connection
+	uint32 foot_path_time_ticks;  // added to journey time for time-based routing
+
 public:
 	/* the big cost section */
 	sint32 maint_building; // normal building
@@ -772,6 +777,13 @@ public:
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
+
+	bool is_transit_by_foot() const { return transit_by_foot; }
+	void set_transit_by_foot(bool v) { transit_by_foot = v; }
+	uint32 get_foot_path_weight() const { return foot_path_weight; }
+	void set_foot_path_weight(uint32 v) { foot_path_weight = v; }
+	uint32 get_foot_path_time_ticks() const { return foot_path_time_ticks; }
+	void set_foot_path_time_ticks(uint32 v) { foot_path_time_ticks = v; }
 };
 
 #endif

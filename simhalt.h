@@ -253,14 +253,16 @@ public:
 		/// directly reachable halt
 		halthandle_t halt;
 		/// best connection weight to reach this destination
-		uint32 weight:31;
+		uint32 weight:30;
 		/// is halt a transfer halt
 		bool is_transfer:1;
+		/// true if this connection is a foot-path (transit by foot), not a vehicle service
+		bool is_foot_path:1;
 		/// the line or convoy which has the schedule to get to the halt with the best weight
 		traveler_t best_weight_traveler;
 
-		connection_t() : weight(0), is_transfer(false), best_weight_traveler(linehandle_t()) { }
-		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), best_weight_traveler(_best_weight_traveler) { }
+		connection_t() : weight(0), is_transfer(false), is_foot_path(false), best_weight_traveler(linehandle_t()) { }
+		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), is_foot_path(false), best_weight_traveler(_best_weight_traveler) { }
 
 		bool operator == (const connection_t &other) const { return halt == other.halt; }
 		bool operator != (const connection_t &other) const { return halt != other.halt; }
@@ -480,6 +482,13 @@ public:
 	// returns the matching warenziele (goods objectives/destinations)
 	vector_tpl<connection_t> const& get_connections(uint8 const catg_index) const { return all_links[catg_index].connections; }
 
+	// returns true if the connection to dest (for the given category) is a foot-path
+	bool is_foot_path_connection(halthandle_t dest, uint8 catg_index) const;
+
+	// If the ware's next hop is a foot-path, move it immediately to the next halt.
+	// Returns true if the ware was teleported (caller must not add it to cargo queue).
+	bool try_foot_transit(ware_t &ware, uint8 foot_steps = 0);
+
 	/**
 	 * Checks if there is connection for certain freight to the other halt.
 	 * @param halt the other halt
@@ -502,7 +511,8 @@ public:
 	 */
 	void new_month();
 
-	uint8 get_connection_update_counter() const { return connection_update_counter;}
+	uint8 get_connection_update_counter() const { return connection_update_counter; }
+	static uint8 get_connection_update_counter_static() { return connection_update_counter; }
 
 private:
 	/* Node used during route search */
@@ -802,7 +812,7 @@ public:
 	 * This is used for inital passenger, since they already know a route
 	 * @returns amount of goods
 	 */
-	uint32 starte_mit_route(ware_t ware);
+	uint32 starte_mit_route(ware_t ware, uint8 foot_steps = 0);
 
 	const grund_t *find_matching_position(waytype_t wt) const;
 

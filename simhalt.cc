@@ -1889,6 +1889,63 @@ sint32 haltestelle_t::rebuild_connections()
 			(consecutive_halts[i].get_count() != max_consecutive_halts_schedule[i]  ||
 			force_transfer_search);
 	}
+
+	// Add foot-path connections: pax can walk between overlapping nearby stops.
+	// Only for the pax category, never for mail or goods.
+	if(  welt->get_settings().is_transit_by_foot()  &&  is_enabled(goods_manager_t::INDEX_PAS)  ) {
+		const uint16 cov = welt->get_settings().get_station_coverage();
+		for(  auto &other_halt : alle_haltestellen  ) {
+			if(  !other_halt.is_bound()  ||  other_halt == self  ) { continue; }
+			if(  !other_halt->is_enabled(goods_manager_t::INDEX_PAS)  ) { continue; }
+			// Find the minimum 2D tile distance and the z-difference at that nearest tile pair.
+			// Eligibility uses 2D only (station coverage area is a 2D concept).
+			// Cost adds |z_diff| so walking up/down levels is more expensive.
+			uint16 coverage_check = cov + 1;
+			uint16 min_2d_dist = 2*cov + 1;
+			uint16 z_diff_at_min = 0;
+			for(  auto const &my_tile : tiles  ) {
+				const koord3d my_pos3d = my_tile.grund->get_pos();
+				const koord    my_pos  = my_pos3d.get_2d();
+				for(  auto const &other_tile : other_halt->get_tiles()  ) {
+					const koord3d other_pos3d = other_tile.grund->get_pos();
+					const koord   other_pos   = other_pos3d.get_2d();
+					// Use min(|dx|,|dy|) so the check matches the square station-coverage area.
+					const uint16 d = (uint16)koord_distance(my_pos3d,other_pos3d);
+					const uint16 coverage_check_d = (uint16)max( abs(my_pos.x - other_pos.x), abs(my_pos.y - other_pos.y) );
+					if(  d < min_2d_dist || coverage_check_d < coverage_check  ) {
+						min_2d_dist    = d;
+						coverage_check = coverage_check_d;
+						z_diff_at_min  = (uint16)abs(my_pos3d.z - other_pos3d.z);
+					}
+				}
+				if(  coverage_check == 0  ) { break; }
+			}
+			if(  coverage_check <= cov  ) {
+				// Walking distance = 2D tiles (min 1) + height levels.
+				const uint32 dist = (uint32)(min_2d_dist > 0 ? min_2d_dist : 1u) + z_diff_at_min;
+				const uint32 base_rc = welt->get_settings().get_foot_path_weight();
+				const uint32 base_jt = welt->get_settings().get_foot_path_time_ticks();
+				const uint32 aggregate_weight = welt->get_settings().get_time_based_routing_enabled(goods_manager_t::INDEX_PAS) ? base_jt * dist : base_rc * dist;
+				connection_t foot_conn(other_halt, aggregate_weight, linehandle_t());
+				foot_conn.is_foot_path = true;
+				connection_t *const existing = staged_all_links[goods_manager_t::INDEX_PAS].connections.insert_unique_ordered(
+					foot_conn, connection_t::compare);
+				if(  existing  &&  aggregate_weight < existing->weight  ) {
+					existing->weight = aggregate_weight;
+					existing->is_foot_path = true;
+				}
+			}
+		}
+		// Any halt with foot connections must be a transfer point so Dijkstra will explore
+		// it as an intermediate hop, even if it carries only one vehicle line.
+		FOR(vector_tpl<connection_t>, const& c, staged_all_links[goods_manager_t::INDEX_PAS].connections) {
+			if(  c.is_foot_path  ) {
+				staged_all_links[goods_manager_t::INDEX_PAS].is_transfer = true;
+				break;
+			}
+		}
+	}
+
 	return connections_searched;
 }
 
@@ -1946,6 +2003,29 @@ void haltestelle_t::rebuild_linked_connections()
 			}
 		}
 	}
+	// Also include foot-adjacent halts so their reverse foot connections are rebuilt too.
+	if(  welt->get_settings().is_transit_by_foot()  &&  is_enabled(goods_manager_t::INDEX_PAS)  ) {
+		const uint16 cov = welt->get_settings().get_station_coverage();
+		for(  auto const& other : alle_haltestellen  ) {
+			if(  !other.is_bound()  ||  other == self  ) { continue; }
+			if(  !other->is_enabled(goods_manager_t::INDEX_PAS)  ) { continue; }
+			bool overlaps = false;
+			for(  auto const& my_tile : tiles  ) {
+				const koord my_pos = my_tile.grund->get_pos().get_2d();
+				for(  auto const& other_tile : other->get_tiles()  ) {
+					if(  koord_distance(my_pos, other_tile.grund->get_pos().get_2d()) <= cov  ) {
+						overlaps = true;
+						break;
+					}
+				}
+				if(  overlaps  ) { break; }
+			}
+			if(  overlaps  ) {
+				all.append_unique(other);
+			}
+		}
+	}
+
 	FOR(vector_tpl<halthandle_t>, h, all) {
 		if(h.is_bound()) {
 			h->rebuild_connections();
@@ -1964,8 +2044,8 @@ void haltestelle_t::fill_connected_component(uint8 catg_idx, uint16 comp)
 
 	FOR(vector_tpl<connection_t>, &c, all_links[catg_idx].connections) {
 		c.halt->fill_connected_component(catg_idx, comp);
-		// cache the is_transfer value
-		c.is_transfer = c.halt->is_transfer(catg_idx);
+		// cache the is_transfer value; foot connections always act as transfer so Dijkstra explores them
+		c.is_transfer = c.is_foot_path ? true : c.halt->is_transfer(catg_idx);
 	}
 }
 
@@ -3036,11 +3116,37 @@ std::shared_ptr<halt_waiting_goods_t> haltestelle_t::add_goods_to_halt(halt_wait
 
 
 
+bool haltestelle_t::is_foot_path_connection(halthandle_t dest, uint8 catg_index) const
+{
+	for(  auto const& conn : all_links[catg_index].connections  ) {
+		if(  conn.halt == dest  ) {
+			return conn.is_foot_path;
+		}
+	}
+	return false;
+}
+
+
+bool haltestelle_t::try_foot_transit(ware_t &ware, uint8 foot_steps)
+{
+	if(  foot_steps >= 8  ) { return false; }
+	if(  !welt->get_settings().is_transit_by_foot()  ) { return false; }
+	const halthandle_t next = ware.get_zwischenziel();
+	if(  !next.is_bound()  ||  next == self  ) { return false; }
+	if(  !is_foot_path_connection(next, ware.get_desc()->get_catg_index())  ) { return false; }
+	// Walk pax to the next halt. Pop the foot hop from transit list so next halt
+	// routes from its own position rather than re-entering liefere_an with stale state.
+	ware.pop_first_transit_halts();
+	next->starte_mit_route(ware, foot_steps + 1);
+	return true;
+}
+
+
 /* same as liefere an, but there will be no route calculated,
  * since it hase be calculated just before
  * (execption: route contains us as intermediate stop)
  */
-uint32 haltestelle_t::starte_mit_route(ware_t ware)
+uint32 haltestelle_t::starte_mit_route(ware_t ware, uint8 foot_steps)
 {
 	if(ware.get_ziel()==self) {
 		if(  ware.to_factory  ) {
@@ -3064,6 +3170,11 @@ uint32 haltestelle_t::starte_mit_route(ware_t ware)
 	// passt das zu bereits wartender ware ?
 	if(vereinige_waren(ware)) {
 		// dann sind wir schon fertig;
+		return ware.menge;
+	}
+
+	// If the next hop is a foot-path, walk passengers immediately — no vehicle needed.
+	if(  try_foot_transit(ware, foot_steps)  ) {
 		return ware.menge;
 	}
 
@@ -3128,7 +3239,12 @@ dbg->warning("haltestelle_t::liefere_an()","%d %s delivered to %s have no longer
 			return ware.menge;
 		}
 	}
-	
+
+	// If the (re-)routed next hop is a foot-path, teleport immediately.
+	if(  try_foot_transit(ware)  ) {
+		return ware.menge;
+	}
+
 	// add to internal storage
 	add_goods_to_halt(halt_waiting_goods_t(ware, welt->get_ticks()));
 

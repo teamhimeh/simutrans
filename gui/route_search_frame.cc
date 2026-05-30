@@ -200,10 +200,19 @@ void route_search_frame_t::append_connection_row(haltestelle_t::connection_t con
     auto label_with_buf = result_container.new_component<gui_label_buf_t>();
     label_with_buf->buf().append(text);
 
-    linehandle_t result_line = std::holds_alternative<linehandle_t>(connection.best_weight_traveler) ? 
+    if(  connection.is_foot_path  ) {
+        // foot-path connection: no vehicle or line, just show walk indicator
+        result_container.new_component<gui_empty_t>();
+        result_container.new_component<gui_empty_t>();
+        result_container.new_component<gui_label_t>("(walk)");
+        result_container.end_table();
+        return;
+    }
+
+    linehandle_t result_line = std::holds_alternative<linehandle_t>(connection.best_weight_traveler) ?
         std::get<linehandle_t>(connection.best_weight_traveler) : linehandle_t();
     result_container.new_component<gui_traveler_button_t>(result_line);
-    convoihandle_t cnv = result_line.is_bound()?(  result_line->count_convoys()>0 ? result_line->get_convoy(0) : convoihandle_t()  ) : std::get<convoihandle_t>(connection.best_weight_traveler);
+    convoihandle_t cnv = result_line.is_bound()?(  result_line->count_convoys()>0 ? result_line->get_convoy(0) : convoihandle_t()  ) : (std::holds_alternative<convoihandle_t>(connection.best_weight_traveler) ? std::get<convoihandle_t>(connection.best_weight_traveler) : convoihandle_t());
 
     if (  cnv.is_bound()  ) {
         auto original_sched = cnv->get_schedule();
@@ -256,6 +265,7 @@ void route_search_frame_t::append_connection_row(haltestelle_t::connection_t con
                 if (i == start_idx) break;
             }
         } else {
+            result_container.end_table();
             return;
         }
 

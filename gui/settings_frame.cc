@@ -5,6 +5,8 @@
 
 #include <string>
 #include "../simcity.h"
+#include "../simhalt.h"
+#include "../simworld.h"
 #include "../sys/simsys.h"
 #include "simwin.h"
 
@@ -132,6 +134,7 @@ bool settings_frame_t::action_triggered( gui_action_creator_t *comp, value_t )
 bool settings_frame_t::infowin_event(const event_t *ev)
 {
 	if(  ev->ev_class == INFOWIN  &&  ev->ev_code == WIN_CLOSE  ) {
+		const bool old_transit_by_foot = sets->is_transit_by_foot();
 		general.read( sets );
 		display.read( sets );
 		routing.read( sets );
@@ -141,6 +144,11 @@ bool settings_frame_t::infowin_event(const event_t *ev)
 
 		// only the rgb colours have been changed, the colours in system format must be updated
 		env_t_rgb_to_system_colors();
+
+		// If transit_by_foot changed, all halt connections must be rebuilt.
+		if(  sets->is_transit_by_foot() != old_transit_by_foot  ) {
+			world()->set_schedule_counter();
+		}
 	}
 	return gui_frame_t::infowin_event(ev);
 }
