@@ -400,7 +400,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		add_component(&sp_schedule_settings);
 
 		// Additional waiting time on goods routing, when TBGR is enabled
-		add_component(&lb_tbgr_waiting_time,2);
+		add_component(&lb_tbgr_waiting_time,0);
 		numimp_tbgr_waiting_time.set_width( 60 );
 		numimp_tbgr_waiting_time.set_value( schedule->get_additional_base_waiting_time() );
 		numimp_tbgr_waiting_time.set_limits( 0, 999999 );
