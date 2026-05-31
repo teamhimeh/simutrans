@@ -1892,50 +1892,82 @@ sint32 haltestelle_t::rebuild_connections()
 
 	// Add foot-path connections: pax can walk between overlapping nearby stops.
 	// Only for the pax category, never for mail or goods.
+	// Scan tiles within coverage area directly rather than iterating all halts.
 	if(  welt->get_settings().is_transit_by_foot()  &&  is_enabled(goods_manager_t::INDEX_PAS)  ) {
 		const uint16 cov = welt->get_settings().get_station_coverage();
-		for(  auto &other_halt : alle_haltestellen  ) {
-			if(  !other_halt.is_bound()  ||  other_halt == self  ) { continue; }
-			if(  !other_halt->is_enabled(goods_manager_t::INDEX_PAS)  ) { continue; }
-			// Find the minimum 2D tile distance and the z-difference at that nearest tile pair.
-			// Eligibility uses 2D only (station coverage area is a 2D concept).
-			// Cost adds |z_diff| so walking up/down levels is more expensive.
-			uint16 coverage_check = cov + 1;
-			uint16 min_2d_dist = 2*cov + 1;
-			uint16 z_diff_at_min = 0;
-			for(  auto const &my_tile : tiles  ) {
-				const koord3d my_pos3d = my_tile.grund->get_pos();
-				const koord    my_pos  = my_pos3d.get_2d();
-				for(  auto const &other_tile : other_halt->get_tiles()  ) {
-					const koord3d other_pos3d = other_tile.grund->get_pos();
-					const koord   other_pos   = other_pos3d.get_2d();
-					// Use min(|dx|,|dy|) so the check matches the square station-coverage area.
-					const uint16 d = (uint16)koord_distance(my_pos3d,other_pos3d);
-					const uint16 coverage_check_d = (uint16)max( abs(my_pos.x - other_pos.x), abs(my_pos.y - other_pos.y) );
-					if(  d < min_2d_dist || coverage_check_d < coverage_check  ) {
-						min_2d_dist    = d;
-						coverage_check = coverage_check_d;
-						z_diff_at_min  = (uint16)abs(my_pos3d.z - other_pos3d.z);
+
+		// Per-candidate tracking: for each nearby halt, keep the tile pair that
+		// minimises Manhattan walk distance + height difference (= total walk cost).
+		struct foot_candidate_t {
+			halthandle_t halt;
+			uint16 walk_d;  // Manhattan 2D distance of best tile pair
+			uint16 z_diff;  // height difference of best tile pair
+		};
+		vector_tpl<foot_candidate_t> candidates;
+
+		for(  auto const &my_tile : tiles  ) {
+			const koord3d my_pos3d = my_tile.grund->get_pos();
+			const koord    my_pos  = my_pos3d.get_2d();
+
+			for(  sint16 dy = -(sint16)cov;  dy <= (sint16)cov;  dy++  ) {
+				for(  sint16 dx = -(sint16)cov;  dx <= (sint16)cov;  dx++  ) {
+					// Eligibility: Chebyshev distance (square coverage area).
+					if(  max( abs(dx), abs(dy) ) > (sint16)cov  ) { continue; }
+
+					const planquadrat_t *plan = welt->access( my_pos + koord(dx, dy) );
+					if(  !plan  ) { continue; }
+
+					for(  uint8 i = 0;  i < plan->get_boden_count();  i++  ) {
+						const grund_t *gr = plan->get_boden_bei(i);
+						const halthandle_t other_halt = gr->get_halt();
+						if(  !other_halt.is_bound()  ||  other_halt == self  ) { continue; }
+						if(  !other_halt->is_enabled(goods_manager_t::INDEX_PAS)  ) { continue; }
+
+						const uint16 walk_d = (uint16)( abs(dx) + abs(dy) );
+						const uint16 z_diff = (uint16)abs( my_pos3d.z - gr->get_pos().z );
+
+						// Update or insert candidate entry for this halt.
+						bool found = false;
+						for(  uint32 ci = 0;  ci < candidates.get_count();  ci++  ) {
+							if(  candidates[ci].halt == other_halt  ) {
+								if(  walk_d + z_diff < candidates[ci].walk_d + candidates[ci].z_diff  ) {
+									candidates[ci].walk_d = walk_d;
+									candidates[ci].z_diff = z_diff;
+								}
+								found = true;
+								break;
+							}
+						}
+						if(  !found  ) {
+							foot_candidate_t fc;
+							fc.halt   = other_halt;
+							fc.walk_d = walk_d;
+							fc.z_diff = z_diff;
+							candidates.append(fc);
+						}
 					}
-				}
-				if(  coverage_check == 0  ) { break; }
-			}
-			if(  coverage_check <= cov  ) {
-				// Walking distance = 2D tiles (min 1) + height levels.
-				const uint32 dist = (uint32)(min_2d_dist > 0 ? min_2d_dist : 1u) + z_diff_at_min;
-				const uint32 base_rc = welt->get_settings().get_foot_path_weight();
-				const uint32 base_jt = welt->get_settings().get_foot_path_time_ticks();
-				const uint32 aggregate_weight = welt->get_settings().get_time_based_routing_enabled(goods_manager_t::INDEX_PAS) ? base_jt * dist : base_rc * dist;
-				connection_t foot_conn(other_halt, aggregate_weight, linehandle_t());
-				foot_conn.is_foot_path = true;
-				connection_t *const existing = staged_all_links[goods_manager_t::INDEX_PAS].connections.insert_unique_ordered(
-					foot_conn, connection_t::compare);
-				if(  existing  &&  aggregate_weight < existing->weight  ) {
-					existing->weight = aggregate_weight;
-					existing->is_foot_path = true;
 				}
 			}
 		}
+
+		// Build connections for all candidates found in the coverage area.
+		const uint32 base_rc = welt->get_settings().get_foot_path_weight();
+		const uint32 base_jt = welt->get_settings().get_foot_path_time_ticks();
+		const bool time_based = welt->get_settings().get_time_based_routing_enabled(goods_manager_t::INDEX_PAS);
+		for(  uint32 ci = 0;  ci < candidates.get_count();  ci++  ) {
+			const foot_candidate_t &fc = candidates[ci];
+			const uint32 dist = (uint32)(fc.walk_d > 0 ? fc.walk_d : 1u) + fc.z_diff;
+			const uint32 aggregate_weight = time_based ? base_jt * dist : base_rc * dist;
+			connection_t foot_conn(fc.halt, aggregate_weight, linehandle_t());
+			foot_conn.is_foot_path = true;
+			connection_t *const existing = staged_all_links[goods_manager_t::INDEX_PAS].connections.insert_unique_ordered(
+				foot_conn, connection_t::compare);
+			if(  existing  &&  aggregate_weight < existing->weight  ) {
+				existing->weight       = aggregate_weight;
+				existing->is_foot_path = true;
+			}
+		}
+
 		// Any halt with foot connections must be a transfer point so Dijkstra will explore
 		// it as an intermediate hop, even if it carries only one vehicle line.
 		FOR(vector_tpl<connection_t>, const& c, staged_all_links[goods_manager_t::INDEX_PAS].connections) {

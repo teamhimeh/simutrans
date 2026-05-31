@@ -854,16 +854,21 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 		new_component_span<gui_label_t>("Reachable on foot", 2);
 		if(  !foot_sorted.empty()  ) {
 			const bool is_tgbr_enabled = world()->get_settings().get_time_based_routing_enabled(goods_manager_t::INDEX_PAS);
+			const uint32 base_rc = world()->get_settings().get_foot_path_weight();
+			const uint32 base_jt = world()->get_settings().get_foot_path_time_ticks();
 			FOR(vector_tpl<haltestelle_t::connection_t>, const& conn, foot_sorted) {
 				button_t *pb = new_component<button_t>();
 				pb->init( button_t::posbutton_automatic, NULL);
 				pb->set_targetpos3d( conn.halt->get_basis_pos3d() );
 
 				gui_label_buf_t *lb = new_component<gui_label_buf_t>();
+				// Reverse-calculate tile distance from weight (weight = base * dist).
+				const uint32 base = is_tgbr_enabled ? base_jt : base_rc;
+				const uint32 dist = (base > 0) ? (conn.weight / base) : 0;
 				if(  is_tgbr_enabled  ) {
-					lb->buf().printf("%s <%u>", conn.halt->get_name(), world()->tick_to_divided_time(conn.weight));
+					lb->buf().printf("%s (%u tiles) <%u>", conn.halt->get_name(), dist, world()->tick_to_divided_time(conn.weight));
 				} else {
-					lb->buf().printf("%s <%u>", conn.halt->get_name(), conn.weight);
+					lb->buf().printf("%s (%u tiles) <%u>", conn.halt->get_name(), dist, conn.weight);
 				}
 				lb->update();
 			}
