@@ -291,13 +291,34 @@ static halthandle_t suche_nahe_haltestelle(player_t *player, karte_t *welt, koor
 		}
 	}
 
-	// now just search all neighbours
+	const sint16 ref_z = pos.z;
+
+	// search same-height neighbours first
 	for(  sint16 y=-1;  y<=h;  y++  ) {
 		for(  sint16 x=-1;  x<=b;  (x==-1 && y>-1 && y<h) ? x=b:x++  ) {
 			if(  planquadrat_t* plan=welt->access(k+koord(x,y))  ) {
-				my_halt = plan->get_halt( player );
-				if(  my_halt.is_bound()  ) {
-					return my_halt;
+				grund_t *gr = plan->get_boden_in_hoehe( ref_z );
+				if(  gr  ) {
+					my_halt = gr->get_halt();
+					if(  my_halt.is_bound()  &&  (player == NULL  ||  player == my_halt->get_owner())  ) {
+						return my_halt;
+					}
+				}
+			}
+		}
+	}
+
+	// then search above/below neighbours
+	for(  sint16 y=-1;  y<=h;  y++  ) {
+		for(  sint16 x=-1;  x<=b;  (x==-1 && y>-1 && y<h) ? x=b:x++  ) {
+			if(  planquadrat_t* plan=welt->access(k+koord(x,y))  ) {
+				for(  uint8 i=0;  i<plan->get_boden_count();  i++  ) {
+					grund_t *gr = plan->get_boden_bei(i);
+					if(  gr->get_hoehe() == ref_z  ) { continue; } // already checked
+					my_halt = gr->get_halt();
+					if(  my_halt.is_bound()  &&  (player == NULL  ||  player == my_halt->get_owner())  ) {
+						return my_halt;
+					}
 				}
 			}
 		}
@@ -5272,7 +5293,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 	}
 	else {
-		halt = suche_nahe_haltestelle(player,welt,bd->get_pos());
+		if(  !is_shift_pressed()  ) {
+			halt = suche_nahe_haltestelle(player,welt,bd->get_pos());
+		}
 	}
 
 	// seems everything ok, lets build
