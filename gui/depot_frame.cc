@@ -596,10 +596,8 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	tram_waggons.set_player_nr(depot->get_owner_nr());
 	tram_waggons.add_listener(this);
 
-	// Convoy template tab setup
-	if (welt->get_convoy_templates().empty()) {
-		welt->load_convoy_templates();
-	}
+	// Convoy template tab setup: always reload to pick up any new .tab files
+	welt->load_convoy_templates();
 	template_panel = new gui_template_panel_t();
 	template_panel->init(welt->get_convoy_templates(), (sint8)depot->get_owner_nr(), depot);
 	template_panel->add_listener(this);
@@ -1393,6 +1391,17 @@ DBG_DEBUG("depot_frame_t::build_vehicle_lists()","finally %i passenger vehicle, 
 		}
 		template_panel->refresh(name_filter_value, sort_by_action, tmpl_boundary_veh, tmpl_is_insert, weg_electrified, show_all, month_now, show_retired_vehicles, tmpl_target_wt);
 	}
+	if (pas.get_size().w > 0) {
+		pas.recalc_size();
+		electrics.recalc_size();
+		loks.recalc_size();
+		waggons.recalc_size();
+		tram_pas.recalc_size();
+		tram_electrics.recalc_size();
+		tram_loks.recalc_size();
+		tram_waggons.recalc_size();
+	}
+
 	update_data();
 	update_tabs();
 }
