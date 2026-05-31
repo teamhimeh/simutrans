@@ -4838,7 +4838,7 @@ const char *tool_build_station_t::tool_station_dock_aux(player_t *player, koord3
 		}
 	}
 
-	if(!halt.is_bound()) {
+	if(!halt.is_bound()  &&  !is_shift_pressed()) {
 		halt = suche_nahe_haltestelle(player, welt, welt->lookup_kartenboden(k)->get_pos() );
 	}
 	bool neu = !halt.is_bound();
@@ -5060,7 +5060,7 @@ const char *tool_build_station_t::tool_station_flat_dock_aux(player_t *player, k
 
 	DBG_MESSAGE("tool_station_flat_dock_aux()","building dock from square (%d,%d) to (%d,%d) layout=%i", k.x, k.y, last_k.x, last_k.y, layout );
 
-	if(!halt.is_bound()) {
+	if(!halt.is_bound()  &&  !is_shift_pressed()) {
 		halt = suche_nahe_haltestelle(player, welt, welt->lookup_kartenboden(k)->get_pos() );
 	}
 	bool neu = !halt.is_bound();
