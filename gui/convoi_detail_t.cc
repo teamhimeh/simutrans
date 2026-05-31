@@ -243,7 +243,7 @@ void convoi_detail_t::init(convoihandle_t cnv)
 			new_component<gui_fill_t>();
 
 			copy_convoi_button.init(button_t::roundbox| button_t::flexible, "Copy Convoi");
-			copy_convoi_button.set_tooltip("Copy this convoi (ctrl pressed: copy vehicle list as template format to clipboard)");
+			copy_convoi_button.set_tooltip(translator::translate("Copy this convoi (ctrl pressed: copy vehicle list as template format to clipboard)"));
 			copy_convoi_button.add_listener(this);
 			add_component(&copy_convoi_button);
 		}
