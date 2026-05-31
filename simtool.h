@@ -498,6 +498,10 @@ class tool_build_station_t : public two_click_tool_t {
 	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix );
 	const building_desc_t *get_desc( sint8 &rotation ) const;
 
+	// When set, tool_station_aux uses this halt instead of creating a new one or calling
+	// suche_nahe_haltestelle. Used by the shift+ctrl area-one-halt mode in do_work.
+	halthandle_t area_master_halt;
+
   public:
 	tool_build_station_t() : two_click_tool_t(TOOL_BUILD_STATION | GENERAL_TOOL) {one_click = true;}
 	image_id get_icon(player_t*) const OVERRIDE;

@@ -5293,7 +5293,11 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 	}
 	else {
-		if(  !is_shift_pressed()  ) {
+		if(  area_master_halt.is_bound()  ) {
+			// Area-one-halt mode: force all new tiles to join the master halt.
+			halt = area_master_halt;
+		}
+		else if(  !is_shift_pressed()  ) {
 			halt = suche_nahe_haltestelle(player,welt,bd->get_pos());
 		}
 	}
@@ -5674,7 +5678,54 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 		return NULL; //TODO: set proper error message when gr is not available.
 	}
 
-	// double click
+	// Area mode with ONE shared new stop (shift+ctrl).
+	// Tiles with no halt join the master halt; tiles with an existing halt only
+	// get their building descriptor updated (halt membership is preserved).
+	if(  is_shift_pressed()  &&  is_ctrl_pressed()  ) {
+		area_master_halt = halthandle_t(); // start with no master halt
+
+		int dx2 = (start.x <= end.x) ? 1 : -1;
+		int dy2 = (start.y <= end.y) ? 1 : -1;
+		const char *error = NULL;
+
+		for(  sint16 kx = start.x;  kx != end.x + dx2;  kx += dx2  ) {
+			for(  sint16 ky = start.y;  ky != end.y + dy2;  ky += dy2  ) {
+				grund_t *gr = welt->lookup_kartenboden( koord(kx, ky) );
+				if(  !gr  ) { continue; }
+
+				const halthandle_t tile_halt = gr->get_halt();
+
+				// If this tile belongs to a different halt and the master is already
+				// established, temporarily clear area_master_halt so tool_station_aux
+				// follows the upgrade-in-place path (keeping the existing halt).
+				const bool foreign_halt = tile_halt.is_bound()
+					&&  area_master_halt.is_bound()
+					&&  tile_halt != area_master_halt;
+
+				if(  foreign_halt  ) {
+					halthandle_t save = area_master_halt;
+					area_master_halt = halthandle_t();
+					const char *e = process( player, koord3d(kx, ky, start.z) );
+					area_master_halt = save;
+					if(  !error  ) { error = e; }
+				}
+				else {
+					const char *e = process( player, koord3d(kx, ky, start.z) );
+					if(  !error  ) { error = e; }
+					// Capture the master halt from the first tile that got one.
+					if(  !area_master_halt.is_bound()  ) {
+						area_master_halt = haltestelle_t::get_halt(
+							koord3d(kx, ky, start.z), player );
+					}
+				}
+			}
+		}
+
+		area_master_halt = halthandle_t(); // clean up
+		return error;
+	}
+
+	// double click (ctrl only) — each tile gets its own or nearest halt
 	koord wh, nw;
 	wh.x = abs(end.x-start.x)+1;
 	wh.y = abs(end.y-start.y)+1;
