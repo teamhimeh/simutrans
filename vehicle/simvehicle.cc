@@ -3775,7 +3775,15 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 	if(  next_signal != route_t::INVALID_INDEX  ) {
 		// success, and there is a signal before end of route => finished
 		sig->set_state( roadsign_t::STATE_GREEN );
-		cnv->set_next_stop_index( min( next_crossing, next_signal ) );
+		// cascade through the next signal (same logic as is_priority_signal_clear)
+		if(  cnv->get_route()->at(next_signal) != cnv->get_route()->back()  ) {
+			sint32 dummy = restart_speed;
+			is_signal_clear( next_signal, dummy, true );
+		}
+		// do not shorten next_stop_index set by cascaded signal
+		if(  next_crossing <= next_signal  ||  cnv->get_next_stop_index() <= next_signal + 1  ) {
+			cnv->set_next_stop_index( min( next_crossing, next_signal ) );
+		}
 		return true;
 	}
 
