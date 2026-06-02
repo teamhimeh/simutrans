@@ -22,7 +22,6 @@ Run these in parallel to gather information:
 gh pr view NUMBER --repo OWNER/REPO
 gh pr diff NUMBER --repo OWNER/REPO
 gh api repos/OWNER/REPO/pulls/NUMBER/comments
-gh api repos/OWNER/REPO/issues/NUMBER/comments
 ```
 
 Also, read the surrounding context of the affected code in the local repository using file viewing tools to fully understand the impact of the changes.
