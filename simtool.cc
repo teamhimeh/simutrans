@@ -276,45 +276,86 @@ static halthandle_t suche_nahe_haltestelle(player_t *player, karte_t *welt, koor
 		bd = welt->lookup_kartenboden(k);
 	}
 
+	const sint16 ref_z = pos.z;
+
+	// For bridge approach (slope) tiles, prioritise the bridge deck height in all
+	// neighbour scans so the halt on the flat span is found before any same-height
+	// ground halt.  A gentle slope puts the deck one level up; a steep slope two.
+	sint16 scan_z = ref_z;
+	if(  bd  &&  bd->ist_bruecke()  ) {
+		const sint8 slope = bd->get_grund_hang();
+		if(  slope == slope_t::north  ||  slope == slope_t::west
+		  || slope == slope_t::east   ||  slope == slope_t::south  ) {
+			scan_z = ref_z + 1;
+		}
+		else if(  slope == 8  ||  slope == 24  ||  slope == 56  ||  slope == 72  ) {
+			scan_z = ref_z + 2;
+		}
+	}
+
 	// first we try to connect to a stop straight in our direction; otherwise our station may break during construction
 	if(  bd->hat_wege()  ) {
 		ribi_t::ribi ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		halthandle_t ribi_approach_halt;
 		for(  int i=0;  i<4;  i++ ) {
 			if(  ribi_t::nesw[i] & ribi ) {
 				if(  planquadrat_t* plan=welt->access(k+koord::nesw[i])  ) {
-					my_halt = plan->get_halt( player );
-					if(  my_halt.is_bound()  ) {
-						return my_halt;
+					grund_t *ngr = plan->get_boden_in_hoehe( scan_z );
+					if(  ngr  ) {
+						my_halt = ngr->get_halt();
+						if(  my_halt.is_bound()  &&  (player == NULL  ||  player == my_halt->get_owner())  ) {
+							if(  ngr->ist_bruecke()  &&  ngr->get_grund_hang() != slope_t::flat  ) {
+								if(  !ribi_approach_halt.is_bound()  ) ribi_approach_halt = my_halt;
+							}
+							else {
+								return my_halt;
+							}
+						}
 					}
 				}
 			}
 		}
+		if(  ribi_approach_halt.is_bound()  ) {
+			return ribi_approach_halt;
+		}
 	}
 
-	const sint16 ref_z = pos.z;
-
-	// search same-height neighbours first
+	// Search at scan_z height first (bridge deck for approach tiles, ref_z otherwise).
+	// Within this scan, prefer halts on flat tiles over halts on bridge approach slopes
+	// so that a nearby flat ground halt is chosen over an adjacent approach halt.
+	halthandle_t approach_halt_at_scan_z; // deferred fallback
 	for(  sint16 y=-1;  y<=h;  y++  ) {
 		for(  sint16 x=-1;  x<=b;  (x==-1 && y>-1 && y<h) ? x=b:x++  ) {
 			if(  planquadrat_t* plan=welt->access(k+koord(x,y))  ) {
-				grund_t *gr = plan->get_boden_in_hoehe( ref_z );
+				grund_t *gr = plan->get_boden_in_hoehe( scan_z );
 				if(  gr  ) {
 					my_halt = gr->get_halt();
 					if(  my_halt.is_bound()  &&  (player == NULL  ||  player == my_halt->get_owner())  ) {
-						return my_halt;
+						if(  gr->ist_bruecke()  &&  gr->get_grund_hang() != slope_t::flat  ) {
+							// approach slope tile — defer in favour of any flat-tile halt
+							if(  !approach_halt_at_scan_z.is_bound()  ) {
+								approach_halt_at_scan_z = my_halt;
+							}
+						}
+						else {
+							return my_halt;
+						}
 					}
 				}
 			}
 		}
 	}
+	if(  approach_halt_at_scan_z.is_bound()  ) {
+		return approach_halt_at_scan_z;
+	}
 
-	// then search above/below neighbours
+	// then search other heights (for approach tiles this includes ref_z = ground level)
 	for(  sint16 y=-1;  y<=h;  y++  ) {
 		for(  sint16 x=-1;  x<=b;  (x==-1 && y>-1 && y<h) ? x=b:x++  ) {
 			if(  planquadrat_t* plan=welt->access(k+koord(x,y))  ) {
 				for(  uint8 i=0;  i<plan->get_boden_count();  i++  ) {
 					grund_t *gr = plan->get_boden_bei(i);
-					if(  gr->get_hoehe() == ref_z  ) { continue; } // already checked
+					if(  gr->get_hoehe() == scan_z  ) { continue; } // already checked
 					my_halt = gr->get_halt();
 					if(  my_halt.is_bound()  &&  (player == NULL  ||  player == my_halt->get_owner())  ) {
 						return my_halt;
