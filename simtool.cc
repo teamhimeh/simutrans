@@ -5104,7 +5104,7 @@ const char *tool_build_station_t::tool_station_flat_dock_aux(player_t *player, k
 }
 
 // build all types of stops but sea harbours
-const char *tool_build_station_t::tool_station_aux(player_t *player, koord3d pos, const building_desc_t *desc, waytype_t wegtype, const char *type_name )
+const char *tool_build_station_t::tool_station_aux(player_t *player, koord3d pos, const building_desc_t *desc, waytype_t wegtype, const char *type_name, halthandle_t master_halt)
 {
 	koord k = pos.get_2d();
 DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", desc->get_name(), k.x, k.y, wegtype);
@@ -5293,9 +5293,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 	}
 	else {
-		if(  area_master_halt.is_bound()  ) {
+		if(  master_halt.is_bound()  ) {
 			// Area-one-halt mode: force all new tiles to join the master halt.
-			halt = area_master_halt;
+			halt = master_halt;
 		}
 		else if(  !is_shift_pressed()  ) {
 			halt = suche_nahe_haltestelle(player,welt,bd->get_pos());
@@ -5562,7 +5562,7 @@ const char *tool_build_station_t::work( player_t *player, koord3d pos )
 {
 	return two_click_tool_t::work( player, pos );
 }
-const char *tool_build_station_t::process( player_t *player, koord3d pos )
+const char *tool_build_station_t::process( player_t *player, koord3d pos, halthandle_t master_halt )
 {
 	const grund_t *gr = welt->lookup(pos);
 	if(!gr) {
@@ -5600,20 +5600,20 @@ const char *tool_build_station_t::process( player_t *player, koord3d pos )
 		case building_desc_t::generic_stop: {
 			switch(desc->get_extra()) {
 				case road_wt:
-					msg = tool_build_station_t::tool_station_aux(player, pos, desc, road_wt, "H");
+					msg = tool_build_station_t::tool_station_aux(player, pos, desc, road_wt, "H", master_halt);
 					break;
 				case track_wt:
 				case monorail_wt:
 				case maglev_wt:
 				case narrowgauge_wt:
 				case tram_wt:
-					msg = tool_build_station_t::tool_station_aux(player, pos, desc, (waytype_t)desc->get_extra(), "BF");
+					msg = tool_build_station_t::tool_station_aux(player, pos, desc, (waytype_t)desc->get_extra(), "BF", master_halt);
 					break;
 				case water_wt:
-					msg = tool_build_station_t::tool_station_aux(player, pos, desc, water_wt, "Dock");
+					msg = tool_build_station_t::tool_station_aux(player, pos, desc, water_wt, "Dock", master_halt);
 					break;
 				case air_wt:
-					msg = tool_build_station_t::tool_station_aux(player, pos, desc, air_wt, "Airport");
+					msg = tool_build_station_t::tool_station_aux(player, pos, desc, air_wt, "Airport", master_halt);
 					break;
 			}
 			break;
@@ -5682,7 +5682,7 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 	// Tiles with no halt join the master halt; tiles with an existing halt only
 	// get their building descriptor updated (halt membership is preserved).
 	if(  is_shift_pressed()  &&  is_ctrl_pressed()  ) {
-		area_master_halt = halthandle_t(); // start with no master halt
+		halthandle_t area_master_halt; // local — valid only during this loop
 
 		int dx2 = (start.x <= end.x) ? 1 : -1;
 		int dy2 = (start.y <= end.y) ? 1 : -1;
@@ -5693,30 +5693,29 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 				grund_t *gr = welt->lookup_kartenboden( koord(kx, ky) );
 				if(  !gr  ) { continue; }
 
-				// Use the tile's own height as reported by lookup_kartenboden.
-				// For bridge approach (slope) tiles, brueckenboden_t stores pos.z at the
-				// bridge level (top of slope), so get_hoehe() already gives the correct z
-				// for welt->lookup() — no subtraction from start.z is needed here.
+				// Skip bridge approach (slope) tiles — they are not flat ground and
+				// brueckenboden_t::get_hoehe() returns the base height of the slope,
+				// which can equal the reference ground height and cause a station to
+				// be placed on the approach tile instead of the intended flat tile.
+				if(  gr->ist_bruecke()  &&  gr->get_grund_hang() != slope_t::flat  ) { continue; }
+
 				const koord3d tile_pos(kx, ky, gr->get_hoehe());
 
 				const halthandle_t tile_halt = gr->get_halt();
 
 				// If this tile belongs to a different halt and the master is already
-				// established, temporarily clear area_master_halt so tool_station_aux
-				// follows the upgrade-in-place path (keeping the existing halt).
+				// established, pass an empty handle so tool_station_aux follows the
+				// upgrade-in-place path (keeping the existing halt).
 				const bool foreign_halt = tile_halt.is_bound()
 					&&  area_master_halt.is_bound()
 					&&  tile_halt != area_master_halt;
 
 				if(  foreign_halt  ) {
-					halthandle_t save = area_master_halt;
-					area_master_halt = halthandle_t();
-					const char *e = process( player, tile_pos );
-					area_master_halt = save;
+					const char *e = process( player, tile_pos, halthandle_t() );
 					if(  !error  ) { error = e; }
 				}
 				else {
-					const char *e = process( player, tile_pos );
+					const char *e = process( player, tile_pos, area_master_halt );
 					if(  !error  ) { error = e; }
 					// Capture the master halt from the first tile that got one.
 					if(  !area_master_halt.is_bound()  ) {
@@ -5726,7 +5725,6 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 			}
 		}
 
-		area_master_halt = halthandle_t(); // clean up
 		return error;
 	}
 
