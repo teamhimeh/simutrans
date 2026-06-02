@@ -1641,6 +1641,7 @@ void convoi_t::step()
 			break;
 
 		case NO_ROUTE:
+			clear_reserved_tiles();
 			unset_convoi_coupling_in_progress();
 			// stuck vehicles
 			if (schedule->empty()) {
@@ -2918,6 +2919,11 @@ void convoi_t::clear_reserved_tile_if_not_matching_route()
 		// this convoy does not have reserved_tile
 		return;
 	}
+    // NEW: if reserved_tiles doesn't cover the full new route, clear and switch to next_reservation_index
+    if( get_reserved_tiles().get_count() < route.get_count() ) {
+        clear_reserved_tiles();
+        return;
+    }
 	// check the new route to the next stop is match as reserved_tiles
 	for( uint16 i=1; i<min(get_route()->get_count(),get_reserved_tiles().get_count()); i++ ) {
 		if( route.at(i) != reserved_tiles[i]  ) {
