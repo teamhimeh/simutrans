@@ -1818,6 +1818,16 @@ const char *tool_clear_reservation_t::work( player_t *, koord3d pos )
 						}
 					}
 				}
+				// Reset convoy reservation state after all schiene tiles have been freed.
+				// clear_reserved_tiles() releases any off-route tiles and wipes the vector.
+				cnv->clear_reserved_tiles();
+				// next_reservation_index: restart from the front vehicle's current position.
+				cnv->set_next_reservation_index( cnv->front()->get_route_index() );
+				// next_coupling_index: clear so no stale coupling target remains.
+				cnv->set_next_coupling( route_t::INVALID_INDEX, 0 );
+				// next_stop_index: reset to just ahead of the front vehicle so the next
+				// can_enter_tile call triggers a fresh block reservation.
+				cnv->set_next_stop_index( cnv->front()->get_route_index() );
 			}
 			else if(  s  ) {
 				s->unreserve_all();

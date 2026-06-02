@@ -309,7 +309,7 @@ void convoi_t::unreserve_route()
  */
 void convoi_t::reserve_route()
 {
-	if(  reserved_tiles.get_count()>0  &&  anz_vehikel>0  ) {
+	if(  !is_coupled()  &&  reserved_tiles.get_count()>0  &&  anz_vehikel>0  ) {
 		// reservation is controlled by reserved_tiles
 		for(  uint32 idx = 0;  idx < reserved_tiles.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( reserved_tiles[idx] )  ) {
