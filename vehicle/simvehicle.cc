@@ -4146,14 +4146,18 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 	uint16 next_signal, next_crossing;
 
 	if(  block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false )  ) {
-		if(  next_signal == route_t::INVALID_INDEX  ||  cnv->get_route()->at(next_signal) == cnv->get_route()->back()  ||  is_signal_clear( next_signal, restart_speed, call_by_step )  ) {
+		if(  next_signal == route_t::INVALID_INDEX  ||  cnv->get_route()->at(next_signal) == cnv->get_route()->back()  ) {
 			// ok, end of route => we can go
 			sig->set_state( roadsign_t::STATE_GREEN );
 			// do not shorten next_stop_index set by recursive call (e.g. longblock signal)
 			// unless a crossing requires stopping before the next signal
-			if(  next_crossing <= next_signal  ||  cnv->get_next_stop_index() <= next_signal + 1  ) {
-				cnv->set_next_stop_index( min( next_signal, next_crossing ) );
-			}
+			cnv->set_next_stop_index( min( next_signal, next_crossing ) );
+			return true;
+		}
+		if(  is_signal_clear( next_signal, restart_speed, call_by_step )  ) {
+			// ok, the next signal is clear
+			sig->set_state( roadsign_t::STATE_GREEN );
+			cnv->set_next_stop_index( min(cnv->get_next_stop_index(), next_crossing) );
 			return true;
 		}
 
@@ -4782,10 +4786,6 @@ void rail_vehicle_t::leave_tile()
 						sig->set_state(  roadsign_t::STATE_RED );
 					}
 				}
-				if(  cnv  ) {
-					// If reservation is controlled by next_reservation_index, this does nothing.
-					cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
-				}
 				if (gr->has_two_ways()) {
 					// we may need to reserve the other way as well
 					if (schiene_t* sch1 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch0))) {
@@ -4809,6 +4809,10 @@ void rail_vehicle_t::leave_tile()
 						sig->set_state(  roadsign_t::STATE_RED );
 					}
 				}
+			}
+			if(  cnv  ) {
+				// If reservation is controlled by next_reservation_index, this does nothing.
+				cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 			}
 		}
 	}
