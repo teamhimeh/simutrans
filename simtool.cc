@@ -5687,39 +5687,73 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 		int dx2 = (start.x <= end.x) ? 1 : -1;
 		int dy2 = (start.y <= end.y) ? 1 : -1;
 		const char *error = NULL;
+		sint32 start_z = start.z; // we compare to this start height. but this value could be changed if there is a bridge approach.
+		const grund_t *start_gr = welt->lookup(start);
+		if(  !start_gr  ) { return NULL; } //TODO: set proper error message when gr is not
+		// bridge approach check
+		if(  start_gr->ist_bruecke()  ) {
+			const sint8 slope = start_gr->get_grund_hang();
+			if(  slope == slope_t::north  ||  slope == slope_t::west
+				|| slope == slope_t::east   ||  slope == slope_t::south  ) {
+				start_z += 1;
+			}
+			else if(  slope == 8  ||  slope == 24  ||  slope == 56  ||  slope == 72  ) {
+				start_z += 2;
+			}
+		}
+
 
 		for(  sint16 kx = start.x;  kx != end.x + dx2;  kx += dx2  ) {
 			for(  sint16 ky = start.y;  ky != end.y + dy2;  ky += dy2  ) {
-				grund_t *gr = welt->lookup_kartenboden( koord(kx, ky) );
-				if(  !gr  ) { continue; }
+				planquadrat_t *plan = welt->access( koord(kx, ky) );
+				if(  !plan  ) { continue; }
 
-				// Skip bridge approach (slope) tiles — they are not flat ground and
-				// brueckenboden_t::get_hoehe() returns the base height of the slope,
-				// which can equal the reference ground height and cause a station to
-				// be placed on the approach tile instead of the intended flat tile.
-				if(  gr->ist_bruecke()  &&  gr->get_grund_hang() != slope_t::flat  ) { continue; }
+				// Iterate every tile in the stack (ground, bridge spans, tunnels …).
+				// process() / tool_station_aux() already rejects non-flat and invalid
+				// tiles, so slope approach tiles fail harmlessly while flat bridge
+				// decks succeed.  This is the only way to reach bridge tiles, because
+				// lookup_kartenboden() returns the natural ground tile, not the bridge
+				// span above it.
+				for(  unsigned b = 0;  b < plan->get_boden_count();  b++  ) {
+					grund_t *gr = plan->get_boden_bei(b);
+					if(  !gr  ) { continue; }
 
-				const koord3d tile_pos(kx, ky, gr->get_hoehe());
+					const koord3d tile_pos = gr->get_pos();
+					// Mirror the ctrl-only bridge height logic: bridge approaches sit
+					// one or two levels below the bridge deck (start.z), flat bridge
+					// spans are at start.z, everything else must be at start.z.
+					sint32 expected_z = start_z;
+					if(  gr->ist_bruecke()  ) {
+						const sint8 slope = gr->get_grund_hang();
+						if(  slope == slope_t::north  ||  slope == slope_t::west
+						  || slope == slope_t::east   ||  slope == slope_t::south  ) {
+							expected_z = start_z - 1;
+						}
+						else if(  slope == 8  ||  slope == 24  ||  slope == 56  ||  slope == 72  ) {
+							expected_z = start_z - 2;
+						}
+					}
+					if(  tile_pos.z != expected_z  ) { continue; }
+					const halthandle_t tile_halt = gr->get_halt();
 
-				const halthandle_t tile_halt = gr->get_halt();
+					// If this tile belongs to a different halt and the master is
+					// already established, pass an empty handle so tool_station_aux
+					// follows the upgrade-in-place path (keeping the existing halt).
+					const bool foreign_halt = tile_halt.is_bound()
+						&&  area_master_halt.is_bound()
+						&&  tile_halt != area_master_halt;
 
-				// If this tile belongs to a different halt and the master is already
-				// established, pass an empty handle so tool_station_aux follows the
-				// upgrade-in-place path (keeping the existing halt).
-				const bool foreign_halt = tile_halt.is_bound()
-					&&  area_master_halt.is_bound()
-					&&  tile_halt != area_master_halt;
-
-				if(  foreign_halt  ) {
-					const char *e = process( player, tile_pos, halthandle_t() );
-					if(  !error  ) { error = e; }
-				}
-				else {
-					const char *e = process( player, tile_pos, area_master_halt );
-					if(  !error  ) { error = e; }
-					// Capture the master halt from the first tile that got one.
-					if(  !area_master_halt.is_bound()  ) {
-						area_master_halt = haltestelle_t::get_halt( tile_pos, player );
+					if(  foreign_halt  ) {
+						const char *e = process( player, tile_pos, halthandle_t() );
+						if(  !error  ) { error = e; }
+					}
+					else {
+						const char *e = process( player, tile_pos, area_master_halt );
+						if(  !error  ) { error = e; }
+						// Capture the master halt from the first tile that got one.
+						if(  !area_master_halt.is_bound()  ) {
+							area_master_halt = haltestelle_t::get_halt( tile_pos, player );
+						}
 					}
 				}
 			}
