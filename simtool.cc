@@ -5693,18 +5693,11 @@ const char *tool_build_station_t::do_work( player_t *player, const koord3d &star
 				grund_t *gr = welt->lookup_kartenboden( koord(kx, ky) );
 				if(  !gr  ) { continue; }
 
-				// Resolve actual z for bridge slope tiles (same logic as ctrl-only loop).
-				koord3d tile_pos(kx, ky, start.z);
-				if(  gr->ist_bruecke()  ) {
-					sint8 slope = gr->get_grund_hang();
-					if(  slope == slope_t::north  ||  slope == slope_t::west
-					  ||  slope == slope_t::east  ||  slope == slope_t::south  ) {
-						tile_pos.z = start.z - 1;
-					}
-					else if(  slope == 8  ||  slope == 24  ||  slope == 56  ||  slope == 72  ) {
-						tile_pos.z = start.z - 2;
-					}
-				}
+				// Use the tile's own height as reported by lookup_kartenboden.
+				// For bridge approach (slope) tiles, brueckenboden_t stores pos.z at the
+				// bridge level (top of slope), so get_hoehe() already gives the correct z
+				// for welt->lookup() — no subtraction from start.z is needed here.
+				const koord3d tile_pos(kx, ky, gr->get_hoehe());
 
 				const halthandle_t tile_halt = gr->get_halt();
 
