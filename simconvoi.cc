@@ -5893,7 +5893,7 @@ void convoi_t::clear_reserved_tiles(){
 	for(  sint32 i=route.get_count()-1;  i>=0;  i--  ) {
 		if(  reserved_tiles.is_contained(route.at(i))  ) {
 			// set next_reservation_index
-			set_next_reservation_index(i);
+			set_next_reservation_index(i+1);
 			break;
 		}
 	}
