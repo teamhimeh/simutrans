@@ -257,19 +257,17 @@ void open_error_msg_win(const char* error)
 /**
  * sucht Haltestelle um Umkreis +1/-1 um (pos, b, h)
  * extended to search first in our direction
+ * v55_5 update: search method
+ * 1. same way
+ * 2. same ground (up/down)
+ * 3. same height but not same way
+ * 4. different height, different koord but nearby
  */
 static halthandle_t suche_nahe_haltestelle(player_t *player, karte_t *welt, koord3d pos, sint16 b=1, sint16 h=1)
 {
 	koord k(pos.get_2d());
 
-	// any other ground with a valid stop here?
 	halthandle_t my_halt;
-	if(  planquadrat_t* plan=welt->access(pos.get_2d())  ) {
-		my_halt = plan->get_halt( player );
-		if(  my_halt.is_bound()  ) {
-			return my_halt;
-		}
-	}
 
 	grund_t *bd = welt->lookup(pos);
 	if(  bd==NULL  ) {
@@ -317,6 +315,14 @@ static halthandle_t suche_nahe_haltestelle(player_t *player, karte_t *welt, koor
 		}
 		if(  ribi_approach_halt.is_bound()  ) {
 			return ribi_approach_halt;
+		}
+	}
+
+	// any other ground with a valid stop here?
+	if(  planquadrat_t* plan=welt->access(pos.get_2d())  ) {
+		my_halt = plan->get_halt( player );
+		if(  my_halt.is_bound()  ) {
+			return my_halt;
 		}
 	}
 
