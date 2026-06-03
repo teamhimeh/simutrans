@@ -4541,10 +4541,6 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			if(  !sch1->reserve( cnv->self, ribi_type( route->at(max(1u,i)-1u), route->at(min(route->get_count()-1u,i+1u)) ) )  ) {
 				success = false;
 			}
-			else if(  use_vector  ){
-				// use reserved_tiles instead of next_reservation_index to hold reservations.
-				cnv->reserve_pos(pos);
-			}
 			if (gr->has_two_ways()) {
 				// we may need to reserve the other way as well
 				if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
@@ -4553,6 +4549,10 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 						success = false;
 					}
 				}
+			}
+			if(  success  &&  use_vector  ){
+				// use reserved_tiles instead of next_reservation_index to hold reservations.
+				cnv->reserve_pos(pos);
 			}
 			if(next_crossing_index==route_t::INVALID_INDEX  &&  gr->get_crossing()) {
 				next_crossing_index = i;
