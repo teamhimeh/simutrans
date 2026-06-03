@@ -5544,7 +5544,9 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 
 	// un-reserve if not successful
 	if(  !success  &&  reserve  ) {
-		for(  uint32 i=start;  i<end;  i++  ) {
+		// Use i<=end so that tile 'end' (where reserve() failed) also gets its
+		// add_convoi_reservation() entry removed via runway_t::unreserve().
+		for(  uint32 i=start;  i<=end;  i++  ) {
 			grund_t *gr = welt->lookup(route->at(i));
 			if (gr) {
 				runway_t* sch1 = (runway_t *)gr->get_weg(air_wt);
@@ -5565,6 +5567,22 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 						break;
 					}
 					sch1->add_convoi_reservation( cnv->self );
+				}
+			}
+		}
+	}
+
+	// When unreserving the takeoff section (end < touchdown), the landing runway
+	// tiles were never visited by the main loop, so their load-balancing
+	// reservations added during the original takeoff must be removed here.
+	if(  !reserve  &&  end<touchdown  ) {
+		for(  uint32 i=touchdown;  i<route->get_count();  i++  ) {
+			if(  grund_t *gr = welt->lookup(route->at(i))  ) {
+				if(  runway_t* sch1 = (runway_t *)gr->get_weg(air_wt)  ) {
+					if(  sch1->get_desc()->get_styp()!=type_runway  ) {
+						break;
+					}
+					sch1->remove_convoi_reservation( cnv->self );
 				}
 			}
 		}
@@ -5834,6 +5852,15 @@ void air_vehicle_t::set_convoi(convoi_t *c)
 						}
 					}
 				}
+			}
+			// Airborne during final approach: the plane is not on a runway tile so the
+			// runway-tile guard above does not fire, but the landing runway reservation
+			// was already acquired at the approach trigger before saving and must be
+			// restored now.  Calling block_reserver twice (when route_index==touchdown-1
+			// already handled above) is harmless — reserve() is idempotent for the same
+			// convoy handle.
+			if(  state==landing  &&  route_index<touchdown  ) {
+				block_reserver( touchdown, search_for_stop+1, true );
 			}
 		}
 	}
