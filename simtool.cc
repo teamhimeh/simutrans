@@ -1825,9 +1825,12 @@ const char *tool_clear_reservation_t::work( player_t *, koord3d pos )
 				cnv->set_next_reservation_index( cnv->front()->get_route_index() );
 				// next_coupling_index: clear so no stale coupling target remains.
 				cnv->set_next_coupling( route_t::INVALID_INDEX, 0 );
-				// next_stop_index: reset to just ahead of the front vehicle so the next
-				// can_enter_tile call triggers a fresh block reservation.
-				cnv->set_next_stop_index( cnv->front()->get_route_index() );
+				// coupling_in_progress: clear both sides so the partner convoy is not left
+				// waiting indefinitely for a coupling that will never complete.
+				cnv->unset_convoi_coupling_in_progress();
+				// next_stop_index: auto-detect from route end so the convoy can drive
+				// normally until re-routing via ROUTING_1 sets everything fresh.
+				cnv->set_next_stop_index( route_t::INVALID_INDEX );
 			}
 			else if(  s  ) {
 				s->unreserve_all();
