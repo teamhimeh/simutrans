@@ -2916,22 +2916,30 @@ void convoi_t::vorfahren()
 void convoi_t::clear_reserved_tile_if_not_matching_route()
 {
 	if(  get_reserved_tiles().get_count()==0 || route.get_count()==0  ) {
-		// this convoy does not have reserved_tile
 		return;
 	}
-    // NEW: if reserved_tiles doesn't cover the full new route, clear and switch to next_reservation_index
-    if( get_reserved_tiles().get_count() < route.get_count() ) {
-        clear_reserved_tiles();
-        return;
-    }
-	// check the new route to the next stop is match as reserved_tiles
-	for( uint16 i=1; i<min(get_route()->get_count(),get_reserved_tiles().get_count()); i++ ) {
-		if( route.at(i) != reserved_tiles[i]  ) {
+	dbg->message("convoi_t::clear_reserved_tile_if_not_matching_route()","reserved tile from %i,%i,%i, route from %i,%i,%i, count: %i vs %i",
+		reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
+		route.at(0).x, route.at(0).y, (int)route.at(0).z,
+		reserved_tiles.get_count(), route.get_count());
+	// reserved_tiles[i] corresponds to route[i+1]:
+	// route[0] (the departure stop) is never added to reserved_tiles by block_reserver
+	// because it starts from next_block+1 and target_rt from index 1, both skipping route[0].
+	// So reserved_tiles must cover route[1..end], i.e. at least route.get_count()-1 entries.
+	if( get_reserved_tiles().get_count() < route.get_count() - 1 ) {
+		clear_reserved_tiles();
+		return;
+	}
+	// check reserved_tiles[i] == route[i+1]
+	for( uint16 i=0; i<min(get_route()->get_count()-1, get_reserved_tiles().get_count()); i++ ) {
+		if( route.at(i+1) != get_reserved_tiles()[i]  ) {
+			dbg->warning("convoi_t::clear_reserved_tile_if_not_matching_route()","invalid reserved_tile found: %i,%i,%i vs %i,%i,%i",
+				reserved_tiles[i].x, reserved_tiles[i].y, (int)reserved_tiles[i].z,
+				route.at(i+1).x, route.at(i+1).y, (int)route.at(i+1).z);
 			clear_reserved_tiles();
 			return;
 		}
 	}
-	return;
 }
 
 
@@ -5891,6 +5899,7 @@ void convoi_t::set_next_cross_lane(bool n) {
 
 
 void convoi_t::clear_reserved_tiles(){
+	dbg->message("convoi_t::clear_reserved_tiles()","%s clear its reserved tiles",get_name());
 	if(  reserved_tiles.get_count()==0  ) {
 		// nothing to do.
 		return;

@@ -3780,21 +3780,21 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 		return true;
 	}
 
-	// now we have to maintain reservation with reserved_tiles, that is slower than using next_reservation_index
-	// copy all tiles that are already reserved
-	bool add_pos = false;
-	vector_tpl<koord3d> tiles_convoy_on;
-	for(  uint16 i=0;  i<cnv->get_vehicle_count();  i++  ) {
-		tiles_convoy_on.append_unique(cnv->get_vehikel(i)->get_pos());
-	}
-	for(  uint16 i=0;  i<next_block+1  &&  i<cnv->get_route()->get_count();  i++  ) {
-		if(  !add_pos  &&  tiles_convoy_on.is_contained(cnv->get_route()->at(i))  ) {
-			add_pos = true;
-		}
-		if(  add_pos  ) {
-			cnv->reserve_pos(cnv->get_route()->at(i));
-		}
-	}
+	// // now we have to maintain reservation with reserved_tiles, that is slower than using next_reservation_index
+	// // copy all tiles that are already reserved
+	// bool add_pos = false;
+	// vector_tpl<koord3d> tiles_convoy_on;
+	// for(  uint16 i=0;  i<cnv->get_vehicle_count();  i++  ) {
+	// 	tiles_convoy_on.append_unique(cnv->get_vehikel(i)->get_pos());
+	// }
+	// for(  uint16 i=0;  i<next_block+1  &&  i<cnv->get_route()->get_count();  i++  ) {
+	// 	if(  !add_pos  &&  tiles_convoy_on.is_contained(cnv->get_route()->at(i))  ) {
+	// 		add_pos = true;
+	// 	}
+	// 	if(  add_pos  ) {
+	// 		cnv->reserve_pos(cnv->get_route()->at(i));
+	// 	}
+	// }
 
 	// now we can use the route search array
 	// (route until end is already reserved at this point!)
@@ -4460,7 +4460,10 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			return cnv->get_next_stop_index()>route_index;
 		}
 		// next check for signal
-		if(  sch1->has_signal()  &&  cnv->get_reserved_tiles().get_count()<=3  ) {
+		// The <=3 guard was removed: when a priority signal chains to a longblock
+		// signal, reserved_tiles may be large while next_stop_index still points
+		// to a real signal that must be checked.
+		if(  sch1->has_signal()  ) {
 			if(  !is_signal_clear( next_block, restart_speed )  ) {
 				// only return false, if we are directly in front of the signal
 				return cnv->get_next_stop_index()>route_index;
@@ -4786,6 +4789,10 @@ void rail_vehicle_t::leave_tile()
 					if(sig) {
 						sig->set_state(  roadsign_t::STATE_RED );
 					}
+				}
+				if(  cnv  ) {
+					// for treat reservation safely
+					cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 				}
 				if (gr->has_two_ways()) {
 					// we may need to reserve the other way as well
