@@ -4181,20 +4181,20 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			sig->set_state( roadsign_t::STATE_GREEN );
 		}
 
-		// For longblock/choose: set next_stop_index one past the signal so that next_block
-		// equals the signal's route index in can_enter_tile, causing sch1->has_signal() to
-		// fire.  This forces is_signal_clear() → check_longblock_signal() to be called when
-		// the convoy tries to leave the longblock tile, instead of falling through to the
-		// generic "signal passed" block_reserver which bypasses target_rt reservation.
-		uint16 adjusted_stop = next_signal;
-		if(  next_signal < cnv->get_route()->get_count()  ) {
-			grund_t *gr_ns = welt->lookup( cnv->get_route()->at(next_signal) );
-			signal_t *ns   = gr_ns ? gr_ns->find<signal_t>() : NULL;
-			if(  ns  &&  (ns->get_desc()->is_longblock_signal() || ns->get_desc()->is_choose_sign())  ) {
-				adjusted_stop = next_signal + 1;
-			}
-		}
-		cnv->set_next_stop_index( min( adjusted_stop, next_crossing ) );
+		// // For longblock/choose: set next_stop_index one past the signal so that next_block
+		// // equals the signal's route index in can_enter_tile, causing sch1->has_signal() to
+		// // fire.  This forces is_signal_clear() → check_longblock_signal() to be called when
+		// // the convoy tries to leave the longblock tile, instead of falling through to the
+		// // generic "signal passed" block_reserver which bypasses target_rt reservation.
+		// uint16 adjusted_stop = next_signal;
+		// if(  next_signal < cnv->get_route()->get_count()  ) {
+		// 	grund_t *gr_ns = welt->lookup( cnv->get_route()->at(next_signal) );
+		// 	signal_t *ns   = gr_ns ? gr_ns->find<signal_t>() : NULL;
+		// 	if(  ns  &&  (ns->get_desc()->is_longblock_signal() || ns->get_desc()->is_choose_sign())  ) {
+		// 		adjusted_stop = next_signal + 1;
+		// 	}
+		// }
+		// cnv->set_next_stop_index( min( adjusted_stop, next_crossing ) );
 
 		return true;
 	}
