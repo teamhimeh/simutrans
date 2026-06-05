@@ -3779,23 +3779,6 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 		cnv->set_next_stop_index( min( next_crossing, next_signal ) );
 		return true;
 	}
-
-	// // now we have to maintain reservation with reserved_tiles, that is slower than using next_reservation_index
-	// // copy all tiles that are already reserved
-	// bool add_pos = false;
-	// vector_tpl<koord3d> tiles_convoy_on;
-	// for(  uint16 i=0;  i<cnv->get_vehicle_count();  i++  ) {
-	// 	tiles_convoy_on.append_unique(cnv->get_vehikel(i)->get_pos());
-	// }
-	// for(  uint16 i=0;  i<next_block+1  &&  i<cnv->get_route()->get_count();  i++  ) {
-	// 	if(  !add_pos  &&  tiles_convoy_on.is_contained(cnv->get_route()->at(i))  ) {
-	// 		add_pos = true;
-	// 	}
-	// 	if(  add_pos  ) {
-	// 		cnv->reserve_pos(cnv->get_route()->at(i));
-	// 	}
-	// }
-
 	// now we can use the route search array
 	// (route until end is already reserved at this point!)
 	schedule_t* schedule = cnv->get_schedule();
@@ -4186,22 +4169,6 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 		else {
 			sig->set_state( roadsign_t::STATE_GREEN );
 		}
-
-		// // For longblock/choose: set next_stop_index one past the signal so that next_block
-		// // equals the signal's route index in can_enter_tile, causing sch1->has_signal() to
-		// // fire.  This forces is_signal_clear() → check_longblock_signal() to be called when
-		// // the convoy tries to leave the longblock tile, instead of falling through to the
-		// // generic "signal passed" block_reserver which bypasses target_rt reservation.
-		// uint16 adjusted_stop = next_signal;
-		// if(  next_signal < cnv->get_route()->get_count()  ) {
-		// 	grund_t *gr_ns = welt->lookup( cnv->get_route()->at(next_signal) );
-		// 	signal_t *ns   = gr_ns ? gr_ns->find<signal_t>() : NULL;
-		// 	if(  ns  &&  (ns->get_desc()->is_longblock_signal() || ns->get_desc()->is_choose_sign())  ) {
-		// 		adjusted_stop = next_signal + 1;
-		// 	}
-		// }
-		// cnv->set_next_stop_index( min( adjusted_stop, next_crossing ) );
-
 		return true;
 	}
 
@@ -4481,9 +4448,6 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			return cnv->get_next_stop_index()>route_index;
 		}
 		// next check for signal
-		// The <=3 guard was removed: when a priority signal chains to a longblock
-		// signal, reserved_tiles may be large while next_stop_index still points
-		// to a real signal that must be checked.
 		if(  sch1->has_signal()  ) {
 			if(  !is_signal_clear( next_block, restart_speed )  ) {
 				// only return false, if we are directly in front of the signal
