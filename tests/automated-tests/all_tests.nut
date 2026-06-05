@@ -240,6 +240,7 @@ all_tests <- [
 	test_longblock_blocked_pre_signal,
 	test_longblock_open_priority_signal,
 	test_longblock_blocked_priority_signal,
+	test_longblock_blocked_priority_priority_long,
 	test_longblock_blocked_priority_pre_long,
 	test_longblock_blocked_pre_priority_long,
 	test_sigcheck,
@@ -270,10 +271,6 @@ all_tests <- [
 
 // Tests that are currently failing
 failing_tests <- [
-	// TC7: priority→priority→longblock chain doesn't stop at L because the
-	// first priority sees the second as "clear" and overwrites next_stop_index
-	// past the longblock.  Requires a C++ fix in is_priority_signal_clear.
-	test_longblock_blocked_priority_priority_long,
 	test_building_city_multitile_replaces_existing,
 	test_city_change_size_to_minimum,
 	test_depot_build_invalid_pos,

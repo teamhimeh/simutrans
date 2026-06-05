@@ -4158,7 +4158,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 		if(  is_signal_clear( next_signal, restart_speed, call_by_step )  ) {
 			// ok, the next signal is clear
 			sig->set_state( roadsign_t::STATE_GREEN );
-			cnv->set_next_stop_index( min(cnv->get_next_stop_index(), next_crossing) );
+			// Only shorten next_stop_index when a crossing requires an earlier stop.
+			// get_next_stop_index() returns n+1 (set_next_stop_index stores n+1),
+			// so set_next_stop_index(get_next_stop_index()) would shift by +1 again —
+			// losing the stop position a child priority signal set for a longblock.
+			if(  next_crossing < cnv->get_next_stop_index() - 1  ) {
+				cnv->set_next_stop_index( next_crossing );
+			}
 			return true;
 		}
 
