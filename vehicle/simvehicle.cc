@@ -4171,30 +4171,29 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 
 			return false;
 		}
-		// If the next signal is a longblock or choose type and returned false, the convoy must
-		// stop at this priority signal so the next signal can be properly evaluated later.
-		// The "can still go" shortcut must not be used for these signal types, because:
-		// - longblock needs the convoy to be waiting (or call_by_step) before check_longblock_signal runs
-		// - allowing pass-through leaves the section after the longblock unreserved
-		if(  next_signal < cnv->get_route()->get_count()  ) {
-			grund_t *gr_next = welt->lookup(cnv->get_route()->at(next_signal));
-			signal_t *next_sig = gr_next ? gr_next->find<signal_t>() : NULL;
-			if(  next_sig  &&  (next_sig->get_desc()->is_longblock_signal() || next_sig->get_desc()->is_choose_sign())  ) {
-				block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
-				sig->set_state( roadsign_t::STATE_RED );
-				restart_speed = 0;
-				return false;
-			}
-		}
 		// when we reached here, the way after the last signal is not free though the way before is => we can still go
-		if(  cnv->get_next_stop_index()<=next_signal+1  ) {
+		if(  cnv->get_next_reservation_index()<=next_signal+1  ) {
 			// only show third aspect on last signal of cascade
 			sig->set_state( roadsign_t::STATE_YELLOW );
 		}
 		else {
 			sig->set_state( roadsign_t::STATE_GREEN );
 		}
-		cnv->set_next_stop_index( min( next_signal, next_crossing ) );
+
+		// For longblock/choose: set next_stop_index one past the signal so that next_block
+		// equals the signal's route index in can_enter_tile, causing sch1->has_signal() to
+		// fire.  This forces is_signal_clear() → check_longblock_signal() to be called when
+		// the convoy tries to leave the longblock tile, instead of falling through to the
+		// generic "signal passed" block_reserver which bypasses target_rt reservation.
+		uint16 adjusted_stop = next_signal;
+		if(  next_signal < cnv->get_route()->get_count()  ) {
+			grund_t *gr_ns = welt->lookup( cnv->get_route()->at(next_signal) );
+			signal_t *ns   = gr_ns ? gr_ns->find<signal_t>() : NULL;
+			if(  ns  &&  (ns->get_desc()->is_longblock_signal() || ns->get_desc()->is_choose_sign())  ) {
+				adjusted_stop = next_signal + 1;
+			}
+		}
+		cnv->set_next_stop_index( min( adjusted_stop, next_crossing ) );
 
 		return true;
 	}
