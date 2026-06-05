@@ -28,6 +28,7 @@ include("tests/test_sign")
 include("tests/test_start_signal")
 include("tests/test_stop_before_check_signal")
 include("tests/test_longblock_signal")
+include("tests/test_sigcheck")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
@@ -239,6 +240,7 @@ all_tests <- [
 	test_longblock_blocked_pre_signal,
 	test_longblock_open_priority_signal,
 	test_longblock_blocked_priority_signal,
+	test_sigcheck,
 	test_trees_plant_single_invalid_param,
 	test_way_tunnel_build_straight,
 	test_schedule_entry_maximum_load,

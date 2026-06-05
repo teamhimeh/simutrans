@@ -111,12 +111,16 @@ function _lb_start_blocker(pl)
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
 	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
+	// Two entries required (schedule validation rejects single-entry schedules).
+	// H2 at 200% min-load keeps the blocker parked there permanently;
+	// H3 is the "return" entry but is never reached because the convoy never departs H2.
 	cnv.change_schedule(pl, schedule_x(wt_rail, [
-		schedule_entry_x(coord3d(10, 8, 0), 200, 0),  // H2 – 200% min-load → stays forever
+		schedule_entry_x(coord3d(10,  8, 0), 200, 0),  // H2 – 200% min-load → stays forever
+		schedule_entry_x(coord3d(10, 12, 0), 200, 0),  // H3 – backup entry (never reached)
 	]))
 	depot.start_all_convoys(pl)
-	// Wait until blocker reaches H2
-	for (local i = 0; i < 6000 && cnv.is_valid() && cnv.get_pos().y < 8; i++) {
+	// Blocker travels north: y decreases from 14 → 8.  Wait until it reaches H2.
+	for (local i = 0; i < 6000 && cnv.is_valid() && cnv.get_pos().y > 8; i++) {
 		sleep()
 	}
 	return cnv
@@ -401,27 +405,36 @@ function test_longblock_blocked_priority_signal()
 	local pri_desc = sign_desc_x.get_available_signs(wt_rail).filter(
 	                     @(idx, s) s.is_priority_signal())[0]
 	ASSERT_TRUE(pri_desc != null)
+	print("  pri_desc ok: " + pri_desc.get_name())
 
 	local sigs = _lb_build_infra(pl, rail)
+	print("  infra built")
 	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 2, 0), pri_desc), null)
 	local sig_S1 = tile_x(10, 2, 0).find_object(mo_signal)
 	ASSERT_TRUE(sig_S1 != null)
+	print("  S1 placed")
 
 	debug.set_game_speed(5)
 
 	local blocker = _lb_start_blocker(pl)
+	print("  blocker at y=" + blocker.get_pos().y)
 	local cnv     = _lb_start_main(pl)
+	print("  main started at y=" + cnv.get_pos().y)
 
 	// Convoy should stop AT L (y=4).  Priority passes S1 ("can still go") but
 	// the longblock at L cannot reserve through the occupied H2.
 	local stopped_at_L = false
+	local last_y = -1
 	for (local i = 0; i < 6000; i++) {
 		sleep()
-		if (!cnv.is_valid()) break
-		if (cnv.get_pos().y == 4 && (cnv.is_waiting() || cnv.get_speed() <= 0)) {
+		if (!cnv.is_valid()) { print("  cnv invalid at step " + i); break }
+		local y = cnv.get_pos().y
+		if (y != last_y) { print("  cnv y=" + y + " waiting=" + cnv.is_waiting()); last_y = y }
+		if (y == 4 && (cnv.is_waiting() || cnv.get_speed() <= 0)) {
 			stopped_at_L = true
 			break
 		}
+		if (y > 4) break  // convoy passed L already
 	}
 
 	// Remove blocker; check_longblock_signal now succeeds, convoy proceeds to H3.
