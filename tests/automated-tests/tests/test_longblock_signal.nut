@@ -456,3 +456,203 @@ function test_longblock_blocked_priority_signal()
 	ASSERT_TRUE(stopped_at_L)
 	ASSERT_TRUE(reached_H3)
 }
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Helper: remove signal at y=3 (TC7-9 place a second signal there)
+// ──────────────────────────────────────────────────────────────────────────────
+function _lb_remove_y3_signal(pl)
+{
+	local sig = tile_x(10, 3, 0).find_object(mo_signal)
+	if (sig != null) {
+		command_x(tool_remover).work(pl, coord3d(10, 3, 0))
+	}
+}
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TC7 – priority(y=2)→priority(y=3)→longblock(y=4), blocker at H2
+// Both priority signals cascade "can still go" and let the convoy through to L.
+// At L the longblock section cannot be reserved because H2 is occupied.
+// Convoy stops AT L (y=4). After removing the blocker convoy reaches H3.
+// ──────────────────────────────────────────────────────────────────────────────
+function test_longblock_blocked_priority_priority_long()
+{
+	local pl   = player_x(0)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	ASSERT_TRUE(rail != null)
+
+	local pri_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                     @(idx, s) s.is_priority_signal())[0]
+	ASSERT_TRUE(pri_desc != null)
+
+	local sigs = _lb_build_infra(pl, rail)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 2, 0), pri_desc), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 3, 0), pri_desc), null)
+	ASSERT_TRUE(tile_x(10, 2, 0).find_object(mo_signal) != null)
+	ASSERT_TRUE(tile_x(10, 3, 0).find_object(mo_signal) != null)
+
+	debug.set_game_speed(5)
+
+	local blocker = _lb_start_blocker(pl)
+	local cnv     = _lb_start_main(pl)
+
+	local stopped_at_L = false
+	for (local i = 0; i < 6000; i++) {
+		sleep()
+		if (!cnv.is_valid()) break
+		local y = cnv.get_pos().y
+		if (y == 4 && (cnv.is_waiting() || cnv.get_speed() <= 0)) {
+			stopped_at_L = true
+			break
+		}
+		if (y > 4) break
+	}
+
+	local reached_H3 = false
+	if (stopped_at_L) {
+		_lb_destroy(pl, blocker)
+		reached_H3 = _lb_wait_until_y(cnv, 12, 8000)
+	}
+
+	print("  stopped_at_L: " + stopped_at_L)
+	print("  reached_H3:   " + reached_H3)
+
+	debug.set_game_speed(1)
+	_lb_destroy(pl, blocker)
+	_lb_destroy(pl, cnv)
+	_lb_remove_y3_signal(pl)
+	_lb_remove_infra(pl)
+	RESET_ALL_PLAYER_FUNDS()
+
+	ASSERT_TRUE(stopped_at_L)
+	ASSERT_TRUE(reached_H3)
+}
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TC8 – priority(y=2)→pre-signal(y=3)→longblock(y=4), blocker at H2
+// Priority at y=2 "can still go" (cascades to the pre which is YELLOW because
+// L is blocked), advancing the convoy to the pre-signal at y=3.
+// The pre-signal blocks because L cannot reserve through H2.
+// Convoy stops AT the pre-signal (y=3). After removing the blocker reaches H3.
+// ──────────────────────────────────────────────────────────────────────────────
+function test_longblock_blocked_priority_pre_long()
+{
+	local pl   = player_x(0)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	ASSERT_TRUE(rail != null)
+
+	local pri_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                     @(idx, s) s.is_priority_signal())[0]
+	local pre_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                     @(idx, s) s.is_pre_signal())[0]
+	ASSERT_TRUE(pri_desc != null)
+	ASSERT_TRUE(pre_desc != null)
+
+	local sigs = _lb_build_infra(pl, rail)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 2, 0), pri_desc), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 3, 0), pre_desc), null)
+	ASSERT_TRUE(tile_x(10, 2, 0).find_object(mo_signal) != null)
+	ASSERT_TRUE(tile_x(10, 3, 0).find_object(mo_signal) != null)
+
+	debug.set_game_speed(5)
+
+	local blocker = _lb_start_blocker(pl)
+	local cnv     = _lb_start_main(pl)
+
+	local stopped_at_pre = false
+	for (local i = 0; i < 6000; i++) {
+		sleep()
+		if (!cnv.is_valid()) break
+		local y = cnv.get_pos().y
+		if (y == 3 && (cnv.is_waiting() || cnv.get_speed() <= 0)) {
+			stopped_at_pre = true
+			break
+		}
+		if (y > 3) break
+	}
+
+	local reached_H3 = false
+	if (stopped_at_pre) {
+		_lb_destroy(pl, blocker)
+		reached_H3 = _lb_wait_until_y(cnv, 12, 8000)
+	}
+
+	print("  stopped_at_pre: " + stopped_at_pre)
+	print("  reached_H3:     " + reached_H3)
+
+	debug.set_game_speed(1)
+	_lb_destroy(pl, blocker)
+	_lb_destroy(pl, cnv)
+	_lb_remove_y3_signal(pl)
+	_lb_remove_infra(pl)
+	RESET_ALL_PLAYER_FUNDS()
+
+	ASSERT_TRUE(stopped_at_pre)
+	ASSERT_TRUE(reached_H3)
+}
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// TC9 – pre-signal(y=2)→priority(y=3)→longblock(y=4), blocker at H2
+// Pre-signal evaluates priority which evaluates L.  L is blocked, but priority
+// "can still go" so the pre-signal sees GREEN from priority and shows GREEN.
+// The convoy proceeds through both y=2 and y=3 and stops AT L (y=4).
+// After removing the blocker convoy reaches H3.
+// ──────────────────────────────────────────────────────────────────────────────
+function test_longblock_blocked_pre_priority_long()
+{
+	local pl   = player_x(0)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	ASSERT_TRUE(rail != null)
+
+	local pre_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                     @(idx, s) s.is_pre_signal())[0]
+	local pri_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                     @(idx, s) s.is_priority_signal())[0]
+	ASSERT_TRUE(pre_desc != null)
+	ASSERT_TRUE(pri_desc != null)
+
+	local sigs = _lb_build_infra(pl, rail)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 2, 0), pre_desc), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(10, 3, 0), pri_desc), null)
+	ASSERT_TRUE(tile_x(10, 2, 0).find_object(mo_signal) != null)
+	ASSERT_TRUE(tile_x(10, 3, 0).find_object(mo_signal) != null)
+
+	debug.set_game_speed(5)
+
+	local blocker = _lb_start_blocker(pl)
+	local cnv     = _lb_start_main(pl)
+
+	local stopped_at_L = false
+	for (local i = 0; i < 6000; i++) {
+		sleep()
+		if (!cnv.is_valid()) break
+		local y = cnv.get_pos().y
+		if (y == 4 && (cnv.is_waiting() || cnv.get_speed() <= 0)) {
+			stopped_at_L = true
+			break
+		}
+		if (y > 4) break
+	}
+
+	local reached_H3 = false
+	if (stopped_at_L) {
+		_lb_destroy(pl, blocker)
+		reached_H3 = _lb_wait_until_y(cnv, 12, 8000)
+	}
+
+	print("  stopped_at_L: " + stopped_at_L)
+	print("  reached_H3:   " + reached_H3)
+
+	debug.set_game_speed(1)
+	_lb_destroy(pl, blocker)
+	_lb_destroy(pl, cnv)
+	_lb_remove_y3_signal(pl)
+	_lb_remove_infra(pl)
+	RESET_ALL_PLAYER_FUNDS()
+
+	ASSERT_TRUE(stopped_at_L)
+	ASSERT_TRUE(reached_H3)
+}
