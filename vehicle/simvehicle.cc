@@ -4453,15 +4453,9 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		}
 	}
 
-	// Re-check YELLOW priority/pre-signals on the tile being entered.
-	// After a cascade the convoy may have set intermediate priority signals to YELLOW
-	// and advanced next_stop_index to a further RED signal.  Those intermediate YELLOW
-	// signals are never revisited by the next_block <= route_index+3 window, so the
-	// convoy passes through them without noticing a state change.
-	// Guard: skip when reserved_tiles is non-empty (longblock mode).  Calling
-	// is_signal_clear there would invoke clear_reserved_tiles() and destroy the
-	// longblock reservation.
-	if(  cnv->is_reservation_empty()  ) {
+	// we re-check priority signals because priority signals can change their states during running
+	// AVOID RELEASE THEIR OWN RESERVATIONS, WE DO NOT CALL IF ALREADY CALLED LONGBLOCK,CHOOSE,and GUIDE.
+	if(  cnv->is_reservation_empty() && cnv->get_next_reservation_index()<cnv->get_route()->get_count() && !target_halt.is_bound() && cnv->get_next_coupling_index()==route_t::INVALID_INDEX  ) {
 		schiene_t *sch_enter = (schiene_t *)gr->get_weg( get_waytype() );
 		if(  sch_enter  &&  sch_enter->has_signal()  ) {
 			signal_t *enter_sig = gr->find<signal_t>();
