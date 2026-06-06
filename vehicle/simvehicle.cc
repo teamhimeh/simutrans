@@ -4471,6 +4471,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 					if(  enter_desc->is_priority_signal()  ||  enter_desc->is_pre_signal()  ) {
 						// we need to re-check this signal.
 						signal_to_check = route_index+advance_i;
+						break;
 					}
 				}
 			}
