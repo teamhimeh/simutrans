@@ -4454,14 +4454,24 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	// we re-check priority signals because priority signals can change their states during running
 	// AVOID RELEASE THEIR OWN RESERVATIONS, WE DO NOT CALL IF ALREADY CALLED LONGBLOCK,CHOOSE,and GUIDE.
 	if(  cnv->is_reservation_empty() && cnv->get_next_reservation_index()<cnv->get_route()->get_count() && !target_halt.is_bound() && cnv->get_next_coupling_index()==route_t::INVALID_INDEX  ) {
-		schiene_t *sch_enter = (schiene_t *)gr->get_weg( get_waytype() );
-		if(  sch_enter  &&  sch_enter->has_signal()  ) {
-			signal_t *enter_sig = gr->find<signal_t>();
-			if(  enter_sig  ) {
-				const roadsign_desc_t *enter_desc = enter_sig->get_desc();
-				if(  enter_desc->is_priority_signal()  ||  enter_desc->is_pre_signal()  ) {
-					// we need to re-check this signal.
-					signal_to_check = route_index;
+		// check 3 tiles from here
+		for( uint16 advance_i=0; advance_i<=3&&(route_index+advance_i<cnv->get_route()->get_count()); advance_i++  ) {
+			koord3d block_pos=cnv->get_route()->at(route_index+advance_i);
+			grund_t *gr_next_block = welt->lookup(block_pos);
+			const schiene_t *sch1 = gr_next_block ? (schiene_t *)gr_next_block->get_weg( get_waytype() ) : NULL;
+			if(sch1==NULL) {
+				// way (weg) not existent (likely destroyed)
+				cnv->suche_neue_route();
+				return false;
+			}
+			if(  sch1->has_signal()  ) {
+				signal_t *enter_sig = gr_next_block->find<signal_t>();
+				if(  enter_sig  ) {
+					const roadsign_desc_t *enter_desc = enter_sig->get_desc();
+					if(  enter_desc->is_priority_signal()  ||  enter_desc->is_pre_signal()  ) {
+						// we need to re-check this signal.
+						signal_to_check = route_index+advance_i;
+					}
 				}
 			}
 		}
