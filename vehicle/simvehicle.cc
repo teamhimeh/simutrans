@@ -4398,6 +4398,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		}
 	}
 
+	uint16 signal_to_check = route_t::INVALID_INDEX;
 	if(  next_block <= route_index+3  &&  cnv->get_next_coupling_index()==route_t::INVALID_INDEX   ) {
 		koord3d block_pos=cnv->get_route()->at(next_block);
 		grund_t *gr_next_block = welt->lookup(block_pos);
@@ -4446,10 +4447,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		}
 		// next check for signal
 		if(  sch1->has_signal()  ) {
-			if(  !is_signal_clear( next_block, restart_speed )  ) {
-				// only return false, if we are directly in front of the signal
-				return cnv->get_next_stop_index()>route_index;
-			}
+			signal_to_check = next_block;
 		}
 	}
 
@@ -4462,19 +4460,20 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			if(  enter_sig  ) {
 				const roadsign_desc_t *enter_desc = enter_sig->get_desc();
 				if(  enter_desc->is_priority_signal()  ||  enter_desc->is_pre_signal()  ) {
-					// Re-check using the standard path.  is_signal_clear calls
-					// clear_reserved_tiles() for non-longblock signals, but
-					// reserved_tiles is empty here so that is a no-op.
-					sint32 dummy = restart_speed;
-					if(  !is_signal_clear( route_index, dummy )  ) {
-						// Signal changed to RED — stop before entering this tile.
-						cnv->set_next_stop_index( route_index );
-						restart_speed = 0;
-						return false;
-					}
-					// Signal still passable (YELLOW or now GREEN) — continue.
+					// we need to re-check this signal.
+					signal_to_check = route_index;
 				}
 			}
+		}
+	}
+
+	// finally check the signal if needed
+	if(  signal_to_check != route_t::INVALID_INDEX  ) {
+		if(  !is_signal_clear( signal_to_check, restart_speed )  ) {
+			if(  signal_to_check == route_index && signal_to_check != next_block  ) {
+				cnv->set_next_stop_index( route_index + 1 ); 
+			}
+			return cnv->get_next_stop_index() > route_index;
 		}
 	}
 	return true;
