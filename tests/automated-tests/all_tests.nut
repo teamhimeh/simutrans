@@ -28,6 +28,8 @@ include("tests/test_sign")
 include("tests/test_start_signal")
 include("tests/test_stop_before_check_signal")
 include("tests/test_longblock_signal")
+include("tests/test_advance_to_end")
+include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
@@ -41,8 +43,7 @@ include("tests/test_wayobj")
 include("tests/test_schedule")
 include("tests/test_road_api")
 include("tests/test_road_choose")
-
-
+include("tests/test_priority_signal")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -233,6 +234,7 @@ all_tests <- [
 	test_stop_before_check_longblock_signal_convoy_stops,
 	test_stop_before_check_choose_signal_convoy_stops,
 	test_stop_before_check_false_convoy_does_not_stop,
+	test_priority_signal_reserve,
 	test_longblock_open_no_prefix_signal,
 	test_longblock_blocked_no_prefix_signal,
 	test_longblock_open_pre_signal,
@@ -242,6 +244,12 @@ all_tests <- [
 	test_longblock_blocked_priority_priority_long,
 	test_longblock_blocked_priority_pre_long,
 	test_longblock_blocked_pre_priority_long,
+	test_advance_to_end_set_get,
+	test_advance_to_end_true_behavior,
+	test_advance_to_end_false_behavior,
+	test_two_ways_set_get,
+	test_two_ways_false_blocks_reverse,
+	test_two_ways_true_allows_reverse,
 	test_trees_plant_single_invalid_param,
 	test_way_tunnel_build_straight,
 	test_schedule_entry_maximum_load,
