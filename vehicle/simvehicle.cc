@@ -4168,17 +4168,8 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 		}
 
 		if(  !cnv->is_waiting()&&!call_by_step&&cnv->is_signal_check_in_step_needed()  ) {
-			// now we are in the sync_step.
-			// the next signal is choose or long, we check this signal in the next step!
-			// Do not unreserve if the convoy has already entered the block past this signal
-			// (route_index > next_block means we're in the priority recheck after passing P).
-			// if(  route_index <= next_block  ) {
-			// 	block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
-			// }
-			sig->set_state( roadsign_t::STATE_RED );
+			sig->set_state( roadsign_t::STATE_YELLOW );
 			restart_speed = -1;
-
-			return false;
 		}
 		// when we reached here, the way after the last signal is not free though the way before is => we can still go
 		if(  cnv->get_next_reservation_index()<=next_signal+1  ) {
