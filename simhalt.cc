@@ -16,6 +16,7 @@
 #include "simdepot.h"
 #include "simfab.h"
 #include "simhalt.h"
+#include "simunits.h"
 #include "simintr.h"
 #include "simline.h"
 #include "simmem.h"
@@ -1513,6 +1514,44 @@ void haltestelle_t::new_month()
 			for (departure_t &slot : departure_slot_table[i]) {
 				slot.dep_tick %= welt->ticks_per_world_month;
 				slot.exp_tick %= welt->ticks_per_world_month;
+			}
+		}
+	}
+
+	const settings_t &sets = welt->get_settings();
+	player_t *public_player = welt->get_public_player();
+
+	// monthly fine for overcrowded passengers (paid by halt owner to public player)
+	if(  sets.get_fine_for_crowd_halt()  &&  owner != public_player  ) {
+		const uint32 pax_waiting = get_ware_summe( goods_manager_t::passengers );
+		const uint32 pax_cap = get_capacity(0);
+		if(  pax_waiting > pax_cap  ) {
+			sint64 excess = (sint64)(pax_waiting - pax_cap);
+			sint64 fine = excess * (sint64)welt->ticks_per_world_month * (sint64)kmh_to_speed(100) >> 20;
+			public_player->book_toll_received( fine, ignore_wt );
+			owner->book_toll_paid( -fine, ignore_wt );
+		}
+	}
+
+	// monthly revenue from passengers waiting at the halt
+	if(  sets.get_halt_pax_revenue() > 0  ) {
+		const uint32 pax_waiting = get_ware_summe( goods_manager_t::passengers );
+		const bool overcrowded = is_overcrowded(0);
+		if(  pax_waiting > 0  &&  !(sets.get_no_revenue_on_overcrowded_halt() && overcrowded)  ) {
+			// capacity_factor = sum of max(0, desc->get_level() - 3) over all halt buildings
+			sint32 capacity_factor = 0;
+			FOR(slist_tpl<tile_t>, const& t, tiles) {
+				if(  gebaeude_t* const gb = t.grund->find<gebaeude_t>()  ) {
+					const building_desc_t *desc = gb->get_tile()->get_desc();
+					if(  desc  ) {
+						sint32 lv = (sint32)desc->get_level() - 3;
+						if(  lv > 0  ) { capacity_factor += lv; }
+					}
+				}
+			}
+			if(  capacity_factor > 0  ) {
+				sint64 revenue = (sint64)sets.get_halt_pax_revenue() * capacity_factor * (sint64)pax_waiting;
+				owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
 			}
 		}
 	}
