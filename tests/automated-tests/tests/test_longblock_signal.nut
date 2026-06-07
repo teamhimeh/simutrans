@@ -175,9 +175,30 @@ function test_longblock_open_no_prefix_signal()
 	debug.set_game_speed(5)
 	local cnv = _lb_start_main(pl)
 
-	// Convoy must reach H3 (y=12).
-	local reached_H3 = _lb_wait_until_y(cnv, 12, 8000)
+	// L has S2 ahead on the current route, so it acts as a normal signal.
+	// Once green, it must not return to red before the convoy passes it.
+	local saw_green = false
+	local red_before_passing = false
+	local reached_H3 = false
+	for (local i = 0; i < 8000; i++) {
+		sleep()
+		if (!cnv.is_valid()) break
+		local y = cnv.get_pos().y
+		if (sigs[0].get_state() == state_green) {
+			saw_green = true
+		}
+		else if (saw_green && y < 4) {
+			red_before_passing = true
+			break
+		}
+		if (y == 12) {
+			reached_H3 = true
+			break
+		}
+	}
 
+	print("  saw_green:          " + saw_green)
+	print("  red_before_passing: " + red_before_passing)
 	print("  reached_H3: " + reached_H3)
 
 	debug.set_game_speed(1)
@@ -185,7 +206,99 @@ function test_longblock_open_no_prefix_signal()
 	_lb_remove_infra(pl)
 	RESET_ALL_PLAYER_FUNDS()
 
+	ASSERT_TRUE(saw_green)
+	ASSERT_FALSE(red_before_passing)
 	ASSERT_TRUE(reached_H3)
+}
+
+
+// Longblock and normal signals on diagonal track. L must detect S2 on the
+// current route without deferring to route search, and remain green until the
+// leading vehicle passes it.
+function test_longblock_open_diagonal_signals()
+{
+	local pl = player_x(0)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	local station_desc = building_desc_x.get_available_stations(
+	                         building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+	local depot_desc = get_depot_by_wt(wt_rail)
+	local lb_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                    @(idx, s) s.is_longblock_signal())[0]
+	local sg_desc = sign_desc_x.get_available_signs(wt_rail).filter(
+	                    @(idx, s) s.is_signal())[0]
+
+	ASSERT_TRUE(rail != null)
+	ASSERT_TRUE(station_desc != null)
+	ASSERT_TRUE(depot_desc != null)
+	ASSERT_TRUE(lb_desc != null)
+	ASSERT_TRUE(sg_desc != null)
+
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(1, 1, 0), coord3d(10, 10, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(10, 10, 0), coord3d(10, 14, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(1, 1, 0), depot_desc), null)
+	ASSERT_EQUAL(command_x.build_station(pl, coord3d(10, 11, 0), station_desc), null)
+	ASSERT_EQUAL(command_x.build_station(pl, coord3d(10, 12, 0), station_desc), null)
+	ASSERT_EQUAL(command_x.build_station(pl, coord3d(10, 13, 0), station_desc), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(4, 4, 0), lb_desc), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(8, 8, 0), sg_desc), null)
+
+	local sig_L = tile_x(4, 4, 0).find_object(mo_signal)
+	local sig_S2 = tile_x(8, 8, 0).find_object(mo_signal)
+	ASSERT_TRUE(sig_L != null)
+	ASSERT_TRUE(sig_S2 != null)
+
+	local depot = depot_x(1, 1, 0)
+	depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+	local cnv = depot.get_convoy_list()[0]
+	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
+	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
+	depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
+	cnv.change_schedule(pl, schedule_x(wt_rail, [
+		schedule_entry_x(coord3d(10, 11, 0), 0, 0),
+		schedule_entry_x(coord3d(10, 13, 0), 0, 0),
+	]))
+
+	debug.set_game_speed(5)
+	depot.start_all_convoys(pl)
+
+	local saw_green = false
+	local red_before_passing = false
+	local reached_station = false
+	for (local i = 0; i < 8000; i++) {
+		sleep()
+		if (!cnv.is_valid()) break
+		local pos = cnv.get_pos()
+		if (sig_L.get_state() == state_green) {
+			saw_green = true
+		}
+		else if (saw_green && pos.x < 4 && pos.y < 4) {
+			red_before_passing = true
+			break
+		}
+		if (pos.x == 10 && pos.y >= 11) {
+			reached_station = true
+			break
+		}
+	}
+
+	print("  diagonal saw_green:          " + saw_green)
+	print("  diagonal red_before_passing: " + red_before_passing)
+	print("  diagonal reached_station:    " + reached_station)
+
+	debug.set_game_speed(1)
+	_lb_destroy(pl, cnv)
+	foreach (p in [coord3d(4, 4, 0), coord3d(8, 8, 0),
+	               coord3d(10, 11, 0), coord3d(10, 12, 0), coord3d(10, 13, 0),
+	               coord3d(1, 1, 0)]) {
+		command_x(tool_remover).work(pl, p)
+	}
+	command_x(tool_remove_way).work(pl, coord3d(10, 14, 0), coord3d(10, 10, 0), "" + wt_rail)
+	command_x(tool_remove_way).work(pl, coord3d(10, 10, 0), coord3d(1, 1, 0), "" + wt_rail)
+	RESET_ALL_PLAYER_FUNDS()
+
+	ASSERT_TRUE(saw_green)
+	ASSERT_FALSE(red_before_passing)
+	ASSERT_TRUE(reached_station)
 }
 
 
@@ -336,9 +449,8 @@ function test_longblock_blocked_pre_signal()
 
 // ──────────────────────────────────────────────────────────────────────────────
 // TC5 – priority signal at S1, no blocker
-// Priority cannot evaluate L in sync_step; it defers and evaluates in step().
-// The convoy is briefly held at S1 (WAITING_FOR_CLEARANCE for one step) while
-// the longblock is checked, then proceeds and reaches H3.
+// L has S2 ahead on the current route, so it is evaluated synchronously as a
+// normal signal. The convoy must not be briefly held at S1.
 // ──────────────────────────────────────────────────────────────────────────────
 function test_longblock_open_priority_signal()
 {
@@ -358,8 +470,7 @@ function test_longblock_open_priority_signal()
 	debug.set_game_speed(5)
 	local cnv = _lb_start_main(pl)
 
-	// The convoy should pass S1 (briefly waiting) and then L, then reach H3.
-	// We observe a brief wait near S1 (y <= 3) before the convoy proceeds.
+	// The convoy should pass S1 and L without a deferred longblock check.
 	local waited_at_S1 = false
 	local reached_H3   = false
 
@@ -367,7 +478,7 @@ function test_longblock_open_priority_signal()
 		sleep()
 		if (!cnv.is_valid()) break
 		local pos = cnv.get_pos()
-		if (pos.y <= 3 && cnv.is_waiting()) {
+		if (pos.y >= 2 && pos.y <= 3 && cnv.is_waiting()) {
 			waited_at_S1 = true
 		}
 		if (pos.y == 12) {
@@ -384,7 +495,7 @@ function test_longblock_open_priority_signal()
 	_lb_remove_infra(pl)
 	RESET_ALL_PLAYER_FUNDS()
 
-	ASSERT_TRUE(waited_at_S1)
+	ASSERT_FALSE(waited_at_S1)
 	ASSERT_TRUE(reached_H3)
 }
 

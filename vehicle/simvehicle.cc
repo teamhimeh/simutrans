@@ -3865,6 +3865,29 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 
 bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block, sint32 &restart_speed, const bool call_by_step)
 {
+	if(  !cnv->is_waiting()  &&  !call_by_step  ) {
+		const route_t* route = cnv->get_route();
+		bool next_signal_exists = false;
+		for(  uint16 i=next_block+1;  i<route->get_count();  i++  ) {
+			grund_t* gr = welt->lookup(route->at(i));
+			schiene_t* sch = gr ? (schiene_t*)gr->get_weg(get_waytype()) : NULL;
+			if(  sch  &&  sch->has_signal()  ) {
+				signal_t* next_sig = gr->find<signal_t>();
+				if(  next_sig  &&  (i==route->get_count()-1  ||
+						!(next_sig->get_two_ways()  &&  i>next_block+1  &&
+							!(ribi_type(route->at(i), route->at(i-1)) & next_sig->get_dir())))  ) {
+					next_signal_exists = true;
+					break;
+				}
+			}
+		}
+
+		if(  next_signal_exists  ) {
+			// No route search is needed: until the next signal this is a normal block.
+			return check_longblock_signal(sig, next_block, restart_speed);
+		}
+	}
+
 	if(  cnv->is_waiting() || (call_by_step&&!sig->is_stop_before_check())  ) {
 		// we are in a step. do that.
 		const bool res = check_longblock_signal(sig, next_block, restart_speed);

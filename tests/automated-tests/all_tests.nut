@@ -236,6 +236,7 @@ all_tests <- [
 	test_stop_before_check_false_convoy_does_not_stop,
 	test_priority_signal_reserve,
 	test_longblock_open_no_prefix_signal,
+	test_longblock_open_diagonal_signals,
 	test_longblock_blocked_no_prefix_signal,
 	test_longblock_open_pre_signal,
 	test_longblock_blocked_pre_signal,
