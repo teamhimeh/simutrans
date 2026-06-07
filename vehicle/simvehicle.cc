@@ -4172,7 +4172,7 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			restart_speed = -1;
 		}
 		// when we reached here, the way after the last signal is not free though the way before is => we can still go
-		if(  cnv->get_next_reservation_index()<=next_signal+1  ) {
+		if(  cnv->get_next_reservation_index()<=next_signal+1 && cnv->is_reservation_empty()  ) {
 			// only show third aspect on last signal of cascade
 			cnv->set_next_stop_index(next_signal);
 			sig->set_state( roadsign_t::STATE_YELLOW );
