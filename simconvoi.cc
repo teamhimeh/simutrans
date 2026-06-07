@@ -2668,7 +2668,7 @@ void convoi_t::vorfahren()
 	// is driving direction not change?
 	ribi_t::ribi neue_richtung_rwr = ribi_t::backward(fahr[0]->calc_direction(route.front(), route.at(min(2, route.get_count() - 1))));
 	bool const go_same_direction = (neue_richtung_rwr&alte_richtung)==0;
-	uint8 const start_step = front()->get_steps();
+	uint8 const start_step = find_most_child_convoi()->back()->get_steps();
 	koord3d const start_pos = front()->get_pos();
 
 
@@ -2811,6 +2811,10 @@ void convoi_t::vorfahren()
 			fahr[0]->set_leading(false); // switches off signal checks ...
 			uint32 dist = VEHICLE_STEPS_PER_CARUNIT*train_length<<YARDS_PER_VEHICLE_STEP_SHIFT;
 			inspecting = self;
+			if(  go_same_direction  ) {
+				// we know the exact step of back vehicle.
+				dist += start_step<<YARDS_PER_VEHICLE_STEP_SHIFT;
+			}
 			while(  inspecting.is_bound()  ) {
 				for(unsigned i=0; i<inspecting->get_vehicle_count(); i++) {
 					vehicle_t* v = inspecting->get_vehikel(i);
@@ -2832,34 +2836,7 @@ void convoi_t::vorfahren()
 				}
 				inspecting = inspecting->get_coupling_convoi();
 			}
-			// if this convoy go to the same direction, we need to advance them to the initial step.
-			if(  go_same_direction ) {
-				inspecting = self;
-				// if front vehicle is not on the same position, we need to advance more.
-				uint16 const current_route_index = front()->get_route_index();
-				dist = 0;
-				if(  current_route_index<route.get_count()-1 && route.at(current_route_index) == start_pos  ) {
-					// the next tile is the forst pos, advance.
-					dist += (uint32)(ribi_t::is_bend(front()->get_direction())?start_step+(vehicle_base_t::diagonal_vehicle_steps_per_tile-front()->get_steps()):start_step+(VEHICLE_STEPS_PER_TILE-front()->get_steps()))<<YARDS_PER_VEHICLE_STEP_SHIFT;
-				} else {
-					// it already on the first tile, or invalid tile. advance a bit.
-					dist += (uint32)(start_step>=front()->get_steps()?start_step-front()->get_steps():0)<<YARDS_PER_VEHICLE_STEP_SHIFT;
-				}
-				if(dist>0) {
-					while(  inspecting.is_bound()  ) {
-						for(unsigned i=0; i<inspecting->get_vehicle_count(); i++) {
-							vehicle_t* v = inspecting->get_vehikel(i);
-
-							v->get_smoke(false);
-							uint32 const driven = v->do_drive( dist );
-							// this gives the length in carunits, 1/CARUNITS_PER_TILE of a full tile => all cars closely coupled!
-							v->get_smoke(true);
-						}
-						inspecting = inspecting->get_coupling_convoi();
-					}
-				}
-			}
-			else if(  !get_coupling_convoi().is_bound()  &&  get_vehicle_count()==1  ) {
+			if(  !go_same_direction  &&  !get_coupling_convoi().is_bound()  &&  get_vehicle_count()==1  ) {
 				// In case that single car bus or truck is turning around...
 				if(  road_vehicle_t* rv = dynamic_cast<road_vehicle_t*>(self->front())  ) {
 					rv->set_sideways_image();
