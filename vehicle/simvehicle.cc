@@ -4151,7 +4151,11 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 		if(  !cnv->is_waiting()&&!call_by_step&&cnv->is_signal_check_in_step_needed()  ) {
 			// now we are in the sync_step.
 			// the next signal is choose or long, we check this signal in the next step!
-			block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
+			// Do not unreserve if the convoy has already entered the block past this signal
+			// (route_index > next_block means we're in the priority recheck after passing P).
+			if(  route_index <= next_block  ) {
+				block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
+			}
 			sig->set_state( roadsign_t::STATE_RED );
 			restart_speed = -1;
 
@@ -4470,7 +4474,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				signal_t *enter_sig = gr_next_block->find<signal_t>();
 				if(  enter_sig  ) {
 					const roadsign_desc_t *enter_desc = enter_sig->get_desc();
-					if(  enter_desc->is_priority_signal()  ||  enter_desc->is_pre_signal()  ) {
+					if(  enter_desc->is_priority_signal()  ) {
 						// we need to re-check this signal.
 						signal_to_check = target_index;
 						break;
