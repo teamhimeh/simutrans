@@ -253,8 +253,6 @@ settings_t::settings_t() :
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
-	penalty_wait_for_two_month = false;
-	fine_for_crowd_halt = false;
 	halt_pax_revenue = 0;
 	no_revenue_on_overcrowded_halt = false;
 
@@ -1060,13 +1058,9 @@ void settings_t::rdwr(loadsave_t *file)
 			roadsign_reverse_front_back = false;
 		}
 		if(  file->get_OTRP_version() >= 56  ) {
-			file->rdwr_bool(penalty_wait_for_two_month);
-			file->rdwr_bool(fine_for_crowd_halt);
 			file->rdwr_long(halt_pax_revenue);
 			file->rdwr_bool(no_revenue_on_overcrowded_halt);
 		} else {
-			penalty_wait_for_two_month = false;
-			fine_for_crowd_halt = false;
 			halt_pax_revenue = 0;
 			no_revenue_on_overcrowded_halt = false;
 		}
@@ -1376,8 +1370,6 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
-	penalty_wait_for_two_month     = contents.get_int( "penalty_wait_for_two_month",     penalty_wait_for_two_month ) != 0;
-	fine_for_crowd_halt            = contents.get_int( "fine_for_crowd_halt",            fine_for_crowd_halt ) != 0;
 	halt_pax_revenue               = contents.get_int( "halt_pax_revenue",               halt_pax_revenue );
 	no_revenue_on_overcrowded_halt = contents.get_int( "no_revenue_on_overcrowded_halt", no_revenue_on_overcrowded_halt ) != 0;
 

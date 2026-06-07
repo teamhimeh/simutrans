@@ -16,7 +16,6 @@
 #include "simdepot.h"
 #include "simfab.h"
 #include "simhalt.h"
-#include "simunits.h"
 #include "simintr.h"
 #include "simline.h"
 #include "simmem.h"
@@ -1518,22 +1517,8 @@ void haltestelle_t::new_month()
 		}
 	}
 
-	const settings_t &sets = welt->get_settings();
-	player_t *public_player = welt->get_public_player();
-
-	// monthly fine for overcrowded passengers (paid by halt owner to public player)
-	if(  sets.get_fine_for_crowd_halt()  &&  owner != public_player  ) {
-		const uint32 pax_waiting = get_ware_summe( goods_manager_t::passengers );
-		const uint32 pax_cap = get_capacity(0);
-		if(  pax_waiting > pax_cap  ) {
-			sint64 excess = (sint64)(pax_waiting - pax_cap);
-			sint64 fine = excess * (sint64)welt->ticks_per_world_month * (sint64)kmh_to_speed(100) >> 20;
-			public_player->book_toll_received( fine, ignore_wt );
-			owner->book_toll_paid( -fine, ignore_wt );
-		}
-	}
-
 	// monthly revenue from passengers waiting at the halt
+	const settings_t &sets = welt->get_settings();
 	if(  sets.get_halt_pax_revenue() > 0  ) {
 		const uint32 pax_waiting = get_ware_summe( goods_manager_t::passengers );
 		const bool overcrowded = is_overcrowded(0);

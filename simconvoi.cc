@@ -1866,24 +1866,6 @@ void convoi_t::new_month()
 		}
 		state = WAITING_FOR_CLEARANCE_TWO_MONTHS;
 	}
-	// penalty fine for convoys blocked for two or more months
-	if(  state == WAITING_FOR_CLEARANCE_TWO_MONTHS  &&  welt->get_settings().get_penalty_wait_for_two_month()  ) {
-		sint64 pax_count = 0;
-		for(  uint i = 0;  i < anz_vehikel;  i++  ) {
-			if(  fahr[i]->get_cargo_type()->get_catg_index() == 0  ) {
-				pax_count += fahr[i]->get_total_cargo();
-			}
-		}
-		if(  pax_count > 0  ) {
-			waytype_t wt = fahr[0]->get_waytype();
-			sint64 penalty = pax_count * (sint64)welt->ticks_per_world_month * (sint64)kmh_to_speed(100) >> 20;
-			player_t *public_player = welt->get_public_player();
-			public_player->book_toll_received( penalty, wt );
-			get_owner()->book_toll_paid( -penalty, wt );
-			book( -penalty, CONVOI_WAYTOLL );
-			book( -penalty, CONVOI_PROFIT );
-		}
-	}
 	// check for traffic jam
 	if(state==CAN_START) {
 		state = CAN_START_ONE_MONTH;
@@ -4244,21 +4226,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 		// we need not to call this on the same position
 		if(  v->last_stop_pos != v->get_pos()  ) {
-			sint64 tmp = v->calc_revenue(v->last_stop_pos, v->get_pos() );
-			// if fine_for_crowd_halt: redirect revenue to public player when halt is overcrowded for this cargo
-			if(  welt->get_settings().get_fine_for_crowd_halt()
-			     &&  halt.is_bound()
-			     &&  halt->is_overcrowded( v->get_cargo_type()->get_index() )  ) {
-				player_t *public_player = welt->get_public_player();
-				public_player->book_toll_received( tmp, get_schedule()->get_waytype() );
-				owner->book_toll_paid( -tmp, get_schedule()->get_waytype() );
-				book( -tmp, CONVOI_WAYTOLL );
-				book( -tmp, CONVOI_PROFIT );
-			}
-			else {
-				gewinn += tmp;
-				owner->book_revenue(tmp, fahr[0]->get_pos().get_2d(), get_schedule()->get_waytype(), v->get_cargo_type()->get_index());
-			}
+			sint64 tmp;
+			// calc_revenue
+			gewinn += tmp = v->calc_revenue(v->last_stop_pos, v->get_pos() );
+			owner->book_revenue(tmp, fahr[0]->get_pos().get_2d(), get_schedule()->get_waytype(), v->get_cargo_type()->get_index());
 			v->last_stop_pos = v->get_pos();
 		}
 

@@ -346,8 +346,6 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	INIT_NUM( "toll_runningcost_percentage", sets->get_way_toll_runningcost_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "toll_waycost_percentage", sets->get_way_toll_waycost_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_BOOL("disable_make_way_public", sets->get_disable_make_way_public());
-	INIT_BOOL("penalty_wait_for_two_month", sets->get_penalty_wait_for_two_month());
-	INIT_BOOL("fine_for_crowd_halt", sets->get_fine_for_crowd_halt());
 	INIT_NUM( "halt_pax_revenue", sets->get_halt_pax_revenue(), 0, 1000000, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_BOOL("no_revenue_on_overcrowded_halt", sets->get_no_revenue_on_overcrowded_halt());
 	SEPERATOR
@@ -448,8 +446,6 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->way_toll_runningcost_percentage );
 	READ_NUM_VALUE( sets->way_toll_waycost_percentage );
 	READ_BOOL_VALUE(sets->disable_make_way_public);
-	READ_BOOL_VALUE(sets->penalty_wait_for_two_month);
-	READ_BOOL_VALUE(sets->fine_for_crowd_halt);
 	READ_NUM_VALUE( sets->halt_pax_revenue );
 	READ_BOOL_VALUE(sets->no_revenue_on_overcrowded_halt);
 

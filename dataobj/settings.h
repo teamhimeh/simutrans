@@ -338,12 +338,6 @@ private:
 	// true if companies can make ways public
 	bool disable_make_way_public;
 
-	// if true, convoys waiting for clearance for two months are fined
-	bool penalty_wait_for_two_month;
-
-	// if true, overcrowded halt revenue goes to public player and halt owners pay monthly fine
-	bool fine_for_crowd_halt;
-
 	// revenue per passenger per capacity-unit per month for halts (0 = disabled)
 	sint32 halt_pax_revenue;
 
@@ -743,8 +737,6 @@ public:
 
 	bool get_allow_underground_transformers() const { return allow_underground_transformers; }
 	bool get_disable_make_way_public() const { return disable_make_way_public; }
-	bool get_penalty_wait_for_two_month() const { return penalty_wait_for_two_month; }
-	bool get_fine_for_crowd_halt() const { return fine_for_crowd_halt; }
 	sint32 get_halt_pax_revenue() const { return halt_pax_revenue; }
 	bool get_no_revenue_on_overcrowded_halt() const { return no_revenue_on_overcrowded_halt; }
 
