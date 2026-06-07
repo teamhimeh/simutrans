@@ -3872,7 +3872,26 @@ bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block,
 		return res;
 	}
 	else {
-		// we are in a sync_step. request to do this in a step.
+		// we are in a sync_step. 
+		// first we check we can use this as normal signal?
+		uint16 next_signal;
+		uint16 next_crossing;
+		if( !block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false ) ){
+			// no empty route to next stop or signal
+			sig->set_state( roadsign_t::STATE_RED );
+			restart_speed = 0;
+			return false;
+		}
+		if(  next_signal != route_t::INVALID_INDEX  ) {
+			// success, and there is a signal before end of route => finished
+			sig->set_state( roadsign_t::STATE_GREEN );
+			cnv->clear_reserved_tiles();
+			cnv->set_next_stop_index( min( next_crossing, next_signal ) );
+			return true;
+		}
+		// we need to check.
+		// request to do this in a step.
+		block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
 		if(!sig->is_stop_before_check()) { cnv->request_signal_check_in_step(); }
 		restart_speed = 0;
 		return false;
