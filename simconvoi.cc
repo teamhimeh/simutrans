@@ -2666,9 +2666,10 @@ void convoi_t::vorfahren()
 	}
 
 	// is driving direction not change?
-	ribi_t::ribi neue_richtung_rwr = ribi_t::backward(fahr[0]->calc_direction(route.front(), route.at(min(2, route.get_count() - 1))));
+	ribi_t::ribi neue_richtung_rwr = ribi_t::backward(front()->calc_direction(route.front(), route.at(min(1, route.get_count() - 1))));
 	bool const go_same_direction = (neue_richtung_rwr&alte_richtung)==0;
-	uint8 const start_step = find_most_child_convoi()->back()->get_steps();
+	vehicle_t *last_car=find_most_child_convoi()->back();
+	uint8 const start_step = last_car->get_steps();
 	koord3d const start_pos = front()->get_pos();
 
 
@@ -2679,6 +2680,14 @@ void convoi_t::vorfahren()
 	// the start position should be the last car of this convoy.
 	// add the position which vehicles on to reset the position.
 	insert_route_convoy_on();
+
+	// using last car's steps value? we also can use this value when coupling at this point.
+	bool using_last_car_steps = go_same_direction;
+	if(  last_car->get_pos()==route.front()  ) {
+		// last car is on the front of the route->we need to check last car's direction
+		ribi_t::ribi neue_richtung_rwr_back = ribi_t::backward(front()->calc_direction(route.front(), route.at(min(1, route.get_count() - 1))));
+		using_last_car_steps |= ((neue_richtung_rwr_back&last_car->get_direction())==0);
+	}
 
 	// this is the position for recalculating route when reversing only image direction (not driving direction).
 	c = self;
@@ -2811,7 +2820,7 @@ void convoi_t::vorfahren()
 			fahr[0]->set_leading(false); // switches off signal checks ...
 			uint32 dist = VEHICLE_STEPS_PER_CARUNIT*train_length<<YARDS_PER_VEHICLE_STEP_SHIFT;
 			inspecting = self;
-			if(  go_same_direction  ) {
+			if(  using_last_car_steps  ) {
 				// we know the exact step of back vehicle.
 				dist += start_step<<YARDS_PER_VEHICLE_STEP_SHIFT;
 			}
