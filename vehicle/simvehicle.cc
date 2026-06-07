@@ -4172,9 +4172,9 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			// the next signal is choose or long, we check this signal in the next step!
 			// Do not unreserve if the convoy has already entered the block past this signal
 			// (route_index > next_block means we're in the priority recheck after passing P).
-			if(  route_index <= next_block  ) {
-				block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
-			}
+			// if(  route_index <= next_block  ) {
+			// 	block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
+			// }
 			sig->set_state( roadsign_t::STATE_RED );
 			restart_speed = -1;
 
