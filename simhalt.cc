@@ -1547,7 +1547,7 @@ void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
 		}
 	}
 	if(  capacity_factor > 0  ) {
-		sint64 revenue = (sint64)base * capacity_factor * (sint64)boarded_pax / 10000;
+		sint64 revenue = (sint64)base * max(capacity_factor,50) * (sint64)boarded_pax / 10000;
 		owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
 		financial_history[0][HALT_REVENUE] += revenue;
 	}
