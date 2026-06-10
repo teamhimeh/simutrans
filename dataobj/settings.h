@@ -338,11 +338,8 @@ private:
 	// true if companies can make ways public
 	bool disable_make_way_public;
 
-	// revenue per passenger per capacity-unit per month for halts (0 = disabled)
-	sint32 halt_pax_revenue;
-
-	// if true, halts do not earn halt_pax_revenue when overcrowded
-	bool no_revenue_on_overcrowded_halt;
+	// revenue per boarding passenger per capacity-unit for halts (0 = disabled)
+	sint32 base_revenue_from_halt;
 	
 	// parameters related to routing of citycars
 	uint16 citycar_max_look_forward;
@@ -737,8 +734,7 @@ public:
 
 	bool get_allow_underground_transformers() const { return allow_underground_transformers; }
 	bool get_disable_make_way_public() const { return disable_make_way_public; }
-	sint32 get_halt_pax_revenue() const { return halt_pax_revenue; }
-	bool get_no_revenue_on_overcrowded_halt() const { return no_revenue_on_overcrowded_halt; }
+	sint32 get_base_revenue_from_halt() const { return base_revenue_from_halt; }
 
 	uint32 get_allow_merge_distant_halt() const { return allow_merge_distant_halt; }
 

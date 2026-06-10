@@ -37,9 +37,9 @@
 #define REROUTING (2)
 #define WEIGHT_UPDATE (3) // Reconnect the network to update weight, but do not cause rerouting
 
-#define MAX_HALT_COST   8 // Total number of cost items
+#define MAX_HALT_COST   9 // Total number of cost items
 #define MAX_MONTHS     12 // Max history
-#define MAX_HALT_NON_MONEY_TYPES 7 // number of non money types in HALT's financial statistic
+#define MAX_HALT_NON_MONEY_TYPES 8 // number of non money types in HALT's financial statistic
 #define HALT_ARRIVED         0 // the amount of ware that arrived here
 #define HALT_DEPARTED        1 // the amount of ware that has departed from here
 #define HALT_WAITING         2 // the amount of ware waiting
@@ -48,6 +48,7 @@
 #define HALT_NOROUTE         5 // number of no-route passengers
 #define HALT_CONVOIS_ARRIVED 6 // number of convois arrived this month
 #define HALT_WALKED          7 // could walk to destination
+#define HALT_REVENUE         8 // revenue from passengers boarding at this halt
 
 #define DST_SIZE 101 // size of departure_slot_table
 
@@ -788,6 +789,9 @@ public:
 	};
 
 	void fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to, const uint8 goods_category_index, const vector_tpl<halthandle_t>& destination_halts);
+
+	// Book revenue for passengers that just boarded a vehicle at this halt.
+	void book_pax_boarding_revenue(uint16 boarded_pax);
 
 	/**
 	 * Delivers goods (ware_t) to this halt.

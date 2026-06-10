@@ -1518,28 +1518,35 @@ void haltestelle_t::new_month()
 		}
 	}
 
-	// monthly revenue from passengers waiting at the halt
-	const settings_t &sets = welt->get_settings();
-	if(  sets.get_halt_pax_revenue() > 0  ) {
-		const uint32 pax_waiting = get_ware_summe( goods_manager_t::passengers );
-		const bool overcrowded = is_overcrowded(0);
-		if(  pax_waiting > 0  &&  !(sets.get_no_revenue_on_overcrowded_halt() && overcrowded)  ) {
-			// capacity_factor = sum of max(0, desc->get_level() - 3) over all halt buildings
-			sint32 capacity_factor = 0;
-			FOR(slist_tpl<tile_t>, const& t, tiles) {
-				if(  gebaeude_t* const gb = t.grund->find<gebaeude_t>()  ) {
-					const building_desc_t *desc = gb->get_tile()->get_desc();
-					if(  desc  ) {
-						sint32 lv = (sint32)desc->get_level() - 3;
-						if(  lv > 0  ) { capacity_factor += lv; }
-					}
+}
+
+
+void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
+{
+	const sint32 base = welt->get_settings().get_base_revenue_from_halt();
+	if(  base <= 0  ||  boarded_pax == 0  ) {
+		return;
+	}
+	// Sum level contributions only from buildings that can handle passengers
+	// (enabled == NOT_ENABLED means all goods; enabled & PAX means explicitly passenger-capable).
+	// Buildings that only handle post or freight are excluded.
+	sint32 capacity_factor = 0;
+	FOR(slist_tpl<tile_t>, const& t, tiles) {
+		if(  gebaeude_t* const gb = t.grund->find<gebaeude_t>()  ) {
+			const building_desc_t *desc = gb->get_tile()->get_desc();
+			if(  desc  ) {
+				const uint8 enabled = desc->get_enabled();
+				if(  enabled == NOT_ENABLED  ||  (enabled & PAX)  ) {
+					sint32 lv = (sint32)desc->get_level() - 3;
+					if(  lv > 0  ) { capacity_factor += lv; }
 				}
 			}
-			if(  capacity_factor > 0  ) {
-				sint64 revenue = (sint64)sets.get_halt_pax_revenue() * capacity_factor * (sint64)pax_waiting;
-				owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
-			}
 		}
+	}
+	if(  capacity_factor > 0  ) {
+		sint64 revenue = (sint64)base * capacity_factor * (sint64)boarded_pax;
+		owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
+		financial_history[0][HALT_REVENUE] += revenue;
 	}
 }
 
@@ -3979,9 +3986,21 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->is_version_atleast(111, 1)  ) {
-		for (int j = 0; j<MAX_HALT_COST; j++) {
+		// read/write original 8 stats
+		for (int j = 0; j<8; j++) {
 			for (size_t k = MAX_MONTHS; k-- != 0;) {
 				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		// HALT_REVENUE added in OTRP version 56
+		if(  file->get_OTRP_version() >= 56  ) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][HALT_REVENUE]);
+			}
+		}
+		else {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				financial_history[k][HALT_REVENUE] = 0;
 			}
 		}
 	}
@@ -3994,6 +4013,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][HALT_WALKED] = 0;
+			financial_history[k][HALT_REVENUE] = 0;
 		}
 	}
 

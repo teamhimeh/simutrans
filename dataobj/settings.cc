@@ -253,8 +253,7 @@ settings_t::settings_t() :
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
-	halt_pax_revenue = 0;
-	no_revenue_on_overcrowded_halt = false;
+	base_revenue_from_halt = 0;
 
 	// stop buildings
 	cst_multiply_dock=-50000;
@@ -1058,11 +1057,9 @@ void settings_t::rdwr(loadsave_t *file)
 			roadsign_reverse_front_back = false;
 		}
 		if(  file->get_OTRP_version() >= 56  ) {
-			file->rdwr_long(halt_pax_revenue);
-			file->rdwr_bool(no_revenue_on_overcrowded_halt);
+			file->rdwr_long(base_revenue_from_halt);
 		} else {
-			halt_pax_revenue = 0;
-			no_revenue_on_overcrowded_halt = false;
+			base_revenue_from_halt = 0;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1370,8 +1367,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
-	halt_pax_revenue               = contents.get_int( "halt_pax_revenue",               halt_pax_revenue );
-	no_revenue_on_overcrowded_halt = contents.get_int( "no_revenue_on_overcrowded_halt", no_revenue_on_overcrowded_halt ) != 0;
+	base_revenue_from_halt = contents.get_int( "base_revenue_from_halt", base_revenue_from_halt );
 
 	env_t::use_old_friction		   = contents.get_int( "use_old_friction",				 env_t::use_old_friction ) != 0;
 

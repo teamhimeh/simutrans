@@ -4201,6 +4201,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 	// cargo type of previous vehicle that could not be filled
 	const goods_desc_t* cargo_type_prev = NULL;
+	uint16 pax_boarded = 0; // total passengers that boarded at this stop
 	bool loading_needed = !get_no_load()  &&  !next_depot  &&  !is_invalid_convoy();
 	// When load_before_departure is enabled, load cargos only when the departure time condition is satisfied.
 	convoihandle_t leading_convoy = get_most_parent_convoi();
@@ -4257,7 +4258,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			if (amount>0  ||  cargo_type_prev==NULL  ||  !cargo_type_prev->is_interchangeable(v->get_cargo_type())) {
 				// load
 				const vector_tpl<halthandle_t> &destinations = destination_halts.get(v->get_cargo_type()->get_catg_index());
-				amount += fetch_goods_and_load(v, halt, destinations, capacity_left);
+				const uint16 loaded = fetch_goods_and_load(v, halt, destinations, capacity_left);
+				amount += loaded;
+				if(  v->get_cargo_type()->get_catg_index() == goods_manager_t::INDEX_PAS  ) {
+					pax_boarded += loaded;
+				}
 			}
 			if (v->get_total_cargo() < v->get_cargo_max()) {
 				// not full
@@ -4284,6 +4289,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	freight_info_resort |= changed_loading_level;
 	if(  changed_loading_level  ) {
 		halt->recalc_status();
+	}
+
+	// Revenue for the halt owner based on passengers that actually boarded
+	if(  pax_boarded > 0  ) {
+		halt->book_pax_boarding_revenue(pax_boarded);
 	}
 
 	// any unloading/loading went on?
