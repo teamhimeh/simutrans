@@ -1527,6 +1527,9 @@ void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
 	if(  base <= 0  ||  boarded_pax == 0  ) {
 		return;
 	}
+	if(  is_overcrowded( goods_manager_t::passengers->get_index() )  ) {
+		return;
+	}
 	// Sum level contributions only from buildings that can handle passengers
 	// (enabled == NOT_ENABLED means all goods; enabled & PAX means explicitly passenger-capable).
 	// Buildings that only handle post or freight are excluded.
@@ -1538,13 +1541,13 @@ void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
 				const uint8 enabled = desc->get_enabled();
 				if(  enabled == NOT_ENABLED  ||  (enabled & PAX)  ) {
 					sint32 lv = (sint32)desc->get_level() - 3;
-					if(  lv > 0  ) { capacity_factor += lv; }
+					if(  lv > 0  ) { capacity_factor += min(lv / 2 + 1, 2); }
 				}
 			}
 		}
 	}
 	if(  capacity_factor > 0  ) {
-		sint64 revenue = (sint64)base * capacity_factor * (sint64)boarded_pax;
+		sint64 revenue = (sint64)base * capacity_factor * (sint64)boarded_pax / 10000;
 		owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
 		financial_history[0][HALT_REVENUE] += revenue;
 	}
