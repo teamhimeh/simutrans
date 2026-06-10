@@ -43,7 +43,8 @@ private:
 	gui_textinput_t inp_name, inp_filter, inp_memo;
 	gui_label_t lbl_filter, lbl_memo, lbl_name, lbl_colour;
 	gui_chart_t chart;
-	button_t filterButtons[MAX_LINE_COST];
+	button_t filterButtons[MAX_LINE_COST + 1];
+	sint64 transport_density_history[MAX_MONTHS];
 	gui_tab_panel_t tabs;
 
 	gui_combobox_t freight_type_c, sort_type_c;
