@@ -263,7 +263,7 @@ function test_crossing_straight_two_convoys_sequential()
     sleep()
 
     // Early pass: both stopped simultaneously = ca at stn_S, cb held at signal.
-    local both_stopped = _cr_wait_both_stopped(cA, cb, 3000)
+    local both_stopped = _cr_wait_both_stopped(ca, cb, 3000)
     print("  TC-S2 same-dir both stopped (A at dest, B at signal): " + both_stopped)
 
     debug.set_game_speed(1)
@@ -341,7 +341,7 @@ function test_crossing_straight_opposite_directions()
     sleep()
 
     // Early pass: ca stopped at stn_S, cb stopped at sig_S = block prohibition confirmed.
-    local both_stopped = _cr_wait_both_stopped(cA, cb, 3000)
+    local both_stopped = _cr_wait_both_stopped(ca, cb, 3000)
     print("  TC-S3 opp-dir both stopped (A at dest, B at signal): " + both_stopped)
 
     debug.set_game_speed(1)
@@ -441,8 +441,8 @@ function test_crossing_four_way_ne_sw_permitted_a_first()
         schedule_entry_x(coord3d(11, 7, 0), 0, 0)
     ])
 
-    local reached_a = _cr_wait_at(cA, 15, 7, 8000)
-    local reached_b = _cr_wait_at(cB, 11, 7, 8000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 8000)
+    local reached_b = _cr_wait_at(cb, 11, 7, 8000)
     print("  TC-4A N→E → stn_E: " + reached_a + "  S→W → stn_W: " + reached_b)
 
     debug.set_game_speed(1)
@@ -489,8 +489,8 @@ function test_crossing_four_way_ne_sw_permitted_b_first()
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
-    local reached_b = _cr_wait_at(cB, 11, 7, 8000)
-    local reached_a = _cr_wait_at(cA, 15, 7, 8000)
+    local reached_b = _cr_wait_at(cb, 11, 7, 8000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 8000)
     print("  TC-4B S→W → stn_W: " + reached_b + "  N→E → stn_E: " + reached_a)
 
     debug.set_game_speed(1)
@@ -538,8 +538,8 @@ function test_crossing_four_way_se_nw_permitted_a_first()
         schedule_entry_x(coord3d(11, 7, 0), 0, 0)
     ])
 
-    local reached_a = _cr_wait_at(cA, 15, 7, 8000)
-    local reached_b = _cr_wait_at(cB, 11, 7, 8000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 8000)
+    local reached_b = _cr_wait_at(cb, 11, 7, 8000)
     print("  TC-4C S→E → stn_E: " + reached_a + "  N→W → stn_W: " + reached_b)
 
     debug.set_game_speed(1)
@@ -586,8 +586,8 @@ function test_crossing_four_way_se_nw_permitted_b_first()
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
-    local reached_b = _cr_wait_at(cB, 11, 7, 8000)
-    local reached_a = _cr_wait_at(cA, 15, 7, 8000)
+    local reached_b = _cr_wait_at(cb, 11, 7, 8000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 8000)
     print("  TC-4D N→W → stn_W: " + reached_b + "  S→E → stn_E: " + reached_a)
 
     debug.set_game_speed(1)
@@ -634,7 +634,7 @@ function test_crossing_four_way_ns_sequential_prohibited()
     ])
 
     // Early pass: A reaches stn_S while B is held at signal → both stopped simultaneously.
-    local both_stopped = _cr_wait_both_stopped(cA, cb, 3000)
+    local both_stopped = _cr_wait_both_stopped(ca, cb, 3000)
     print("  TC-4P1 both stopped (A in block, B at signal): " + both_stopped)
 
     debug.set_game_speed(1)
@@ -679,7 +679,7 @@ function test_crossing_four_way_ne_ne_sequential_prohibited()
     ])
 
     // Early pass: A reaches stn_E while B is held at signal → both stopped simultaneously.
-    local both_stopped = _cr_wait_both_stopped(cA, cb, 3000)
+    local both_stopped = _cr_wait_both_stopped(ca, cb, 3000)
     print("  TC-4P2 both stopped (A in block, B at signal): " + both_stopped)
 
     debug.set_game_speed(1)
@@ -726,8 +726,8 @@ function test_crossing_four_way_ne_se_sequential_prohibited()
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
-    local reached_a = _cr_wait_at(cA, 15, 7, 8000)
-    local reached_b = _cr_wait_at(cB, 15, 7, 8000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 8000)
+    local reached_b = _cr_wait_at(cb, 15, 7, 8000)
     print("  TC-4P3 ca (N→E) stn_E: " + reached_a + "  cb (S→E) stn_E: " + reached_b)
 
     debug.set_game_speed(1)
