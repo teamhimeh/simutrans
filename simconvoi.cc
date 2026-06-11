@@ -314,7 +314,10 @@ void convoi_t::reserve_route()
 		for(  uint32 idx = 0;  idx < reserved_tiles.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( reserved_tiles[idx] )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( reserved_tiles[max(1u,idx)-1u], reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)] ) );
+					const koord3d prev = reserved_tiles[max(1u,idx)-1u];
+					const koord3d curr = reserved_tiles[idx];
+					const koord3d next = reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)];
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
 				}
 			}
 		}
@@ -331,7 +334,10 @@ void convoi_t::reserve_route()
 			if(  is_reservation_empty() || route.at(idx)==reserved_tiles[0]  ) break;// reach first reserved tiles.
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
+					const koord3d curr = route.at(idx);
+					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
 				}
 			}
 		}
@@ -343,7 +349,10 @@ void convoi_t::reserve_route()
 		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
+					const koord3d curr = route.at(idx);
+					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
 				}
 			}
 		}
@@ -356,7 +365,10 @@ void convoi_t::reserve_route()
 		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < front()->get_route_index()  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
+					const koord3d curr = route.at(idx);
+					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
 				}
 			}
 		}

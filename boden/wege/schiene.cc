@@ -97,16 +97,23 @@ void schiene_t::info(cbuffer_t & buf) const
 bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
 {
 	if(c == reserved) {
-		// Do NOT update reserved_dir here.  It was set by block_reserver with the exact
-		// corner_set for this tile; enter_tile passes get_direction() which may be a
-		// diagonal (e.g. SW=12 for a N→W turn) that does not equal the PBS corner_set.
+		// Allow direction restoration when reserved_dir is still none (e.g. after
+		// save/load before reserve_route() has run).  Do NOT overwrite a valid
+		// corner_set: enter_tile passes get_direction() which may be a wrong diagonal
+		// (e.g. SW=12 for a N→W turn) that would corrupt the PBS corner_set.
+		if(reserved_dir == ribi_t::none  &&  dir != ribi_t::none) {
+			reserved_dir = dir;
+		}
 		if(schiene_t::show_reservations) {
 			set_flag( obj_t::dirty );
 		}
 		return true;
 	}
 	if(c == reserved2) {
-		// Same: reserved2_dir must not be overwritten after it was set by block_reserver.
+		// Same: restore direction only when not yet set.
+		if(reserved2_dir == ribi_t::none  &&  dir != ribi_t::none) {
+			reserved2_dir = dir;
+		}
 		if(schiene_t::show_reservations) {
 			set_flag( obj_t::dirty );
 		}
@@ -150,6 +157,17 @@ bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
 * releases previous reservation
 * only true, if there was something to release
 */
+bool schiene_t::unreserve(vehicle_t* v)
+{
+	// Derive the convoy handle from the vehicle so that co-reserved convoys
+	// are correctly matched.  The old inline always passed 'reserved' which
+	// silently cleared the primary slot even when the vehicle belonged to
+	// the secondary convoy.
+	convoi_t* c = v ? v->get_convoi() : nullptr;
+	return unreserve(c ? c->self : convoihandle_t());
+}
+
+
 bool schiene_t::unreserve(convoihandle_t c)
 {
 	if(reserved.is_bound()  &&  reserved == c) {

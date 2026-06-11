@@ -71,9 +71,10 @@ public:
 	virtual bool unreserve( convoihandle_t c);
 
 	/**
-	* releases previous reservation
+	* releases previous reservation — derives convoy handle from the vehicle
+	* so that co-reserved convoys are correctly identified.
 	*/
-	bool unreserve( vehicle_t *) { return unreserve(reserved); }
+	bool unreserve( vehicle_t *v);
 
 	/* called before deletion;
 	 * last chance to unreserve tiles ...
@@ -81,9 +82,19 @@ public:
 	void cleanup(player_t *player) OVERRIDE;
 
 	/**
-	* gets the related convoi
+	* gets the related convoi (primary slot)
 	*/
 	convoihandle_t get_reserved_convoi() const {return reserved;}
+
+	/**
+	* true if convoy c holds either the primary or the secondary reservation.
+	* Use this instead of get_reserved_convoi()==c when the convoy may be
+	* co-reserved (e.g. in is_next_tile_already_reserved).
+	*/
+	bool is_reserved_by(convoihandle_t c) const {
+		return (reserved.is_bound()  &&  reserved  == c)
+		    || (reserved2.is_bound() &&  reserved2 == c);
+	}
 
 	void rdwr(loadsave_t *file) OVERRIDE;
 

@@ -4268,8 +4268,8 @@ bool rail_vehicle_t::is_next_tile_already_reserved(uint16 index)
 		// no way
 		return false;
 	}
-	// if the next tile is reserved by us, ok!
-	return cnv->self == w->get_reserved_convoi();
+	// if the next tile is reserved by us (primary or co-reserved), ok!
+	return w->is_reserved_by(cnv->self);
 }
 
 
