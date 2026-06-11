@@ -795,18 +795,24 @@ void convoi_t::add_running_cost( const weg_t *weg )
 		// running on non-public way costs toll (since running costs are positive => invert)
 		sint64 toll = -(base_sum_running_costs*welt->get_settings().get_way_toll_runningcost_percentage())/100l;
 		sint64 wayobj_toll = 0;
+		sint64 signal_toll = 0;
 		if(  welt->get_settings().get_way_toll_waycost_percentage()  ) {
-			if(  weg->is_electrified()  &&  needs_electrification()  ) {
-				// toll for using electricity
-				grund_t *gr = welt->lookup(weg->get_pos());
-				for(  int i=1;  i<gr->get_top();  i++  ) {
-					obj_t *d=gr->obj_bei(i);
+			// toll for using electricity, and signal
+			grund_t *gr = welt->lookup(weg->get_pos());
+			for(  int i=1;  i<gr->get_top();  i++  ) {
+				obj_t *d=gr->obj_bei(i);
+				if(  weg->is_electrified()  &&  get_use_electric()  ) {
 					if(  wayobj_t const* const wo = obj_cast<wayobj_t>(d)  )  {
 						if(  wo->get_waytype()==weg->get_waytype()  ) {
 							wayobj_toll += (wo->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
 							wo->get_owner()->book_toll_received( wayobj_toll, get_schedule()->get_waytype() );
-							break;
 						}
+					}
+				}
+				if(  roadsign_t const* const s = obj_cast<roadsign_t>(d)  ) {
+					if(  s->get_waytype() == weg->get_waytype()  ) {
+						signal_toll += (s->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
+						s->get_owner()->book_toll_received( signal_toll );
 					}
 				}
 			}
@@ -814,9 +820,9 @@ void convoi_t::add_running_cost( const weg_t *weg )
 			toll += (weg->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
 		}
 		weg->get_owner()->book_toll_received( toll, get_schedule()->get_waytype() );
-		get_owner()->book_toll_paid(         -toll-wayobj_toll, get_schedule()->get_waytype() );
-		book( -toll-wayobj_toll, CONVOI_WAYTOLL);
-		book( -toll-wayobj_toll, CONVOI_PROFIT);
+		get_owner()->book_toll_paid(         -toll-wayobj_toll-signal_toll, get_schedule()->get_waytype() );
+		book( -toll-wayobj_toll-signal_toll, CONVOI_WAYTOLL);
+		book( -toll-wayobj_toll-signal_toll, CONVOI_PROFIT);
 
 	}
 	sint64 const sum_running_costs = base_sum_running_costs * (welt->get_settings().is_overloading_runningcost_increase()?(sint64) max(loading_level,100) : (sint64) 100)/ (sint64) 100;
