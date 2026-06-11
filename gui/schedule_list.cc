@@ -52,9 +52,7 @@
 #include "depot_picker.h"
 
 
-#define MAX_LINE_COST_GUI (MAX_LINE_COST + 1)
-
-static const char *cost_type[MAX_LINE_COST_GUI] =
+static const char *cost_type[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 {
 	"Free Capacity",
 	"Transported",
@@ -69,7 +67,7 @@ static const char *cost_type[MAX_LINE_COST_GUI] =
 	"Avg. density"
 };
 
-const uint8 cost_type_color[MAX_LINE_COST_GUI] =
+const uint8 cost_type_color[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 {
 	COL_FREE_CAPACITY,
 	COL_TRANSPORTED,
@@ -888,7 +886,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 				chart.show_curve(i);
 			}
 		}
-		// compute transport density (ton-kilo / distance) dynamically; not saved
+		// transport density (ton-kilo / distance): computed dynamically, not recorded in financial_history; curve index is MAX_LINE_COST, outside the saved range
 		{
 			const sint64 *history = new_line->get_finance_history();
 			for(  int month=0; month<MAX_MONTHS; month++  ) {
