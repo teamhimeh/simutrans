@@ -1969,6 +1969,7 @@ void fabrik_t::step(uint32 delta_t)
 				// Classic producer logic.
 				currently_requiring_power = false;
 				currently_producing = false;
+				uint32 power = 0;
 
 				// produces something
 				for(  uint32 product = 0;  product < output.get_count();  product++  ) {
@@ -2001,6 +2002,11 @@ void fabrik_t::step(uint32 delta_t)
 							output[product].menge = output[product].max - 1;
 						}
 					}
+				}
+				if(  desc->is_electricity_producer()  ) {
+					// compute power production
+					uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
+					set_power_supply((uint32)pp);
 				}
 
 				break;
@@ -2044,6 +2050,11 @@ void fabrik_t::step(uint32 delta_t)
 
 				// normalize work with respect to output number
 				work /= output.get_count();
+				if(  desc->is_electricity_producer()  ) {
+					// compute power production
+					uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
+					set_power_supply((uint32)pp);
+				}
 
 				break;
 			}
@@ -2113,6 +2124,11 @@ void fabrik_t::step(uint32 delta_t)
 
 					// work done is consumption rate
 					work = work_from_production(prod, consumed_menge);
+					if(  desc->is_electricity_producer()  ) {
+						// compute power production
+						uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
+						set_power_supply((uint32)pp);
+					}
 				}
 
 				break;
@@ -2224,6 +2240,11 @@ void fabrik_t::step(uint32 delta_t)
 							input[index].menge = 0;
 							inactive_inputs ++;
 						}
+					}
+					if(  desc->is_electricity_producer()  ) {
+						// compute power production
+						uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
+						set_power_supply((uint32)pp);
 					}
 				}
 				break;
@@ -2350,12 +2371,13 @@ void fabrik_t::step(uint32 delta_t)
 			}
 			case CL_ELEC_CLASSIC: {
 				// Classic no input power producer.
-				currently_requiring_power = false;
+				currently_requiring_power = true;
+				// currently_producing = true;
 				work = 1 << WORK_BITS;
 
 				// power station? => produce power
 				if(  desc->is_electricity_producer()  ) {
-					currently_requiring_power = true;
+					// currently_requiring_power = true;
 					currently_producing = true;
 					set_power_supply((uint32)( ((sint64)scaled_electric_demand * (sint64)(DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS ));
 				}
@@ -2364,7 +2386,7 @@ void fabrik_t::step(uint32 delta_t)
 			case CL_NONE:
 			default: {
 				currently_producing = false;
-				currently_requiring_power = false;
+				currently_requiring_power = true;
 				// None always produces maximum for whatever reason. Also default.
 				work = 1 << WORK_BITS;
 				break;

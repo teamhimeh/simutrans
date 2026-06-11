@@ -28,6 +28,7 @@
 #include "../../obj/wayobj.h"
 #include "../../obj/bruecke.h"
 #include "../../obj/tunnel.h"
+#include "../../boden/wege/strasse.h"
 #include "../../player/simplay.h"
 
 // for depot tools
@@ -184,6 +185,7 @@ getpush_obj_pos(baum_t, obj_t::baum);
 getpush_obj_pos(gebaeude_t, obj_t::gebaeude);
 getpush_obj_pos(label_t, obj_t::label);
 getpush_obj_pos(weg_t, obj_t::way);
+getpush_obj_pos(strasse_t, obj_t::way);
 getpush_obj_pos(leitung_t, obj_t::leitung);
 getpush_obj_pos(field_t, obj_t::field);
 getpush_obj_pos(wayobj_t, obj_t::wayobj);
@@ -251,7 +253,12 @@ SQInteger script_api::param<obj_t*>::push(HSQUIRRELVM vm, obj_t* const& obj)
 		case_resolve_obj(baum_t);
 		case_resolve_obj(gebaeude_t);
 		case_resolve_obj(label_t);
-		case_resolve_obj(weg_t);
+		case bind_code<weg_t>::objtype:
+		if (((weg_t*)obj)->get_waytype() == road_wt) {
+			return script_api::param<strasse_t*>::push(vm, (strasse_t*)obj);
+		}
+		return script_api::param<weg_t*>::push(vm, (weg_t*)obj);
+
 		case_resolve_obj(roadsign_t);
 		case_resolve_obj(signal_t);
 		case_resolve_obj(field_t);
@@ -291,6 +298,24 @@ static SQInteger get_way_ribi(HSQUIRRELVM vm)
 	ribi_t::ribi ribi = w ? (masked ? w->get_ribi() : w->get_ribi_unmasked() ) : 0;
 
 	return param<my_ribi_t>::push(vm, ribi);
+}
+
+static SQInteger get_overtaking_mode(HSQUIRRELVM vm)
+{
+	strasse_t *w = param<strasse_t*>::get(vm, 1);
+	if (w) {
+		return param<sint8>::push(vm, w->get_overtaking_mode());
+	}
+	return param<sint8>::push(vm, twoway_mode);
+}
+
+static SQInteger get_street_flags(HSQUIRRELVM vm)
+{
+	strasse_t *w = param<strasse_t*>::get(vm, 1);
+	if (w) {
+		return param<uint8>::push(vm, w->get_street_flag());
+	}
+	return param<uint8>::push(vm, 0);
 }
 
 // create class
@@ -373,7 +398,7 @@ call_tool_init depot_append_vehicle(depot_t *depot, player_t *player, convoihand
 	// see depot_frame_t::image_from_storage_list: tool = 'a'
 	// see depot_t::call_depot_tool for command string composition
 	cbuffer_t buf;
-	buf.printf( "%c,%s,%hu,%s", 'a', depot->get_pos().get_str(), cnv.get_id(), desc->get_name());
+	buf.printf( "%c,%s,%u,%s", 'a', depot->get_pos().get_str(), cnv.get_id(), desc->get_name());
 
 	return call_tool_init(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
 }
@@ -384,10 +409,10 @@ call_tool_init depot_start_convoy(depot_t *depot, player_t *player, convoihandle
 	// see depot_t::call_depot_tool for command string composition
 	cbuffer_t buf;
 	if (cnv.is_bound()) {
-		buf.printf( "%c,%s,%hu", 'b', depot->get_pos().get_str(), cnv->self.get_id());
+		buf.printf( "%c,%s,%u", 'b', depot->get_pos().get_str(), cnv->self.get_id());
 	}
 	else {
-		buf.printf( "%c,%s,%hu", 'B', depot->get_pos().get_str(), 0);
+		buf.printf( "%c,%s,%u", 'B', depot->get_pos().get_str(), 0);
 	}
 
 	return call_tool_init(TOOL_CHANGE_DEPOT | SIMPLE_TOOL, buf, 0, player);
@@ -697,6 +722,19 @@ void export_map_objects(HSQUIRRELVM vm)
 	register_method_fv(vm, &get_way_stat, "get_convoys_passed",    freevariable<sint32>(WAY_STAT_CONVOIS), true);
 	end_class(vm);
 
+	/**
+	 * Streets (roads)
+	 */
+	begin_obj_class<strasse_t>(vm, "street_x", "way_x");
+	/**
+	 * @return overtaking mode
+	 */
+	register_function(vm, &get_overtaking_mode, "get_overtaking_mode", 1, "x");
+	/**
+	 * @return street flags
+	 */
+	register_function(vm, &get_street_flags, "get_street_flags", 1, "x");
+	end_class(vm);
 
 	/**
 	 * Labels.
@@ -764,6 +802,43 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @returns true if the flag is set
 	 */
 	register_method(vm, &roadsign_t::is_start_signal, "is_start_signal");
+	/**
+	 * Get "advance to end" flag of a choose signal.
+	 * When true, trains routed to this choose signal will try to advance to the end of the platform.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_advance_to_end, "is_advance_to_end");
+	/**
+	 * Get "require parent convoy to enter" (guide signal) flag of a signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_guide_signal, "is_guide_signal");
+	/**
+	 * Get "choose signal" flag of a signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_choose_signal, "is_choose_signal");
+	/**
+	 * Get "skip default route" flag of a choose signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_skip_default_route, "is_skip_default_route");
+	/**
+	 * Get "length based" flag of a choose signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_length_based, "is_length_based");
+	/**
+	 * Get margin length of a choose signal.
+	 * @returns margin length in tiles
+	 */
+	register_method(vm, &roadsign_t::get_margin_length, "get_margin_length");
+	/**
+	 * Get "allow reverse passage" (two ways) flag of a signal.
+	 * When true, trains coming from the reverse direction are allowed to pass the signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::get_two_ways, "get_two_ways");
 	end_class(vm);
 
 	/**
