@@ -598,7 +598,7 @@ public:
 	image_id get_icon(player_t *) const OVERRIDE { return !env_t::networkmode ? icon : IMG_EMPTY; }
 	bool is_selected() const OVERRIDE{ return win_get_magic(magic_settings_frame_t); }
 	bool init(player_t*) OVERRIDE{
-		if (!env_t::networkmode) {
+		if (!env_t::networkmode || env_t::server) {
 			create_win(new settings_frame_t(&welt->get_settings()), w_info, magic_settings_frame_t);
 		}
 		return false;
