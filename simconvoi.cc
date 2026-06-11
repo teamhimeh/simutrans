@@ -1392,6 +1392,9 @@ bool convoi_t::drive_to()
 			}
 		}
 
+		// unreserve old route before replacing to avoid stray reservations when rerouted
+		unreserve_route();
+
 		if(  !cached_calc_route( start, ziel, &route, schedule->get_current_entry().is_pass_stop() )  ) {
 			if(  state != NO_ROUTE  ) {
 				state = NO_ROUTE;
