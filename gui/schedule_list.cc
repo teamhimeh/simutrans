@@ -64,7 +64,7 @@ static const char *cost_type[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 	"Maxspeed",
 	"Road toll",
 	"Freight ton-kilo",
-	"Avg. density"
+	"Avg. density" // not recorded in financial_history
 };
 
 const uint8 cost_type_color[schedule_list_gui_t::MAX_LINE_COST_GUI] =
@@ -79,7 +79,7 @@ const uint8 cost_type_color[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 	COL_MAXSPEED,
 	COL_TOLL,
 	COL_TONKILO,
-	COL_TRANSPORT_DENSITY
+	COL_TRANSPORT_DENSITY // not recorded in financial_history
 };
 
 static uint8 tabs_to_lineindex[9];
