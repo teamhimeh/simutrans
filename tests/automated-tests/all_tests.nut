@@ -281,14 +281,14 @@ all_tests <- [
 	test_crossing_straight_single_convoy,
 	test_crossing_straight_two_convoys_sequential,
 	test_crossing_straight_opposite_directions,
-	test_crossing_3way_single_convoy,
-	test_crossing_4way_NE_SW_permitted_A_first,
-	test_crossing_4way_NE_SW_permitted_B_first,
-	test_crossing_4way_SE_NW_permitted_A_first,
-	test_crossing_4way_SE_NW_permitted_B_first,
-	test_crossing_4way_NS_sequential_prohibited,
-	test_crossing_4way_NE_NE_sequential_prohibited,
-	test_crossing_4way_NE_SE_sequential_prohibited,
+	test_crossing_three_way_single_convoy,
+	test_crossing_four_way_NE_SW_permitted_A_first,
+	test_crossing_four_way_NE_SW_permitted_B_first,
+	test_crossing_four_way_SE_NW_permitted_A_first,
+	test_crossing_four_way_SE_NW_permitted_B_first,
+	test_crossing_four_way_NS_sequential_prohibited,
+	test_crossing_four_way_NE_NE_sequential_prohibited,
+	test_crossing_four_way_NE_SE_sequential_prohibited,
 ]
 
 

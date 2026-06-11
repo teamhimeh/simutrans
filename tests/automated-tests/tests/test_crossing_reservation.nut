@@ -368,7 +368,7 @@ function test_crossing_straight_opposite_directions()
 //
 // Note: the "branch stub" tile is (14, 5) — x=14 is not used by other tests.
 // ══════════════════════════════════════════════════════════
-function test_crossing_3way_single_convoy()
+function test_crossing_three_way_single_convoy()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -413,7 +413,7 @@ function test_crossing_3way_single_convoy()
 // Train B (S→W) co-reserves crossing with SW=12 while A holds it.
 // Both must reach their destinations.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_NE_SW_permitted_A_first()
+function test_crossing_four_way_NE_SW_permitted_A_first()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -462,7 +462,7 @@ function test_crossing_4way_NE_SW_permitted_A_first()
 // Same pair; Train B (S→W) starts first and reserves SW=12.
 // Train A (N→E) co-reserves NE=3 while B holds the crossing.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_NE_SW_permitted_B_first()
+function test_crossing_four_way_NE_SW_permitted_B_first()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -511,7 +511,7 @@ function test_crossing_4way_NE_SW_permitted_B_first()
 // Train A (S→E) starts first; reserves SE=6.
 // Train B (N→W) co-reserves NW=9.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_SE_NW_permitted_A_first()
+function test_crossing_four_way_SE_NW_permitted_A_first()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -559,7 +559,7 @@ function test_crossing_4way_SE_NW_permitted_A_first()
 // Train B (N→W) starts first; reserves NW=9.
 // Train A (S→E) co-reserves SE=6 while B holds the crossing.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_SE_NW_permitted_B_first()
+function test_crossing_four_way_SE_NW_permitted_B_first()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -608,7 +608,7 @@ function test_crossing_4way_SE_NW_permitted_B_first()
 // can_co_reserve_dirs(5, 5) = false.
 // PBS allows only one at a time; both must reach stn_S sequentially.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_NS_sequential_prohibited()
+function test_crossing_four_way_NS_sequential_prohibited()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -653,7 +653,7 @@ function test_crossing_4way_NS_sequential_prohibited()
 // Both convoys turn NE.  (3 & 3) = 3 ≠ 0  →  can_co_reserve_dirs = false.
 // Only one holds the crossing NE corner at a time; both reach stn_E sequentially.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_NE_NE_sequential_prohibited()
+function test_crossing_four_way_NE_NE_sequential_prohibited()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
@@ -699,7 +699,7 @@ function test_crossing_4way_NE_NE_sequential_prohibited()
 // Both trains exit east — they'd conflict at the E exit of the crossing.
 // PBS serialises them; both reach stn_E sequentially.
 // ══════════════════════════════════════════════════════════
-function test_crossing_4way_NE_SE_sequential_prohibited()
+function test_crossing_four_way_NE_SE_sequential_prohibited()
 {
     local pl           = player_x(0)
     local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
