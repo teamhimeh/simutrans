@@ -45,6 +45,7 @@ include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
 include("tests/test_otrp_signal_options")
+include("tests/test_crossing_reservation")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -274,7 +275,20 @@ all_tests <- [
 	test_road_choose_stop_behind_twoway_mode,
 	test_road_choose_stop_behind_loading_only_mode,
 	test_road_choose_stop_behind_inverted_mode,
-	test_road_choose_no_stop_behind_prohibited_mode
+	test_road_choose_no_stop_behind_prohibited_mode,
+
+	// 4-way crossing PBS co-reservation
+	test_crossing_straight_single_convoy,
+	test_crossing_straight_two_convoys_sequential,
+	test_crossing_straight_opposite_directions,
+	test_crossing_3way_single_convoy,
+	test_crossing_4way_NE_SW_permitted_A_first,
+	test_crossing_4way_NE_SW_permitted_B_first,
+	test_crossing_4way_SE_NW_permitted_A_first,
+	test_crossing_4way_SE_NW_permitted_B_first,
+	test_crossing_4way_NS_sequential_prohibited,
+	test_crossing_4way_NE_NE_sequential_prohibited,
+	test_crossing_4way_NE_SE_sequential_prohibited,
 ]
 
 

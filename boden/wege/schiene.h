@@ -9,6 +9,7 @@
 
 #include "weg.h"
 #include "../../convoihandle_t.h"
+#include "../../dataobj/ribi.h"
 
 class vehicle_t;
 
@@ -20,10 +21,15 @@ class vehicle_t;
 class schiene_t : public weg_t
 {
 protected:
-	/**
-	* Bound when this block was successfully reserved by the convoi
-	*/
 	convoihandle_t reserved;
+	ribi_t::ribi   reserved_dir  = ribi_t::none;
+	convoihandle_t reserved2;
+	ribi_t::ribi   reserved2_dir = ribi_t::none;
+
+	// Two bends that share no ribi bits don't cross visually (NW+SE or NE+SW).
+	static bool can_co_reserve_dirs(ribi_t::ribi d1, ribi_t::ribi d2) {
+		return ribi_t::is_bend(d1) && ribi_t::is_bend(d2) && (d1 & d2) == 0;
+	}
 
 public:
 	static const way_desc_t *default_schiene;
@@ -47,7 +53,7 @@ public:
 	/**
 	* true, if this rail can be reserved
 	*/
-	bool can_reserve(convoihandle_t c) const { return !reserved.is_bound()  ||  c==reserved; }
+	bool can_reserve(convoihandle_t c) const { return !reserved.is_bound()  ||  c==reserved  ||  c==reserved2; }
 
 	/**
 	* true, if this rail can be reserved

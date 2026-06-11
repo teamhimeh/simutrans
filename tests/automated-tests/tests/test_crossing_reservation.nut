@@ -1,0 +1,741 @@
+//
+// Tests for rail PBS reservation at 4-way crossings (co-reservation).
+//
+// Co-reservation rules (schiene_t::can_co_reserve_dirs):
+//   corner_set = backward(ribi_type(prev, curr)) | ribi_type(curr, next)
+//   Two bends whose corner-sets share NO ribi bits may co-reserve simultaneously.
+//
+//   PERMITTED  : N→E + S→W   corners NE=3,  SW=12  (3  & 12 = 0)
+//   PERMITTED  : S→E + N→W   corners SE=6,  NW=9   (6  &  9 = 0)
+//   PROHIBITED : N→S  (corner NS=5, not a bend — can't co-reserve with anything)
+//   PROHIBITED : same or overlapping corner  e.g. N→E + S→E (NE=3, SE=6, 3&6=2≠0)
+//
+// Original single-reservation behaviour is also tested:
+//   - straight track  : only one convoy at a time
+//   - 3-way junction  : only one convoy at a time
+//
+// Map  layout  (16×16, valid coords 0-15)
+// ════════════════════════════════════════════════════════════════
+//
+//  4-way crossing area  (x=11..15, y=3..11)
+//  ─────────────────────────────────────────
+//     N-S track : x=13, y=3..11
+//     E-W track : x=11..15, y=7
+//     crossing  : (13, 7)
+//
+//  depot_N : (13, 3)     depot_S : (13, 11)
+//  stn_N   : (13, 4)     stn_S   : (13, 10)
+//  sig_N   : (13, 5)  ←  two-way PBS (placed once)
+//  sig_S   : (13, 9)  ←  two-way PBS (placed once)
+//  stn_E   : (15,  7)    stn_W   : (11,  7)
+//
+//  Straight-track tests  (x=9, y=0..8)   — avoids all other test columns
+//
+//  3-way junction test  (x=9, y=0..6; branch: (9,4)→(9,4+west stub))
+//    Branch goes to (8,4) — check: x=8 tests use y=0..14, but test runs
+//    sequentially after cleanup, so y=4 is safe.
+//
+//  NOTE on x=8 branch: test_start_signal uses x=8,y=0..14 but removes all
+//    infrastructure at end.  The 3-way test runs sequentially, so (8,4) is
+//    free.  However to be truly safe the branch goes EAST only inside the
+//    x=9 column (using a single dead-end stub at (9,4)→(10,4) is avoided
+//    because x=10 = longblock column).  Instead, the 3-way is tested inline
+//    below using the 4-way crossing's x=13 column with an extra branch.
+// ════════════════════════════════════════════════════════════════
+
+
+// ──────────────────────────────────────────────────────────
+// Shared helpers  (4-way crossing at (13, 7))
+// ──────────────────────────────────────────────────────────
+
+function _cr_build_infra(pl, rail, station_desc, signal_desc)
+{
+    // N-S track (x=13, y=3..11)
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(13, 3, 0), coord3d(13, 11, 0), rail, true), null)
+    // E-W track (x=11..15, y=7)
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(11, 7, 0), coord3d(15, 7, 0), rail, true), null)
+
+    local depot_desc = get_depot_by_wt(wt_rail)
+    ASSERT_EQUAL(command_x.build_depot(pl, coord3d(13, 3, 0), depot_desc), null)   // depot_N
+    ASSERT_EQUAL(command_x.build_depot(pl, coord3d(13, 11, 0), depot_desc), null)  // depot_S
+
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(13, 4, 0), station_desc), null)  // stn_N
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(13, 10, 0), station_desc), null) // stn_S
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(15, 7, 0), station_desc), null)  // stn_E
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(11, 7, 0), station_desc), null)  // stn_W
+
+    // PBS signals — placed ONCE = two-way (works for trains from either direction).
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(13, 5, 0), signal_desc), null)  // sig_N
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(13, 9, 0), signal_desc), null)  // sig_S
+}
+
+function _cr_remove_infra(pl)
+{
+    foreach (y in [5, 9]) {
+        if (tile_x(13, y, 0).find_object(mo_signal) != null) {
+            command_x(tool_remover).work(pl, coord3d(13, y, 0))
+        }
+    }
+    foreach (pos in [coord3d(13, 4, 0), coord3d(13, 10, 0),
+                     coord3d(15, 7, 0), coord3d(11, 7, 0),
+                     coord3d(13, 3, 0), coord3d(13, 11, 0)]) {
+        command_x(tool_remover).work(pl, pos)
+    }
+    command_x(tool_remove_way).work(pl, coord3d(13, 3, 0), coord3d(13, 11, 0), "" + wt_rail)
+    command_x(tool_remove_way).work(pl, coord3d(11, 7, 0), coord3d(15, 7, 0), "" + wt_rail)
+}
+
+// Create and start a 3-car train from depot_N (13,3) with given schedule.
+function _cr_start_from_N(pl, entries)
+{
+    local depot = depot_x(13, 3, 0)
+    depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cnv = depot.get_convoy_list()[depot.get_convoy_list().len() - 1]
+    depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cnv.change_schedule(pl, schedule_x(wt_rail, entries))
+    depot.start_all_convoys(pl)
+    sleep()
+    return cnv
+}
+
+// Create and start a 3-car train from depot_S (13,11) with given schedule.
+function _cr_start_from_S(pl, entries)
+{
+    local depot = depot_x(13, 11, 0)
+    depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cnv = depot.get_convoy_list()[depot.get_convoy_list().len() - 1]
+    depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cnv.change_schedule(pl, schedule_x(wt_rail, entries))
+    depot.start_all_convoys(pl)
+    sleep()
+    return cnv
+}
+
+// Poll until convoy's leading vehicle is at (tx, ty).  Returns false on timeout.
+function _cr_wait_at(cnv, tx, ty, max_steps)
+{
+    for (local i = 0; i < max_steps; i++) {
+        sleep()
+        if (!cnv.is_valid()) return false
+        local p = cnv.get_pos()
+        if (p.x == tx && p.y == ty) return true
+    }
+    return false
+}
+
+// Poll until both convoys have the same position for 2 consecutive ticks (both stopped).
+// For prohibited tests: one stops at the signal while the other stops at its destination —
+// the moment both are stopped simultaneously proves the prohibition is being enforced.
+function _cr_wait_both_stopped(cnvA, cnvB, max_steps)
+{
+    local prevA = null, prevB = null
+    for (local i = 0; i < max_steps; i++) {
+        sleep()
+        if (!cnvA.is_valid() || !cnvB.is_valid()) return false
+        local pA = cnvA.get_pos()
+        local pB = cnvB.get_pos()
+        if (prevA != null && prevB != null
+         && pA.x == prevA.x && pA.y == prevA.y
+         && pB.x == prevB.x && pB.y == prevB.y) {
+            return true
+        }
+        prevA = pA
+        prevB = pB
+    }
+    return false
+}
+
+function _cr_destroy(pl, cnv)
+{
+    if (cnv.is_valid()) {
+        cnv.destroy(pl)
+        for (local i = 0; i < 200 && cnv.is_valid(); i++) sleep()
+    }
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-S1  Straight track — single convoy  (non-4-way baseline)
+//
+// One convoy N→S on a plain straight track at x=9.
+// Confirms normal PBS reservation is unaffected by co-reservation changes.
+// ══════════════════════════════════════════════════════════
+function test_crossing_straight_single_convoy()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    // Straight N-S track at x=9, y=0..6
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(9, 0, 0), coord3d(9, 6, 0), rail, true), null)
+    local depot_desc = get_depot_by_wt(wt_rail)
+    ASSERT_EQUAL(command_x.build_depot(pl,   coord3d(9, 0, 0), depot_desc), null)
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(9, 1, 0), station_desc), null)
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(9, 5, 0), station_desc), null)
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(9, 2, 0), signal_desc), null)
+
+    debug.set_game_speed(5)
+
+    local depot = depot_x(9, 0, 0)
+    depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cnv = depot.get_convoy_list()[0]
+    depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cnv.change_schedule(pl, schedule_x(wt_rail, [
+        schedule_entry_x(coord3d(9, 1, 0), 0, 0),
+        schedule_entry_x(coord3d(9, 5, 0), 0, 0)
+    ]))
+    depot.start_all_convoys(pl)
+    sleep()
+
+    local reached = _cr_wait_at(cnv, 9, 5, 6000)
+    print("  TC-S1 reached y=5: " + reached)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cnv)
+    if (tile_x(9, 2, 0).find_object(mo_signal) != null) command_x(tool_remover).work(pl, coord3d(9, 2, 0))
+    foreach (y in [0, 1, 5]) command_x(tool_remover).work(pl, coord3d(9, y, 0))
+    command_x(tool_remove_way).work(pl, coord3d(9, 0, 0), coord3d(9, 6, 0), "" + wt_rail)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reached)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-S2  Straight track — two convoys, same direction  (single reservation)
+//
+// Two N→S convoys on the same track.  corner_set for straight N→S = 5 (not a bend).
+// can_co_reserve_dirs(5, 5) = false → PBS admits only one at a time.
+// cA enters the block first; cB follows and must stop at signal y=5 until cA clears.
+// Test passes as soon as both are stopped simultaneously:
+//   cA stopped at stn_S (y=7, loading)  AND  cB stopped at sig_N (y=5, waiting).
+// ══════════════════════════════════════════════════════════
+function test_crossing_straight_two_convoys_sequential()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    // x=9, y=0..8  — depot_N y=0, stn_N y=1, sig y=2, sig y=5, stn_S y=7
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(9, 0, 0), coord3d(9, 8, 0), rail, true), null)
+    local depot_desc = get_depot_by_wt(wt_rail)
+    ASSERT_EQUAL(command_x.build_depot(pl,   coord3d(9, 0, 0), depot_desc), null)
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(9, 1, 0), station_desc), null)
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(9, 7, 0), station_desc), null)
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(9, 2, 0), signal_desc), null)
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(9, 5, 0), signal_desc), null)
+
+    debug.set_game_speed(5)
+
+    local depotN = depot_x(9, 0, 0)
+    depotN.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cA = depotN.get_convoy_list()[0]
+    depotN.append_vehicle(pl, cA, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depotN.append_vehicle(pl, cA, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cA.change_schedule(pl, schedule_x(wt_rail, [
+        schedule_entry_x(coord3d(9, 1, 0), 0, 0),
+        schedule_entry_x(coord3d(9, 7, 0), 0, 0)
+    ]))
+    depotN.start_all_convoys(pl)
+    sleep()
+
+    // cA has departed; add cB to the now-empty depot.
+    depotN.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cB = depotN.get_convoy_list()[0]
+    depotN.append_vehicle(pl, cB, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depotN.append_vehicle(pl, cB, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cB.change_schedule(pl, schedule_x(wt_rail, [
+        schedule_entry_x(coord3d(9, 1, 0), 0, 0),
+        schedule_entry_x(coord3d(9, 7, 0), 0, 0)
+    ]))
+    depotN.start_all_convoys(pl)
+    sleep()
+
+    // Early pass: both stopped simultaneously = cA at stn_S, cB held at signal.
+    local bothStopped = _cr_wait_both_stopped(cA, cB, 3000)
+    print("  TC-S2 same-dir both stopped (A at dest, B at signal): " + bothStopped)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    foreach (y in [2, 5]) {
+        if (tile_x(9, y, 0).find_object(mo_signal) != null)
+            command_x(tool_remover).work(pl, coord3d(9, y, 0))
+    }
+    foreach (y in [0, 1, 7]) command_x(tool_remover).work(pl, coord3d(9, y, 0))
+    command_x(tool_remove_way).work(pl, coord3d(9, 0, 0), coord3d(9, 8, 0), "" + wt_rail)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(bothStopped)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-S3  Straight track — two convoys, opposite directions  (single reservation)
+//
+// N→S and S→N on the same straight track.  The N→S train gets the block first
+// (100-tick head start); S→N train hits the south signal and waits.
+// Test passes as soon as both are stopped simultaneously:
+//   cA stopped at stn_S (y=7)  AND  cB stopped at sig_S (y=5, waiting).
+// No deadlock because cA enters the block before cB tries to reserve.
+// ══════════════════════════════════════════════════════════
+function test_crossing_straight_opposite_directions()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    // x=9, y=0..8  — depot_N y=0, stn_N y=1, sig y=2, sig y=5, stn_S y=7, depot_S y=8
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(9, 0, 0), coord3d(9, 8, 0), rail, true), null)
+    local depot_desc = get_depot_by_wt(wt_rail)
+    ASSERT_EQUAL(command_x.build_depot(pl,   coord3d(9, 0, 0), depot_desc), null)
+    ASSERT_EQUAL(command_x.build_depot(pl,   coord3d(9, 8, 0), depot_desc), null)
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(9, 1, 0), station_desc), null)
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(9, 7, 0), station_desc), null)
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(9, 2, 0), signal_desc), null)
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(9, 5, 0), signal_desc), null)
+
+    debug.set_game_speed(5)
+
+    // cA: N→S — gets the block first.
+    local depotN = depot_x(9, 0, 0)
+    depotN.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cA = depotN.get_convoy_list()[0]
+    depotN.append_vehicle(pl, cA, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depotN.append_vehicle(pl, cA, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cA.change_schedule(pl, schedule_x(wt_rail, [
+        schedule_entry_x(coord3d(9, 1, 0), 0, 0),
+        schedule_entry_x(coord3d(9, 7, 0), 0, 0)
+    ]))
+    depotN.start_all_convoys(pl)
+
+    // Give cA time to clear sig_N (y=2) and enter the block before cB starts.
+    for (local i = 0; i < 100; i++) sleep()
+
+    // cB: S→N — should find the block already reserved by cA and wait at sig_S (y=5).
+    local depotS = depot_x(9, 8, 0)
+    depotS.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
+    local cB = depotS.get_convoy_list()[0]
+    depotS.append_vehicle(pl, cB, vehicle_desc_x("H-Trans-Tiger-Car"))
+    depotS.append_vehicle(pl, cB, vehicle_desc_x("H-Trans-Pantheress-Back"))
+    cB.change_schedule(pl, schedule_x(wt_rail, [
+        schedule_entry_x(coord3d(9, 7, 0), 0, 0),
+        schedule_entry_x(coord3d(9, 1, 0), 0, 0)
+    ]))
+    depotS.start_all_convoys(pl)
+    sleep()
+
+    // Early pass: cA stopped at stn_S, cB stopped at sig_S = block prohibition confirmed.
+    local bothStopped = _cr_wait_both_stopped(cA, cB, 3000)
+    print("  TC-S3 opp-dir both stopped (A at dest, B at signal): " + bothStopped)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    foreach (y in [2, 5]) {
+        if (tile_x(9, y, 0).find_object(mo_signal) != null)
+            command_x(tool_remover).work(pl, coord3d(9, y, 0))
+    }
+    foreach (y in [0, 1, 7, 8]) command_x(tool_remover).work(pl, coord3d(9, y, 0))
+    command_x(tool_remove_way).work(pl, coord3d(9, 0, 0), coord3d(9, 8, 0), "" + wt_rail)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(bothStopped)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-3W  3-way junction — single convoy  (non-4-way baseline)
+//
+// Uses the 4-way crossing infrastructure (13, 7) with an extra E-branch stub
+// at y=5 to create a 3-way switch at (13, 5).  One convoy travels straight
+// N→S through the switch and must reach stn_S.
+//
+// Note: the "branch stub" tile is (14, 5) — x=14 is not used by other tests.
+// ══════════════════════════════════════════════════════════
+function test_crossing_3way_single_convoy()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+
+    // Add one-tile east branch at y=5 to make (13,5) a 3-way switch.
+    // (14,5) is free — no other test uses x=14, y=5.
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(13, 5, 0), coord3d(14, 5, 0), rail, true), null)
+
+    debug.set_game_speed(5)
+
+    // Single convoy: N→S straight through the 3-way at (13,5).
+    local cnv = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0)
+    ])
+
+    local reached = _cr_wait_at(cnv, 13, 10, 6000)
+    print("  TC-3W reached stn_S (13,10): " + reached)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cnv)
+    command_x(tool_remove_way).work(pl, coord3d(13, 5, 0), coord3d(14, 5, 0), "" + wt_rail)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reached)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4A  4-way crossing  N→E + S→W  PERMITTED  (A starts first)
+//
+// corner_set NE=3 and SW=12;  3 & 12 = 0  →  can_co_reserve_dirs = true.
+// Train A (N→E) starts first, reserves crossing with NE=3.
+// Train B (S→W) co-reserves crossing with SW=12 while A holds it.
+// Both must reach their destinations.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_NE_SW_permitted_A_first()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    // Train A: N→E path  (depot_N → stn_N → stn_E)
+    local cA = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    // Short delay so A's block_reserver fires before B starts.
+    for (local i = 0; i < 300; i++) sleep()
+
+    // Train B: S→W path  (depot_S → stn_S → stn_W)
+    local cB = _cr_start_from_S(pl, [
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(11, 7, 0), 0, 0)
+    ])
+
+    local reachedA = _cr_wait_at(cA, 15, 7, 8000)
+    local reachedB = _cr_wait_at(cB, 11, 7, 8000)
+    print("  TC-4A N→E → stn_E: " + reachedA + "  S→W → stn_W: " + reachedB)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reachedA)
+    ASSERT_TRUE(reachedB)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4B  4-way crossing  N→E + S→W  PERMITTED  (B starts first)
+//
+// Same pair; Train B (S→W) starts first and reserves SW=12.
+// Train A (N→E) co-reserves NE=3 while B holds the crossing.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_NE_SW_permitted_B_first()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    // Train B starts first: S→W
+    local cB = _cr_start_from_S(pl, [
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(11, 7, 0), 0, 0)
+    ])
+
+    for (local i = 0; i < 300; i++) sleep()
+
+    // Train A: N→E
+    local cA = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    local reachedB = _cr_wait_at(cB, 11, 7, 8000)
+    local reachedA = _cr_wait_at(cA, 15, 7, 8000)
+    print("  TC-4B S→W → stn_W: " + reachedB + "  N→E → stn_E: " + reachedA)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reachedA)
+    ASSERT_TRUE(reachedB)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4C  4-way crossing  S→E + N→W  PERMITTED  (A starts first)
+//
+// corner_set SE=6 and NW=9;  6 & 9 = 0  →  can_co_reserve_dirs = true.
+// Train A (S→E) starts first; reserves SE=6.
+// Train B (N→W) co-reserves NW=9.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_SE_NW_permitted_A_first()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    // Train A: S→E path  (depot_S → stn_S → stn_E)
+    local cA = _cr_start_from_S(pl, [
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    for (local i = 0; i < 300; i++) sleep()
+
+    // Train B: N→W path  (depot_N → stn_N → stn_W)
+    local cB = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(11, 7, 0), 0, 0)
+    ])
+
+    local reachedA = _cr_wait_at(cA, 15, 7, 8000)
+    local reachedB = _cr_wait_at(cB, 11, 7, 8000)
+    print("  TC-4C S→E → stn_E: " + reachedA + "  N→W → stn_W: " + reachedB)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reachedA)
+    ASSERT_TRUE(reachedB)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4D  4-way crossing  S→E + N→W  PERMITTED  (B starts first)
+//
+// Train B (N→W) starts first; reserves NW=9.
+// Train A (S→E) co-reserves SE=6 while B holds the crossing.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_SE_NW_permitted_B_first()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    // Train B starts first: N→W
+    local cB = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(11, 7, 0), 0, 0)
+    ])
+
+    for (local i = 0; i < 300; i++) sleep()
+
+    // Train A: S→E
+    local cA = _cr_start_from_S(pl, [
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    local reachedB = _cr_wait_at(cB, 11, 7, 8000)
+    local reachedA = _cr_wait_at(cA, 15, 7, 8000)
+    print("  TC-4D N→W → stn_W: " + reachedB + "  S→E → stn_E: " + reachedA)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reachedA)
+    ASSERT_TRUE(reachedB)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4P1  4-way crossing  N→S + N→S  PROHIBITED (straight path)
+//
+// Both convoys travel N→S.  corner_set = NS = 5 (not a bend).
+// can_co_reserve_dirs(5, 5) = false.
+// PBS allows only one at a time; both must reach stn_S sequentially.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_NS_sequential_prohibited()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    local cA = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0)
+    ])
+
+    for (local i = 0; i < 100; i++) sleep()
+
+    local cB = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0)
+    ])
+
+    // Early pass: A reaches stn_S while B is held at signal → both stopped simultaneously.
+    local bothStopped = _cr_wait_both_stopped(cA, cB, 3000)
+    print("  TC-4P1 both stopped (A in block, B at signal): " + bothStopped)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(bothStopped)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4P2  4-way crossing  N→E + N→E  PROHIBITED (same corner)
+//
+// Both convoys turn NE.  (3 & 3) = 3 ≠ 0  →  can_co_reserve_dirs = false.
+// Only one holds the crossing NE corner at a time; both reach stn_E sequentially.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_NE_NE_sequential_prohibited()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    local cA = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    for (local i = 0; i < 100; i++) sleep()
+
+    local cB = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    // Early pass: A reaches stn_E while B is held at signal → both stopped simultaneously.
+    local bothStopped = _cr_wait_both_stopped(cA, cB, 3000)
+    print("  TC-4P2 both stopped (A in block, B at signal): " + bothStopped)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(bothStopped)
+}
+
+
+// ══════════════════════════════════════════════════════════
+// TC-4P3  4-way crossing  N→E + S→E  PROHIBITED (shared E exit)
+//
+// N→E corner NE=3; S→E corner SE=6.  (3 & 6) = 2 ≠ 0 → can't co-reserve.
+// Both trains exit east — they'd conflict at the E exit of the crossing.
+// PBS serialises them; both reach stn_E sequentially.
+// ══════════════════════════════════════════════════════════
+function test_crossing_4way_NE_SE_sequential_prohibited()
+{
+    local pl           = player_x(0)
+    local rail         = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+    local station_desc = building_desc_x.get_available_stations(
+                             building_desc_x.station, wt_rail, good_desc_x.passenger)[0]
+    local signal_desc  = sign_desc_x.get_available_signs(wt_rail).filter(
+                             @(idx, s) s.is_signal())[0]
+    ASSERT_TRUE(rail != null && station_desc != null && signal_desc != null)
+
+    _cr_build_infra(pl, rail, station_desc, signal_desc)
+    debug.set_game_speed(5)
+
+    // Train A: N→E
+    local cA = _cr_start_from_N(pl, [
+        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    for (local i = 0; i < 100; i++) sleep()
+
+    // Train B: S→E  (same E exit, different entry corner)
+    local cB = _cr_start_from_S(pl, [
+        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(15, 7, 0), 0, 0)
+    ])
+
+    local reachedA = _cr_wait_at(cA, 15, 7, 8000)
+    local reachedB = _cr_wait_at(cB, 15, 7, 8000)
+    print("  TC-4P3 cA (N→E) stn_E: " + reachedA + "  cB (S→E) stn_E: " + reachedB)
+
+    debug.set_game_speed(1)
+    _cr_destroy(pl, cA)
+    _cr_destroy(pl, cB)
+    _cr_remove_infra(pl)
+    RESET_ALL_PLAYER_FUNDS()
+
+    ASSERT_TRUE(reachedA)
+    ASSERT_TRUE(reachedB)
+}

@@ -4574,15 +4574,22 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 					next_signal_index = i;
 				}
 			}
-			if(  !sch1->reserve( cnv->self, ribi_type( route->at(max(1u,i)-1u), route->at(min(route->get_count()-1u,i+1u)) ) )  ) {
-				success = false;
-			}
-			if (gr->has_two_ways()) {
-				// we may need to reserve the other way as well
-				if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
-					// the other way is reservable too => try to reserve it
-					if (!sch0->reserve(cnv->self, ribi_type(route->at(max(1u, i) - 1u), route->at(min(route->get_count() - 1u, i + 1u))))) {
-						success = false;
+			{
+				// corner_set = entry_border | exit_border; correctly identifies which corner of the
+				// tile a turning train occupies, enabling safe co-reservation of opposite corners.
+				const ribi_t::ribi corner_set =
+					ribi_t::backward(ribi_type(route->at(max(1u,i)-1u), pos))
+					| ribi_type(pos, route->at(min(route->get_count()-1u,i+1u)));
+				if(  !sch1->reserve( cnv->self, corner_set )  ) {
+					success = false;
+				}
+				if (gr->has_two_ways()) {
+					// we may need to reserve the other way as well
+					if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
+						// the other way is reservable too => try to reserve it
+						if (!sch0->reserve(cnv->self, corner_set)) {
+							success = false;
+						}
 					}
 				}
 			}
@@ -4772,7 +4779,9 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				grund_t* grn = welt->lookup(route->at(h));
 				schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
 				if(  schn  ) {
-					schn->reserve( cnv->self, ribi_type(route->at(max(1u,h)-1u), route->at(min(route->get_count()-1u,h+1u))) );
+					schn->reserve( cnv->self,
+					ribi_t::backward(ribi_type(route->at(max(1u,h)-1u), route->at(h)))
+					| ribi_type(route->at(h), route->at(min(route->get_count()-1u,h+1u))) );
 				}
 			}
 			return true;
@@ -4810,7 +4819,12 @@ void rail_vehicle_t::leave_tile()
 					// other convoy exist!
 					other_convoy = v->get_convoi()->self;
 				}
-				sch0->unreserve(this);
+				// Use convoy handle so co-reserved convoys are correctly identified:
+				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
+				// unreserve(vehicle_t*) always cleared the primary slot regardless of which
+				// convoy this vehicle belongs to — causing spurious promotion/clearing bugs.
+				const convoihandle_t self_cnv = cnv ? cnv->self : convoihandle_t();
+				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
 					sch0->reserve(other_convoy,ribi_t::none);
@@ -4831,7 +4845,7 @@ void rail_vehicle_t::leave_tile()
 					// we may need to reserve the other way as well
 					if (schiene_t* sch1 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch0))) {
 						// the other way is reservable too => unreserve it
-						sch1->unreserve(this);
+						sch1->unreserve(self_cnv);
 					}
 				}
 			}
