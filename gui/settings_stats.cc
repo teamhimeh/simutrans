@@ -270,6 +270,7 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "transit_by_foot", sets->transit_by_foot );
 	INIT_NUM( "foot_path_weight", sets->foot_path_weight, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	INIT_NUM( "foot_path_time_ticks", sets->foot_path_time_ticks, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
+	INIT_BOOL( "walk_cost_to_halt", sets->walk_cost_to_halt );
 	INIT_END
 }
 
@@ -324,6 +325,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_BOOL_VALUE( sets->transit_by_foot );
 	READ_NUM_VALUE( sets->foot_path_weight );
 	READ_NUM_VALUE( sets->foot_path_time_ticks );
+	READ_BOOL_VALUE( sets->walk_cost_to_halt );
 }
 
 

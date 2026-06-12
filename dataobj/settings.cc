@@ -347,6 +347,7 @@ settings_t::settings_t() :
 	transit_by_foot = false;
 	foot_path_weight = 24;
 	foot_path_time_ticks = 1800;
+	walk_cost_to_halt = false;
 }
 
 
@@ -1067,6 +1068,11 @@ void settings_t::rdwr(loadsave_t *file)
 			transit_by_foot = false;
 			foot_path_weight = 24;
 			foot_path_time_ticks = 1800;
+		}
+		if(  file->get_OTRP_version() > 56  ) {
+			file->rdwr_bool(walk_cost_to_halt);
+		} else {
+			walk_cost_to_halt = false;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1904,6 +1910,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	transit_by_foot       = contents.get_int("transit_by_foot",       transit_by_foot) != 0;
 	foot_path_weight      = contents.get_int("foot_path_weight",      foot_path_weight);
 	foot_path_time_ticks  = contents.get_int("foot_path_time_ticks",  foot_path_time_ticks);
+	walk_cost_to_halt     = contents.get_int("walk_cost_to_halt",     walk_cost_to_halt) != 0;
 
 	// Default pak file path
 	objfilename = ltrim(contents.get_string("pak_file_path", objfilename.c_str() ) );

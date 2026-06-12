@@ -616,7 +616,13 @@ public:
 	 *
 	 * if avoid_overcrowding is set, a valid route in only found when there is no overflowing stop in between
 	 */
-	static int search_route( const halthandle_t *const start_halts, const uint16 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL );
+	/**
+	 * @param start_pos  2D origin position (building tile). When valid and transit_by_foot is
+	 *                   enabled, the Manhattan distance to each start halt is added to the initial
+	 *                   route weight so that nearby stops are preferred over distant ones.
+	 *                   The destination walking cost is derived from ware.get_zielpos() internally.
+	 */
+	static int search_route( const halthandle_t *const start_halts, const uint16 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL, const koord start_pos=koord::invalid );
 
 	/**
 	 * A separate version of route searching code for re-calculating routes

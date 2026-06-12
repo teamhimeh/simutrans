@@ -2265,10 +2265,29 @@ uint8 haltestelle_t::last_search_ware_catg_idx = 255;
  * if USE_ROUTE_SLIST_TPL is defined, the list template will be used.
  * However, this is about 50% slower.
  */
-int haltestelle_t::search_route( const halthandle_t *const start_halts, const uint16 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware )
+int haltestelle_t::search_route( const halthandle_t *const start_halts, const uint16 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware, const koord start_pos )
 {
 	const uint8 ware_catg_idx = ware.get_desc()->get_catg_index();
 	const uint8 ware_idx = ware.get_desc()->get_index();
+
+	// Walking cost setup: only for passengers when transit_by_foot is enabled.
+	// Origin walking cost penalises start halts that are farther from the passenger's building.
+	// Destination walking cost penalises end halts that are farther from the destination tile.
+	const bool use_walk_cost = (start_pos != koord::invalid)
+	                           && welt->get_settings().is_transit_by_foot()
+	                           && welt->get_settings().is_walk_cost_to_halt()
+	                           && ware_catg_idx == goods_manager_t::INDEX_PAS;
+	const bool tbgr_walk = use_walk_cost && welt->get_settings().get_time_based_routing_enabled(ware_catg_idx);
+	const uint32 walk_factor = tbgr_walk
+	                           ? welt->get_settings().get_foot_path_time_ticks()
+	                           : welt->get_settings().get_foot_path_weight();
+	const koord dest_pos = use_walk_cost ? ware.get_zielpos() : koord::invalid;
+
+	// Returns Manhattan walking cost between two 2D positions; 0 when walking disabled.
+	auto compute_walk_weight = [&](const koord& from, const koord& to) -> uint32 {
+		if(!use_walk_cost) return 0;
+		return koord_distance(from, to) * walk_factor;
+	};
 
 	// since also the factory halt list is added to the ground, we can use just this ...
 	const planquadrat_t *const plan = welt->access( ware.get_zielpos() );
@@ -2276,6 +2295,9 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 	// but we can only use a subset of these
 	static vector_tpl<halthandle_t> end_halts(16);
 	end_halts.clear();
+	// parallel walking costs from each end halt to dest_pos (0 when use_walk_cost is false)
+	static vector_tpl<uint32> end_halt_walk_costs(16);
+	end_halt_walk_costs.clear();
 	// target halts are in these connected components
 	// we start from halts only in the same components
 	static vector_tpl<uint16> end_conn_comp(16);
@@ -2302,6 +2324,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 					}
 				}
 				end_halts.append(halt);
+				end_halt_walk_costs.append( compute_walk_weight(halt->get_init_pos(), dest_pos) );
 
 				// check connected component of target halt
 				uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
@@ -2323,7 +2346,8 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 		// we already set getoff stop (because this goods is dummy!)
 		// e.g. called by route_search_frame_t
 		halthandle_t halt = ware.get_ziel();
-				end_halts.append(halt);
+		end_halts.append(halt);
+		end_halt_walk_costs.append( compute_walk_weight(halt->get_init_pos(), dest_pos) );
 
 		// check connected component of target halt
 		uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
@@ -2386,10 +2410,15 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 			// this start halt will not lead to any target
 			continue;
 		}
-		open_list.insert( route_node_t(start_halt, 0) );
+		// Walking distance from origin building to this start halt.
+		// Using max(1u, ...) so best_weight never equals 0 (which is the closed-list sentinel).
+		// When use_walk_cost is false the walk weight is 0, giving best_weight=1 — negligible
+		// compared to typical connection weights and preserves backward-compatible behaviour.
+		const uint32 origin_walk_w = max(1u, compute_walk_weight(start_pos, start_halt->get_init_pos()));
+		open_list.insert( route_node_t(start_halt, origin_walk_w) );
 
 		halt_data_t & start_data = halt_data[ start_halt.get_id() ];
-		start_data.best_weight = UINT32_MAX;
+		start_data.best_weight = origin_walk_w;
 		start_data.destination = 0;
 		start_data.depth       = 0;
 		start_data.overcrowded = false; // start halt overcrowding is handled by routines calling this one
@@ -2397,6 +2426,14 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 		markers[ start_halt.get_id() ] = current_marker;
 	}
+
+	// Look up pre-computed destination walking cost for a given halt id (0 for non-end halts).
+	auto get_dest_walk_cost = [&](uint32 halt_id) -> uint32 {
+		for(uint32 i = 0; i < end_halts.get_count(); i++) {
+			if(end_halts[i].get_id() == halt_id) return end_halt_walk_costs[i];
+		}
+		return 0u;
+	};
 
 	// here the normal routing with overcrowded stops is done
 	while (!open_list.empty())
@@ -2485,6 +2522,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 				if(  current_conn.halt.is_bound()  &&  current_conn.is_transfer  &&  allocation_pointer<max_hops  ) {
 					// Case : transfer halt
+					// Use WEIGHT_MIN as lower bound on any destination's additional walk cost for pruning.
 					const uint32 total_weight = current_halt_data.best_weight + current_conn.weight;
 
 					if(  total_weight < best_destination_weight  ) {
@@ -2520,7 +2558,12 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 				uint32 total_weight = current_halt_data.best_weight + current_conn.weight;
 
-				if(  total_weight<halt_data[ reachable_halt_id ].best_weight  &&  total_weight<best_destination_weight  &&  allocation_pointer<max_hops  ) {
+				// For end halts, include walking cost from the halt to dest_pos in pruning and
+				// priority so that closer destination halts are preferred even if transit is equal.
+				const uint32 dest_walk = get_dest_walk_cost(reachable_halt_id);
+				const uint32 effective_weight = total_weight + dest_walk;
+
+				if(  total_weight<halt_data[ reachable_halt_id ].best_weight  &&  effective_weight<best_destination_weight  &&  allocation_pointer<max_hops  ) {
 					// new weight is lower than lowest weight --> create new node and update halt data
 					const bool overcrowded_transfer = no_routing_over_overcrowding  &&  ( current_halt_data.overcrowded  ||  ( !halt_data[reachable_halt_id].destination  &&  current_conn.halt->is_overcrowded( ware_idx ) ) );
 
@@ -2532,16 +2575,18 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 					overcrowded_nodes                         += overcrowded_transfer;
 
 					if(  halt_data[reachable_halt_id].destination  ) {
-						best_destination_weight = total_weight;
+						// Use walk-adjusted weight for pruning so routes to nearer end halts win.
+						best_destination_weight = effective_weight;
+						open_list.insert( route_node_t(current_conn.halt, effective_weight) );
 					}
 					else {
 						// as the next halt is not a destination add WEIGHT_MIN
 						// TODO: (TBGR) use estimated time. Should include waiting time
 						total_weight += WEIGHT_MIN;
+						open_list.insert( route_node_t(current_conn.halt, total_weight) );
 					}
 
 					allocation_pointer++;
-					open_list.insert( route_node_t(current_conn.halt, total_weight) );
 				}
 			} // else if not in closed list
 		} // for each connection entry

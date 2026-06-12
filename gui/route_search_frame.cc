@@ -1,6 +1,7 @@
 #include "route_search_frame.h"
 #include "../dataobj/schedule.h"
 #include "../dataobj/translator.h"
+#include "../simplan.h"
 #include "components/gui_divider.h"
 #include "components/gui_image.h"
 #include "minimap.h"
@@ -11,6 +12,7 @@
 #include "../simware.h"
 #include "../simworld.h"
 #include <variant>
+#include <cstdio>
 
 class gui_traveler_button_t : public button_t, public action_listener_t
 {
@@ -58,13 +60,18 @@ public:
 
 route_search_frame_t::route_search_frame_t()
 : gui_frame_t( translator::translate("Pax route search") ),
-from_halt_label("From:"),
-dest_halt_label("To:"),
-result_container(1, 0)
+from_halt_label("From halt:"),
+dest_halt_label("To halt:"),
+from_koord_label("From (x,y):"),
+dest_koord_label("To (x,y):"),
+result_container(1, 0),
+from_koord(koord::invalid),
+dest_koord(koord::invalid)
 {
-    // clear the buffer
     snprintf(from_halt_input_text, lengthof(from_halt_input_text), "");
     snprintf(dest_halt_input_text, lengthof(dest_halt_input_text), "");
+    snprintf(from_koord_text, lengthof(from_koord_text), "");
+    snprintf(dest_koord_text, lengthof(dest_koord_text), "");
 
     set_table_layout(1,0);
     {
@@ -84,7 +91,6 @@ result_container(1, 0)
 		for(  int i=0;  i < goods_manager_t::get_count();  i++  ) {
 			const goods_desc_t *ware = goods_manager_t::get_info(i);
 			if(  ware->get_catg() == 0  &&  ware->get_index() > 2  ) {
-				// Special freight: Each good is special
 				viewable_freight_types.append(ware);
 				freight_type_c.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate(ware->get_name()), SYSCOL_TEXT) ;
 			}
@@ -95,7 +101,8 @@ result_container(1, 0)
 	freight_type_c.set_focusable( true );
 	freight_type_c.add_listener( this );
 
-    add_table(5, 1);
+    // Row 1: halt name inputs
+    add_table(4, 1);
     {
         from_halt_input.set_text(from_halt_input_text, lengthof(from_halt_input_text));
         dest_halt_input.set_text(dest_halt_input_text, lengthof(dest_halt_input_text));
@@ -103,6 +110,18 @@ result_container(1, 0)
         add_component(&from_halt_input);
         add_component(&dest_halt_label);
         add_component(&dest_halt_input);
+    }
+    end_table();
+
+    // Row 2: coordinate inputs (takes precedence over halt name when non-empty)
+    add_table(4, 1);
+    {
+        from_koord_input.set_text(from_koord_text, lengthof(from_koord_text));
+        dest_koord_input.set_text(dest_koord_text, lengthof(dest_koord_text));
+        add_component(&from_koord_label);
+        add_component(&from_koord_input);
+        add_component(&dest_koord_label);
+        add_component(&dest_koord_input);
     }
     end_table();
 
@@ -118,7 +137,6 @@ result_container(1, 0)
 
         add_component(&freight_type_c);
 
-        
         bt_show_non_traveled.init(button_t::square_state, "Show Non-Traveled Section");
         bt_show_non_traveled.pressed = true;
         bt_show_non_traveled.add_listener(this);
@@ -130,7 +148,7 @@ result_container(1, 0)
 
     result_container.set_table_layout(1,0);
     add_component(&result_container);
-    result_container.new_component<gui_label_t>("Please enter halt names and press search.");
+    result_container.new_component<gui_label_t>("Enter halt names or tile coordinates (x,y) and press Search.");
 
     set_resizemode(diagonal_resize);
     reset_min_windowsize();
@@ -328,29 +346,116 @@ void route_search_frame_t::append_halt_row(halthandle_t halt) {
     result_container.end_table();
 }
 
+// static
+koord route_search_frame_t::parse_koord(const char* text)
+{
+    if(!text || text[0] == '\0') return koord::invalid;
+    int x = -1, y = -1;
+    if(sscanf(text, "%d,%d", &x, &y) == 2 && x >= 0 && y >= 0) {
+        return koord(x, y);
+    }
+    return koord::invalid;
+}
+
 void route_search_frame_t::search_route() {
 	// reset selection
     minimap_t::get_instance()->set_selected_cnv( convoihandle_t(), true );
     minimap_t::get_instance()->set_selected_route( nullptr, nullptr, true );
     result_container.remove_all();
-    from_halt = find_halt(from_halt_input.get_text());
-    if(  !from_halt.is_bound()  ) {
-        result_container.new_component<gui_label_t>("From halt not found.");
-        return;
+
+    // Parse coordinate inputs; they take precedence over halt-name inputs when non-empty.
+    from_koord = parse_koord(from_koord_input.get_text());
+    dest_koord = parse_koord(dest_koord_input.get_text());
+
+    // Helper: collect all enabled halts covering a tile position.
+    auto collect_halts = [&](koord pos, vector_tpl<halthandle_t>& out) {
+        const planquadrat_t *plan = world()->access(pos);
+        if(plan) {
+            for(uint h = 0; h < plan->get_haltlist_count(); h++) {
+                halthandle_t h2 = plan->get_haltlist()[h];
+                if(h2.is_bound() && h2->is_enabled(search_ware_index)) {
+                    out.append_unique(h2);
+                }
+            }
+        }
+    };
+
+    // Resolve from-position and collect all candidate start halts.
+    static vector_tpl<halthandle_t> start_halts(16);
+    start_halts.clear();
+    koord from_pos;
+    if((from_koord != koord::invalid)) {
+        from_pos = from_koord;
+        collect_halts(from_pos, start_halts);
+        if(start_halts.empty()) {
+            result_container.new_component<gui_label_t>("No halt found at From coordinate.");
+            return;
+        }
     }
-    dest_halt = find_halt(dest_halt_input.get_text());
-    if(  !dest_halt.is_bound()  ) {
-        result_container.new_component<gui_label_t>("To halt not found.");
-        return;
+    else {
+        from_halt = find_halt(from_halt_input.get_text());
+        if(!from_halt.is_bound()) {
+            result_container.new_component<gui_label_t>("From halt not found.");
+            return;
+        }
+        from_pos = from_halt->get_init_pos();
+        start_halts.append(from_halt);
     }
-    minimap_t::get_instance()->set_from_dest_halt(from_halt, dest_halt);
+
+    // Resolve destination position.
+    // When dest_koord is given: leave dummy_ware.ziel unbound so search_route evaluates ALL halts
+    // near dest_koord and picks the one with the lowest total route cost (transit + walking).
+    // When halt-name is given: fix the destination as before (backward-compatible).
+    koord dest_pos_for_search;
+    bool fix_dest = false;
+    if((dest_koord != koord::invalid)) {
+        dest_pos_for_search = dest_koord;
+        // Validate that at least one enabled halt exists near dest_koord.
+        static vector_tpl<halthandle_t> dest_halts_tmp(8);
+        dest_halts_tmp.clear();
+        collect_halts(dest_koord, dest_halts_tmp);
+        if(dest_halts_tmp.empty()) {
+            result_container.new_component<gui_label_t>("No halt found at To coordinate.");
+            return;
+        }
+        dest_halt = dest_halts_tmp[0]; // preliminary; updated after search
+    }
+    else {
+        dest_halt = find_halt(dest_halt_input.get_text());
+        if(!dest_halt.is_bound()) {
+            result_container.new_component<gui_label_t>("To halt not found.");
+            return;
+        }
+        dest_pos_for_search = dest_halt->get_init_pos();
+        fix_dest = true;
+    }
+
     ware_t dummy_ware = ware_t();
     dummy_ware.menge = 0;
     dummy_ware.index = search_ware_index;
-    dummy_ware.set_zielpos(dest_halt->get_init_pos());
-    dummy_ware.set_ziel(dest_halt);
-    halthandle_t start_halt_array[1] = {from_halt};
-    haltestelle_t::search_route(start_halt_array, 1, false, dummy_ware);
+    dummy_ware.set_zielpos(dest_pos_for_search);
+    if(fix_dest) {
+        // Halt-name mode: pin the destination so only this halt is considered.
+        dummy_ware.set_ziel(dest_halt);
+    }
+    // Koord mode: ziel stays unbound — search_route discovers the best destination halt.
+
+    // Use return_ware so we can learn the actual start halt chosen by the routing algorithm.
+    // When multiple start halts exist (koord mode), routing picks the one with the lowest
+    // total cost (walking to halt + transit), not simply the nearest one.
+    ware_t return_ware;
+    haltestelle_t::search_route(start_halts.begin(), (uint16)start_halts.get_count(), false, dummy_ware,
+                                &return_ware, from_pos);
+
+    // Update from_halt / dest_halt to what routing actually chose.
+    if(return_ware.get_ziel().is_bound()) {
+        from_halt = return_ware.get_ziel();
+    }
+    if(!fix_dest && dummy_ware.get_ziel().is_bound()) {
+        dest_halt = dummy_ware.get_ziel();
+    }
+
+    minimap_t::get_instance()->set_from_dest_halt(from_halt, dest_halt);
 
     if(  !dummy_ware.get_ziel().is_bound()  ) {
         result_container.new_component<gui_label_t>("No route found!");
@@ -377,4 +482,11 @@ void route_search_frame_t::swap_halt_inputs() {
     strcpy(dest_halt_input_text, temp);
     from_halt_input.set_text(from_halt_input_text, lengthof(from_halt_input_text));
     dest_halt_input.set_text(dest_halt_input_text, lengthof(dest_halt_input_text));
+
+    char temp2[64];
+    strcpy(temp2, from_koord_text);
+    strcpy(from_koord_text, dest_koord_text);
+    strcpy(dest_koord_text, temp2);
+    from_koord_input.set_text(from_koord_text, lengthof(from_koord_text));
+    dest_koord_input.set_text(dest_koord_text, lengthof(dest_koord_text));
 }

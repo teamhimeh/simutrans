@@ -388,6 +388,10 @@ private:
 	bool transit_by_foot;
 	uint32 foot_path_weight;      // added to route cost for walking connection
 	uint32 foot_path_time_ticks;  // added to journey time for time-based routing
+	// When true, the walking distance from a passenger's origin/destination tile to each
+	// candidate halt is included in the route cost so that nearer halts are preferred.
+	// When false, all halts within station coverage are treated as equidistant (old behaviour).
+	bool walk_cost_to_halt;
 
 public:
 	/* the big cost section */
@@ -784,6 +788,8 @@ public:
 	void set_foot_path_weight(uint32 v) { foot_path_weight = v; }
 	uint32 get_foot_path_time_ticks() const { return foot_path_time_ticks; }
 	void set_foot_path_time_ticks(uint32 v) { foot_path_time_ticks = v; }
+	bool is_walk_cost_to_halt() const { return walk_cost_to_halt; }
+	void set_walk_cost_to_halt(bool v) { walk_cost_to_halt = v; }
 };
 
 #endif
