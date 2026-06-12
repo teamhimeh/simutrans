@@ -48,6 +48,8 @@ class route_search_frame_t : public gui_frame_t, public action_listener_t
 	void search_route();
 	void append_connection_row(haltestelle_t::connection_t connection, halthandle_t from_halt);
 	void append_halt_row(halthandle_t halt);
+	// Shows a tile coordinate as a plain text row (used for koord-based origin/destination).
+	void append_pos_row(koord pos);
 	void swap_halt_inputs();
 
 	// Parse "x,y" text into koord; returns koord::invalid on failure.

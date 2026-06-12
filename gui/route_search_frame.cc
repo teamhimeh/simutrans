@@ -346,6 +346,16 @@ void route_search_frame_t::append_halt_row(halthandle_t halt) {
     result_container.end_table();
 }
 
+void route_search_frame_t::append_pos_row(koord pos) {
+    result_container.add_table(2, 1);
+    result_container.new_component<gui_empty_t>(); // alignment placeholder (halt_row has a button here)
+    char buf[32];
+    snprintf(buf, sizeof(buf), "(%d, %d)", pos.x, pos.y);
+    auto *lbl = result_container.new_component<gui_label_buf_t>();
+    lbl->buf().append(buf);
+    result_container.end_table();
+}
+
 // static
 koord route_search_frame_t::parse_koord(const char* text)
 {
@@ -462,15 +472,73 @@ void route_search_frame_t::search_route() {
         return;
     }
 
+    const uint8 ware_catg_idx = dummy_ware.get_desc()->get_catg_index();
+    const bool tbgr = world()->get_settings().get_time_based_routing_enabled(ware_catg_idx);
+    const bool add_walk = world()->get_settings().is_transit_by_foot()
+                          && world()->get_settings().is_walk_cost_to_halt();
+    const uint32 walk_factor = tbgr ? world()->get_settings().get_foot_path_time_ticks()
+                                    : world()->get_settings().get_foot_path_weight();
+
+    // Pre-compute walking costs so they can be both displayed and counted in the total.
+    const uint32 origin_walk_raw = (add_walk && (from_koord != koord::invalid))
+        ? koord_distance(from_pos, from_halt->get_init_pos()) * walk_factor : 0u;
+    const uint32 dest_walk_raw   = (add_walk && (dest_koord != koord::invalid))
+        ? koord_distance(dest_halt->get_init_pos(), dest_pos_for_search) * walk_factor : 0u;
+
+    // Helper: emit a walking-leg connection row using the existing foot-path display code.
+    // append_connection_row handles is_foot_path=true without needing a real convoy/line.
+    auto append_walk_leg = [&](uint32 raw_weight) {
+        haltestelle_t::connection_t wc;
+        wc.is_foot_path = true;
+        wc.weight = raw_weight;  // same units as transit connection weights
+        append_connection_row(wc, halthandle_t());
+    };
+
+    uint64 total_raw = origin_walk_raw;
+
+    // Origin leg: position → start halt (only when walking and koord given).
+    if(origin_walk_raw > 0) {
+        append_pos_row(from_pos);
+        append_walk_leg(origin_walk_raw);
+    }
+
     append_halt_row(from_halt);
     halthandle_t transit_from = from_halt;
     FOR(vector_tpl<halthandle_t>, const h, dummy_ware.get_transit_halts()) {
-        // Fetch the fastest traveler
-        auto connection = find_connection(transit_from, h, dummy_ware.get_desc()->get_catg_index());
+        auto connection = find_connection(transit_from, h, ware_catg_idx);
+        total_raw += connection.weight;
         append_connection_row(connection, transit_from);
         append_halt_row(h);
         transit_from = h;
     }
+
+    // Destination leg: dest halt → position (only when walking and koord given).
+    if(dest_walk_raw > 0) {
+        append_walk_leg(dest_walk_raw);
+        append_pos_row(dest_pos_for_search);
+    }
+    total_raw += dest_walk_raw;
+
+    // Total journey cost row.
+    result_container.new_component<gui_divider_t>();
+    result_container.add_table(2, 1);
+    {
+        result_container.new_component<gui_label_t>("Total:");
+
+        // Apply the same unit conversion used by append_connection_row.
+        uint64 display_total;
+        if(tbgr) {
+            display_total = total_raw * world()->get_settings().get_spacing_shift_divisor()
+                            / world()->ticks_per_world_month;
+        } else {
+            display_total = total_raw;
+        }
+        char buf[32];
+        snprintf(buf, sizeof(buf), "<%llu>", (unsigned long long)display_total);
+        auto *lbl = result_container.new_component<gui_label_buf_t>();
+        lbl->buf().append(buf);
+    }
+    result_container.end_table();
 
     reset_min_windowsize();
 }
