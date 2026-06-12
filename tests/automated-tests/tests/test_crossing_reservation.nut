@@ -17,17 +17,20 @@
 // Map  layout  (16×16, valid coords 0-15)
 // ════════════════════════════════════════════════════════════════
 //
-//  4-way crossing area  (x=11..15, y=3..11)
+//  4-way crossing area  (x=11..15, y=1..13)
 //  ─────────────────────────────────────────
-//     N-S track : x=13, y=3..11
+//     N-S track : x=13, y=1..13
 //     E-W track : x=11..15, y=7
 //     crossing  : (13, 7)
 //
-//  depot_N : (13, 3)     depot_S : (13, 11)
-//  stn_N   : (13, 4)     stn_S   : (13, 10)
-//  sig_N   : (13, 5)  ←  two-way PBS (placed once)
-//  sig_S   : (13, 9)  ←  two-way PBS (placed once)
-//  stn_E   : (15,  7)    stn_W   : (11,  7)
+//  depot_N : (13,  1)    depot_S : (13, 13)
+//  stn_N   : (13,  2)    stn_S   : (13, 12)
+//  sig_N   : (13,  3)  ← two-way PBS, 4 tiles from crossing
+//  sig_S   : (13, 11)  ← two-way PBS, 4 tiles from crossing
+//  stn_E   : (15,  7)   stn_W   : (11,  7)
+//
+//  The 4-tile gap between each signal and the crossing gives cb's
+//  deceleration window enough time to co-reserve before ca exits.
 //
 //  Straight-track tests  (x=9, y=0..8)   — avoids all other test columns
 //
@@ -50,45 +53,46 @@
 
 function _cr_build_infra(pl, rail, station_desc, signal_desc)
 {
-    // N-S track (x=13, y=3..11)
-    ASSERT_EQUAL(command_x.build_way(pl, coord3d(13, 3, 0), coord3d(13, 11, 0), rail, true), null)
+    // N-S track (x=13, y=1..13)
+    ASSERT_EQUAL(command_x.build_way(pl, coord3d(13, 1, 0), coord3d(13, 13, 0), rail, true), null)
     // E-W track (x=11..15, y=7)
     ASSERT_EQUAL(command_x.build_way(pl, coord3d(11, 7, 0), coord3d(15, 7, 0), rail, true), null)
 
     local depot_desc = get_depot_by_wt(wt_rail)
-    ASSERT_EQUAL(command_x.build_depot(pl, coord3d(13, 3, 0), depot_desc), null)   // depot_N
-    ASSERT_EQUAL(command_x.build_depot(pl, coord3d(13, 11, 0), depot_desc), null)  // depot_S
+    ASSERT_EQUAL(command_x.build_depot(pl, coord3d(13, 1, 0), depot_desc), null)   // depot_N
+    ASSERT_EQUAL(command_x.build_depot(pl, coord3d(13, 13, 0), depot_desc), null)  // depot_S
 
-    ASSERT_EQUAL(command_x.build_station(pl, coord3d(13, 4, 0), station_desc), null)  // stn_N
-    ASSERT_EQUAL(command_x.build_station(pl, coord3d(13, 10, 0), station_desc), null) // stn_S
-    ASSERT_EQUAL(command_x.build_station(pl, coord3d(15, 7, 0), station_desc), null)  // stn_E
-    ASSERT_EQUAL(command_x.build_station(pl, coord3d(11, 7, 0), station_desc), null)  // stn_W
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(13, 2, 0), station_desc), null)   // stn_N
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(13, 12, 0), station_desc), null)  // stn_S
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(15, 7, 0), station_desc), null)   // stn_E
+    ASSERT_EQUAL(command_x.build_station(pl, coord3d(11, 7, 0), station_desc), null)   // stn_W
 
     // PBS signals — placed ONCE = two-way (works for trains from either direction).
-    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(13, 5, 0), signal_desc), null)  // sig_N
-    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(13, 9, 0), signal_desc), null)  // sig_S
+    // 4 tiles from crossing gives enough window for co-reservation.
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(13, 3, 0), signal_desc), null)   // sig_N
+    ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(13, 11, 0), signal_desc), null)  // sig_S
 }
 
 function _cr_remove_infra(pl)
 {
-    foreach (y in [5, 9]) {
+    foreach (y in [3, 11]) {
         if (tile_x(13, y, 0).find_object(mo_signal) != null) {
             command_x(tool_remover).work(pl, coord3d(13, y, 0))
         }
     }
-    foreach (pos in [coord3d(13, 4, 0), coord3d(13, 10, 0),
+    foreach (pos in [coord3d(13, 2, 0), coord3d(13, 12, 0),
                      coord3d(15, 7, 0), coord3d(11, 7, 0),
-                     coord3d(13, 3, 0), coord3d(13, 11, 0)]) {
+                     coord3d(13, 1, 0), coord3d(13, 13, 0)]) {
         command_x(tool_remover).work(pl, pos)
     }
-    command_x(tool_remove_way).work(pl, coord3d(13, 3, 0), coord3d(13, 11, 0), "" + wt_rail)
+    command_x(tool_remove_way).work(pl, coord3d(13, 1, 0), coord3d(13, 13, 0), "" + wt_rail)
     command_x(tool_remove_way).work(pl, coord3d(11, 7, 0), coord3d(15, 7, 0), "" + wt_rail)
 }
 
-// Create and start a 3-car train from depot_N (13,3) with given schedule.
+// Create and start a 3-car train from depot_N (13,1) with given schedule.
 function _cr_start_from_n(pl, entries)
 {
-    local depot = depot_x(13, 3, 0)
+    local depot = depot_x(13, 1, 0)
     depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
     local cnv = depot.get_convoy_list()[depot.get_convoy_list().len() - 1]
     depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
@@ -99,10 +103,10 @@ function _cr_start_from_n(pl, entries)
     return cnv
 }
 
-// Create and start a 3-car train from depot_S (13,11) with given schedule.
+// Create and start a 3-car train from depot_S (13,13) with given schedule.
 function _cr_start_from_s(pl, entries)
 {
-    local depot = depot_x(13, 11, 0)
+    local depot = depot_x(13, 13, 0)
     depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("H-Trans-Pantheress"))
     local cnv = depot.get_convoy_list()[depot.get_convoy_list().len() - 1]
     depot.append_vehicle(pl, cnv, vehicle_desc_x("H-Trans-Tiger-Car"))
@@ -388,12 +392,12 @@ function test_crossing_three_way_single_convoy()
 
     // Single convoy: N→S straight through the 3-way at (13,5).
     local cnv = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0)
+        schedule_entry_x(coord3d(13, 2, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, 0)
     ])
 
-    local reached = _cr_wait_at(cnv, 13, 10, 6000)
-    print("  TC-3W reached stn_S (13,10): " + reached)
+    local reached = _cr_wait_at(cnv, 13, 12, 6000)
+    print("  TC-3W reached stn_S (13,12): " + reached)
 
     debug.set_game_speed(1)
     _cr_destroy(pl, cnv)
@@ -409,14 +413,12 @@ function test_crossing_three_way_single_convoy()
 // TC-4A  4-way crossing  N→E + S→W  PERMITTED  (A starts first)
 //
 // corner_set NE=3 and SW=12;  3 & 12 = 0  →  can_co_reserve_dirs = true.
-// Train A (N→E) starts 50 ticks before B so A's block_reserver reserves the
-// crossing (NE=3) while B is still approaching sig_S.  B's block_reserver then
-// co-reserves the same crossing (SW=12) and both proceed simultaneously.
+// A (N→E) starts first; sync_wait_shift aligns departures from first stop.
 //
-// Assertion: when both trains first stop simultaneously, both are at their
-// destinations (ca at stn_E=15,7 and cb at stn_W=11,7).
-// Without co-reservation, cb is blocked at sig_S (13,9) when ca first loads
-// at stn_E, causing the position check to fail.
+// Checkpoint: B (second convoy) must pass sig_S BEFORE A's head exits the
+// crossing to tile (14,7).  With co-reservation the signal turns green for B
+// while A is still on the crossing.  Without it B waits at sig_S until A's
+// rear clears and the reservation is released.
 // ══════════════════════════════════════════════════════════
 function test_crossing_four_way_ne_sw_permitted_a_first()
 {
@@ -431,31 +433,35 @@ function test_crossing_four_way_ne_sw_permitted_a_first()
     _cr_build_infra(pl, rail, station_desc, signal_desc)
     debug.set_game_speed(5)
 
-    // Train A: N→E path  (depot_N → stn_N → stn_E)
+    local sync_wait_shift = (1 << world.get_bits_per_month()) / 64
+
     local ca = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
-
-    // Short delay so A's block_reserver fires and reserves the crossing before B starts.
-    // 50 ticks is enough to trigger block_reserver (A reaches sig_N) but not enough
-    // for A to physically clear the crossing — so B encounters A's live reservation.
-    for (local i = 0; i < 50; i++) sleep()
-
-    // Train B: S→W path  (depot_S → stn_S → stn_W)
     local cb = _cr_start_from_s(pl, [
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(11, 7, 0), 0, 0)
     ])
 
-    // Wait for the first moment both are simultaneously stopped.
-    // With co-reservation: ca at stn_E (15,7) and cb at stn_W (11,7) together.
-    // Without co-reservation: ca loads at stn_E while cb is stuck at sig_S (13,9).
-    local both_stopped = _cr_wait_both_stopped(ca, cb, 6000)
-    local pa_x = -1, pa_y = -1, pb_x = -1, pb_y = -1
-    if (ca.is_valid()) { local t = ca.get_pos();  pa_x = t.x;  pa_y = t.y }
-    if (cb.is_valid()) { local t = cb.get_pos();  pb_x = t.x;  pb_y = t.y }
-    print("  TC-4A ca(" + pa_x + "," + pa_y + ") cb(" + pb_x + "," + pb_y + ") both_stopped=" + both_stopped)
+    // ca exits crossing when head x >= 14; cb passes sig_S (13,11) when head y < 11.
+    // permitted: cb passes signal no later than ca exits crossing.
+    local ca_cross_exit = -1
+    local cb_sig_pass   = -1
+    for (local i = 0; i < 6000 && ca.is_valid() && cb.is_valid(); i++) {
+        sleep()
+        local cap = ca.get_pos()
+        local cbp = cb.get_pos()
+        if (ca_cross_exit < 0 && cap.x >= 14)  ca_cross_exit = i
+        if (cb_sig_pass   < 0 && cbp.y <  11)  cb_sig_pass   = i
+        if (ca_cross_exit >= 0 && cb_sig_pass >= 0) break
+        if (cap.x == 15 && cbp.x == 11) break
+    }
+
+    local reached_a = _cr_wait_at(ca, 15, 7, 6000)
+    local reached_b = _cr_wait_at(cb, 11, 7, 6000)
+    local permitted_ok = cb_sig_pass >= 0 && ca_cross_exit >= 0 && cb_sig_pass <= ca_cross_exit
+    print("  TC-4A ca_cross_exit=" + ca_cross_exit + " cb_sig_pass=" + cb_sig_pass + " permitted_ok=" + permitted_ok)
 
     debug.set_game_speed(1)
     _cr_destroy(pl, ca)
@@ -463,20 +469,21 @@ function test_crossing_four_way_ne_sw_permitted_a_first()
     _cr_remove_infra(pl)
     RESET_ALL_PLAYER_FUNDS()
 
-    ASSERT_TRUE(both_stopped)
-    ASSERT_EQUAL(pa_x, 15)  // ca reached stn_E — not stuck at a signal
-    ASSERT_EQUAL(pa_y, 7)
-    ASSERT_EQUAL(pb_x, 11)  // cb reached stn_W — not blocked by exclusive reservation
-    ASSERT_EQUAL(pb_y, 7)
+    ASSERT_TRUE(reached_a)
+    ASSERT_TRUE(reached_b)
+    ASSERT_TRUE(permitted_ok)
 }
 
 
 // ══════════════════════════════════════════════════════════
 // TC-4B  4-way crossing  N→E + S→W  PERMITTED  (B starts first)
 //
-// Same pair; Train B (S→W) starts 50 ticks first and reserves SW=12.
-// Train A (N→E) co-reserves NE=3 while B still holds the crossing.
-// Without co-reservation, ca is blocked at sig_N (13,5) when cb first loads.
+// corner_set NE=3 and SW=12;  3 & 12 = 0  →  can_co_reserve_dirs = true.
+// B (S→W) starts first; sync_wait_shift aligns departures from first stop.
+//
+// Checkpoint: A (second convoy) must pass sig_N BEFORE B's head exits the
+// crossing to tile (12,7).  With co-reservation A's signal turns green while
+// B is still on the crossing.  Without it A waits at sig_N until B clears.
 // ══════════════════════════════════════════════════════════
 function test_crossing_four_way_ne_sw_permitted_b_first()
 {
@@ -491,25 +498,35 @@ function test_crossing_four_way_ne_sw_permitted_b_first()
     _cr_build_infra(pl, rail, station_desc, signal_desc)
     debug.set_game_speed(5)
 
-    // Train B starts first: S→W
+    local sync_wait_shift = (1 << world.get_bits_per_month()) / 64
+
     local cb = _cr_start_from_s(pl, [
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(11, 7, 0), 0, 0)
     ])
-
-    for (local i = 0; i < 50; i++) sleep()
-
-    // Train A: N→E  (co-reserves NE=3 while B holds SW=12)
     local ca = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
-    local both_stopped = _cr_wait_both_stopped(ca, cb, 6000)
-    local pa_x = -1, pa_y = -1, pb_x = -1, pb_y = -1
-    if (ca.is_valid()) { local t = ca.get_pos();  pa_x = t.x;  pa_y = t.y }
-    if (cb.is_valid()) { local t = cb.get_pos();  pb_x = t.x;  pb_y = t.y }
-    print("  TC-4B ca(" + pa_x + "," + pa_y + ") cb(" + pb_x + "," + pb_y + ") both_stopped=" + both_stopped)
+    // cb (first) exits crossing when head reaches (12,7); ca (second) passes sig_N (13,3) when head y > 3.
+    // permitted: ca passes signal no later than cb exits crossing.
+    local cb_cross_exit = -1
+    local ca_sig_pass   = -1
+    for (local i = 0; i < 6000 && ca.is_valid() && cb.is_valid(); i++) {
+        sleep()
+        local cap = ca.get_pos()
+        local cbp = cb.get_pos()
+        if (cb_cross_exit < 0 && cbp.x <= 12) cb_cross_exit = i
+        if (ca_sig_pass   < 0 && cap.y >  3)  ca_sig_pass   = i
+        if (cb_cross_exit >= 0 && ca_sig_pass >= 0) break
+        if (cbp.x == 11 && cap.x == 15) break
+    }
+
+    local reached_b = _cr_wait_at(cb, 11, 7, 6000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 6000)
+    local permitted_ok = ca_sig_pass >= 0 && cb_cross_exit >= 0 && ca_sig_pass <= cb_cross_exit
+    print("  TC-4B cb_cross_exit=" + cb_cross_exit + " ca_sig_pass=" + ca_sig_pass + " permitted_ok=" + permitted_ok)
 
     debug.set_game_speed(1)
     _cr_destroy(pl, ca)
@@ -517,11 +534,9 @@ function test_crossing_four_way_ne_sw_permitted_b_first()
     _cr_remove_infra(pl)
     RESET_ALL_PLAYER_FUNDS()
 
-    ASSERT_TRUE(both_stopped)
-    ASSERT_EQUAL(pa_x, 15)  // ca reached stn_E — not blocked at sig_N (13,5)
-    ASSERT_EQUAL(pa_y, 7)
-    ASSERT_EQUAL(pb_x, 11)  // cb reached stn_W
-    ASSERT_EQUAL(pb_y, 7)
+    ASSERT_TRUE(reached_a)
+    ASSERT_TRUE(reached_b)
+    ASSERT_TRUE(permitted_ok)
 }
 
 
@@ -529,9 +544,11 @@ function test_crossing_four_way_ne_sw_permitted_b_first()
 // TC-4C  4-way crossing  S→E + N→W  PERMITTED  (A starts first)
 //
 // corner_set SE=6 and NW=9;  6 & 9 = 0  →  can_co_reserve_dirs = true.
-// Train A (S→E) starts 50 ticks first; reserves SE=6.
-// Train B (N→W) co-reserves NW=9 while A still holds the crossing.
-// Without co-reservation, cb is blocked at sig_N (13,5) when ca first loads.
+// A (S→E) starts first; sync_wait_shift aligns departures from first stop.
+//
+// Checkpoint: B (second convoy) must pass sig_N BEFORE A's head exits the
+// crossing to tile (14,7).  With co-reservation B's signal turns green while
+// A is still on the crossing.  Without it B waits at sig_N until A clears.
 // ══════════════════════════════════════════════════════════
 function test_crossing_four_way_se_nw_permitted_a_first()
 {
@@ -546,25 +563,35 @@ function test_crossing_four_way_se_nw_permitted_a_first()
     _cr_build_infra(pl, rail, station_desc, signal_desc)
     debug.set_game_speed(5)
 
-    // Train A: S→E path  (depot_S → stn_S → stn_E)
+    local sync_wait_shift = (1 << world.get_bits_per_month()) / 64
+
     local ca = _cr_start_from_s(pl, [
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
-
-    for (local i = 0; i < 50; i++) sleep()
-
-    // Train B: N→W path  (depot_N → stn_N → stn_W)
     local cb = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(11, 7, 0), 0, 0)
     ])
 
-    local both_stopped = _cr_wait_both_stopped(ca, cb, 6000)
-    local pa_x = -1, pa_y = -1, pb_x = -1, pb_y = -1
-    if (ca.is_valid()) { local t = ca.get_pos();  pa_x = t.x;  pa_y = t.y }
-    if (cb.is_valid()) { local t = cb.get_pos();  pb_x = t.x;  pb_y = t.y }
-    print("  TC-4C ca(" + pa_x + "," + pa_y + ") cb(" + pb_x + "," + pb_y + ") both_stopped=" + both_stopped)
+    // ca (first) exits crossing when head reaches (14,7); cb (second) passes sig_N (13,3) when head y > 3.
+    // permitted: cb passes signal no later than ca exits crossing.
+    local ca_cross_exit = -1
+    local cb_sig_pass   = -1
+    for (local i = 0; i < 6000 && ca.is_valid() && cb.is_valid(); i++) {
+        sleep()
+        local cap = ca.get_pos()
+        local cbp = cb.get_pos()
+        if (ca_cross_exit < 0 && cap.x >= 14) ca_cross_exit = i
+        if (cb_sig_pass   < 0 && cbp.y >  3)  cb_sig_pass   = i
+        if (ca_cross_exit >= 0 && cb_sig_pass >= 0) break
+        if (cap.x == 15 && cbp.x == 11) break
+    }
+
+    local reached_a = _cr_wait_at(ca, 15, 7, 6000)
+    local reached_b = _cr_wait_at(cb, 11, 7, 6000)
+    local permitted_ok = cb_sig_pass >= 0 && ca_cross_exit >= 0 && cb_sig_pass <= ca_cross_exit
+    print("  TC-4C ca_cross_exit=" + ca_cross_exit + " cb_sig_pass=" + cb_sig_pass + " permitted_ok=" + permitted_ok)
 
     debug.set_game_speed(1)
     _cr_destroy(pl, ca)
@@ -572,20 +599,21 @@ function test_crossing_four_way_se_nw_permitted_a_first()
     _cr_remove_infra(pl)
     RESET_ALL_PLAYER_FUNDS()
 
-    ASSERT_TRUE(both_stopped)
-    ASSERT_EQUAL(pa_x, 15)  // ca reached stn_E
-    ASSERT_EQUAL(pa_y, 7)
-    ASSERT_EQUAL(pb_x, 11)  // cb reached stn_W — not blocked at sig_N (13,5)
-    ASSERT_EQUAL(pb_y, 7)
+    ASSERT_TRUE(reached_a)
+    ASSERT_TRUE(reached_b)
+    ASSERT_TRUE(permitted_ok)
 }
 
 
 // ══════════════════════════════════════════════════════════
 // TC-4D  4-way crossing  S→E + N→W  PERMITTED  (B starts first)
 //
-// Train B (N→W) starts 50 ticks first; reserves NW=9.
-// Train A (S→E) co-reserves SE=6 while B still holds the crossing.
-// Without co-reservation, ca is blocked at sig_S (13,9) when cb first loads.
+// corner_set SE=6 and NW=9;  6 & 9 = 0  →  can_co_reserve_dirs = true.
+// B (N→W) starts first; sync_wait_shift aligns departures from first stop.
+//
+// Checkpoint: A (second convoy) must pass sig_S BEFORE B's head exits the
+// crossing to tile (12,7).  With co-reservation A's signal turns green while
+// B is still on the crossing.  Without it A waits at sig_S until B clears.
 // ══════════════════════════════════════════════════════════
 function test_crossing_four_way_se_nw_permitted_b_first()
 {
@@ -600,25 +628,35 @@ function test_crossing_four_way_se_nw_permitted_b_first()
     _cr_build_infra(pl, rail, station_desc, signal_desc)
     debug.set_game_speed(5)
 
-    // Train B starts first: N→W
+    local sync_wait_shift = (1 << world.get_bits_per_month()) / 64
+
     local cb = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(11, 7, 0), 0, 0)
     ])
-
-    for (local i = 0; i < 50; i++) sleep()
-
-    // Train A: S→E  (co-reserves SE=6 while B holds NW=9)
     local ca = _cr_start_from_s(pl, [
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, sync_wait_shift),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
-    local both_stopped = _cr_wait_both_stopped(ca, cb, 6000)
-    local pa_x = -1, pa_y = -1, pb_x = -1, pb_y = -1
-    if (ca.is_valid()) { local t = ca.get_pos();  pa_x = t.x;  pa_y = t.y }
-    if (cb.is_valid()) { local t = cb.get_pos();  pb_x = t.x;  pb_y = t.y }
-    print("  TC-4D ca(" + pa_x + "," + pa_y + ") cb(" + pb_x + "," + pb_y + ") both_stopped=" + both_stopped)
+    // cb (first) exits crossing when head reaches (12,7); ca (second) passes sig_S (13,11) when head y < 11.
+    // permitted: ca passes signal no later than cb exits crossing.
+    local cb_cross_exit = -1
+    local ca_sig_pass   = -1
+    for (local i = 0; i < 6000 && ca.is_valid() && cb.is_valid(); i++) {
+        sleep()
+        local cap = ca.get_pos()
+        local cbp = cb.get_pos()
+        if (cb_cross_exit < 0 && cbp.x <= 12) cb_cross_exit = i
+        if (ca_sig_pass   < 0 && cap.y <  11) ca_sig_pass   = i
+        if (cb_cross_exit >= 0 && ca_sig_pass >= 0) break
+        if (cbp.x == 11 && cap.x == 15) break
+    }
+
+    local reached_b = _cr_wait_at(cb, 11, 7, 6000)
+    local reached_a = _cr_wait_at(ca, 15, 7, 6000)
+    local permitted_ok = ca_sig_pass >= 0 && cb_cross_exit >= 0 && ca_sig_pass <= cb_cross_exit
+    print("  TC-4D cb_cross_exit=" + cb_cross_exit + " ca_sig_pass=" + ca_sig_pass + " permitted_ok=" + permitted_ok)
 
     debug.set_game_speed(1)
     _cr_destroy(pl, ca)
@@ -626,11 +664,9 @@ function test_crossing_four_way_se_nw_permitted_b_first()
     _cr_remove_infra(pl)
     RESET_ALL_PLAYER_FUNDS()
 
-    ASSERT_TRUE(both_stopped)
-    ASSERT_EQUAL(pa_x, 15)  // ca reached stn_E — not blocked at sig_S (13,9)
-    ASSERT_EQUAL(pa_y, 7)
-    ASSERT_EQUAL(pb_x, 11)  // cb reached stn_W
-    ASSERT_EQUAL(pb_y, 7)
+    ASSERT_TRUE(reached_a)
+    ASSERT_TRUE(reached_b)
+    ASSERT_TRUE(permitted_ok)
 }
 
 
@@ -655,15 +691,15 @@ function test_crossing_four_way_ns_sequential_prohibited()
     debug.set_game_speed(5)
 
     local ca = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0)
+        schedule_entry_x(coord3d(13, 2, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, 0)
     ])
 
     for (local i = 0; i < 100; i++) sleep()
 
     local cb = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0)
+        schedule_entry_x(coord3d(13, 2, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, 0)
     ])
 
     // Early pass: A reaches stn_S while B is held at signal → both stopped simultaneously.
@@ -700,14 +736,14 @@ function test_crossing_four_way_ne_ne_sequential_prohibited()
     debug.set_game_speed(5)
 
     local ca = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, 0),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
     for (local i = 0; i < 100; i++) sleep()
 
     local cb = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, 0),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
@@ -747,7 +783,7 @@ function test_crossing_four_way_ne_se_sequential_prohibited()
 
     // Train A: N→E
     local ca = _cr_start_from_n(pl, [
-        schedule_entry_x(coord3d(13, 4, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 2, 0), 0, 0),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
@@ -755,7 +791,7 @@ function test_crossing_four_way_ne_se_sequential_prohibited()
 
     // Train B: S→E  (same E exit, different entry corner)
     local cb = _cr_start_from_s(pl, [
-        schedule_entry_x(coord3d(13, 10, 0), 0, 0),
+        schedule_entry_x(coord3d(13, 12, 0), 0, 0),
         schedule_entry_x(coord3d(15, 7, 0), 0, 0)
     ])
 
