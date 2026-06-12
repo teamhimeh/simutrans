@@ -2418,11 +2418,12 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 		open_list.insert( route_node_t(start_halt, origin_walk_w) );
 
 		halt_data_t & start_data = halt_data[ start_halt.get_id() ];
-		start_data.best_weight = origin_walk_w;
-		start_data.destination = 0;
-		start_data.depth       = 0;
-		start_data.overcrowded = false; // start halt overcrowding is handled by routines calling this one
-		start_data.transfer    = halthandle_t();
+		start_data.best_weight    = origin_walk_w;
+		start_data.destination    = 0;
+		start_data.depth          = 0;
+		start_data.overcrowded    = false; // start halt overcrowding is handled by routines calling this one
+		start_data.transfer       = halthandle_t();
+		start_data.arrived_by_foot = false;
 
 		markers[ start_halt.get_id() ] = current_marker;
 	}
@@ -2514,6 +2515,11 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 			// (if not, we were just under construction, and will be fine after 16 steps)
 			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
+			// No consecutive foot-path hops: after a walking leg passengers must board a vehicle.
+			if(  current_halt_data.arrived_by_foot  &&  current_conn.is_foot_path  ) {
+				continue;
+			}
+
 			if(  markers[ reachable_halt_id ]!=current_marker  ) {
 				// Case : not processed before
 
@@ -2528,12 +2534,13 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 					if(  total_weight < best_destination_weight  ) {
 						const bool overcrowded_transfer = no_routing_over_overcrowding  &&  ( current_halt_data.overcrowded  ||  current_conn.halt->is_overcrowded( ware_idx ) );
 
-						halt_data[ reachable_halt_id ].best_weight = total_weight;
-						halt_data[ reachable_halt_id ].destination = 0;
-						halt_data[ reachable_halt_id ].depth       = current_halt_data.depth + 1u;
-						halt_data[ reachable_halt_id ].transfer    = current_node.halt;
-						halt_data[ reachable_halt_id ].overcrowded = overcrowded_transfer;
-						overcrowded_nodes                         += overcrowded_transfer;
+						halt_data[ reachable_halt_id ].best_weight    = total_weight;
+						halt_data[ reachable_halt_id ].destination    = 0;
+						halt_data[ reachable_halt_id ].depth          = current_halt_data.depth + 1u;
+						halt_data[ reachable_halt_id ].transfer       = current_node.halt;
+						halt_data[ reachable_halt_id ].overcrowded    = overcrowded_transfer;
+						halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
+						overcrowded_nodes                             += overcrowded_transfer;
 
 						allocation_pointer++;
 						// as the next halt is not a destination add WEIGHT_MIN
@@ -2567,12 +2574,13 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 					// new weight is lower than lowest weight --> create new node and update halt data
 					const bool overcrowded_transfer = no_routing_over_overcrowding  &&  ( current_halt_data.overcrowded  ||  ( !halt_data[reachable_halt_id].destination  &&  current_conn.halt->is_overcrowded( ware_idx ) ) );
 
-					halt_data[ reachable_halt_id ].best_weight = total_weight;
+					halt_data[ reachable_halt_id ].best_weight    = total_weight;
 					// no need to update destination, as halt nature (as destination or transfer) will not change
-					halt_data[ reachable_halt_id ].depth       = current_halt_data.depth + 1u;
-					halt_data[ reachable_halt_id ].transfer    = current_node.halt;
-					halt_data[ reachable_halt_id ].overcrowded = overcrowded_transfer;
-					overcrowded_nodes                         += overcrowded_transfer;
+					halt_data[ reachable_halt_id ].depth          = current_halt_data.depth + 1u;
+					halt_data[ reachable_halt_id ].transfer       = current_node.halt;
+					halt_data[ reachable_halt_id ].overcrowded    = overcrowded_transfer;
+					halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
+					overcrowded_nodes                             += overcrowded_transfer;
 
 					if(  halt_data[reachable_halt_id].destination  ) {
 						// Use walk-adjusted weight for pruning so routes to nearer end halts win.
@@ -3206,7 +3214,7 @@ bool haltestelle_t::is_foot_path_connection(halthandle_t dest, uint8 catg_index)
 
 bool haltestelle_t::try_foot_transit(ware_t &ware, uint8 foot_steps)
 {
-	if(  foot_steps >= 8  ) { return false; }
+	if(  foot_steps >= 1  ) { return false; }
 	if(  !welt->get_settings().is_transit_by_foot()  ) { return false; }
 	const halthandle_t next = ware.get_zwischenziel();
 	if(  !next.is_bound()  ||  next == self  ) { return false; }

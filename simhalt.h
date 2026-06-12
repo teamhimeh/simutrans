@@ -542,6 +542,10 @@ private:
 		uint16 depth:14;
 		bool destination:1;
 		bool overcrowded:1;
+		// true when this halt was reached via a foot-path connection in the current search.
+		// Used to block a second consecutive foot-path hop (passengers must board a vehicle
+		// between any two walking legs).
+		bool arrived_by_foot;
 	};
 
 	// store the best weight so far for a halt, and indicate whether it is a destination
