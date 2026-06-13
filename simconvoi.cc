@@ -1392,7 +1392,7 @@ bool convoi_t::drive_to()
 			}
 		}
 
-		// unreserve old route before replacing to avoid stray reservations when rerouted
+		// unreserve old route before replacing; required for cache-hit path where calc_route() (which also unreserves) is skipped
 		unreserve_route();
 
 		if(  !cached_calc_route( start, ziel, &route, schedule->get_current_entry().is_pass_stop() )  ) {
@@ -1654,6 +1654,7 @@ void convoi_t::step()
 		case NO_ROUTE:
 			clear_reserved_tiles();
 			unset_convoi_coupling_in_progress();
+			unreserve_route();
 			// stuck vehicles
 			if (schedule->empty()) {
 				// no entries => no route ...
