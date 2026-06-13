@@ -26,9 +26,14 @@ protected:
 	convoihandle_t reserved2;
 	ribi_t::ribi   reserved2_dir = ribi_t::none;
 
-	// Two bends that share no ribi bits don't cross visually (NW+SE or NE+SW).
+	// Two paths that can share this tile simultaneously without conflict.
 	static bool can_co_reserve_dirs(ribi_t::ribi d1, ribi_t::ribi d2) {
-		return ribi_t::is_bend(d1) && ribi_t::is_bend(d2) && (d1 & d2) == 0;
+		// Two non-crossing bends (NE+SW or NW+SE) through a 3-way or 4-way junction.
+		if (ribi_t::is_bend(d1) && ribi_t::is_bend(d2) && (d1 & d2) == 0) return true;
+		// Two perpendicular straight-through paths on a 4-way crossing tile.
+		if (d1 == ribi_t::northsouth && d2 == ribi_t::eastwest) return true;
+		if (d1 == ribi_t::eastwest   && d2 == ribi_t::northsouth) return true;
+		return false;
 	}
 
 public:
@@ -85,6 +90,27 @@ public:
 	* gets the related convoi (primary slot)
 	*/
 	convoihandle_t get_reserved_convoi() const {return reserved;}
+
+	/**
+	* gets the direction corner_set of the primary reservation
+	*/
+	ribi_t::ribi get_reserved_dir() const { return reserved_dir; }
+
+	// Returns true if a convoy approaching from 'entry' (the border we enter through,
+	// i.e. backward of the approach direction) might be able to co-reserve with the
+	// current primary reservation.  Used by check_next_tile during route-finding to
+	// decide whether a reserved tile is still worth routing through.
+	bool can_co_reserve_entry(ribi_t::ribi entry) const {
+		if (!reserved.is_bound()) return true;
+		if (reserved2.is_bound()) return false;
+		if (reserved_dir == ribi_t::none) return false;
+		// Bend case: entry must be a component of the opposite non-crossing bend.
+		if (ribi_t::is_bend(reserved_dir) && (ribi_t::backward(reserved_dir) & entry) != 0) return true;
+		// 4-way straight case: perpendicular straight-through paths don't conflict.
+		if (reserved_dir == ribi_t::northsouth && (entry & ribi_t::eastwest)   != 0) return true;
+		if (reserved_dir == ribi_t::eastwest   && (entry & ribi_t::northsouth) != 0) return true;
+		return false;
+	}
 
 	/**
 	* true if convoy c holds either the primary or the secondary reservation.

@@ -3632,6 +3632,14 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 		if(  sch->can_reserve(cnv->self)  ) {
 			return true;
 		}
+		// Reserved by a different convoy: allow routing through if co-reservation
+		// might be possible (non-crossing bend or 4-way perpendicular straight-through).
+		if(  prev != koord3d::invalid  &&  sch->is_reserved()  ) {
+			const ribi_t::ribi entry = ribi_t::backward(ribi_type(prev, bd->get_pos()));
+			if(  sch->can_co_reserve_entry(entry)  ) {
+				return true;
+			}
+		}
 		if(  coupling  ) {
 			// see if the blocking vehicle is waiting for coupling.
 			for(  uint8 pos=1;  pos<(volatile uint8)bd->get_top();  pos++  ) {
