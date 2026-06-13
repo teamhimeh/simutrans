@@ -2480,8 +2480,9 @@ bool depot_frame_t::infowin_event(const event_t *ev)
 {
 	// enable disable button actions
 	if(  ev->ev_class < INFOWIN  &&  (depot == NULL  ||  welt->get_active_player() != depot->get_owner()) ) {
-		// allow click events through so bt_start can switch to the depot owner
-		if(  ev->ev_class == EVENT_CLICK  ||  ev->ev_class == EVENT_RELEASE  ||  ev->ev_class == EVENT_REPEAT  ) {
+		// allow clicks on bt_start only, so the player can switch to the depot owner
+		if(  (IS_LEFTCLICK(ev)  ||  IS_LEFTRELEASE(ev)  ||  IS_LEFTREPEAT(ev))
+		     &&  bt_start.getroffen(ev->cx, ev->cy - D_TITLEBAR_HEIGHT)  ) {
 			return gui_frame_t::infowin_event(ev);
 		}
 		return false;
@@ -2568,6 +2569,7 @@ void depot_frame_t::draw(scr_coord pos, scr_size size)
 	bt_veh_action.enable( action_allowed );
 	bt_sell_all.enable( action_allowed );
 	line_button.enable( action_allowed );
+	bt_remove_all_vehicles.enable( action_allowed );
 
 	bt_paste_convoi.enable( action_allowed );
 	
