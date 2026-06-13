@@ -1500,20 +1500,7 @@ void depot_frame_t::update_data()
 	}
 	
 	
-	// update the description of start/move_to_parent_convoy button
-	// if this convoy is child convoy, start button is changed to "move to parent convoy" button.
-	if(  !is_shown_convoy_coupled  ) {
-		if( is_teleport_to_another_depot ){
-			bt_start.set_text("Teleport to Depot");
-			bt_start.set_tooltip("Teleport this convoy to another depot(defined in schedule)");
-		} else {
-			bt_start.set_text("Start");
-			bt_start.set_tooltip("Start the selected vehicle(s)");
-		}
-	} else {
-		bt_start.set_tooltip("Move to Parent Convoy");
-		bt_start.set_text("Move to Parent Convoy");
-	}
+	// start button text is updated every frame in draw()
 
 	const vehicle_desc_t *veh = NULL;
 
@@ -2147,7 +2134,9 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 
 	if(  comp != NULL  ) { // message from outside!
 		if(  comp == &bt_start  ) {
-			if(  cnv.is_bound()  ) {
+			if(  depot->get_owner() != welt->get_active_player()  ) {
+				welt->switch_active_player(depot->get_owner()->get_player_nr(), false);
+			} else if(  cnv.is_bound()  ) {
 				// Move to Parent Convoy (Not Start Button!)
 				if(  is_shown_convoy_coupled  ) {
 					for( uint32 i=0; i<depot->get_convoy_list().get_count(); i++ ) {
@@ -2491,6 +2480,10 @@ bool depot_frame_t::infowin_event(const event_t *ev)
 {
 	// enable disable button actions
 	if(  ev->ev_class < INFOWIN  &&  (depot == NULL  ||  welt->get_active_player() != depot->get_owner()) ) {
+		// allow click events through so bt_start can switch to the depot owner
+		if(  ev->ev_class == EVENT_CLICK  ||  ev->ev_class == EVENT_RELEASE  ||  ev->ev_class == EVENT_REPEAT  ) {
+			return gui_frame_t::infowin_event(ev);
+		}
 		return false;
 	}
 
@@ -2545,11 +2538,27 @@ void depot_frame_t::draw(scr_coord pos, scr_size size)
 	const bool action_allowed = welt->get_active_player() == depot->get_owner();
 	convoihandle_t cnv = depot->get_convoi(icnv);
 
+	if(  !action_allowed  ) {
+		bt_start.set_text(depot->get_owner()->get_name());
+		bt_start.set_tooltip("move to the owner");
+	} else if(  !is_shown_convoy_coupled  ) {
+		if(  is_teleport_to_another_depot  ) {
+			bt_start.set_text("Teleport to Depot");
+			bt_start.set_tooltip("Teleport this convoy to another depot(defined in schedule)");
+		} else {
+			bt_start.set_text("Start");
+			bt_start.set_tooltip("Start the selected vehicle(s)");
+		}
+	} else {
+		bt_start.set_text("Move to Parent Convoy");
+		bt_start.set_tooltip("Move to Parent Convoy");
+	}
+
 	bt_new_line.enable( action_allowed );
 	bt_change_line.enable( action_allowed );
 	bt_copy_convoi.enable( action_allowed );
 	bt_apply_line.enable( action_allowed );
-	bt_start.enable( action_allowed  &&  cnv!=depot->get_replacement_seed() );	
+	bt_start.enable( !action_allowed  ||  cnv!=depot->get_replacement_seed() );
 	bt_schedule.enable( action_allowed );
 	bt_destroy.enable( action_allowed );
 	bt_sell.enable( action_allowed );
