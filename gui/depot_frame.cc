@@ -2556,12 +2556,9 @@ bool depot_frame_t::infowin_event(const event_t *ev)
 void depot_frame_t::draw(scr_coord pos, scr_size size)
 {
 	const bool action_allowed = welt->get_active_player() == depot->get_owner();
+	const bool player_changed = (action_allowed != last_action_allowed);
+	last_action_allowed = action_allowed;
 	convoihandle_t cnv = depot->get_convoi(icnv);
-
-	if(  action_allowed != last_action_allowed  ) {
-		last_action_allowed = action_allowed;
-		update_data();
-	}
 
 	bt_new_line.enable( action_allowed );
 	bt_change_line.enable( action_allowed );
@@ -2596,9 +2593,11 @@ void depot_frame_t::draw(scr_coord pos, scr_size size)
 
 	bt_replacement_seed.set_text(cnv==depot->get_replacement_seed() ? "Unregister replacement" : "Replacement seed");
 
-	// check for data inconsistencies (can happen with withdraw-all and vehicle in depot)
-	if(  !cnv.is_bound()  &&  !convoi_pics.empty()  ) {
-		icnv=0;
+	// check for data inconsistencies or active-player change
+	if(  player_changed  ||  (!cnv.is_bound()  &&  !convoi_pics.empty())  ) {
+		if(  !cnv.is_bound()  &&  !convoi_pics.empty()  ) {
+			icnv = 0;
+		}
 		update_data();
 		cnv = depot->get_convoi(icnv);
 	}
