@@ -302,6 +302,7 @@ settings_t::settings_t() :
 	avoid_overcrowding = false;
 	overloading_revenue_reduced = false;
 	overloading_runningcost_increase = true;
+	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
 
@@ -1020,11 +1021,17 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_bool(overloading_revenue_reduced);
 			file->rdwr_bool(overloading_runningcost_increase);
 			file->rdwr_bool(default_reverse);
+			if(  file->get_OTRP_version() >= 56  ) {
+				file->rdwr_bool(overloaded_acceleration);
+			} else {
+				overloaded_acceleration = false;
+			}
 		} else {
 			allow_overloading = false;
 			overloading_revenue_reduced = false;
 			overloading_runningcost_increase = true;
 			default_reverse = false;
+			overloaded_acceleration = false;
 		}
 		if(  file->get_OTRP_version() >= 51  ) {
 			file->rdwr_bool(env_t::use_old_friction);
@@ -1518,6 +1525,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	allow_overloading					 = contents.get_int( "allow_overloading", allow_overloading) != 0;
 	overloading_revenue_reduced 		 = contents.get_int( "overloading_revenue_reduced", overloading_revenue_reduced) != 0;
 	overloading_runningcost_increase	 = contents.get_int( "overloading_runningcost_increase", overloading_runningcost_increase) != 0;
+	overloaded_acceleration				 = contents.get_int( "overloaded_acceleration", overloaded_acceleration ) != 0;
 
 	// city stuff
 	passenger_multiplier   = contents.get_int_clamped( "passenger_multiplier",   passenger_multiplier,   0, 100 );
