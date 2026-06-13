@@ -704,6 +704,7 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	gui_frame_t::set_windowsize(size);
 	set_resizemode( diagonal_resize );
 
+	last_action_allowed = (welt->get_active_player() == depot->get_owner());
 	depot->clear_command_pending();
 }
 
@@ -1500,7 +1501,25 @@ void depot_frame_t::update_data()
 	}
 	
 	
-	// start button text is updated every frame in draw()
+	// update start button text based on current active player and convoy state
+	{
+		const bool action_allowed = welt->get_active_player() == depot->get_owner();
+		if(  !action_allowed  ) {
+			bt_start.set_text(depot->get_owner()->get_name());
+			bt_start.set_tooltip("move to the owner");
+		} else if(  !is_shown_convoy_coupled  ) {
+			if(  is_teleport_to_another_depot  ) {
+				bt_start.set_text("Teleport to Depot");
+				bt_start.set_tooltip("Teleport this convoy to another depot(defined in schedule)");
+			} else {
+				bt_start.set_text("Start");
+				bt_start.set_tooltip("Start the selected vehicle(s)");
+			}
+		} else {
+			bt_start.set_text("Move to Parent Convoy");
+			bt_start.set_tooltip("Move to Parent Convoy");
+		}
+	}
 
 	const vehicle_desc_t *veh = NULL;
 
@@ -2539,20 +2558,9 @@ void depot_frame_t::draw(scr_coord pos, scr_size size)
 	const bool action_allowed = welt->get_active_player() == depot->get_owner();
 	convoihandle_t cnv = depot->get_convoi(icnv);
 
-	if(  !action_allowed  ) {
-		bt_start.set_text(depot->get_owner()->get_name());
-		bt_start.set_tooltip("move to the owner");
-	} else if(  !is_shown_convoy_coupled  ) {
-		if(  is_teleport_to_another_depot  ) {
-			bt_start.set_text("Teleport to Depot");
-			bt_start.set_tooltip("Teleport this convoy to another depot(defined in schedule)");
-		} else {
-			bt_start.set_text("Start");
-			bt_start.set_tooltip("Start the selected vehicle(s)");
-		}
-	} else {
-		bt_start.set_text("Move to Parent Convoy");
-		bt_start.set_tooltip("Move to Parent Convoy");
+	if(  action_allowed != last_action_allowed  ) {
+		last_action_allowed = action_allowed;
+		update_data();
 	}
 
 	bt_new_line.enable( action_allowed );
@@ -2572,7 +2580,20 @@ void depot_frame_t::draw(scr_coord pos, scr_size size)
 	bt_remove_all_vehicles.enable( action_allowed );
 
 	bt_paste_convoi.enable( action_allowed );
-	
+	bt_allow_invalid_convoy.enable( action_allowed );
+
+	if(  !action_allowed  ) {
+		bt_uncouple.disable();
+		bt_reverse.disable();
+		child_convoi_selector.disable();
+		vehicle_filter.disable();
+		sort_by.disable();
+	}
+	else {
+		vehicle_filter.enable();
+		sort_by.enable();
+	}
+
 	bt_replacement_seed.set_text(cnv==depot->get_replacement_seed() ? "Unregister replacement" : "Replacement seed");
 
 	// check for data inconsistencies (can happen with withdraw-all and vehicle in depot)
