@@ -474,7 +474,8 @@ public:
 	tool_build_wayobj_t(uint16 const id = TOOL_BUILD_WAYOBJ | GENERAL_TOOL, bool b = true) : two_click_tool_t(id), build(b) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;

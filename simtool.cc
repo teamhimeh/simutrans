@@ -4288,11 +4288,11 @@ bool tool_build_wayobj_t::is_selected() const
 	return (selected  &&  selected->build==build  &&  selected->get_desc() == get_desc());
 }
 
-bool tool_build_wayobj_t::init( player_t *player )
+bool tool_build_wayobj_t::init( player_t *player, bool called_from_move )
 {
 	two_click_tool_t::init( player );
 
-	if (is_ctrl_pressed()  &&  can_use_gui()) {
+	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
 		create_win(new wayobj_spacing_frame_t(player, this), w_info, (ptrdiff_t)this);
 	}
 

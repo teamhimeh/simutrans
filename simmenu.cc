@@ -1444,6 +1444,9 @@ const char *two_click_tool_t::move(player_t *player, uint16 buttonstate, koord3d
 		} else if(tool_build_tunnel_t* tt = dynamic_cast<tool_build_tunnel_t*>(this)) {
 			// This is tool_build_tunnel_t. The mode selection window should not be called.
 			tt->init( player, true );
+		} else if(tool_build_wayobj_t* two = dynamic_cast<tool_build_wayobj_t*>(this)) {
+			// This is tool_build_wayobj_t. The mode selection window should not be called.
+			two->init( player, true );
 		} else {
 			init( player );
 		}
