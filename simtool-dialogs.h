@@ -594,8 +594,8 @@ public:
 class dialog_settings_t : public tool_t {
 public:
 	dialog_settings_t() : tool_t(DIALOG_SETTINGS | DIALOGE_TOOL) {}
-	char const* get_tooltip(player_t const*) const OVERRIDE{ return !env_t::networkmode ? translator::translate("Setting") : translator::translate("deactivated in online mode"); }
-	image_id get_icon(player_t *) const OVERRIDE { return !env_t::networkmode ? icon : IMG_EMPTY; }
+	char const* get_tooltip(player_t const*) const OVERRIDE{ return !env_t::networkmode || env_t::server ? translator::translate("Setting") : translator::translate("deactivated in online mode"); }
+	image_id get_icon(player_t *) const OVERRIDE { return !env_t::networkmode || env_t::server ? icon : IMG_EMPTY; }
 	bool is_selected() const OVERRIDE{ return win_get_magic(magic_settings_frame_t); }
 	bool init(player_t*) OVERRIDE{
 		if (!env_t::networkmode || env_t::server) {
@@ -604,6 +604,8 @@ public:
 		return false;
 	}
 	bool exit(player_t*) OVERRIDE{ destroy_win(magic_settings_frame_t); return false; }
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
 /* server info and join dialog */
