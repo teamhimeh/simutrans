@@ -386,7 +386,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -422,7 +423,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }

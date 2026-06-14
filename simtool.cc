@@ -3337,7 +3337,7 @@ waytype_t tool_build_bridge_t::get_waytype() const
 }
 
 
-bool tool_build_bridge_t::init( player_t *player )
+bool tool_build_bridge_t::init( player_t *player, bool called_from_move )
 {
 	two_click_tool_t::init( player );
 	// now get current desc
@@ -3345,7 +3345,7 @@ bool tool_build_bridge_t::init( player_t *player )
 	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
 		return false;
 	}
-	if (is_ctrl_pressed()  &&  can_use_gui()  ) {
+	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
 		create_win(new overtaking_mode_frame_t(player, this), w_info, (ptrdiff_t)this);
 	}
 	return desc!=NULL;
@@ -3629,7 +3629,7 @@ waytype_t tool_build_tunnel_t::get_waytype() const
 }
 
 
-bool tool_build_tunnel_t::init( player_t *player )
+bool tool_build_tunnel_t::init( player_t *player, bool called_from_move )
 {
 	two_click_tool_t::init( player );
 	// now get current desc
@@ -3637,7 +3637,7 @@ bool tool_build_tunnel_t::init( player_t *player )
 	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
 		return false;
 	}
-	if (is_ctrl_pressed()  &&  can_use_gui()  ) {
+	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
 		create_win(new overtaking_mode_frame_t(player, this), w_info, (ptrdiff_t)this);
 	}
 	return desc!=NULL;
