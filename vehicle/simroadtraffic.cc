@@ -576,6 +576,18 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 		}
 	}
 
+	// Check detailed_oneway on the current tile: may block this specific exit direction.
+	{
+		const grund_t *gr_current = welt->lookup(get_pos());
+		const roadsign_t *rs_cur = gr_current ? gr_current->find<roadsign_t>() : NULL;
+		if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
+			const ribi_t::ribi entry_ribi = ribi_type(pos_prev, get_pos());
+			if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & current_direction90)  ) {
+				return false;
+			}
+		}
+	}
+
 	const koord3d pos_next_next = route[idx_in_scope(route_index,1)];
 	
 	// At an intersection, decide whether the convoi should go on passing lane.
@@ -1173,7 +1185,13 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 		pos_prev2 = route[idx_in_scope(target_index,-2)];
 	}
 	const ribi_t::ribi direction90 = ribi_type(pos_prev2, route[idx_in_scope(target_index,-1)]);
-	ribi_t::ribi ribi = weg->get_ribi() & (~ribi_t::backward(direction90));
+	ribi_t::ribi ribi = ribi = weg->get_ribi() & (~ribi_t::backward(direction90));
+	if(  direction90 != ribi_t::none  ) {
+		const roadsign_t *rs_sign = gr->find<roadsign_t>();
+		if(  rs_sign  &&  rs_sign->get_desc()->is_single_way()  &&  rs_sign->is_detailed_oneway()  ) {
+			ribi = gr->get_weg_ribi_unmasked(road_wt) & rs_sign->get_detailed_oneway_out_ribi(direction90) & (~ribi_t::backward(direction90));
+		}
+	}
 
 	if(  weg->get_ribi()==0  ) {
 		// this can go to nowhere!
@@ -1216,18 +1234,6 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 						// inappropriate direction!
 						ribi &= ~ribi_t::nesw[r];
 						continue;
-					}
-				}
-				// Check detailed_oneway restriction on the current tile: certain exits blocked per entry direction.
-				if(  weg->has_sign()  ) {
-					const roadsign_t* rs_cur = gr->find<roadsign_t>();
-					if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
-						const ribi_t::ribi entry_ribi = ribi_type(route[idx_in_scope(target_index,-2)], route[idx_in_scope(target_index,-1)]);
-						const ribi_t::ribi exit_r = ribi_t::nesw[r];
-						if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & exit_r)  ) {
-							ribi &= ~exit_r;
-							continue;
-						}
 					}
 				}
 #ifdef DESTINATION_CITYCARS

@@ -225,7 +225,9 @@ public:
 	void init_detailed_oneway_defaults(ribi_t::ribi way_ribi) {
 		for(int i = 0; i < 4; i++) {
 			ribi_t::ribi entry = ribi_t::nesw[i];
-			uint8 allowed = (entry == dir) ? 0 : (uint8)(way_ribi & ~ribi_t::backward(entry));
+			// Mirror the original ribi_maske behavior: no U-turn, and no exit in the
+			// sign's own direction (dir) regardless of how the vehicle arrived.
+			uint8 allowed = (uint8)(way_ribi & ~ribi_t::backward(entry) & ~(ribi_t::ribi)dir);
 			set_detailed_oneway_out_ribi(entry, allowed);
 		}
 	}
