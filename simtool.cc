@@ -6011,8 +6011,12 @@ const char* tool_build_roadsign_t::check_pos_intern(player_t *player, koord3d po
 		}
 
 		const bool two_way = desc->is_single_way()  ||  desc->is_signal_type();
+		// single_way signs are allowed on 2-, 3-, and 4-way junctions; signals stay 2-way only
+		const bool valid_dir_check = !two_way
+		    || (desc->is_signal_type() && ribi_t::is_twoway(dir))
+		    || (desc->is_single_way() && !ribi_t::is_single(dir) && dir != ribi_t::none);
 
-		if(  !two_way  ||  (two_way  &&  ribi_t::is_twoway(dir))  ) {
+		if(  valid_dir_check  ) {
 			roadsign_t* rs;
 			if(  desc->is_signal_type()  ) {
 				// if there is already a signal, we might need to inverse the direction
@@ -6297,8 +6301,12 @@ const char *tool_build_roadsign_t::place_sign_intern( player_t *player, grund_t*
 		ribi_t::ribi dir = weg->get_ribi_unmasked();
 
 		const bool two_way = desc->is_single_way() || desc->is_signal_type();
+		// single_way signs are allowed on 2-, 3-, and 4-way junctions; signals stay 2-way only
+		const bool valid_dir = !two_way
+		    || (desc->is_signal_type() && ribi_t::is_twoway(dir))
+		    || (desc->is_single_way() && !ribi_t::is_single(dir) && dir != ribi_t::none);
 
-		if(  !two_way  ||  (two_way  &&  ribi_t::is_twoway(dir))  ) {
+		if(  valid_dir  ) {
 			roadsign_t* rs;
 			if (desc->is_signal_type()) {
 				// if there is already a signal, we might need to inverse the direction
@@ -10234,6 +10242,64 @@ bool tool_change_roadsign_t::init( player_t *player )
 				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
 				if(  sign_info_win  ) {
 					sign_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'D':
+		// toggle detailed_oneway flag on a single_way sign; initialises defaults when enabling
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  ) {
+					bool enable = (inst != 0);
+					if(  enable  &&  !rs->is_detailed_oneway()  ) {
+						// initialise from way ribi before enabling
+						weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp()!=tram_wt ? rs->get_desc()->get_wtyp() : track_wt);
+						if(  weg  ) {
+							rs->init_detailed_oneway_defaults(weg->get_ribi_unmasked());
+						}
+					}
+					rs->set_detailed_oneway(enable);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'n':
+		// set ticks_ns (packed from-N / from-S allowed exit ribis) on a detailed_oneway sign
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					rs->set_detailed_oneway_out_ribi(ribi_t::north, inst & 0xF);
+					rs->set_detailed_oneway_out_ribi(ribi_t::south, (inst >> 4) & 0xF);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'e':
+		// set ticks_ow (packed from-E / from-W allowed exit ribis) on a detailed_oneway sign
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					rs->set_detailed_oneway_out_ribi(ribi_t::east, inst & 0xF);
+					rs->set_detailed_oneway_out_ribi(ribi_t::west, (inst >> 4) & 0xF);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
 				}
 			}
 		}

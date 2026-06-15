@@ -1218,6 +1218,18 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 						continue;
 					}
 				}
+				// Check detailed_oneway restriction on the current tile: certain exits blocked per entry direction.
+				if(  weg->has_sign()  ) {
+					const roadsign_t* rs_cur = gr->find<roadsign_t>();
+					if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
+						const ribi_t::ribi entry_ribi = ribi_type(route[idx_in_scope(target_index,-2)], route[idx_in_scope(target_index,-1)]);
+						const ribi_t::ribi exit_r = ribi_t::nesw[r];
+						if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & exit_r)  ) {
+							ribi &= ~exit_r;
+							continue;
+						}
+					}
+				}
 #ifdef DESTINATION_CITYCARS
 				uint32 dist=koord_distance( to->get_pos().get_2d(), target );
 				poslist.append( to->get_pos(), dist*dist );

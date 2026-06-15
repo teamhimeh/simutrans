@@ -34,6 +34,9 @@ public:
 	 */
 	virtual ribi_t::ribi get_ribi(const grund_t* ) const = 0;
 
+	// Like get_ribi but further restricts exits based on entry direction (for detailed_oneway signs).
+	virtual ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const { return get_ribi(gr); }
+
 	virtual waytype_t get_waytype() const = 0;
 
 	/**

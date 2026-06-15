@@ -311,6 +311,7 @@ public:
 	* Determine the direction bits for this kind of vehicle.
 	*/
 	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return gr->get_weg_ribi(get_waytype()); }
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE;
 
 	sint32 get_purchase_time() const {return purchase_time;}
 

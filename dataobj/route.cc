@@ -220,7 +220,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		}
 
 		// testing all four possible directions
-		const ribi_t::ribi ribi =  tdriver->get_ribi(gr)  &  ( ~ribi_t::reverse_single(tmp->ribi_from) );
+		const ribi_t::ribi ribi =  tdriver->get_ribi(gr, tmp->ribi_from)  &  ( ~ribi_t::reverse_single(tmp->ribi_from) );
 		for(  int r=0;  r<4;  r++  ) {
 			// a way goes here, and it is not marked (i.e. in the closed list)
 			grund_t* to = NULL;
@@ -422,7 +422,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 		uint32 topnode_f = !queue.empty() ? queue.front()->f : max_cost;
 
-		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr);
+		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr, tmp->ribi_from);
 		// testing all four possible directions
 		// mask direction we came from
 		const ribi_t::ribi ribi =  way_ribi  &  ( ~ribi_t::reverse_single(tmp->ribi_from) )  &  tmp->jps_ribi;

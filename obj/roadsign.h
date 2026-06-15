@@ -51,7 +51,8 @@ protected:
 		stop_before_check	= 1U<<5,//stop before check sign. for choose-sign and longblock-sign.
 		skip_default_route 	= 1U<<6,// use default calc_route() before call find_route().
 		start_signal		= 1U<<7,// if the next signal is start signal and state is RED, convoy stay there (not move to the end of the steps of signal tile).
-		length_based		= 1U<<8 // in choose signal, length based find_route(do not enter the first found tile, the shortest halt which can enter the convoys).
+		length_based		= 1U<<8, // in choose signal, length based find_route(do not enter the first found tile, the shortest halt which can enter the convoys).
+		detailed_oneway	= 1U<<9  // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
 	};
 
 	uint8 choose_signal_margin_length;
@@ -195,6 +196,42 @@ public:
 	void set_start_signal(bool tf) { tf? choose_sign_flag|=start_signal:choose_sign_flag&=~start_signal; }
 	bool is_length_based() const { return (choose_sign_flag&length_based)>0; }
 	void set_length_based(bool tf) { tf? choose_sign_flag|=length_based:choose_sign_flag&=~length_based; }
+	bool is_detailed_oneway() const { return (choose_sign_flag&detailed_oneway)>0; }
+	void set_detailed_oneway(bool tf) { tf? choose_sign_flag|=detailed_oneway:choose_sign_flag&=~detailed_oneway; }
+
+	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
+	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
+	// ticks_ow bits 0-3 = allowed exits for entry ribi E, bits 4-7 = allowed exits for entry ribi W.
+	ribi_t::ribi get_detailed_oneway_out_ribi(ribi_t::ribi entry_ribi) const {
+		switch(entry_ribi) {
+			case ribi_t::north: return (ribi_t::ribi)(ticks_ns & 0xF);
+			case ribi_t::south: return (ribi_t::ribi)((ticks_ns >> 4) & 0xF);
+			case ribi_t::east:  return (ribi_t::ribi)(ticks_ow & 0xF);
+			case ribi_t::west:  return (ribi_t::ribi)((ticks_ow >> 4) & 0xF);
+			default:            return ribi_t::all; // diagonal: unrestricted
+		}
+	}
+	void set_detailed_oneway_out_ribi(ribi_t::ribi entry_ribi, uint8 allowed_out) {
+		switch(entry_ribi) {
+			case ribi_t::north: ticks_ns = (ticks_ns & 0xF0) | (allowed_out & 0xF); break;
+			case ribi_t::south: ticks_ns = (ticks_ns & 0x0F) | ((allowed_out & 0xF) << 4); break;
+			case ribi_t::east:  ticks_ow = (ticks_ow & 0xF0) | (allowed_out & 0xF); break;
+			case ribi_t::west:  ticks_ow = (ticks_ow & 0x0F) | ((allowed_out & 0xF) << 4); break;
+			default: break;
+		}
+	}
+	// Initialize detailed_oneway table to match normal one-way sign behavior.
+	// way_ribi is the unmasked ribi of the underlying way.
+	void init_detailed_oneway_defaults(ribi_t::ribi way_ribi) {
+		for(int i = 0; i < 4; i++) {
+			ribi_t::ribi entry = ribi_t::nesw[i];
+			uint8 allowed = (entry == dir) ? 0 : (uint8)(way_ribi & ~ribi_t::backward(entry));
+			set_detailed_oneway_out_ribi(entry, allowed);
+		}
+	}
+	// Recompute ribi_maske on the underlying way to reflect detailed_oneway settings.
+	void update_ribi_maske();
+
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
 	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}

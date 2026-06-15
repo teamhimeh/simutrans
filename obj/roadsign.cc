@@ -152,6 +152,32 @@ roadsign_t::~roadsign_t()
 }
 
 
+void roadsign_t::update_ribi_maske()
+{
+	if(  preview  ) {
+		return;
+	}
+	weg_t *weg = welt->lookup(get_pos())->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
+	if(  !weg  ) {
+		return;
+	}
+	if(  desc->is_single_way()  &&  is_detailed_oneway()  ) {
+		// block only entry directions where no exits are allowed at all
+		ribi_t::ribi blocked = ribi_t::none;
+		for(  int i = 0;  i < 4;  i++  ) {
+			ribi_t::ribi entry = ribi_t::nesw[i];
+			if(  get_detailed_oneway_out_ribi(entry) == ribi_t::none  ) {
+				blocked |= entry;
+			}
+		}
+		weg->set_ribi_maske(blocked);
+	}
+	else {
+		weg->set_ribi_maske(calc_mask());
+	}
+}
+
+
 void roadsign_t::set_dir(ribi_t::ribi dir)
 {
 	ribi_t::ribi olddir = this->dir;
@@ -221,15 +247,15 @@ void roadsign_t::show_info()
 		create_win(new trafficlight_info_t(this), w_info, (ptrdiff_t)this );
 	}
 	else if(  desc->is_single_way()  ) {
-		if(  (intersection_pos = get_intersection()) == koord3d::invalid  ) {
+		intersection_pos = get_intersection();
+		if(  intersection_pos == koord3d::invalid  ) {
 			set_lane_affinity(4);
-			obj_t::show_info();
 		}
 		else {
 			// off the "not applied" bit flag
 			lane_affinity = ~((~lane_affinity)|4);
-			create_win(new onewaysign_info_t(this, intersection_pos), w_info, (ptrdiff_t)this );
 		}
+		create_win(new onewaysign_info_t(this, intersection_pos), w_info, (ptrdiff_t)this );
 	}
 	else if(  desc->is_signal_type()  ) {
 		// this should be a signal.
