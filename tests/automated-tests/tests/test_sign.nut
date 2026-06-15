@@ -190,7 +190,7 @@ function test_sign_build_oneway()
 		ASSERT_TRUE(error_caught)
 	}
 
-	// remove sign, try to build again (should fail because of crossing)
+	// remove sign, try to build again (should success after v56)
 	{
 		ASSERT_EQUAL(remover.work(pl, coord3d(2, 3, 0)), null)
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
@@ -215,7 +215,7 @@ function test_sign_build_oneway()
 			ASSERT_EQUAL(e, "Tool has no effects")
 			error_caught = true
 		}
-		ASSERT_TRUE(error_caught)
+		ASSERT_FALSE(error_caught)
 	}
 
 	ASSERT_EQUAL(wayremover.work(pl, coord3d(1, 3, 0), coord3d(3, 3, 0), "" + wt_road), null)
