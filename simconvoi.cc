@@ -1353,7 +1353,7 @@ bool convoi_t::drive_to()
 						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
 					}
 				}
-				if(!r&&!need_electric) {
+				if(!need_electric) {
 					// no electric route found
 					route_t *cached = welt->get_route_cache().find(
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
