@@ -196,7 +196,7 @@ public:
 	void set_start_signal(bool tf) { tf? choose_sign_flag|=start_signal:choose_sign_flag&=~start_signal; }
 	bool is_length_based() const { return (choose_sign_flag&length_based)>0; }
 	void set_length_based(bool tf) { tf? choose_sign_flag|=length_based:choose_sign_flag&=~length_based; }
-	bool is_detailed_oneway() const { return (choose_sign_flag&detailed_oneway)>0; }
+	bool is_detailed_oneway() const;
 	void set_detailed_oneway(bool tf) { tf? choose_sign_flag|=detailed_oneway:choose_sign_flag&=~detailed_oneway; }
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.

@@ -984,3 +984,16 @@ const vector_tpl<const roadsign_desc_t*>& roadsign_t::get_available_signs(const 
 	}
 	return dummy;
 }
+
+bool roadsign_t::is_detailed_oneway() const
+{ 
+	const grund_t *gr = welt->lookup(get_pos());
+	const weg_t *weg = gr ? gr->get_weg(get_desc()->get_wtyp() != tram_wt
+								? get_desc()->get_wtyp() : track_wt) : NULL;
+	const ribi_t::ribi way_ribi = weg ? weg->get_ribi_unmasked() : ribi_t::none;
+	if(  !ribi_t::is_single(way_ribi) && !ribi_t::is_twoway(way_ribi)  ) {
+		// more than 2 direction -> allow using detailed setting.
+		return (choose_sign_flag&detailed_oneway)>0;
+	} 
+	return false;
+}
