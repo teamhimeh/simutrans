@@ -180,13 +180,13 @@ function test_sign_build_oneway()
 
 		// change direction of sign on road crossing, should now succeed
 		ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 3, 0), sign), null)
-		// ribi_maske cycled S->N, so masked dirs = E+S+W = 0xE
+		// on a road/road crossing the sign direction cycles but ribi_maske resets to 0
 		ASSERT_WAY_PATTERN_MASKED(wt_road, coord3d(0, 0, 0),
 			[
 				"........",
 				"..4.....",
 				"..5.....",
-				".2E8....",
+				".2F8....",
 				"..1.....",
 				"........",
 				"........",
