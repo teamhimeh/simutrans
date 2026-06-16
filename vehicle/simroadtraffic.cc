@@ -1241,6 +1241,23 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 						continue;
 					}
 				}
+				// Pre-check detailed_oneway on the candidate tile: avoid routing
+				// into a tile where the entry direction has no valid forward exits.
+				// Without this the car enters the tile and only then discovers it
+				// is blocked, causing a U-turn from the far edge of the tile.
+				if(  w->has_sign()  ) {
+					const roadsign_t *rs_to = to->find<roadsign_t>();
+					if(  rs_to  &&  rs_to->get_desc()->is_single_way()  &&  rs_to->is_detailed_oneway()  ) {
+						const ribi_t::ribi entry_at_to = ribi_t::nesw[r];
+						const ribi_t::ribi allowed = rs_to->get_detailed_oneway_out_ribi(entry_at_to)
+						                             & w->get_ribi_unmasked()
+						                             & ~ribi_t::backward(entry_at_to);
+						if(  !allowed  ) {
+							ribi &= ~ribi_t::nesw[r];
+							continue;
+						}
+					}
+				}
 #ifdef DESTINATION_CITYCARS
 				uint32 dist=koord_distance( to->get_pos().get_2d(), target );
 				poslist.append( to->get_pos(), dist*dist );
