@@ -1324,6 +1324,7 @@ bool convoi_t::drive_to()
 		// Also for road vehicles, unreserve tiles.
 		else if(road_vehicle_t* r = dynamic_cast<road_vehicle_t*>(fahr[0])) {
 			r->unreserve_all_tiles();
+			r->unreserve_target_halt();
 		}
 
 		koord3d start = front()->get_pos();
@@ -1353,7 +1354,7 @@ bool convoi_t::drive_to()
 						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
 					}
 				}
-				if(!r&&!need_electric) {
+				if(!need_electric) {
 					// no electric route found
 					route_t *cached = welt->get_route_cache().find(
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
@@ -3188,8 +3189,13 @@ void convoi_t::rdwr(loadsave_t *file)
 					state = INITIAL;
 				}
 				// add to blockstrecke
-				if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype()))) {
-					sch->reserve(self,ribi_t::none);
+				// air vehicles manage all tile reservations via block_reserver in
+				// set_convoi; reserving the occupied tile here would permanently lock
+				// taxiway tiles (which have no leave_tile unreservation path)
+				if(v->get_waytype() != air_wt) {
+					if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype()))) {
+						sch->reserve(self,ribi_t::none);
+					}
 				}
 				// add to crossing
 				if(crossing_t *cr = gr->get_crossing()) {
