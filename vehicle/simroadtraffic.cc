@@ -583,7 +583,12 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 		if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
 			const ribi_t::ribi entry_ribi = ribi_type(pos_prev, get_pos());
 			if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & current_direction90)  ) {
-				return false;
+				// Allow backward movement: when find_destination routes the car back (e.g.,
+				// all allowed exits are dead-ends), the car must be able to retrace using its
+				// direction.  A U-turn (heading back the way we came) is the fallback escape.
+				if(  current_direction90 != ribi_t::backward((ribi_t::ribi)get_direction())  ) {
+					return false;
+				}
 			}
 		}
 	}
@@ -1266,6 +1271,22 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 					// reduce probability
 					poslist.append(to->get_pos(), 1);
 					continue;
+				}
+				// Avoid routing into a tile with no reachable forward exit.
+				// Such dead-ends cause oscillation that eventually makes pos_next == get_pos().
+				{
+					const ribi_t::ribi fwd = w->get_ribi() & ~ribi_t::backward(dir1);
+					bool any_fwd = false;
+					for(uint8 nr = 0; nr < 4 && !any_fwd; nr++) {
+						if(  fwd & ribi_t::nesw[nr]  ) {
+							grund_t *nxt;
+							any_fwd = to->get_neighbour(nxt, road_wt, ribi_t::nesw[nr]);
+						}
+					}
+					if(  !any_fwd  ) {
+						ribi &= ~ribi_t::nesw[r];
+						continue;
+					}
 				}
 				bool pos_added = false;
 				// we prefer vacant road.
@@ -1966,6 +1987,17 @@ bool private_car_t::is_rerouting_needed() const{
 	if(  (str_n->get_ribi()&dir)==0  ) {
 		// ribi is not appropriate. The route should be re-calculated.
 		return true;
+	}
+	// Trigger rerouting when detailed_oneway sign blocks the planned exit direction.
+	// With ribi_maske=0 the normal ribi check above never catches this for 3-way junctions.
+	{
+		const roadsign_t *rs_n = gr_n ? gr_n->find<roadsign_t>() : NULL;
+		if(  rs_n  &&  rs_n->get_desc()->is_single_way()  &&  rs_n->is_detailed_oneway()  ) {
+			const ribi_t::ribi entry_at_n = ribi_type(get_pos(), pos_next);
+			if(  !(rs_n->get_detailed_oneway_out_ribi(entry_at_n) & dir)  ) {
+				return true;
+			}
+		}
 	}
 	grund_t* gr_nn = welt->lookup(pos_next_next);
 	strasse_t* str_nn = gr_nn ? (strasse_t*)(gr_nn->get_weg(road_wt)) : NULL;
