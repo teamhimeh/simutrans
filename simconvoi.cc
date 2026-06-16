@@ -1324,6 +1324,7 @@ bool convoi_t::drive_to()
 		// Also for road vehicles, unreserve tiles.
 		else if(road_vehicle_t* r = dynamic_cast<road_vehicle_t*>(fahr[0])) {
 			r->unreserve_all_tiles();
+			r->unreserve_target_halt();
 		}
 
 		koord3d start = front()->get_pos();
