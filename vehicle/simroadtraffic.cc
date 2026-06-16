@@ -549,7 +549,10 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 	
 	const strasse_t* current_str = (strasse_t*)(welt->lookup(get_pos())->get_weg(road_wt));
 	const uint8 current_direction90 = ribi_type(get_pos(), pos_next);
-	if(  !current_str  ||  (current_str->get_ribi()&current_direction90)==0  ) {
+	// Use get_ribi_unmasked() here: ribi_mask_oneway (lane-affinity mask) must not
+	// be treated as a physical barrier. The detailed_oneway sign check below handles
+	// per-entry-direction exit restrictions.
+	if(  !current_str  ||  (current_str->get_ribi_unmasked()&current_direction90)==0  ) {
 		// this car can no longer go to the next tile.
 		time_to_life = 0;
 		return false;
@@ -583,10 +586,12 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 		if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
 			const ribi_t::ribi entry_ribi = ribi_type(pos_prev, get_pos());
 			if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & current_direction90)  ) {
-				// Allow backward movement: when find_destination routes the car back (e.g.,
-				// all allowed exits are dead-ends), the car must be able to retrace using its
-				// direction.  A U-turn (heading back the way we came) is the fallback escape.
-				if(  current_direction90 != ribi_t::backward((ribi_t::ribi)get_direction())  ) {
+				// Allow U-turn: when find_destination routes the car back because all
+				// allowed exits are dead-ends, the car must be able to retrace.
+				// Use entry_ribi (actual direction car entered this tile) not get_direction(),
+				// because hop() sets direction toward pos_next_next which may already be
+				// the U-turn target and would give the wrong backward direction.
+				if(  current_direction90 != ribi_t::backward(entry_ribi)  ) {
 					return false;
 				}
 			}
@@ -1198,11 +1203,15 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 		}
 	}
 
-	if(  weg->get_ribi()==0  ) {
+	// Use unmasked ribi for dead-end / U-turn checks: detailed_oneway sets
+	// ribi_maske=0 so masking is irrelevant, and a stale mask must not
+	// falsely block routing on a detailed_oneway tile.
+	const ribi_t::ribi ribi_eff = weg->get_ribi_unmasked();
+	if(  ribi_eff==0  ) {
 		// this can go to nowhere!
 		return koord3d::invalid;
 	}
-	else if(  weg->get_ribi()==ribi_t::backward(direction90)  ) {
+	else if(  ribi_eff==ribi_t::backward(direction90)  ) {
 		// we have no choice but to return to pos_prev2
 		return pos_prev2;
 	}
@@ -1330,7 +1339,7 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 	if (!poslist.empty()) {
 		return pick_any_weighted(poslist);
 	}
-	else if(  weg->get_ribi() & ribi_t::backward(direction90)  ) {
+	else if(  weg->get_ribi_unmasked() & ribi_t::backward(direction90)  ) {
 		return pos_prev2;
 	}
 	return koord3d::invalid;

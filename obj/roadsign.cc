@@ -191,7 +191,8 @@ void roadsign_t::set_dir(ribi_t::ribi dir)
 		if(desc->is_single_way()  ||  (desc->is_signal_type() && !get_two_ways())) {
 			// set mask, if it is a single way ...
 			weg->count_sign();
-			weg->set_ribi_maske(calc_mask());
+			// detailed_oneway uses its own per-entry table; ignore the simple dir mask.
+			update_ribi_maske();
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
 			grund_t *to;
 			for(int r = 0; r < 4; r++) {

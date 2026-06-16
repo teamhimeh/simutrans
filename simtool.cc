@@ -10083,7 +10083,11 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * t:set stop before check(for choose/longblock signs)
  * d:set use default route for choose signal
  * p:set start signal(do not start from stops if this flag is true)
- * 
+ * l:set length-based choose (choose shortest halt that fits convoy)
+ * D:toggle detailed_oneway flag on single_way sign; initialises defaults when enabling
+ * n:set packed from-N/from-S allowed exit ribis on detailed_oneway sign (ticks_ns)
+ * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
+ * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
@@ -10123,7 +10127,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 'o':
-		// set guide signal state for signal
+		// set choose signal
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_choose_signal(inst);
@@ -10189,7 +10193,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 't':
-		// set advance to end state for signal
+		// set stop before check for signal
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_stop_before_check(inst);
