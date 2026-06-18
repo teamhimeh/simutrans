@@ -384,6 +384,9 @@ private:
 	// can unload cargo even if stop length is too short
 	bool allow_unload_longer_convoy;
 
+	// can build elevated way over other player's halt
+	bool allow_elevated_way_over_others_halt;
+
 public:
 	/* the big cost section */
 	sint32 maint_building; // normal building
@@ -770,6 +773,8 @@ public:
 	bool is_default_reverse() const {return default_reverse;}
 	// allow unload longer convoy
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+
+	bool get_allow_elevated_way_over_others_halt() const { return allow_elevated_way_over_others_halt; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
 };

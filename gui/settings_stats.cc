@@ -266,6 +266,7 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	SEPERATOR
 	INIT_BOOL( "allow_higher_flight", sets->allow_higher_flight );
 	INIT_BOOL( "use_route_cache", sets->use_route_cache );
+	INIT_BOOL( "allow_elevated_way_over_others_halt", sets->allow_elevated_way_over_others_halt );
 	INIT_END
 }
 
@@ -317,6 +318,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 
 	READ_BOOL_VALUE( sets->allow_higher_flight );
 	READ_BOOL_VALUE( sets->use_route_cache );
+	READ_BOOL_VALUE( sets->allow_elevated_way_over_others_halt );
 }
 
 

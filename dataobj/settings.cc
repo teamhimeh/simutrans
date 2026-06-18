@@ -1055,6 +1055,11 @@ void settings_t::rdwr(loadsave_t *file)
 			signal_reverse_front_back = false;
 			roadsign_reverse_front_back = false;
 		}
+		if(  file->get_OTRP_version() >= 56  ) {
+			file->rdwr_bool(allow_elevated_way_over_others_halt);
+		} else {
+			allow_elevated_way_over_others_halt = false;
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
