@@ -154,6 +154,24 @@ void gebaeude_t::rotate90()
 			// eight layout city building
 			layout = (layout & 4) + ((layout+3) & 3);
 		}
+		else if(  layout>=48  &&  building_desc->get_all_layouts()>48  ) {
+			// slope stop layout: rotate90 cycles N->E->S->W->N
+			// Layout = slope_group (upper nibble, one of 48/64/80/96) + flat_part (lower nibble).
+			// When way is NS (bit0=0) the slope group shifts by ±16 following the rotate90 cycle.
+			// When way is EW (bit0=1) the slope group is unchanged (rotating EW->NS keeps the slope).
+			// The flat part rotates via the same table used for straight stations.
+			static const uint8 layout_rotate[16] = { 1, 8, 5, 10, 3, 12, 7, 14, 9, 0, 13, 2, 11, 4, 15, 6 };
+			const uint8 slope_group = layout & 0xF0;
+			const uint8 flat_part   = layout & 0x0F;
+			const int   flat_count  = min( 48, (int)building_desc->get_all_layouts() );
+			const uint8 new_flat    = layout_rotate[flat_part] % flat_count;
+			// for NS-way (bit0=0): swap between N/W group and S/E group (add or subtract 16)
+			// for EW-way (bit0=1): slope group is unchanged
+			const uint8 new_group = (flat_part & 1)
+				? slope_group
+				: (uint8)(slope_group + ((slope_group & 0x10) ? 16 : -16));
+			layout = new_group + new_flat;
+		}
 		else if(  layout>=16  ) {
 			// diagonal tile layout for stations
 			// construct the rotated layout
@@ -1095,7 +1113,13 @@ void gebaeude_t::cleanup(player_t *player)
 	// may need to update next buildings, in the case of start, middle, end buildings
 	// realign surrounding buildings...
 	const uint32 layout = tile->get_layout();
-	
+
+	// Slope stops (layout >= 48 with slope images) use a straight-way direction table
+	// (index 0) and store NS/EW in bit 0 of the flat part, which is also bit 0 of layout.
+	// Using (layout & 0x30) >> 4 for slope layouts would give indices 3-6, out of bounds.
+	const bool is_slope_stop = (layout >= 48 && tile->get_desc()->get_all_layouts() > 48);
+	const uint32 dir_type_idx = is_slope_stop ? 0u : (layout & 0x30u) >> 4;
+
 	// [straight/vertical/horizontal][layout&1][index_to_lookup]
 	const koord directions_to_lookup[3][2][2] = {
 		{{koord::south, koord::north}, {koord::east, koord::west}},
@@ -1107,18 +1131,25 @@ void gebaeude_t::cleanup(player_t *player)
 		ribi_t::northwest, // vertical diagonal
 		ribi_t::southwest // horizontal diagonal
 	};
-	
+
 	// check adjacent tiles and turn on the connection bit.
 	const sint8 offset = this_gr->get_weg_yoff()/TILE_HEIGHT_STEP;
+	const slope_t::type cur_slope = this_gr->get_weg_hang();
 	// WORKAROUND: station extensions have somehow inverted layout bits.
 	const bool is_generic_ext = tile->get_desc()->get_type() == building_desc_t::generic_extension;
 	for(  uint8 i=0;  i<2;  i++  ) {
-		const koord dir = directions_to_lookup[(layout&0x30)>>4][(layout&1)^is_generic_ext][i];
-		grund_t* gr = welt->lookup(get_pos() + koord3d(dir, offset));
+		const koord dir = directions_to_lookup[dir_type_idx][(layout&1)^is_generic_ext][i];
+		// Height of this tile's edge in direction dir, relative to tile base z.
+		const int z_delta_dir = (dir == koord::south) ? max( corner_sw(cur_slope), corner_se(cur_slope) )
+		                      : (dir == koord::north) ? max( corner_nw(cur_slope), corner_ne(cur_slope) )
+		                      : (dir == koord::east)  ? max( corner_ne(cur_slope), corner_se(cur_slope) )
+		                      : /* west */              max( corner_nw(cur_slope), corner_sw(cur_slope) );
+		grund_t* gr = welt->lookup(get_pos() + koord3d(dir, offset + z_delta_dir));
 		if(!gr) {
-			// check whether bridge end tile
-			grund_t * gr_tmp = welt->lookup(get_pos() + koord3d(dir, offset - 1));
-			if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1) {
+			// Bridge end tile or downslope continuation one level below the edge.
+			grund_t * gr_tmp = welt->lookup(get_pos() + koord3d(dir, offset + z_delta_dir - 1));
+			if(gr_tmp && (gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1
+			              || (z_delta_dir == 0 && slope_t::is_single( gr_tmp->get_weg_hang() )))) {
 				gr = gr_tmp;
 			}
 		}
@@ -1128,8 +1159,11 @@ void gebaeude_t::cleanup(player_t *player)
 		}
 		const koord xy = gb->get_tile()->get_offset();
 		uint8 layoutbase = gb->get_tile()->get_layout();
-		const bool bit_4_turn_on = (ribi_type(dir) & bit_4_turn_on_dir[(layoutbase&0x30)>>4]) > 0;
-		layoutbase |= bit_4_turn_on ? 4u : 2u; // set far bit on neighbour
+		// Slope stop neighbours also use the straight-way rule for bit selection.
+		const uint32 nb_idx = (layoutbase >= 48 && gb->get_tile()->get_desc()->get_all_layouts() > 48)
+		                    ? 0u : (layoutbase & 0x30u) >> 4;
+		const bool bit_4_turn_on = (ribi_type(dir) & bit_4_turn_on_dir[nb_idx]) > 0;
+		layoutbase |= bit_4_turn_on ? 4u : 2u; // set end-cap bit on neighbour
 		gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
 	}
 	mark_images_dirty();

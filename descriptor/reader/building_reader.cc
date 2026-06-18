@@ -191,8 +191,9 @@ void building_reader_t::register_obj(obj_desc_t *&data)
 	// after this point all building_desc_t's have type in building_desc_t::btype
 
 	// allowed layouts are 1,2,4,8,16,48 where 8,16,48 is reserved for stations
+	const bool is_slope_and_diagonal_supporting_station = (desc->type == building_desc_t::generic_stop &&  (desc->layouts == 80 || desc->layouts == 132));
 	const bool is_diagonal_supporting_station = (desc->type == building_desc_t::generic_stop &&  desc->layouts == 48);
-	if(  !is_diagonal_supporting_station  ) {
+	if(  !is_diagonal_supporting_station && !is_slope_and_diagonal_supporting_station  ) {
 		uint8 l = desc->type == building_desc_t::generic_stop ? 16 : 4;
 		while (l > 0) {
 			if ((desc->layouts & l) != 0  &&  (desc->layouts != l)) {

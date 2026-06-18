@@ -5174,8 +5174,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// get valid ground
 	grund_t *bd = tool_intern_koord_to_weg_grund(player, welt, pos, wegtype);
 
-	if(  !bd  ||  bd->get_weg_hang()!=slope_t::flat  ) {
-		// only flat tiles, only one stop per map square
+	if(  !bd  ) {
 		return "No suitable way on the ground!";
 	}
 
@@ -5196,7 +5195,38 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// find out orientation ...
 	uint32 layout = 0;
 	ribi_t::ribi ribi=ribi_t::none;
-	if(  desc->get_all_layouts()==48  ) {
+	
+	if(  desc->get_all_layouts()==132  ) {
+		// through station supporting diagonal
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==80  ) {
+		// through station supporting diagonal
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==48  ) {
 		// through station supporting diagonal
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5371,7 +5401,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		halt = haltestelle_t::create(k, player);
 	}
-	if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
+	if(  bd->get_weg_hang() != slope_t::flat  ) {
+		hausbauer_t::build_station_on_slope_way(halt_player, bd->get_pos(), layout, desc, halt);
+	}
+	else if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
 	else {
