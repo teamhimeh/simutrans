@@ -5196,7 +5196,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	uint32 layout = 0;
 	ribi_t::ribi ribi=ribi_t::none;
 	
-	if(  desc->get_all_layouts()==132  ) {
+	if(  desc->get_all_layouts()==112  ) {
 		// through station supporting diagonal
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
