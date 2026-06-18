@@ -987,11 +987,12 @@ gebaeude_t* hausbauer_t::build_station_on_slope_way(player_t* player, koord3d po
 		built_layout = (corner_layout | (built_layout & 9)) % flat_count;
 	}
 
-	// determine slope image offset:
-	//   N or W single-height  => +48
-	//   S or E single-height  => +64
-	//   N or W double-height  => +80
-	//   S or E double-height  => +96
+	// Determine slope image offset.
+	// Layout structure: 0-47 flat, 48-63 N/W single, 64-79 S/E single,
+	//                   80-95 N/W double, 96-111 S/E double.
+	// An 80-layout pakset has single-slope images only; double-slope tiles
+	// fall back to the same N/W or S/E single image group.
+	// A 132-layout pakset has dedicated double-slope images.
 	int slope_offset = 0;
 	if(  slope == slope_t::north  ||  slope == slope_t::west  ) {
 		slope_offset = 48;
@@ -1000,10 +1001,11 @@ gebaeude_t* hausbauer_t::build_station_on_slope_way(player_t* player, koord3d po
 		slope_offset = 64;
 	}
 	else if(  slope == (slope_t::type)(slope_t::north*2)  ||  slope == (slope_t::type)(slope_t::west*2)  ) {
-		slope_offset = 80;
+		// Use double-height images if present, otherwise fall back to single-height.
+		slope_offset = (built_layout + 80 < (int)desc->get_all_layouts()) ? 80 : 48;
 	}
 	else if(  slope == (slope_t::type)(slope_t::south*2)  ||  slope == (slope_t::type)(slope_t::east*2)  ) {
-		slope_offset = 96;
+		slope_offset = (built_layout + 96 < (int)desc->get_all_layouts()) ? 96 : 64;
 	}
 
 	// use slope image only when the descriptor defines one for this layout

@@ -5392,6 +5392,11 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 	}
 
+	// Slope tiles require a descriptor with slope images (all_layouts > 48).
+	if(  bd->get_weg_hang() != slope_t::flat  &&  desc->get_all_layouts() <= 48  ) {
+		return "Stops on slope require a slope-capable descriptor!";
+	}
+
 	// seems everything ok, lets build
 	bool neu = !halt.is_bound();
 
