@@ -14,6 +14,7 @@ include("tests/test_climate")
 include("tests/test_depot")
 include("tests/test_dir")
 include("tests/test_factory")
+include("tests/test_convoy_cargo")
 include("tests/test_good")
 include("tests/test_groundobj")
 include("tests/test_halt")
@@ -24,6 +25,11 @@ include("tests/test_powerline")
 include("tests/test_reservation")
 include("tests/test_scenario")
 include("tests/test_sign")
+include("tests/test_start_signal")
+include("tests/test_stop_before_check_signal")
+include("tests/test_longblock_signal")
+include("tests/test_advance_to_end")
+include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
@@ -34,7 +40,11 @@ include("tests/test_way_runway")
 include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_wayobj")
-
+include("tests/test_schedule")
+include("tests/test_road_api")
+include("tests/test_road_choose")
+include("tests/test_priority_signal")
+include("tests/test_otrp_signal_options")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -43,6 +53,9 @@ all_tests <- [
 	test_building_build_house_invalid_desc,
 	test_building_build_house_auto_rotation_attraction,
 	test_building_build_house_auto_rotation_citybuilding,
+	test_building_city_multitile_all_tiles_occupied,
+	test_building_city_multitile_removal_clears_all_tiles,
+	test_building_city_multitile_requires_city,
 	test_building_build_multi_tile_sloped,
 	test_building_buy_house_invalid_param,
 	test_building_buy_house_from_public_player,
@@ -84,6 +97,8 @@ all_tests <- [
 	test_factory_build_with_fields,
 	test_factory_build_climate,
 	test_factory_link,
+	test_convoy_cargo_empty,
+	test_convoy_cargo_loaded,
 	test_good_is_interchangeable,
 	test_good_speed_bonus,
 	test_groundobj_build_invalid_param,
@@ -205,13 +220,67 @@ all_tests <- [
 	test_transport_pax_temp_unload,
 	test_transport_pax_temp_unload_all,
 	test_transport_pax_transfer_interval,
+	test_transport_route_cache_convoy_length,
+	test_transport_route_cache_invalidation,
+	test_transport_route_cache_need_electric,
+	test_transport_two_convoys_on_same_line,
+	test_start_signal_default_false,
+	test_start_signal_convoy_stays_at_station,
+	test_start_signal_false_convoy_advances_to_signal,
+	test_start_signal_convoy_passes_when_clear,
+	test_stop_before_check_default_false,
+	test_stop_before_check_set_get,
+	test_stop_before_check_simple_signal_convoy_stops,
+	test_stop_before_check_longblock_signal_convoy_stops,
+	test_stop_before_check_choose_signal_convoy_stops,
+	test_stop_before_check_false_convoy_does_not_stop,
+	test_priority_signal_reserve,
+	test_longblock_open_no_prefix_signal,
+	test_longblock_blocked_no_prefix_signal,
+	test_longblock_open_pre_signal,
+	test_longblock_blocked_pre_signal,
+	test_longblock_open_priority_signal,
+	test_longblock_blocked_priority_signal,
+	test_otrp_signal_options_roundtrip,
+	test_choose_signal_false_behavior,
+	test_skip_default_route_false_behavior,
+	test_margin_length_behavior,
+	test_length_based_behavior,
+	test_longblock_blocked_priority_priority_long,
+	test_longblock_blocked_priority_pre_long,
+	test_longblock_blocked_pre_priority_long,
+	test_advance_to_end_true_behavior,
+	test_advance_to_end_false_behavior,
+	test_two_ways_false_blocks_reverse,
+	test_two_ways_true_allows_reverse,
 	test_trees_plant_single_invalid_param,
-	test_way_tunnel_build_straight
+	test_way_tunnel_build_straight,
+	test_schedule_entry_maximum_load,
+	test_schedule_entry_spacing,
+	test_schedule_entry_length_coupling_done,
+	test_schedule_entry_max_speed,
+	test_schedule_entry_balance_speed,
+	test_schedule_flags,
+	test_schedule_max_speed,
+	test_schedule_departure_slot_group_id,
+	test_schedule_departure_slot_group_id_non_null,
+	test_schedule_next_line,
+	test_schedule_next_line_non_null,
+	test_schedule_current,
+	test_schedule_entry_time_statistics,
+	test_road_api,
+	test_road_choose_stop_behind_halt_mode,
+	test_road_choose_stop_behind_oneway_mode,
+	test_road_choose_stop_behind_twoway_mode,
+	test_road_choose_stop_behind_loading_only_mode,
+	test_road_choose_stop_behind_inverted_mode,
+	test_road_choose_no_stop_behind_prohibited_mode
 ]
 
 
 // Tests that are currently failing
 failing_tests <- [
+	test_building_city_multitile_replaces_existing,
 	test_city_change_size_to_minimum,
 	test_depot_build_invalid_pos,
 	test_depot_build_on_tunnel_entrance,

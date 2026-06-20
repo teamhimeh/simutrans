@@ -22,6 +22,8 @@
 #include "dataobj/settings.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/rect.h"
+#include "dataobj/route_cache.h"
+#include "dataobj/convoi_template.h"
 
 #include "utils/checklist.h"
 #include "utils/sha1_hash.h"
@@ -124,6 +126,9 @@ public:
 	};
 
 private:
+	/// Route cache: maps (start, ziel, max_speed_kmh, need_electric) to a cached route_t.
+	route_cache_t route_cache;
+
 	/**
 	 * @name Map properties
 	 * Basic map properties are stored in this variables.
@@ -275,6 +280,8 @@ private:
 	 * Array containing the factories.
 	 */
 	slist_tpl<fabrik_t *> fab_list;
+
+	vector_tpl<convoi_template_t> convoy_templates;
 
 	/**
 	 * Stores a list of goods produced by factories currently in the game;
@@ -1167,6 +1174,8 @@ public:
 	void set_copy_convoi(convoihandle_t cnv) { copy_convoi = cnv; };
 	convoihandle_t get_copy_convoi() { return copy_convoi; }
 
+	route_cache_t& get_route_cache() { return route_cache; }
+
 private:
 	/**
 	 * Dummy method, to generate compiler error if someone tries to call get_climate( int ),
@@ -1516,6 +1525,9 @@ public:
 	void add_convoi(convoihandle_t);
 	void rem_convoi(convoihandle_t);
 	vector_tpl<convoihandle_t> const& convoys() const { return convoi_array; }
+
+	void load_convoy_templates();
+	const vector_tpl<convoi_template_t>& get_convoy_templates() const { return convoy_templates; }
 
 	/**
 	 * To access the cities array.

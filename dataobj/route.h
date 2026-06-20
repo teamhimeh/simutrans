@@ -136,13 +136,47 @@ public:
 	 * Finds route to a location, where @p tdriver->is_target becomes true.
 	 * @param max_depth is the maximum length of a route
 	 */
-	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, bool coupling = false, const uint8 choose_margin=0 );
+	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, const bool length_based = false, bool coupling = false, const uint8 choose_margin=0 );
 
 	/**
 	 * Calculates the route from @p start to @p target
 	 * @param for max_len, 16 is one tile
 	 */
 	route_result_t calc_route(karte_t *welt, koord3d start, koord3d target, test_driver_t *tdriver, const sint32 max_speed_kmh, sint32 max_len, const bool need_electric=false );
+
+	/**
+	 * Copy constructor.
+	 */
+	route_t(const route_t& other) {
+		for (uint32 i = 0; i < other.route.get_count(); i++) {
+			route.append(other.route[i]);
+		}
+	}
+
+	/// Default constructor.
+	route_t() {}
+
+	/**
+	 * Copy assignment: copies coordinates from other route.
+	 */
+	route_t& operator=(const route_t& other) {
+		if (this != &other) {
+			route.clear();
+			route.resize(other.route.get_count());
+			for (uint32 i = 0; i < other.route.get_count(); i++) {
+				route.append(other.route[i]);
+			}
+		}
+		return *this;
+	}
+
+	/**
+	 * Returns true if every tile in the route is accessible by tdriver.
+	 * need_electric must match convoi_t::needs_electrification() to mirror
+	 * the same check performed during A* route search.
+	 * Used to validate cached routes before use.
+	 */
+	bool is_passable(karte_t *welt, test_driver_t *tdriver, bool need_electric) const;
 
 	/**
 	 * Load/Save of the route.

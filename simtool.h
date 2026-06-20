@@ -325,7 +325,6 @@ public:
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* get_default_param(player_t*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
 	bool init(player_t* player) OVERRIDE { return init(player, false); }
 	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
@@ -387,7 +386,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -423,7 +423,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -473,7 +474,8 @@ public:
 	tool_build_wayobj_t(uint16 const id = TOOL_BUILD_WAYOBJ | GENERAL_TOOL, bool b = true) : two_click_tool_t(id), build(b) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
@@ -496,7 +498,7 @@ class tool_build_station_t : public two_click_tool_t {
 	const char *tool_station_building_aux(player_t *, bool, koord3d, const building_desc_t *, sint8 rotation );
 	const char *tool_station_dock_aux(player_t *, koord3d, const building_desc_t * );
 	const char *tool_station_flat_dock_aux(player_t *, koord3d, const building_desc_t *, sint8 );
-	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix );
+	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix, halthandle_t master_halt = halthandle_t());
 	const building_desc_t *get_desc( sint8 &rotation ) const;
 
   public:
@@ -511,21 +513,22 @@ class tool_build_station_t : public two_click_tool_t {
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
 
-	char const* process(player_t*, koord3d) ;
+	char const* process(player_t*, koord3d, halthandle_t master_halt = halthandle_t());
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE {return 2;};
 };
 
-class tool_rotate_building_t : public tool_t {
+class tool_rotate_building_t : public two_click_tool_t {
 private:
-	const char *tool_rotate_platform(koord3d);
-	const char *tool_rotate_building(koord3d);
+	const char *rotate_building_at(player_t*, koord3d);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
 
 public:
-	tool_rotate_building_t() : tool_t(TOOL_ROTATE_BUILDING | GENERAL_TOOL) {}
+	tool_rotate_building_t() : two_click_tool_t(TOOL_ROTATE_BUILDING | GENERAL_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Rotate Building"); }
-	char const* work(player_t *, koord3d) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
 };
 
@@ -536,11 +539,12 @@ private:
 	const char *place_sign_intern( player_t *, grund_t*, const roadsign_desc_t* b = NULL);
 
 	struct signal_info {
-		signal_info() : spacing(2), remove_intermediate(true), replace_other(true) {}
+		signal_info() : spacing(2), remove_intermediate(true), replace_other(true), two_ways(false) {}
 
 		uint8 spacing; // place signals every n tiles
 		bool  remove_intermediate;
 		bool  replace_other;
+		bool  two_ways;
 	};
 	// default values for this tool per player
 	signal_info signal[MAX_PLAYER_COUNT];
@@ -564,8 +568,9 @@ public:
 	bool init(player_t*) OVERRIDE;
 	bool exit(player_t*) OVERRIDE;
 
-	void set_values(player_t *player, uint8 spacing, bool remove, bool replace );
-	void get_values(player_t *player, uint8 &spacing, bool &remove, bool &replace );
+	const roadsign_desc_t* get_desc() const { return desc; }
+	void set_values(player_t *player, uint8 spacing, bool remove, bool replace, bool two_ways );
+	void get_values(player_t *player, uint8 &spacing, bool &remove, bool &replace, bool &two_ways );
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
@@ -1186,6 +1191,19 @@ public:
 	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
+class tool_only_own_vehicle_states_t : public tool_t {
+public:
+	tool_only_own_vehicle_states_t() : tool_t(TOOL_SHOW_ONLY_OWN_VEHICLE_STATES | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("only own vehicle states"); }
+	bool init( player_t * ) OVERRIDE {
+		env_t::show_only_own_vehicle_states^=1;
+		welt->set_dirty();
+		return false;
+	}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
 class tool_money_messages_t : public tool_t {
 public:
 	tool_money_messages_t() : tool_t(TOOL_TOGGLE_MESSAGE | SIMPLE_TOOL) {}
@@ -1252,6 +1270,19 @@ public:
 	bool is_selected() const OVERRIDE { return env_t::show_way_offset_label; }
 	bool init( player_t * ) OVERRIDE {
 		env_t::show_way_offset_label = !env_t::show_way_offset_label;
+		welt->set_dirty();
+		return false;
+	}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
+class tool_follow_convoi_underground_t : public tool_t {
+public:
+	tool_follow_convoi_underground_t() : tool_t(TOOL_FOLLOW_CONVOI_UNDERGROUND | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Toggle convoy following underground mode"); }
+	bool init( player_t * ) OVERRIDE {
+		env_t::follow_convoi_underground = (env_t::follow_convoi_underground + 1) % grund_t::ugm_count;
 		welt->set_dirty();
 		return false;
 	}
@@ -1477,6 +1508,66 @@ public:
 	bool init(player_t * )OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE {return false;}
 	bool is_work_network_safe() const OVERRIDE {return false;}
+};
+
+// Two-click route tool: change way settings (overtaking mode, street flags, vehicle offset)
+// along an existing way route without touching ribi or desc.
+// default_param encodes the waytype (as integer string, same as tool_wayremover_t).
+// Changes overtaking_mode and street_flag on roads only.
+// Ctrl+click on toolbar icon opens the settings dialog.
+class tool_change_way_settings_t : public two_click_tool_t {
+private:
+	overtaking_mode_t overtaking_mode;
+	uint8 street_flag;
+
+	bool calc_route(route_t &route, player_t *player, const koord3d &start, const koord3d &end);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
+
+public:
+	tool_change_way_settings_t() : two_click_tool_t(TOOL_CHANGE_WAY_SETTINGS | GENERAL_TOOL),
+		overtaking_mode(twoway_mode), street_flag(0) {}
+
+	waytype_t get_waytype() const OVERRIDE { return road_wt; }
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
+	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
+
+	void set_overtaking_mode(overtaking_mode_t m) { overtaking_mode = m; }
+	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
+	void set_street_flag(uint8 f) { street_flag = f; }
+	uint8 get_street_flag() const { return street_flag; }
+};
+
+// Changes vehicle_offset on ways of any type.
+// Waytype is detected from the first-clicked tile (Shift picks alternate waytype at crossings).
+// Ctrl+click on toolbar icon opens the settings dialog.
+class tool_change_way_offset_t : public two_click_tool_t {
+private:
+	sint8 vehicle_offset;  // packed raw byte: bits 7-1 = value, bit 0 = mode
+	waytype_t detected_wt; // set on first click; invalid_wt = use default_param
+
+	bool calc_route(route_t &route, player_t *player, const koord3d &start, const koord3d &end);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
+
+public:
+	tool_change_way_offset_t() : two_click_tool_t(TOOL_CHANGE_WAY_OFFSET | GENERAL_TOOL),
+		vehicle_offset(0), detected_wt(invalid_wt) {}
+
+	waytype_t get_waytype() const OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
+	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
+
+	void set_vehicle_offset(sint8 v) { vehicle_offset = (sint8)((v << 1) | (vehicle_offset & 1)); }
+	sint8 get_vehicle_offset() const { return vehicle_offset >> 1; }
+	void set_vehicle_offset_mode(bool m) { m ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
+	bool get_vehicle_offset_mode() const { return vehicle_offset & 1; }
 };
 
 #endif

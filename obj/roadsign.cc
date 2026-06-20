@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include <algorithm>
 
 #include "../simunits.h"
 #include "../simdebug.h"
@@ -51,6 +52,7 @@ roadsign_t::roadsign_t(loadsave_t *file) : obj_t ()
 {
 	image = foreground_image = IMG_EMPTY;
 	preview = false;
+	choose_sign_flag = 0; // must initialize before rdwr(): old save formats use bitwise-OR on this field
 	rdwr(file);
 	if(desc) {
 		/* if more than one state, we will switch direction and phase for traffic lights
@@ -106,6 +108,9 @@ roadsign_t::roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const ro
 			ticks_ns = 1 << player->get_player_nr();
 		}
 	}
+	if(  desc->is_signal_type()  ) {
+		set_two_ways(false);
+	}
 	/* if more than one state, we will switch direction and phase for traffic lights
 	 * however also gate signs need indications
 	 */
@@ -157,7 +162,7 @@ void roadsign_t::set_dir(ribi_t::ribi dir)
 		if(  desc->get_wtyp()!=track_wt  &&  desc->get_wtyp()!=monorail_wt  &&  desc->get_wtyp()!=maglev_wt  &&  desc->get_wtyp()!=narrowgauge_wt  ) {
 			weg->count_sign();
 		}
-		if(desc->is_single_way()  ||  desc->is_signal_type()) {
+		if(desc->is_single_way()  ||  (desc->is_signal_type() && !get_two_ways())) {
 			// set mask, if it is a single way ...
 			weg->count_sign();
 			weg->set_ribi_maske(calc_mask());
@@ -194,6 +199,19 @@ DBG_MESSAGE("roadsign_t::set_dir()","ribi %i",dir);
 }
 
 
+void roadsign_t::set_two_ways(bool yesno)
+{
+	ticks_ns = yesno ? 1 : 0;
+	if(  desc->is_signal_type()  &&  !preview  ) {
+		weg_t *weg = welt->lookup(get_pos())->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
+		if(  weg  ) {
+			weg->count_sign();
+			weg->set_ribi_maske(yesno ? (ribi_t::ribi)ribi_t::none : calc_mask());
+		}
+	}
+}
+
+
 void roadsign_t::show_info()
 {
 	if(  desc->is_private_way()  ) {
@@ -226,6 +244,9 @@ void roadsign_t::show_info()
 	}
 	else if(  desc->is_end_choose_signal()  ) {
 		create_win(new end_of_choose_info_t(this), w_info, (ptrdiff_t)this);
+	}
+	else if(  desc->is_choose_sign()  ) {
+		create_win(new onewaysign_info_t(this, koord3d::invalid), w_info, (ptrdiff_t)this);
 	}
 	else {
 		obj_t::show_info();
@@ -502,6 +523,14 @@ void roadsign_t::calc_image()
 
 		}
 	}
+	// swap front/back if the pak requires it
+	if(  !automatic && (desc->get_flags()&roadsign_desc_t::ONLY_BACKIMAGE)==0  ) {
+		if(  welt->get_settings().get_roadsign_reverse_front_back()  ) {
+			std::swap( tmp_image, foreground_image );
+			std::swap( xoff, after_xoffset );
+			std::swap( yoff, after_yoffset );
+		}
+	}
 	// set image and offsets
 	set_image( tmp_image );
 	set_xoff( xoff );
@@ -676,9 +705,20 @@ void roadsign_t::rdwr(loadsave_t *file)
 		dir = ribi_t::backward(dir);
 	}
 	
-	if(file->get_OTRP_version()>=46) {	
-		file->rdwr_byte(choose_sign_flag);
-	} 
+	if(file->get_OTRP_version()>=54) {
+		file->rdwr_short(choose_sign_flag);
+	}
+	else if(file->get_OTRP_version()>=46) {
+		uint8 flag8 = (uint8)choose_sign_flag;
+		file->rdwr_byte(flag8);
+		if(  file->is_loading()  ) {
+			choose_sign_flag = flag8;
+			if(  file->get_OTRP_version()<=52  ) {
+				// stop_before_check was added in v53
+				set_stop_before_check(false);
+			}
+		}
+	}
 	else if(file->get_OTRP_version()>=22) {
 		bool guide_signal = is_guide_signal();
 		file->rdwr_bool(guide_signal);
@@ -723,6 +763,10 @@ void roadsign_t::rdwr(loadsave_t *file)
 		if(  file->is_version_less(110, 7)  &&  desc  &&  desc->is_private_way()  ) {
 			ticks_ns = 0xFD;
 			ticks_ow = 0xFF;
+		}
+		// ticks_ns is repurposed as two_ways flag for signals; old saves may have timing value
+		if(  desc  &&  desc->is_signal_type()  &&  ticks_ns >= 2  ) {
+			ticks_ns = 0;
 		}
 	}
 }

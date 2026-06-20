@@ -289,7 +289,18 @@ const char* is_available(const obj_desc_timelined_t* desc)
 }
 
 
-call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_desc_t* way, bool straight, bool keep_city_roads)
+struct build_way_args_t {
+	bool keep_city_roads;
+	sint8 overtaking_mode;
+	uint8 street_flag;
+	sint8 height_offset;
+	sint8 vehicle_offset;
+
+	build_way_args_t(bool keep_city_roads, sint8 overtaking_mode, uint8 street_flag, sint8 height_offset, sint8 vehicle_offset)
+		: keep_city_roads(keep_city_roads), overtaking_mode(overtaking_mode), street_flag(street_flag), height_offset(height_offset), vehicle_offset(vehicle_offset) {}
+};
+
+call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_desc_t* way, bool straight, build_way_args_t args)
 {
 	if (way == NULL) {
 		return call_tool_work("No way provided");
@@ -297,7 +308,69 @@ call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_des
 	if (const char* err = is_available(way)) {
 		return call_tool_work(err);
 	}
-	return call_tool_work(TOOL_BUILD_WAY | GENERAL_TOOL, way->get_name(), (straight ? 2 : 0) + (keep_city_roads ? 1 : 0), pl, start, end);
+	static cbuffer_t buf;
+	buf.clear();
+	buf.printf("%s,%d,%d,%d,%d", way->get_name(), args.overtaking_mode, args.street_flag, args.height_offset, args.vehicle_offset);
+	return call_tool_work(TOOL_BUILD_WAY | GENERAL_TOOL, buf, (straight ? 2 : 0) + (args.keep_city_roads ? 1 : 0), pl, start, end);
+}
+
+
+SQInteger command_build_way(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const way_desc_t* way = param<const way_desc_t*>::get(vm, 5);
+	bool straight = param<bool>::get(vm, 6);
+
+	bool keep_city_roads = false;
+	sint8 overtaking_mode = 1 /*twoway_mode*/;
+	uint8 street_flag = 0;
+	sint8 height_offset = 0;
+	sint8 vehicle_offset = 0;
+
+	build_way_args_t args(keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset);
+	return param<call_tool_work>::push(vm, build_way(pl, start, end, way, straight, args));
+}
+
+SQInteger command_build_road(HSQUIRRELVM vm)
+{
+	player_t* pl = param<player_t*>::get(vm, 2);
+	koord3d start = param<koord3d>::get(vm, 3);
+	koord3d end = param<koord3d>::get(vm, 4);
+	const way_desc_t* way = param<const way_desc_t*>::get(vm, 5);
+	bool straight = param<bool>::get(vm, 6);
+
+	bool keep_city_roads = false;
+	sint8 overtaking_mode = 1 /*twoway_mode*/;
+	uint8 street_flag = 0;
+	sint8 height_offset = 0;
+	sint8 vehicle_offset = 0;
+
+	if (sq_gettype(vm, 7) == OT_TABLE) {
+		get_slot(vm, "keep_city_roads", keep_city_roads, 7);
+		sint32 mode = 1;
+		if (SQ_SUCCEEDED(get_slot(vm, "overtaking_mode", mode, 7))) {
+			overtaking_mode = (sint8)mode;
+		}
+		sint32 flag = 0;
+		if (SQ_SUCCEEDED(get_slot(vm, "street_flag", flag, 7))) {
+			street_flag = (uint8)flag;
+		}
+		sint32 ho = 0;
+		if (SQ_SUCCEEDED(get_slot(vm, "height_offset", ho, 7))) {
+			height_offset = (sint8)ho;
+		}
+		sint32 vo = 0;
+		if (SQ_SUCCEEDED(get_slot(vm, "vehicle_offset", vo, 7))) {
+			vehicle_offset = (sint8)vo;
+		}
+	}
+	else {
+		keep_city_roads = param<bool>::get(vm, 7);
+	}
+	build_way_args_t args(keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset);
+	return param<call_tool_work>::push(vm, build_way(pl, start, end, way, straight, args));
 }
 
 
@@ -425,6 +498,69 @@ call_tool_work build_sign_at(player_t* pl, koord3d start, const roadsign_desc_t*
 	return call_tool_work(TOOL_BUILD_ROADSIGN | GENERAL_TOOL, sign->get_name(), 0, pl, start);
 }
 
+call_tool_init set_signal_stop_before_check(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,t", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_start_signal(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,p", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_advance_to_end(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,a", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_guide_signal(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,s", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_choose_signal(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,o", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_skip_default_route(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,d", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_length_based(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,l", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_margin_length(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,m", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
+call_tool_init set_signal_two_ways(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,w", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
 call_tool_work change_climate_at(player_t* pl, koord3d start, int climate)
 {
 	if (climate < water_climate || climate >= MAX_CLIMATES) {
@@ -525,7 +661,7 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param way type of way to be built
 	 * @param straight force building of straight ways, similar as building way with control key pressed
 	 */
-	STATIC register_method_fv(vm, build_way, "build_way", freevariable<bool>(false), false, true);
+	STATIC register_function(vm, command_build_way, "build_way", 6 /* exactly 6 parameters */, ".xt|x|yt|x|yt|x|yb", true /* static */);
 	/**
 	 * Build a road.
 	 * @param pl player to pay for the work
@@ -533,9 +669,9 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param end   coordinate, where work ends
 	 * @param way type of way to be built
 	 * @param straight force building of straight ways, similar as building way with control key pressed
-	 * @param keep_city_roads if true city roads will not be replaced
+	 * @param args table of arguments (keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset)
 	 */
-	STATIC register_method(vm, build_way, "build_road", false, true);
+	STATIC register_function(vm, command_build_road, "build_road", 7, ".xt|x|yt|x|yt|x|yb.", true /* static */);
 	/**
 	 * Build a depot.
 	 * @param pl player to pay for the work
@@ -604,6 +740,93 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param sign type of road-sign or signal to be built
 	 */
 	STATIC register_method(vm, build_sign_at, "build_sign_at", false, true);
+	/**
+	 * Set or clear the "stop before check" flag on a rail signal.
+	 * Applicable to simple signals, longblock signals and choose signals.
+	 * @param pl  player who owns the signal
+	 * @param pos position of the signal tile
+	 * @param val 1 to enable, 0 to disable
+	 * @returns null on success, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_stop_before_check, "set_stop_before_check", false, true);
+	/**
+	 * Set or clear the "start signal" flag on a rail signal.
+	 * When set, a convoy in CAN_START or CAN_START_ONE_MONTH state checks
+	 * whether this signal (the next signal ahead) is clear before departing.
+	 * If the signal is RED the convoy stays put; if GREEN it departs normally.
+	 * @param pl  player who owns the signal
+	 * @param pos position of the signal tile
+	 * @param val 1 to enable, 0 to disable
+	 * @returns null on success, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_start_signal, "set_start_signal", false, true);
+	/**
+	 * Sets "advance to end" flag on a choose signal.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_advance_to_end, "set_advance_to_end", false, true);
+	/**
+	 * Sets "require parent convoy to enter" (guide signal) flag on a signal.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_guide_signal, "set_guide_signal", false, true);
+	/**
+	 * Sets "choose signal" flag on a signal.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_choose_signal, "set_choose_signal", false, true);
+	/**
+	 * Sets "skip default route" flag on a choose signal.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_skip_default_route, "set_skip_default_route", false, true);
+	/**
+	 * Sets "length based" flag on a choose signal.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_length_based, "set_length_based", false, true);
+	/**
+	 * Sets "margin length" on a choose signal.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new margin length
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_margin_length, "set_margin_length", false, true);
+	/**
+	 * Set or clear the "allow reverse passage" (two ways) flag of a signal.
+	 * When set (true), trains coming from the reverse direction are allowed to pass the signal.
+	 * When cleared (false), the signal strictly blocks trains from the reverse direction.
+	 * @param pl  player who owns the signal
+	 * @param pos position of the signal tile
+	 * @param val 1 to enable, 0 to disable
+	 * @returns null on success, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_two_ways, "set_two_ways", false, true);
 	/**
 	 * Build way-object.
 	 * @param pl player to pay for the work

@@ -21,6 +21,8 @@
 #include "components/action_listener.h"
 #include "components/gui_scrollpane.h"
 #include "components/gui_speedbar.h"
+#include "components/gui_scrolled_list.h"
+#include "components/gui_container.h"
 #include "../simtypes.h"
 #include "../utils/cbuffer_t.h"
 #include "../linehandle_t.h"
@@ -28,6 +30,7 @@
 
 class depot_t;
 class vehicle_desc_t;
+class gui_template_panel_t;
 
 
 /*
@@ -108,6 +111,7 @@ private:
 	button_t bt_reverse;
 	button_t bt_uncouple;
 	button_t bt_remove_all_vehicles;
+	button_t bt_allow_invalid_convoy;
 	const char* no_child_text;
 	gui_label_t lb_child_convoy;
 	// coupling convoy selector
@@ -117,9 +121,14 @@ private:
 	// When this flag is true, the currently shown convoy is someone's child convoy.
 	// if this flag is true, this convoy cannot depart alone.
 	bool is_shown_convoy_coupled;
+	// When this flag is true, this convoy will be teleported to another depot set in schedule.
+	bool is_teleport_to_another_depot;
+	// cached value of (active_player == depot_owner) from the previous draw() call; used to detect player switches
+	bool last_action_allowed;
 
 	button_t bt_obsolete;
 	button_t bt_show_all;
+	button_t bt_show_tram; // toggle: show tram vehicle tabs (pressed) or track vehicle tabs (not pressed)
 	button_t bt_sell_all;
 
 	gui_label_t lb_sort_by;
@@ -172,6 +181,26 @@ private:
 	gui_scrollpane_t scrolly_loks;
 	gui_scrollpane_t scrolly_waggons;
 
+	/// Secondary-waytype (tram) vehicle lists shown in track depot
+	vector_tpl<gui_image_list_t::image_data_t*> tram_pas_vec;
+	vector_tpl<gui_image_list_t::image_data_t*> tram_electrics_vec;
+	vector_tpl<gui_image_list_t::image_data_t*> tram_loks_vec;
+	vector_tpl<gui_image_list_t::image_data_t*> tram_waggons_vec;
+
+	gui_image_list_t tram_pas;
+	gui_image_list_t tram_electrics;
+	gui_image_list_t tram_loks;
+	gui_image_list_t tram_waggons;
+	gui_scrollpane_t scrolly_tram_pas;
+	gui_scrollpane_t scrolly_tram_electrics;
+	gui_scrollpane_t scrolly_tram_loks;
+	gui_scrollpane_t scrolly_tram_waggons;
+
+	/// Convoy template tab
+	gui_template_panel_t *template_panel;
+	gui_scrollpane_t scrolly_template;
+	gui_container_t cont_template_tab;
+
 	/// contains the current translation of "<no schedule set>"
 	const char* no_schedule_text;
 	/// contains the current translation of "<clear schedule>"
@@ -219,6 +248,7 @@ private:
 	 */
 	typedef ptrhashtable_tpl<vehicle_desc_t const*, gui_image_list_t::image_data_t*> vehicle_image_map;
 	vehicle_image_map vehicle_map;
+	vehicle_image_map tram_vehicle_map;  ///< same for secondary-waytype (tram) vehicles
 
 	/**
 	 * Draw the info text for the vehicle the mouse is over - if any.
@@ -240,8 +270,8 @@ private:
 	/// true if already stored here
 	bool is_in_vehicle_list(const vehicle_desc_t *info);
 
-	/// add a single vehicle (helper function)
-	void add_to_vehicle_list(const vehicle_desc_t *info);
+	/// add a single vehicle (helper function). is_secondary=true routes to tram tabs.
+	void add_to_vehicle_list(const vehicle_desc_t *info, bool is_secondary = false);
 
 	/// for convoi image
 	void image_from_convoi_list(uint nr, bool to_end);

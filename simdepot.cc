@@ -141,7 +141,7 @@ void depot_t::call_depot_tool( char tool, convoihandle_t cnv, const char *extra)
 	// call depot tool
 	tool_t *tmp_tool = create_tool( TOOL_CHANGE_DEPOT | SIMPLE_TOOL );
 	cbuffer_t buf;
-	buf.printf( "%c,%s,%hu", tool, get_pos().get_str(), cnv.get_id() );
+	buf.printf( "%c,%s,%u", tool, get_pos().get_str(), cnv.get_id() );
 	if(  extra  ) {
 		buf.append( "," );
 		buf.append( extra );
@@ -493,12 +493,49 @@ bool depot_t::start_convoi(convoihandle_t cnv, bool local_execution)
 	// When coupled, the convoy is not allowed to depart alone!
 	convoihandle_t p_c = find_parent_convoy_in_depot(cnv);
 	if( p_c.is_bound() ) {
-		static cbuffer_t buf;
-		buf.clear();
-		buf.printf( translator::translate("Vehicle %s is coupled convoy, so it cannot depart alone!"), cnv->get_name() );
-		create_win( new news_img(buf), w_time_delete, magic_none);
+		if (local_execution) {
+			static cbuffer_t buf;
+			buf.clear();
+			buf.printf( translator::translate("Vehicle %s is coupled convoy, so it cannot depart alone!"), cnv->get_name() );
+			create_win( new news_img(buf), w_time_delete, magic_none);
+		}
 		return false;
 	}
+	if (!cnv->get_schedule()) {
+		dbg->warning("depot_t::start_convoi()","No schedule for convoi.");
+		if (local_execution) {
+			create_win( new news_img("Noch kein Fahrzeug\nmit Fahrplan\nvorhanden\n"), w_time_delete, magic_none);
+		}
+		return false;
+	}
+	// If this convoy has only 1 stop:another depot, teleport to there.
+	if(  cnv->get_schedule()->get_count()==1  ) {
+		if(grund_t *gr_depot = welt->lookup(cnv->get_schedule()->at(0).pos)) {
+			depot_t *dep = gr_depot->get_depot();
+			if(  dep && dep->get_owner()==get_owner() && dep->can_accept_waytype(cnv->front()->get_desc()->get_waytype())  ) {
+				// find depot! move to there
+				convoihandle_t c = cnv;
+				while( c.is_bound() ){
+					remove_convoi(c);
+					c->betrete_depot(dep, true);
+					c=c->get_coupling_convoi();
+				}
+				return true;
+			}
+		}
+	}
+	// check invalid convoy
+	convoihandle_t c = cnv;
+	while (c.is_bound())
+	{
+		if(  c->pruefe_alle()  ) {
+			// if the coupoling condition is good, this is valid convoy.
+			// we set invalid_convoy only fron depot_frame_t
+			c->set_invalid_convoy(false);
+		}
+		c = c->get_coupling_convoi();
+	}
+
 	// Check the start condition
 	if(  !can_start_convoi(cnv, local_execution)  ) {
 		return false;
@@ -564,7 +601,7 @@ bool depot_t::can_start_convoi(convoihandle_t cnv, bool local_execution)
 		}
 
 		// check if convoi is complete
-		if( front_cnv->get_total_sum_power() == 0 || !cnv->pruefe_alle()) {
+		if( front_cnv->get_total_sum_power() == 0 || ( !cnv->pruefe_alle() && !cnv->is_invalid_convoy() ) ) {
 			if (local_execution) {
 				create_win( new news_img("Diese Zusammenstellung kann nicht fahren!\n"), w_time_delete, magic_none);
 			}
@@ -598,10 +635,12 @@ bool depot_t::can_start_convoi(convoihandle_t cnv, bool local_execution)
 				const schedule_entry_t c = child_cnv->get_schedule()->get_current_entry();
 				if(  t.pos!=c.pos  ) {
 					// the next stop is different!->false
-					static cbuffer_t buf;
-					buf.clear();
-					buf.printf( translator::translate("Vehicle %s will couple with vehicle %s, but the next stop positions are different!"), cnv->get_name(), child_cnv->get_name() );
-					create_win( new news_img(buf), w_time_delete, magic_none);
+					if (local_execution) {
+						static cbuffer_t buf;
+						buf.clear();
+						buf.printf( translator::translate("Vehicle %s will couple with vehicle %s, but the next stop positions are different!"), cnv->get_name(), child_cnv->get_name() );
+						create_win( new news_img(buf), w_time_delete, magic_none);
+					}
 					return false;
 				}
 				// check child convoy can depot?

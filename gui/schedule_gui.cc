@@ -39,8 +39,6 @@
 #include "minimap.h"
 
 static karte_ptr_t welt;
-#define UP_FLAG (0x4000)
-#define DOWN_FLAG (0x2000)
 
 /**
  * One entry in the list of schedule entries.
@@ -53,29 +51,18 @@ class gui_schedule_entry_t : public gui_aligned_container_t, public gui_action_c
 	player_t* player;
 	waytype_t waytype;
 	gui_image_t arrow;
-	gui_image_t up_arrow;
-	gui_image_t down_arrow;
 	gui_label_buf_t stop;
-	bool is_allow_up;// allow up? (not 0 nor last (when next line is bound))
-	bool is_allow_down;// allow down? (not last nor last-1 (when next line is bound))
 
 public:
-	gui_schedule_entry_t(player_t* pl, schedule_entry_t e, uint n, waytype_t const wt, const bool can_up, const bool can_down)
+	gui_schedule_entry_t(player_t* pl, schedule_entry_t e, uint n, waytype_t const wt)
 	{
 		player = pl;
 		entry  = e;
 		number = n;
 		waytype = wt;
 		is_current = false;
-		is_allow_up = can_up;
-		is_allow_down = can_down;
-		set_table_layout(4,1);
+		set_table_layout(2,1);
 
-		// up & down arrow
-		add_component(&up_arrow);
-		up_arrow.set_image(gui_theme_t::arrow_button_up_img[0], true);
-		add_component(&down_arrow);
-		down_arrow.set_image(gui_theme_t::arrow_button_down_img[0], true);
 		// jump to this stop
 		add_component(&arrow);
 		arrow.set_image(gui_theme_t::pos_button_img[0], true);
@@ -90,8 +77,6 @@ public:
 		schedule_t::gimme_stop_name(stop.buf(), welt, player, entry, -1, waytype);
 		stop.set_color(is_current ? SYSCOL_TEXT_HIGHLIGHT : SYSCOL_TEXT);
 		stop.update();
-		up_arrow.set_image(gui_theme_t::arrow_button_up_img[(player==welt->get_active_player()&&is_allow_up)?0:2], true);
-		down_arrow.set_image(gui_theme_t::arrow_button_down_img[(player==welt->get_active_player()&&is_allow_down)?0:2], true);
 	}
 
 	void draw(scr_coord offset) OVERRIDE
@@ -121,20 +106,6 @@ public:
 			else if(  player!=welt->get_active_player()  ) {
 				// avoid change by other player
 				call_listeners(number);
-			}
-			else if(  ev->mx < down_arrow.get_pos().x  ) {
-				// up arrow, actioon triggered
-				if(  is_allow_up  ) {
-					call_listeners( UP_FLAG | number );
-					return false;
-				}
-			}
-			else if(  ev->mx < arrow.get_pos().x  ) {
-				// down arrow, actioon triggered
-				if(  is_allow_down  ) {
-					call_listeners( DOWN_FLAG | number );
-					return false;
-				}
 			}
 			else {
 				call_listeners(number);
@@ -237,9 +208,7 @@ void schedule_gui_stats_t::update_schedule()
 		}
 		else {
 			for(uint8 i=0; i<schedule->get_count(); i++) {
-				const bool is_allow_up = (i!=0 && (!schedule->get_next_line().is_bound()||i!=schedule->get_count()-1));
-				const bool is_allow_down = (i!=schedule->get_count()-1 && (!schedule->get_next_line().is_bound()||i!=schedule->get_count()-2));
-				entries.append( new_component<gui_schedule_entry_t>(player, schedule->at(i), i, schedule->get_waytype(), is_allow_up, is_allow_down) );
+				entries.append( new_component<gui_schedule_entry_t>(player, schedule->at(i), i, schedule->get_waytype()) );
 				entries.back()->add_listener( this );
 			}
 			entries[ schedule->get_current_stop() ]->set_active(true);
@@ -265,21 +234,7 @@ void schedule_gui_stats_t::draw(scr_coord offset)
 bool schedule_gui_stats_t::action_triggered(gui_action_creator_t *, value_t v)
 {
 	// has to be one of the entries
-	if( v.i & UP_FLAG ) {
-		dbg->message("schedule_gui_stats_t::action_triggered()","up button pressed!");
-		uint8 up_stop = v.i & 0x00FF;
-		schedule->move_entry_backward(  up_stop  );
-		call_listeners( schedule->get_current_stop() );
-	}
-	else if( v.i & DOWN_FLAG ) {
-		dbg->message("schedule_gui_stats_t::action_triggered()","down button pressed!");
-		uint8 down_stop = v.i & 0x00FF;
-		schedule->move_entry_forward( down_stop );
-		call_listeners( schedule->get_current_stop() );
-	}
-	else {
-		call_listeners(v);
-	}
+	call_listeners(v);
 	return true;
 }
 
@@ -288,7 +243,7 @@ cbuffer_t schedule_gui_stats_t::buf;
 
 schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoihandle_t cnv_, const char* cnv_line_name) :
 	gui_frame_t( translator::translate("Fahrplan"), NULL),
-	line_selector(line_scrollitem_t::compare),
+	line_selector(line_color_line_scroll_item_t::compare),
 	next_line_selector(non_color_line_scroll_item_t::compare),
 	departure_slot_group_selector(company_color_line_scroll_item_t::compare),
 	lb_waitlevel(SYSCOL_TEXT_HIGHLIGHT, gui_label_t::right),
@@ -352,14 +307,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 	set_table_layout(1,0);
 
-	add_table(1,1);
-	if(  cnv.is_bound()  ) {
-		snprintf(lb_cnv_line_name_str,255,cnv->get_name());
-	} else {
-		snprintf(lb_cnv_line_name_str,255,cnv_line_name);
+	add_table(3,1);
+	{
+		if(  cnv.is_bound()  ) {
+			snprintf(lb_cnv_line_name_str,255,cnv->get_name());
+		} else {
+			snprintf(lb_cnv_line_name_str,255,cnv_line_name);
+		}
+		lb_cnv_line_name.set_text(lb_cnv_line_name_str);
+		add_component(&lb_cnv_line_name);
+		new_component<gui_fill_t>();
+		bt_revert.init(button_t::roundbox, "Revert schedule");
+		bt_revert.set_tooltip("Revert to original schedule");
+		bt_revert.add_listener(this);
+		add_component(&bt_revert);
 	}
-	lb_cnv_line_name.set_text(lb_cnv_line_name_str);
-	add_component(&lb_cnv_line_name);
 	end_table();
 
 
@@ -467,9 +429,16 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 		bt_reverse_default.init(button_t::square_state, "Reverse by Default");
 		bt_reverse_default.set_tooltip(translator::translate("When the next destination is in the opposite direction, it will automatically reverse."));
+		bt_reverse_default.pressed = schedule->is_reverse_default();
 		bt_reverse_default.add_listener(this);
 		add_component(&bt_reverse_default);
 		add_component(&sp_schedule_reverse_settings);
+
+		bt_no_use_electric.init(button_t::square_state, "Not use electricity");
+		bt_no_use_electric.set_tooltip(translator::translate("Not use electricity in this schedule"));
+		bt_no_use_electric.add_listener(this);
+		add_component(&bt_no_use_electric);
+		add_component(&sp_coupling_settings);
 	}
 	end_table();
 
@@ -780,11 +749,6 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 	add_table(6,1);
 	{
-		bt_revert.init(button_t::roundbox, "Revert schedule");
-		bt_revert.set_tooltip("Revert to original schedule");
-		bt_revert.add_listener(this);
-		add_component(&bt_revert);
-
 		// return tickets
 		if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
 			//  hide the return ticket on rail stuff, where it causes much trouble
@@ -796,6 +760,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		else {
 			new_component<gui_fill_t>();
 		}
+		new_component<gui_fill_t>();
 
 		bt_up.init(button_t::arrowup, "up");
 		bt_up.set_tooltip("up this entry");
@@ -1185,7 +1150,7 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_reset_coupling) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).reset_coupling();
-			schedule->at(schedule->get_current_stop()).set_uncouple_child(true);
+			schedule->at(schedule->get_current_stop()).set_uncouple_child(false);
 			update_selection();
 		}
 	}
@@ -1302,8 +1267,8 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		tool_t *tool = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 		cbuffer_t buf;
 		buf.printf( "c,0,%i,%ld,", (int)schedule->get_type(), (long)(intptr_t)old_schedule );
-		// A line needs a unique departure_slot_group_id.
-		schedule->set_departure_slot_group_id(schedule_t::issue_new_departure_slot_group_id());
+		// departure_slot_group_id will be set to the new line's own handle in TOOL_CHANGE_LINE 'c' handler
+		schedule->set_departure_slot_group_id(linehandle_t());
 		schedule->sprintf_schedule( buf );
 		tool->set_default_param(buf);
 		welt->set_tool( tool, player );
@@ -1362,6 +1327,10 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_tmp_schedule) {
 		schedule->set_temporary(!bt_tmp_schedule.pressed);
 		bt_tmp_schedule.pressed = schedule->is_temporary();
+	}
+	else if(comp == &bt_no_use_electric) {
+		schedule->set_no_use_electric(!bt_no_use_electric.pressed);
+		bt_no_use_electric.pressed = schedule->is_no_use_electric();
 	}
 	else if(comp == &bt_reverse_default) {
 		schedule->set_reverse_default(!bt_reverse_default.pressed);
@@ -1520,17 +1489,19 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(  comp == &name_filter_input  ) {
 		if(  strcmp(old_schedule_filter,schedule_filter)  ) {
 			init_line_selector();
+			init_next_line_selector();
+			init_departure_slot_group_selector();
 			strcpy(old_schedule_filter,schedule_filter);
 		}
 	}
 	else if(comp == &departure_slot_group_selector) {
 		uint32 selection = p.i;
 		if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(departure_slot_group_selector.get_element(selection))  ) {
-			const sint64 id = li->get_line()->get_schedule()->get_departure_slot_group_id();
-			schedule->set_departure_slot_group_id(id);
+			schedule->set_departure_slot_group_id(li->get_line()->get_schedule()->get_departure_slot_group_id());
 		}
 		else {
-			schedule->set_new_departure_slot_group_id();
+			// "<new departure slot group>": revert to own line's handle
+			schedule->set_departure_slot_group_id(old_line);
 		}
 	}
 	// recheck lines
@@ -1566,8 +1537,13 @@ void schedule_gui_t::init_line_selector()
 	line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
 
 	FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
-		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ) {
-			line_selector.new_component<line_scrollitem_t>(line);
+		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  (new_line.is_bound() && new_line==line)  ) {
+			if(  env_t::show_line_colors  ) {
+				line_selector.new_component<line_color_line_scroll_item_t>(line);
+			}
+			else {
+				line_selector.new_component<line_scrollitem_t>(line);
+			}
 		}
 		if(  !new_line.is_bound()  ) {
 			if(  schedule->matches( welt, line->get_schedule() )  ) {
@@ -1643,12 +1619,30 @@ void schedule_gui_t::init_departure_slot_group_selector()
 		}
 		vector_tpl<linehandle_t> lines;
 		player->simlinemgmt.get_lines(schedule->get_type(), &lines);
+		if(schedule->get_type()==schedule_t::train_schedule) {
+			vector_tpl<linehandle_t> tram_lines;
+			player->simlinemgmt.get_lines(schedule_t::tram_schedule, &tram_lines);
+			FOR(  vector_tpl<linehandle_t>, tram_line, tram_lines  ) {
+				lines.append(tram_line);
+			}
+		}
+		if(schedule->get_type()==schedule_t::tram_schedule) {
+			vector_tpl<linehandle_t> track_lines;
+			player->simlinemgmt.get_lines(schedule_t::train_schedule, &track_lines);
+			FOR(  vector_tpl<linehandle_t>, track_line, track_lines  ) {
+				lines.append(track_line);
+			}
+		}
 		FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
-			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)) {
-				if(  schedule->matches(world(), line->get_schedule())  ) {
+			// only show leader lines (lines that are their own departure slot group)
+			if(  line->get_schedule()->get_departure_slot_group_id() != line  ) {
+				continue;
+			}
+			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  schedule->get_departure_slot_group_id() == line) {
+				if(  player == this->player &&  schedule->matches(world(), line->get_schedule())  ) {
 					this_schedule_index = departure_slot_group_selector.count_elements();
 				}
-				else if(  line->get_schedule()->get_departure_slot_group_id()==schedule->get_departure_slot_group_id()  &&  selection==0  ) {
+				if(  line->get_schedule()->get_departure_slot_group_id()==schedule->get_departure_slot_group_id()  &&  selection==0  ) {
 					selection = departure_slot_group_selector.count_elements();
 				}
 				departure_slot_group_selector.new_component<company_color_line_scroll_item_t>(line);
@@ -1765,6 +1759,9 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
 	bt_reverse_default.set_visible(show_reverse_settings&&yesno);
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	bt_no_use_electric.set_visible(coupling_waytype&&yesno);
+	sp_coupling_settings.set_visible(coupling_waytype&&yesno);	
 }
 void schedule_gui_t::extract_loading_settings(bool yesno) {
 	bt_extract_loading_settings.set_typ(yesno? button_t::arrowup: button_t::arrowdown);

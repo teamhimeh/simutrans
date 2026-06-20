@@ -124,6 +124,7 @@ private:
 	schedule_t* current_schedule;
 	uint8 last_schedule_counter;
 	vector_tpl<halthandle_t> stop_cache;
+	linehandle_t displayed_line;
 
 	/// adds a schedule to cache
 	void add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints );
@@ -182,6 +183,8 @@ private:
 	vector_tpl<halthandle_t> route_search_highlighted_halts;
 	vector_tpl<halthandle_t> route_search_transfer_halts;
 	halthandle_t route_search_from_halt, route_search_dest_halt;
+
+	vector_tpl<koord> highlighted_depot_positions;
 
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
@@ -255,6 +258,7 @@ public:
 
 	void set_selected_cnv( convoihandle_t c, bool const clear_cache = true );
 	void set_selected_route(schedule_t* schedule, player_t* owner, bool is_highlighted = true, bool const clear_cache = true);
+	void set_displayed_line(linehandle_t l) { displayed_line = l; }
 
 	void set_selected_city( const stadt_t* _city );
 
@@ -289,6 +293,12 @@ public:
 
 	void add_route_halt(halthandle_t halt) { route_search_highlighted_halts.append_unique(halt); }
 	void add_transfer_halt(halthandle_t halt) { route_search_transfer_halts.append_unique(halt); }
+
+	void set_highlighted_depots(const vector_tpl<koord> &positions) {
+		highlighted_depot_positions.clear();
+		for (koord const& k : positions) { highlighted_depot_positions.append(k); }
+	}
+	void clear_highlighted_depots() { highlighted_depot_positions.clear(); }
 	void set_from_dest_halt(halthandle_t from_halt, halthandle_t dest_halt) {
 		if (  from_halt.is_bound() && dest_halt.is_bound()  ) {
 			route_search_from_halt = from_halt;

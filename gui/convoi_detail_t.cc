@@ -15,10 +15,14 @@
 #include "../simcolor.h"
 #include "../simworld.h"
 #include "../simware.h"
+#include "simwin.h"
+#include "depot_picker.h"
 
 #include "../dataobj/translator.h"
 #include "../dataobj/loadsave.h"
 #include "../dataobj/environment.h"
+
+#include "../sys/simsys.h"
 
 #include "../player/simplay.h"
 
@@ -75,7 +79,7 @@ public:
 			// power
 			if(v->get_desc()->get_power()>0) {
 				l = new_component<gui_label_buf_t>();
-				l->buf().printf("%s %i kW, %s %.2f", translator::translate("Power:"), (v->get_desc()->get_engine_type()==vehicle_desc_t::electric&&!v->get_convoi()->get_use_electric())?0:v->get_desc()->get_power(), translator::translate("Gear:"), v->get_desc()->get_gear()/64.0 );
+				l->buf().printf("%s %i kW, %s %.2f", translator::translate("Power:"), ((v->get_desc()->get_engine_type()==vehicle_desc_t::electric&&!v->get_convoi()->get_use_electric())||v->get_convoi()->is_invalid_convoy())?0:v->get_desc()->get_power(), translator::translate("Gear:"), v->get_desc()->get_gear()/64.0 );
 				l->update();
 			}
 			// friction
@@ -162,10 +166,15 @@ void convoi_detail_t::init(convoihandle_t cnv)
 
 		new_component<gui_fill_t>();
 
-		add_table(3,1)->set_force_equal_columns(true);
+		add_table(4,1)->set_force_equal_columns(true);
 		{
+			suspension_button.init(button_t::roundbox| button_t::flexible, "Suspension");
+			suspension_button.set_tooltip(translator::translate("Suspend this convoy"));
+			suspension_button.add_listener(this);
+			add_component(&suspension_button);
+
 			move_to_depot_button.init(button_t::roundbox| button_t::flexible, "Teleport to Depot");
-			move_to_depot_button.set_tooltip("Remove vehicle from here and send to the nearest depot.");
+			move_to_depot_button.set_tooltip(translator::translate("Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)"));
 			move_to_depot_button.add_listener(this);
 			add_component(&move_to_depot_button);
 
@@ -234,7 +243,7 @@ void convoi_detail_t::init(convoihandle_t cnv)
 			new_component<gui_fill_t>();
 
 			copy_convoi_button.init(button_t::roundbox| button_t::flexible, "Copy Convoi");
-			copy_convoi_button.set_tooltip("Copy this convoi");
+			copy_convoi_button.set_tooltip(translator::translate("Copy this convoi (ctrl pressed: copy vehicle list as template format to clipboard)"));
 			copy_convoi_button.add_listener(this);
 			add_component(&copy_convoi_button);
 		}
@@ -351,12 +360,12 @@ void convoi_detail_t::draw(scr_coord offset)
 	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()  ;
 	sale_button.enable(selling_allowed && !cnv->get_coupling_convoi().is_bound());
 	withdraw_button.enable(selling_allowed  &&  !cnv->get_coupling_convoi().is_bound()  &&  !cnv->is_coupled());
-	bool show_move_to_depot_button = selling_allowed  &&  !cnv->is_coupled();
-	if(  show_move_to_depot_button  &&  cnv->get_coupling_convoi().is_bound()  ) {
+	bool show_move_to_depot_button = selling_allowed;
+	if(  show_move_to_depot_button  &&  cnv->get_most_parent_convoi()->get_coupling_convoi().is_bound()  ) {
 		// Check if all child convoys can be sent to the same depot.
-		convoihandle_t c = cnv;
+		convoihandle_t c = cnv->get_most_parent_convoi();
 		while( c.is_bound() ) {
-			if(  (cnv->get_owner() != c->get_owner())  ||  (cnv->front()->get_desc()->get_waytype() != c->front()->get_desc()->get_waytype())  ) {
+			if(  (cnv->get_owner() != c->get_owner())  ||  (cnv->front()->get_waytype() != c->front()->get_waytype())  ) {
 				show_move_to_depot_button = false;
 			}
 			c = c->get_coupling_convoi();
@@ -382,6 +391,12 @@ void convoi_detail_t::draw(scr_coord offset)
 		max_balance_speed_kmh_of_convoi_numberinput.disable();
 	}
 	max_balance_speed_kmh_of_convoi_button.enable(is_owner);
+	if (is_owner&&!cnv->is_coupled()) {
+		suspension_button.enable(cnv->get_state()!=convoi_t::EDIT_SCHEDULE);
+	} else {
+		suspension_button.disable();
+	}
+	suspension_button.pressed = cnv->is_suspended();
 
 	update_labels();
 
@@ -404,7 +419,12 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			return true;
 		}
 		else if(comp==&move_to_depot_button) {
-			cnv->call_convoi_tool( 'y', NULL );
+			if(  event_get_last_control_shift() & 2  ) {
+				// Ctrl+click: open depot picker to choose destination
+				create_win(new depot_picker_t(cnv, true), w_info, magic_depot_picker);
+			} else {
+				cnv->call_convoi_tool( 'y', NULL );
+			}
 			return true;
 		}
 		else if(comp==&withdraw_button) {
@@ -412,7 +432,19 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			return true;
 		}
 		else if(comp==&copy_convoi_button) {
-			welt->set_copy_convoi(cnv);
+			if(  event_get_last_control_shift() == 2  ) {
+				// Ctrl+click: copy vehicle list as convoy template format to system clipboard
+				welt->set_copy_convoi(cnv);
+				cbuffer_t buf;
+				for(  uint16 i = 0;  i < cnv->get_vehicle_count();  i++  ) {
+					buf.printf("vehicle[%u]=%s\n", i, cnv->get_vehikel(i)->get_desc()->get_name());
+				}
+				if(  buf.len() > 0  ) {
+					dr_copy(buf, buf.len());
+				}
+			} else {
+				welt->set_copy_convoi(cnv);
+			}
 			return true;
 		}
 		else if(comp==&trade_convoi_button) {
@@ -439,6 +471,12 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			cbuffer_t buf;
 			buf.printf( "%d", (uint16)max_balance_speed_kmh_of_convoi_numberinput.get_value() );
 			cnv->call_convoi_tool( 'b', buf );
+			return true;
+		}
+		else if(comp==&suspension_button) {
+			cbuffer_t buf;
+			buf.printf( "%d", !cnv->is_suspended() );
+			cnv->call_convoi_tool( 'u', buf );
 			return true;
 		}
 	}

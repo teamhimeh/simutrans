@@ -1883,13 +1883,16 @@ void minimap_t::draw(scr_coord pos)
 
 	if(  mode & MAP_DEPOT  ) {
 		FOR(  slist_tpl<depot_t*>,  const d,  depot_t::get_depot_list()  ) {
-			if(  d->get_owner() == world->get_active_player()  ) {
-				scr_coord depot_pos = map_to_screen_coord( d->get_pos().get_2d() );
-				depot_pos = depot_pos + pos;
-				// offset of one to avoid
-				static uint8 depot_typ_to_color[19]={ COL_ORANGE, COL_YELLOW, COL_RED, 0, 0, 0, 0, 0, 0, COL_PURPLE, COL_DARK_RED, COL_DARK_ORANGE, 0, 0, 0, 0, 0, 0, COL_LIGHT_RED };
-				display_filled_circle_rgb( depot_pos.x, depot_pos.y, 4, color_idx_to_rgb(depot_typ_to_color[d->get_typ() - obj_t::bahndepot]) );
-				display_circle_rgb( depot_pos.x, depot_pos.y, 4, color_idx_to_rgb(COL_BLACK) );
+			scr_coord depot_pos = map_to_screen_coord( d->get_pos().get_2d() );
+			depot_pos = depot_pos + pos;
+			// offset of one to avoid
+			const bool has_filter = !highlighted_depot_positions.empty();
+			const bool highlighted = !has_filter || highlighted_depot_positions.is_contained(d->get_pos().get_2d());
+			const sint16 r = highlighted ? 4 : 2;
+			display_filled_circle_rgb( depot_pos.x, depot_pos.y, r, color_idx_to_rgb(d->get_owner()->get_player_color1()+4) );
+			display_circle_rgb( depot_pos.x, depot_pos.y, r, color_idx_to_rgb(COL_BLACK) );
+			if(  highlighted && has_filter  ) {
+				display_circle_rgb( depot_pos.x, depot_pos.y, r + 3, color_idx_to_rgb(COL_WHITE) );
 			}
 		}
 	}
@@ -1960,6 +1963,63 @@ void minimap_t::draw(scr_coord pos)
 
 	}
 
+	// draw convoy positions for the displayed line
+	if(  displayed_line.is_bound()  ) {
+		const skin_desc_t *waytype_icon = NULL;
+		switch(  displayed_line->get_schedule()->get_waytype()  ) {
+			case track_wt:        waytype_icon = skinverwaltung_t::zughaltsymbol;          break;
+			case water_wt:        waytype_icon = skinverwaltung_t::schiffshaltsymbol;      break;
+			case road_wt:         waytype_icon = skinverwaltung_t::autohaltsymbol;         break;
+			case air_wt:          waytype_icon = skinverwaltung_t::airhaltsymbol;          break;
+			case monorail_wt:     waytype_icon = skinverwaltung_t::monorailhaltsymbol;     break;
+			case tram_wt:         waytype_icon = skinverwaltung_t::tramhaltsymbol;         break;
+			case maglev_wt:       waytype_icon = skinverwaltung_t::maglevhaltsymbol;       break;
+			case narrowgauge_wt:  waytype_icon = skinverwaltung_t::narrowgaugehaltsymbol;  break;
+			default:              waytype_icon = skinverwaltung_t::autohaltsymbol;         break;
+		}
+
+		image_id icon_img = (waytype_icon ? waytype_icon->get_image_id(0) : IMG_EMPTY);
+		scr_coord_val icon_xoff = 0, icon_yoff = 0, icon_xw = 12, icon_yw = 12;
+		if(  icon_img != IMG_EMPTY  ) {
+			display_get_image_offset(icon_img, &icon_xoff, &icon_yoff, &icon_xw, &icon_yw);
+		}
+
+		scr_coord hover_scr = map_to_screen_coord(last_world_pos);
+		convoihandle_t hover_cnv;
+		for(  uint32 i = 0;  i < displayed_line->count_convoys();  i++  ) {
+			convoihandle_t cnv = displayed_line->get_convoy(i);
+			if(  !cnv.is_bound()  ) continue;
+			koord cnv_pos = cnv->get_pos().get_2d();
+			if(  !world->is_within_limits(cnv_pos)  ) continue;
+
+			scr_coord cnv_scr = map_to_screen_coord(cnv_pos);
+			scr_coord draw_pos = cnv_scr + pos;
+
+			if(  icon_img != IMG_EMPTY  ) {
+				// center icon: display_color_img adds icon_xoff internally, so we subtract it back
+				display_color_img(icon_img, draw_pos.x - icon_xoff - icon_xw/2, draw_pos.y - icon_yoff - icon_yw/2, cnv->get_owner()->get_player_nr(), false, false);
+			}
+			else {
+				display_fillbox_wh_clip_rgb(draw_pos.x - 3, draw_pos.y - 3, 7, 7, color_idx_to_rgb(COL_BLACK), true);
+				display_fillbox_wh_clip_rgb(draw_pos.x - 2, draw_pos.y - 2, 5, 5, color_idx_to_rgb(cnv->get_owner()->get_player_color1() + 3), true);
+			}
+
+			if(  abs(cnv_scr.x - hover_scr.x) <= 8  &&  abs(cnv_scr.y - hover_scr.y) <= 8  ) {
+				hover_cnv = cnv;
+			}
+		}
+
+		if(  hover_cnv.is_bound()  ) {
+			scr_coord cnv_map_pos = map_to_screen_coord(hover_cnv->get_pos().get_2d());
+			const char *name = hover_cnv->get_name();
+			int name_width = proportional_string_width(name) + (LINESPACE / 2);
+			scr_coord boxpos = cnv_map_pos + scr_coord(10, 0);
+			boxpos.x = clamp(boxpos.x, 0, get_size().w - name_width);
+			boxpos += pos;
+			display_ddd_proportional_clip(boxpos.x, boxpos.y, color_idx_to_rgb(COL_GREY4), color_idx_to_rgb(COL_WHITE), name, true);
+		}
+	}
+
 	// if we do not do this here, vehicles would erase the town names
 	// ADD: if CRTL key is pressed, temporary show the name
 	if(  mode & MAP_TOWN  ) {
@@ -1972,6 +2032,40 @@ void minimap_t::draw(scr_coord pos)
 			scr_coord p = map_to_screen_coord( stadt->get_pos() );
 			p += pos;
 			display_proportional_clip_rgb( p.x, p.y, name, ALIGN_LEFT, col, true );
+		}
+	}
+
+	// draw depot names on top so they are not erased by vehicles
+	if(  mode & MAP_DEPOT  ) {
+		const bool has_filter = !highlighted_depot_positions.empty();
+		FOR(  slist_tpl<depot_t*>,  const d,  depot_t::get_depot_list()  ) {
+			if(  has_filter && !highlighted_depot_positions.is_contained(d->get_pos().get_2d())  ) {
+				continue;
+			}
+			scr_coord p = map_to_screen_coord( d->get_pos().get_2d() );
+			p += pos;
+
+			// resolve waytype icon
+			const skin_desc_t *wt_skin = NULL;
+			switch(  d->get_waytype()  ) {
+				case track_wt:        wt_skin = skinverwaltung_t::zughaltsymbol;          break;
+				case water_wt:        wt_skin = skinverwaltung_t::schiffshaltsymbol;      break;
+				case road_wt:         wt_skin = skinverwaltung_t::autohaltsymbol;         break;
+				case air_wt:          wt_skin = skinverwaltung_t::airhaltsymbol;          break;
+				case monorail_wt:     wt_skin = skinverwaltung_t::monorailhaltsymbol;     break;
+				case tram_wt:         wt_skin = skinverwaltung_t::tramhaltsymbol;         break;
+				case maglev_wt:       wt_skin = skinverwaltung_t::maglevhaltsymbol;       break;
+				case narrowgauge_wt:  wt_skin = skinverwaltung_t::narrowgaugehaltsymbol;  break;
+				default: break;
+			}
+			const image_id icon_img = (wt_skin ? wt_skin->get_image_id(0) : IMG_EMPTY);
+			scr_coord_val icon_xoff = 0, icon_yoff = 0, icon_xw = 12, icon_yw = 12;
+			if(  icon_img != IMG_EMPTY  ) {
+				display_get_image_offset(icon_img, &icon_xoff, &icon_yoff, &icon_xw, &icon_yw);
+				display_color_img(icon_img, p.x + 6 - icon_xoff, p.y - icon_yoff - icon_yw / 2, d->get_owner()->get_player_nr(), false, true);
+			}
+			const scr_coord_val name_x = p.x + 6 + (icon_img != IMG_EMPTY ? icon_xw + 2 : 0);
+			display_proportional_clip_rgb( name_x, p.y - LINESPACE / 2, d->get_name(), ALIGN_LEFT, color_idx_to_rgb(COL_WHITE), true );
 		}
 	}
 }

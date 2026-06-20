@@ -79,7 +79,7 @@ bool schedule_t::is_stop_allowed(const grund_t *gr) const
 	if(  ok  ) {
 		// ok, we can go here; but we must also check, that we are not entering a foreign depot
 		depot_t *dp = gr->get_depot();
-		ok &= (dp==NULL  ||  (int)dp->get_tile()->get_desc()->get_extra()==my_waytype);
+		ok &= (dp==NULL  ||  dp->can_accept_waytype(my_waytype));
 	}
 
 	return ok;
@@ -293,10 +293,13 @@ void schedule_t::rdwr(loadsave_t *file)
 		max_speed = 0;
 	}
 
-	if(  file->get_OTRP_version()>=34  ) {
-		file->rdwr_longlong(departure_slot_group_id);
-	} else {
-		departure_slot_group_id = issue_new_departure_slot_group_id();
+	if(  file->get_OTRP_version()>=53  ) {
+		simline_t::rdwr_linehandle_t(file, departure_slot_group_id);
+	} else if(  file->is_loading()  ) {
+		if(  file->get_OTRP_version()>=34  ) {
+			file->rdwr_longlong(_legacy_departure_slot_group_id);
+		}
+		departure_slot_group_id = linehandle_t();  // will be set by simlinemgmt_t::finish_rd()
 	}
 
 	if(  file->get_OTRP_version()>=40  ) {
@@ -610,7 +613,7 @@ void schedule_t::add_return_way()
 void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 {
 	uint32 s = current_stop + (flags<<8) + (max_speed<<16);
-	buf.printf("%u|%ld|%u|%d|%u|", s, departure_slot_group_id, additional_base_waiting_time, (int)get_type(), next_line.get_id());
+	buf.printf("%u|%u|%u|%d|%u|", s, (uint32)departure_slot_group_id.get_id(), additional_base_waiting_time, (int)get_type(), next_line.get_id());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
 		buf.printf("%s,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.get_stop_flags(), i.max_speed_kmh_of_convoi, i.spacing, i.spacing_shift, i.delay_tolerance, i.length_coupling_done, i.maximum_loading, i.balance_speed_kmh_of_convoi);
 	}
@@ -629,7 +632,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		return false;
 	}
 	//  first get current_stop pointer
-	uint32 s = atoi( p );
+	uint32 s = (uint32)strtoul( p, NULL, 10 );
 	current_stop = s & 0xff;
 	flags = ((s&0xff00) >> 8);
 	max_speed = (s>>16);
@@ -642,7 +645,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	}
 	p++;
 	// then departure_slot_group_id
-	departure_slot_group_id = atoll( p );
+	departure_slot_group_id.set_id( strtoul( p, NULL, 10 ) );
 	while(  *p  &&  *p!='|'  ) {
 		p++;
 	}
@@ -652,7 +655,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	}
 	p++;
 	// then additional_base_waiting_time
-	additional_base_waiting_time = atoi( p );
+	additional_base_waiting_time = (uint32)strtoul( p, NULL, 10 );
 	while(  *p  &&  *p!='|'  ) {
 		p++;
 	}
@@ -677,7 +680,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	}
 	p++;
 	//  then next line
-	uint16 next_line_id = atoi( p );
+	uint32 next_line_id = strtoul( p, NULL, 10 );
 	next_line.set_id(next_line_id);
 	while(  *p  &&  *p!='|'  ) {
 		p++;
@@ -1017,25 +1020,6 @@ void schedule_t::get_schedule_flag_text(cbuffer_t& buf, schedule_t* schedule)
 		str[cnt+2] = '\0';
 		buf.append(str);
 	}
-}
-
-void schedule_t::set_new_departure_slot_group_id() {
-	departure_slot_group_id = issue_new_departure_slot_group_id();
-}
-
-
-static uint32 departure_slot_group_id_random = 12345678 + (uint32)time( NULL );
-
-
-sint64 schedule_t::issue_new_departure_slot_group_id() {
-	// issue_new_departure_slot_group_id() has to have its own random number generator
-	// because this function is called only on local machine in network games.
-	// Using simrand() here results in a desync.
-	departure_slot_group_id_random *= 3141592621u;
-	const uint32 num_1 = ++departure_slot_group_id_random;
-	departure_slot_group_id_random *= 3141592621u;
-	const sint64 num_2 = ++departure_slot_group_id_random;
-	return ((num_2 & 0x7FFFFFFF) << 32) | num_1;
 }
 
 

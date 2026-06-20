@@ -92,6 +92,7 @@ typedef unsigned int FLAGGED_PIXVAL;
 #define COL_OPERATION       132
 #define COL_MAINTENANCE     COL_LIGHT_RED
 #define COL_TOLL            157
+#define COL_TONKILO         182
 #define COL_POWERLINES      46
 #define COL_OPS_PROFIT      87
 #define COL_NEW_VEHICLES    COL_LIGHT_PURPLE
@@ -105,9 +106,10 @@ typedef unsigned int FLAGGED_PIXVAL;
 #define COL_MARGIN          COL_LIGHT_YELLOW
 #define COL_WEALTH          95
 
-#define COL_CONVOI_COUNT    COL_LIGHT_TURQUOISE
-#define COL_FREE_CAPACITY   COL_TOLL
-#define COL_DISTANCE        COL_OPS_PROFIT
+#define COL_CONVOI_COUNT      COL_LIGHT_TURQUOISE
+#define COL_FREE_CAPACITY     COL_TOLL
+#define COL_DISTANCE          COL_OPS_PROFIT
+#define COL_TRANSPORT_DENSITY COL_PURPLE
 
 #define COL_CITIZENS        COL_WHITE
 #define COL_GROWTH          122

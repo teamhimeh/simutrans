@@ -27,12 +27,13 @@
 #include "../utils/simstring.h"
 #include "convoi_detail_t.h"
 #include "convoi_stops_list_t.h"
+#include "depot_picker.h"
 
 #define CHART_HEIGHT (100)
 
 static const char cost_type[convoi_t::MAX_CONVOI_COST][64] =
 {
-	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll"
+	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo"
 };
 
 static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
@@ -44,12 +45,13 @@ static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
 	COL_PROFIT,
 	COL_DISTANCE,
 	COL_MAXSPEED,
-	COL_TOLL
+	COL_TOLL,
+	COL_TONKILO
 };
 
 static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 {
-	false, false, true, true, true, false, false, true
+	false, false, true, true, true, false, false, true, false
 };
 
 
@@ -157,7 +159,7 @@ void convoi_info_t::init(convoihandle_t cnv)
 		add_component(&button);
 
 		go_home_button.init(button_t::roundbox | button_t::flexible, "go home");
-		go_home_button.set_tooltip("Sends the convoi to the last depot it departed from!");
+		go_home_button.set_tooltip("Sends the convoi to the nearest depot. Ctrl+click to choose depot.");
 		go_home_button.add_listener(this);
 		add_component(&go_home_button);
 
@@ -220,7 +222,7 @@ void convoi_info_t::init(convoihandle_t cnv)
 	chart.set_min_size(scr_size(0, CHART_HEIGHT));
 	container_stats.add_component(&chart);
 
-	container_stats.add_table(4,2)->set_force_equal_columns(true);
+	container_stats.add_table(4,3)->set_force_equal_columns(true);
 
 	for (int cost = 0; cost<convoi_t::MAX_CONVOI_COST; cost++) {
 		uint16 curve = chart.add_curve( color_idx_to_rgb(cost_type_color[cost]), cnv->get_finance_history(), convoi_t::MAX_CONVOI_COST, cost, MAX_MONTHS, cost_type_money[cost], false, true, cost_type_money[cost]*2 );
@@ -355,7 +357,7 @@ void convoi_info_t::update_labels()
 		scroll_freight.set_size( scroll_freight.get_size() );
 	}
 
-	scroll_stops_list.set_size(  scr_size( scroll_stops_list.get_size().w,get_client_windowsize().h - scroll_stops_list.get_pos().y - D_MARGIN_BOTTOM )  );
+	scroll_stops_list.set_size(  scr_size( scroll_stops_list.get_size().w, switch_mode.get_size().h - scroll_stops_list.get_pos().y )  );
 
 	// realign container - necessary if strings changed length
 	container_top->set_size( container_top->get_size() );
@@ -409,7 +411,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			if(  cnv->get_coupling_convoi().is_bound()  ) {
 				convoihandle_t c = cnv;
 				while( c.is_bound() ) {
-					if(  cnv->get_owner() != c->get_owner() || cnv->get_schedule()->get_waytype() != c->get_schedule()->get_waytype()  ) {
+					if(  cnv->get_owner() != c->get_owner() || cnv->front()->get_waytype() != c->front()->get_waytype()  ) {
 						show_go_home_button = false;
 					}
 					c = c->get_coupling_convoi();
@@ -426,8 +428,15 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		if(  grund_t* gr=welt->lookup(cnv->get_schedule()->get_current_entry().pos)  ) {
 			go_home_button.pressed = gr->get_depot() != NULL;
 		}
-		no_load_button.pressed = cnv->get_no_load();
-		no_load_button.enable();
+		no_load_button.pressed = cnv->get_no_load()||cnv->is_invalid_convoy();
+		if(  cnv->is_invalid_convoy()  ){
+			// this convoy is invalid convoy->out of service
+			no_load_button.set_text("Out of service");
+			no_load_button.disable();
+		}	
+		else {
+			no_load_button.enable();
+		}
 		set_recovery_button.pressed = cnv->is_in_delay_recovery();
 		set_recovery_button.enable();
 		if(  cnv->is_coupled() ){
@@ -486,9 +495,10 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_show_button.pressed = is_route_show;
 	route_show_button.enable();
 
+	// update layout before rendering so upper section width matches current window size
+	set_windowsize(size);
 	// all gui stuff set => display it
 	gui_frame_t::draw(pos, size);
-	set_windowsize(size);
 }
 
 
@@ -610,7 +620,7 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 			}
 		}
 
-		if(  comp == &no_load_button    &&    !route_search_in_progress  ) {
+		if(  comp == &no_load_button    &&    !route_search_in_progress  &&  !cnv->is_invalid_convoy()  ) {
 			cnv->call_convoi_tool( 'n', NULL );
 			return true;
 		}
@@ -619,6 +629,12 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 			// limit update to certain states that are considered to be safe for schedule updates
 			int state = cnv->get_state();
 			if(state==convoi_t::EDIT_SCHEDULE) {
+				return true;
+			}
+
+			// Ctrl+click: open depot picker to choose destination
+			if(  event_get_last_control_shift() & 2  ) {
+				create_win(new depot_picker_t(cnv, false), w_info, magic_depot_picker);
 				return true;
 			}
 
