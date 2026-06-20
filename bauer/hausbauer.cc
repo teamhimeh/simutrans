@@ -610,53 +610,43 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 
 		int layout = built_layout & 9;
 
-		// Height of each edge of the current tile relative to the tile's base z.
-		// For flat tiles all z_delta values are 0, so behaviour is unchanged.
-		// For slope tiles the primary lookup is at the correct edge height, and
-		// the fallback also catches slope-stop neighbours one level below.
-		const slope_t::type cur_slope = welt->lookup( pos )->get_weg_hang();
-		const int z_delta_far = (layout & 1)
-		    ? max( corner_ne(cur_slope), corner_se(cur_slope) )   // EW: east edge
-		    : max( corner_sw(cur_slope), corner_se(cur_slope) );  // NS: south edge
-		const int z_delta_near = (layout & 1)
-		    ? max( corner_nw(cur_slope), corner_sw(cur_slope) )   // EW: west edge
-		    : max( corner_nw(cur_slope), corner_ne(cur_slope) );  // NS: north edge
+		const grund_t* const this_gr = welt->lookup( pos );
 
-		// detect if we are connected at far (north/west) end
-		sint8 offset = welt->lookup( pos )->get_weg_yoff()/TILE_HEIGHT_STEP;
-		koord3d checkpos = pos+koord3d( (layout & 1 ? koord::east : koord::south), offset+z_delta_far);
-		grund_t * gr = welt->lookup( checkpos );
+		// Determine the two axis directions for this stop orientation.
+		// NS (layout bit 0 == 0): far = south, near = north.
+		// EW (layout bit 0 == 1): far = east,  near = west.
+		const ribi_t::ribi dir_far  = (layout & 1) ? ribi_t::east  : ribi_t::south;
+		const ribi_t::ribi dir_near = (layout & 1) ? ribi_t::west  : ribi_t::north;
 
-		if(!gr) {
-			// Bridge end tile or downslope continuation one level below the edge.
-			grund_t * gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::east : koord::south), offset+z_delta_far-1) );
-			if(gr_tmp && (gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1
-			              || (z_delta_far == 0 && slope_t::is_single( gr_tmp->get_weg_hang() )))) {
-				gr = gr_tmp;
-			}
-			else {
-				gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::east : koord::south), offset+z_delta_far-2) );
-				if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 2) {
-					gr = gr_tmp;
+		// Find a connected stop neighbour in direction dir.
+		// get_neighbour() handles all height transitions (single/double slope, bridge,
+		// tunnel) via get_vmove(), so no manual z-delta computation is needed.
+		// Falls back to the same-height tile that owns a halt (for adjacent extensions
+		// that are not directly way-connected).
+		auto find_nb = [&]( ribi_t::ribi dir ) -> grund_t* {
+			grund_t* nb = nullptr;
+			for(  int w = 0;  w < 2  &&  !nb;  w++  ) {
+				const weg_t* weg = this_gr->get_weg_nr( w );
+				if(  weg  ) {
+					this_gr->get_neighbour( nb, weg->get_waytype(), dir );
 				}
 			}
-		}
-
-		if(gr) {
-			gebaeude_t* gb = gr->find<gebaeude_t>();
-			if(gb==NULL) {
-				// no building on same level, check other levels
-				const planquadrat_t *pl = welt->access(checkpos.get_2d());
-				if (pl) {
-					for(  uint8 i=0;  i<pl->get_boden_count();  i++  ) {
-						gr = pl->get_boden_bei(i);
-						if(gr->is_halt() && gr->get_halt().is_bound() ) {
-							break;
-						}
+			if(  !nb  ) {
+				// Same-height tile with a halt (stop extension without direct way link).
+				const planquadrat_t* pl = welt->access( pos.get_2d() + koord(dir) );
+				if(  pl  ) {
+					grund_t* same_z = pl->get_boden_in_hoehe( pos.z );
+					if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+						nb = same_z;
 					}
 				}
-				gb = gr->find<gebaeude_t>();
 			}
+			return nb;
+		};
+
+		// detect if we are connected at far (south/east) end
+		if(  grund_t* gr = find_nb( dir_far )  ) {
+			gebaeude_t* gb = gr->find<gebaeude_t>();
 			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
 				corner_layout &= ~2; // clear near bit
 				const koord xy = gb->get_tile()->get_offset();
@@ -679,7 +669,7 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 					}
 				}
 				else if(  gb->get_tile()->get_desc()->get_all_layouts()>4  ) {
-					if((layoutbase & 1) == (layout & 1)) {
+					if(  (layoutbase & 1) == (layout & 1)  ) {
 						layoutbase &= 0xb; // clear near bit on neighbour
 					}
 				}
@@ -687,25 +677,10 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 			}
 		}
 
-		// detect if near (south/east) end
-		gr = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset+z_delta_near) );
-		if(!gr) {
-			// Bridge end tile or downslope continuation one level below the edge.
-			grund_t * gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset+z_delta_near-1) );
-			if(gr_tmp && (gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1
-			              || (z_delta_near == 0 && slope_t::is_single( gr_tmp->get_weg_hang() )))) {
-				gr = gr_tmp;
-			}
-			else {
-				gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset+z_delta_near-2) );
-				if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 2) {
-					gr = gr_tmp;
-				}
-			}
-		}
-		if(gr) {
+		// detect if we are connected at near (north/west) end
+		if(  grund_t* gr = find_nb( dir_near )  ) {
 			gebaeude_t* gb = gr->find<gebaeude_t>();
-			if(gb  &&  gb->get_tile()->get_desc()->is_transport_building()) {
+			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
 				corner_layout &= ~4; // clear far bit
 				const koord xy = gb->get_tile()->get_offset();
 				uint8 layoutbase = gb->get_tile()->get_layout();
@@ -726,8 +701,8 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 						layoutbase &= ~6;
 					}
 				}
-				else if(gb->get_tile()->get_desc()->get_all_layouts()>4) {
-					if((layoutbase & 1) == (layout & 1)) {
+				else if(  gb->get_tile()->get_desc()->get_all_layouts()>4  ) {
+					if(  (layoutbase & 1) == (layout & 1)  ) {
 						layoutbase &= 0xd; // clear far bit on neighbour
 					}
 				}
@@ -762,33 +737,28 @@ gebaeude_t* hausbauer_t::build_station_on_diagonal_way(player_t* player, koord3d
 	const uint16 way_connection_dir_bits = way_connection & ribi_t::west ? 1 : 0;
 	
 	// calculate neighbour_diagonal_stops
-	const sint8 offset = bd->get_hoehe()+bd->get_weg_yoff()/TILE_HEIGHT_STEP;
-	// Per-direction edge heights relative to the tile base (NESW order matching koord::nesw[]).
-	// For flat tiles all values are 0. For slope tiles the neighbour must be looked up at
-	// offset + z_delta[i] so that uphill and downhill connections are found correctly.
-	const slope_t::type diag_slope = bd->get_weg_hang();
-	const int z_delta[4] = {
-		max( corner_nw(diag_slope), corner_ne(diag_slope) ),  // N (i=0)
-		max( corner_ne(diag_slope), corner_se(diag_slope) ),  // E (i=1)
-		max( corner_sw(diag_slope), corner_se(diag_slope) ),  // S (i=2)
-		max( corner_nw(diag_slope), corner_sw(diag_slope) )   // W (i=3)
-	};
+	// Use get_neighbour() so that slope/bridge height transitions are handled correctly.
 	grund_t *gr;
 	gebaeude_t* neighbour_diagonal_stops[] = {NULL, NULL, NULL, NULL};
 	const koord pos_2d = bd->get_pos().get_2d();
 	for(  unsigned i=0;  i<4;  i++  ) {
-		// oriented buildings here - get neighbouring layouts
-		gr = world()->lookup(koord3d(pos_2d+koord::nesw[i], offset+z_delta[i]));
-		if(  !gr  ) {
-			// Bridge end tile or downslope continuation one level below the edge.
-			grund_t * gr_off1 = world()->lookup(koord3d(pos_2d+koord::nesw[i], offset+z_delta[i]-1));
-			grund_t * gr_off2 = world()->lookup(koord3d(pos_2d+koord::nesw[i], offset+z_delta[i]-2));
-			if(gr_off1 && (gr_off1->get_weg_yoff()/TILE_HEIGHT_STEP == 1
-			               || (z_delta[i] == 0 && slope_t::is_single( gr_off1->get_weg_hang() )))) {
-				gr = gr_off1;
+		// Find connected neighbour via each way on this tile.
+		const ribi_t::ribi dir = ribi_t::nesw[i];
+		gr = nullptr;
+		for(  int w = 0;  w < 2  &&  !gr;  w++  ) {
+			const weg_t* weg = bd->get_weg_nr( w );
+			if(  weg  ) {
+				bd->get_neighbour( gr, weg->get_waytype(), dir );
 			}
-			else if(gr_off2 && gr_off2->get_weg_yoff()/TILE_HEIGHT_STEP == 2) {
-				gr = gr_off2;
+		}
+		if(  !gr  ) {
+			// Same-height tile with a halt (for extensions not directly way-connected).
+			const planquadrat_t* pl = world()->access( pos_2d + koord::nesw[i] );
+			if(  pl  ) {
+				grund_t* same_z = pl->get_boden_in_hoehe( bd->get_hoehe() );
+				if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+					gr = same_z;
+				}
 			}
 		}
 		if(  !gr  ||  !gr->get_halt().is_bound()  ) {
@@ -861,50 +831,35 @@ gebaeude_t* hausbauer_t::build_station_on_slope_way(player_t* player, koord3d po
 
 		int layout = built_layout & 9;
 
-		sint8 offset = welt->lookup( pos )->get_weg_yoff()/TILE_HEIGHT_STEP;
+		const grund_t* const this_gr = welt->lookup( pos );
 
-		// Height of each edge of the current slope tile relative to the tile's base z.
-		// For NS way (layout bit 0 == 0): far block checks south edge, near block checks north edge.
-		// For EW way (layout bit 0 == 1): far block checks east  edge, near block checks west  edge.
-		// corner_xx macros return 0..2 (single slope = 1, double = 2).
-		const int z_delta_far = (layout & 1)
-		    ? max( corner_ne(slope), corner_se(slope) )   // EW: east edge
-		    : max( corner_sw(slope), corner_se(slope) );  // NS: south edge
-		const int z_delta_near = (layout & 1)
-		    ? max( corner_nw(slope), corner_sw(slope) )   // EW: west edge
-		    : max( corner_nw(slope), corner_ne(slope) );  // NS: north edge
+		const ribi_t::ribi dir_far  = (layout & 1) ? ribi_t::east  : ribi_t::south;
+		const ribi_t::ribi dir_near = (layout & 1) ? ribi_t::west  : ribi_t::north;
 
-		// detect far (north/west) end neighbor
-		koord3d checkpos = pos+koord3d( (layout & 1 ? koord::east : koord::south), offset+z_delta_far);
-		grund_t *gr = welt->lookup( checkpos );
-		if(  !gr  ) {
-			// One level below the edge: bridge end (elevated way) or downslope continuation.
-			grund_t *gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::east : koord::south), offset+z_delta_far-1) );
-			if(  gr_tmp  &&  (gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1
-			                  ||  (z_delta_far == 0  &&  slope_t::is_single( gr_tmp->get_weg_hang() )))  ) {
-				gr = gr_tmp;
-			}
-			else {
-				gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::east : koord::south), offset+z_delta_far-2) );
-				if(  gr_tmp  &&  gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 2  ) {
-					gr = gr_tmp;
+		// get_neighbour() resolves the correct height via get_vmove() for slopes and bridges.
+		auto find_nb = [&]( ribi_t::ribi dir ) -> grund_t* {
+			grund_t* nb = nullptr;
+			for(  int w = 0;  w < 2  &&  !nb;  w++  ) {
+				const weg_t* weg = this_gr->get_weg_nr( w );
+				if(  weg  ) {
+					this_gr->get_neighbour( nb, weg->get_waytype(), dir );
 				}
 			}
-		}
-		if(  gr  ) {
-			gebaeude_t *gb = gr->find<gebaeude_t>();
-			if(  gb==NULL  ) {
-				const planquadrat_t *pl = welt->access( checkpos.get_2d() );
+			if(  !nb  ) {
+				const planquadrat_t* pl = welt->access( pos.get_2d() + koord(dir) );
 				if(  pl  ) {
-					for(  uint8 i=0;  i<pl->get_boden_count();  i++  ) {
-						gr = pl->get_boden_bei(i);
-						if(  gr->is_halt()  &&  gr->get_halt().is_bound()  ) {
-							break;
-						}
+					grund_t* same_z = pl->get_boden_in_hoehe( pos.z );
+					if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+						nb = same_z;
 					}
 				}
-				gb = gr->find<gebaeude_t>();
 			}
+			return nb;
+		};
+
+		// detect far (south/east) end neighbor
+		if(  grund_t* gr = find_nb( dir_far )  ) {
+			gebaeude_t *gb = gr->find<gebaeude_t>();
 			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
 				corner_layout &= ~2; // clear near bit
 				const koord xy = gb->get_tile()->get_offset();
@@ -933,23 +888,8 @@ gebaeude_t* hausbauer_t::build_station_on_slope_way(player_t* player, koord3d po
 			}
 		}
 
-		// detect near (south/east) end neighbor
-		gr = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset+z_delta_near) );
-		if(  !gr  ) {
-			// One level below the edge: bridge end (elevated way) or downslope continuation.
-			grund_t *gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset+z_delta_near-1) );
-			if(  gr_tmp  &&  (gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1
-			                  ||  (z_delta_near == 0  &&  slope_t::is_single( gr_tmp->get_weg_hang() )))  ) {
-				gr = gr_tmp;
-			}
-			else {
-				gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset+z_delta_near-2) );
-				if(  gr_tmp  &&  gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 2  ) {
-					gr = gr_tmp;
-				}
-			}
-		}
-		if(  gr  ) {
+		// detect near (north/west) end neighbor
+		if(  grund_t* gr = find_nb( dir_near )  ) {
 			gebaeude_t *gb = gr->find<gebaeude_t>();
 			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
 				corner_layout &= ~4; // clear far bit

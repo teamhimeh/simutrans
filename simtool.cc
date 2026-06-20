@@ -5355,6 +5355,12 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		layout &= (desc->get_all_layouts()-1);
 	}
 
+	// Slope tiles require a descriptor with slope images (all_layouts > 48).
+	// Check BEFORE removing the existing building to avoid corrupting the halt.
+	if(  bd->get_weg_hang() != slope_t::flat  &&  desc->get_all_layouts() <= 48  ) {
+		return "Stops on slope require a slope-capable descriptor!";
+	}
+
 	halthandle_t old_halt = bd->get_halt();
 	sint64 old_cost = 0;
 	bool recalc_schedule = false;
@@ -5392,11 +5398,6 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 	}
 
-	// Slope tiles require a descriptor with slope images (all_layouts > 48).
-	if(  bd->get_weg_hang() != slope_t::flat  &&  desc->get_all_layouts() <= 48  ) {
-		return "Stops on slope require a slope-capable descriptor!";
-	}
-
 	// seems everything ok, lets build
 	bool neu = !halt.is_bound();
 
@@ -5409,7 +5410,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	if(  bd->get_weg_hang() != slope_t::flat  ) {
 		hausbauer_t::build_station_on_slope_way(halt_player, bd->get_pos(), layout, desc, halt);
 	}
-	else if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
+	else if(  desc->get_all_layouts()>=48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
 	else {

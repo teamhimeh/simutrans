@@ -1112,59 +1112,53 @@ void gebaeude_t::cleanup(player_t *player)
 
 	// may need to update next buildings, in the case of start, middle, end buildings
 	// realign surrounding buildings...
-	const uint32 layout = tile->get_layout();
 
-	// Slope stops (layout >= 48 with slope images) use a straight-way direction table
-	// (index 0) and store NS/EW in bit 0 of the flat part, which is also bit 0 of layout.
-	// Using (layout & 0x30) >> 4 for slope layouts would give indices 3-6, out of bounds.
-	const bool is_slope_stop = (layout >= 48 && tile->get_desc()->get_all_layouts() > 48);
-	const uint32 dir_type_idx = is_slope_stop ? 0u : (layout & 0x30u) >> 4;
-
-	// [straight/vertical/horizontal][layout&1][index_to_lookup]
-	const koord directions_to_lookup[3][2][2] = {
-		{{koord::south, koord::north}, {koord::east, koord::west}},
-		{{koord::north, koord::east}, {koord::west, koord::south}},
-		{{koord::south, koord::east}, {koord::west, koord::north}}
-	};
+	// Which end-cap bit to restore on a neighbour reached from direction dir,
+	// given the neighbour's layout type (straight=0, vertical diag=1, horizontal diag=2).
 	const ribi_t::ribi bit_4_turn_on_dir[3] = {
 		ribi_t::southeast, // straight
 		ribi_t::northwest, // vertical diagonal
-		ribi_t::southwest // horizontal diagonal
+		ribi_t::southwest  // horizontal diagonal
 	};
 
-	// check adjacent tiles and turn on the connection bit.
-	const sint8 offset = this_gr->get_weg_yoff()/TILE_HEIGHT_STEP;
-	const slope_t::type cur_slope = this_gr->get_weg_hang();
-	// WORKAROUND: station extensions have somehow inverted layout bits.
-	const bool is_generic_ext = tile->get_desc()->get_type() == building_desc_t::generic_extension;
-	for(  uint8 i=0;  i<2;  i++  ) {
-		const koord dir = directions_to_lookup[dir_type_idx][(layout&1)^is_generic_ext][i];
-		// Height of this tile's edge in direction dir, relative to tile base z.
-		const int z_delta_dir = (dir == koord::south) ? max( corner_sw(cur_slope), corner_se(cur_slope) )
-		                      : (dir == koord::north) ? max( corner_nw(cur_slope), corner_ne(cur_slope) )
-		                      : (dir == koord::east)  ? max( corner_ne(cur_slope), corner_se(cur_slope) )
-		                      : /* west */              max( corner_nw(cur_slope), corner_sw(cur_slope) );
-		grund_t* gr = welt->lookup(get_pos() + koord3d(dir, offset + z_delta_dir));
-		if(!gr) {
-			// Bridge end tile or downslope continuation one level below the edge.
-			grund_t * gr_tmp = welt->lookup(get_pos() + koord3d(dir, offset + z_delta_dir - 1));
-			if(gr_tmp && (gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1
-			              || (z_delta_dir == 0 && slope_t::is_single( gr_tmp->get_weg_hang() )))) {
-				gr = gr_tmp;
+	// Walk every way on this tile. For each connected direction, find the neighbouring
+	// stop via get_neighbour() and restore its end-cap bit.
+	// get_neighbour() resolves the correct height for slopes and bridges via get_vmove(),
+	// handling single slopes, double slopes, and all combinations correctly.
+	for(  int w = 0;  w < 2;  w++  ) {
+		const weg_t* weg = this_gr->get_weg_nr( w );
+		if(  !weg  ) { continue; }
+		const ribi_t::ribi way_ribi = weg->get_ribi_unmasked();
+		for(  uint8 i = 0;  i < 4;  i++  ) {
+			const ribi_t::ribi dir = ribi_t::nesw[i];
+			if(  !(way_ribi & dir)  ) { continue; }
+
+			grund_t* gr = nullptr;
+			this_gr->get_neighbour( gr, weg->get_waytype(), dir );
+			if(  !gr  ) {
+				// Same-height tile with a halt (stop extension without direct way link).
+				const planquadrat_t* pl = welt->access( get_pos().get_2d() + koord(dir) );
+				if(  pl  ) {
+					grund_t* same_z = pl->get_boden_in_hoehe( get_pos().z );
+					if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+						gr = same_z;
+					}
+				}
 			}
+
+			gebaeude_t* gb = gr ? gr->find<gebaeude_t>() : NULL;
+			if(  !gb  ||  gb->get_tile()->get_desc()->get_all_layouts() <= 4u  ) {
+				continue;
+			}
+			const koord xy = gb->get_tile()->get_offset();
+			uint8 layoutbase = gb->get_tile()->get_layout();
+			// Slope stop neighbours use the straight-way rule (index 0) for bit selection.
+			const uint32 nb_idx = (layoutbase >= 48 && gb->get_tile()->get_desc()->get_all_layouts() > 48)
+			                    ? 0u : (layoutbase & 0x30u) >> 4;
+			const bool bit_4_turn_on = (dir & bit_4_turn_on_dir[nb_idx]) > 0;
+			layoutbase |= bit_4_turn_on ? 4u : 2u; // restore end-cap bit on neighbour
+			gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
 		}
-		gebaeude_t* gb = gr ? gr->find<gebaeude_t>() : NULL;
-		if(  !gb  ||  gb->get_tile()->get_desc()->get_all_layouts()<=4u  ) {
-			continue;
-		}
-		const koord xy = gb->get_tile()->get_offset();
-		uint8 layoutbase = gb->get_tile()->get_layout();
-		// Slope stop neighbours also use the straight-way rule for bit selection.
-		const uint32 nb_idx = (layoutbase >= 48 && gb->get_tile()->get_desc()->get_all_layouts() > 48)
-		                    ? 0u : (layoutbase & 0x30u) >> 4;
-		const bool bit_4_turn_on = (ribi_type(dir) & bit_4_turn_on_dir[nb_idx]) > 0;
-		layoutbase |= bit_4_turn_on ? 4u : 2u; // set end-cap bit on neighbour
-		gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
 	}
 	mark_images_dirty();
 }
