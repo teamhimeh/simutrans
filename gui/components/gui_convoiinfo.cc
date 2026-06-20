@@ -146,11 +146,12 @@ void gui_convoiinfo_t::update_label()
 	label_profit.buf().append_money(cnv->get_jahresgewinn() / 100.0);
 	label_profit.update();
 	label_line.buf().clear();
+	label_next_halt.buf().clear();
 
 	if (cnv->in_depot()) {
 		label_line.set_visible( false );
 		pos_next_halt.set_targetpos3d(cnv->get_home_depot());
-		label_next_halt.set_text("(in depot)");
+		label_next_halt.buf().printf( "%s %s", translator::translate("(in depot)"), cnv->get_home_depot_name() );
 	}
 	else {
 		label_line.set_visible(true);
@@ -178,7 +179,7 @@ void gui_convoiinfo_t::update_label()
 				}
 			}
 			pos_next_halt.set_targetpos3d( end );
-			label_next_halt.set_text_pointer(h.is_bound()?h->get_name():translator::translate("wegpunkt"));
+			label_next_halt.buf().printf(h.is_bound()?h->get_name():translator::translate("wegpunkt"));
 		}
 	}
 
