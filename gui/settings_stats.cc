@@ -325,6 +325,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	INIT_INIT
 	INIT_NUM( "remove_dummy_player_months", sets->get_remove_dummy_player_months(), 0, MAX_PLAYER_HISTORY_YEARS*12, 12, false );
 	INIT_NUM( "unprotect_abandoned_player_months", sets->get_unprotect_abandoned_player_months(), 0, MAX_PLAYER_HISTORY_YEARS*12, 12, false );
+	INIT_BOOL( "allow_unlock_by_public", sets->get_allow_unlock_by_public() );
 	INIT_NUM( "ai_construction_speed", sets->get_default_ai_construction_speed(), 0, 1000000000, 1000, false );
 	SEPERATOR
 
@@ -422,6 +423,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	sint64 start_money_temp;
 	READ_NUM_VALUE( sets->remove_dummy_player_months );
 	READ_NUM_VALUE( sets->unprotect_abandoned_player_months );
+	READ_BOOL_VALUE( sets->allow_unlock_by_public );
 	READ_NUM_VALUE( sets->default_ai_construction_speed );
 	env_t::default_ai_construction_speed = sets->get_default_ai_construction_speed();
 	READ_COST_VALUE( start_money_temp );

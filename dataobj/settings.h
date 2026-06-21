@@ -384,6 +384,9 @@ private:
 	// can unload cargo even if stop length is too short
 	bool allow_unload_longer_convoy;
 
+	// public player can unlock any player without entering their password
+	bool allow_unlock_by_public;
+
 public:
 	/* the big cost section */
 	sint32 maint_building; // normal building
@@ -770,6 +773,9 @@ public:
 	bool is_default_reverse() const {return default_reverse;}
 	// allow unload longer convoy
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+
+	bool get_allow_unlock_by_public() const { return allow_unlock_by_public; }
+	void set_allow_unlock_by_public(bool y) { allow_unlock_by_public = y; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
 };

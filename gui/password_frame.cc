@@ -10,6 +10,7 @@
 #include "../simworld.h"
 
 #include "../dataobj/translator.h"
+#include "../dataobj/settings.h"
 #include "../network/network_cmd_ingame.h"
 
 #include "../utils/cbuffer_t.h"
@@ -48,6 +49,18 @@ password_frame_t::password_frame_t( player_t *player ) :
 	password.add_listener(this);
 	add_component( &password );
 	set_focus( &password );
+
+	// Unlock button: clears the password (unlocks the player slot)
+	unlock_button.init( button_t::roundbox | button_t::flexible, "Clear Password" );
+	unlock_button.add_listener(this);
+	// enabled when: player is locked AND
+	//   (active player is this player, OR allow_unlock_by_public && active is public player (unlocked))
+	const bool active_is_this   = welt->get_active_player_nr() == player->get_player_nr();
+	const bool public_can_unlock = welt->get_settings().get_allow_unlock_by_public()
+	                               &&  welt->get_active_player_nr() == PUBLIC_PLAYER_NR
+	                               &&  !welt->get_public_player()->is_locked();
+	unlock_button.enable(  player->is_password_hash()  &&  ( (!player->is_locked()  &&  active_is_this)  ||  public_can_unlock) );
+	add_component( &unlock_button, 2 );
 
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize() );
@@ -111,6 +124,23 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 		welt->set_tool( tmp_tool, player );
 		// since init always returns false, it is safe to delete immediately
 		delete tmp_tool;
+	}
+
+	if(  comp == &unlock_button  ) {
+		// clear password hash to unlock the player
+		pwd_hash_t empty_hash;
+		welt->store_player_password_hash( player->get_player_nr(), empty_hash );
+		if(  env_t::networkmode  ) {
+			player->unlock(true, true);
+			nwc_auth_player_t *nwc = new nwc_auth_player_t(player->get_player_nr(), empty_hash);
+			network_send_server(nwc);
+		}
+		else {
+			player->access_password_hash() = empty_hash;
+			player->unlock(true, false);
+		}
+		destroy_win(this);
+		return true;
 	}
 
 	if(  p.i==1  ) {

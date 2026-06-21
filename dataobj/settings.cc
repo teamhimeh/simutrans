@@ -247,6 +247,8 @@ settings_t::settings_t() :
 	// off
 	unprotect_abandoned_player_months = 0;
 
+	allow_unlock_by_public = true;
+
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
 	way_toll_waycost_percentage = 0;
@@ -1055,6 +1057,11 @@ void settings_t::rdwr(loadsave_t *file)
 			signal_reverse_front_back = false;
 			roadsign_reverse_front_back = false;
 		}
+		if(  file->get_OTRP_version() >= 56  ) {
+			file->rdwr_bool(allow_unlock_by_public);
+		} else {
+			allow_unlock_by_public = true;
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
@@ -1658,6 +1665,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// .. read twice: old and correct spelling
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abondoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abandoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
+	allow_unlock_by_public = contents.get_int( "allow_unlock_by_public", allow_unlock_by_public ) != 0;
 	default_player_color_random       = contents.get_int( "random_player_colors", default_player_color_random ) != 0;
 
 	for( int i = 0; i < MAX_PLAYER_COUNT; i++ ) {
