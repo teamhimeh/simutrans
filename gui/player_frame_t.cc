@@ -16,6 +16,7 @@
 #include "../dataobj/translator.h"
 
 #include "simwin.h"
+#include "components/gui_divider.h"
 #include "../utils/simstring.h"
 #include "../player/ai_scripted.h"
 
