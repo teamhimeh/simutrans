@@ -38,6 +38,7 @@ class ki_kontroll_t : public gui_frame_t, private action_listener_t
 		gui_combobox_t
 			player_select[MAX_PLAYER_COUNT-1];
 
+		gui_aligned_container_t player_list;
 
 		void update_income();
 
@@ -69,7 +70,6 @@ class ki_kontroll_t : public gui_frame_t, private action_listener_t
 		// since no information are needed to be saved to restore this, returning magic is enough
 		uint32 get_rdwr_id() OVERRIDE { return magic_ki_kontroll_t; }
 };
-
-class 
+ 
 
 #endif
