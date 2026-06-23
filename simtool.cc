@@ -73,6 +73,7 @@
 #include "obj/baum.h"
 #include "obj/field.h"
 #include "obj/label.h"
+#include "obj/pillar.h"
 
 #include "dataobj/koord.h"
 #include "dataobj/settings.h"
@@ -556,6 +557,45 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 
 	koord k(pos.get_2d());
 
+	// check for pillar
+	pillar_t* pl = gr->find<pillar_t>();
+	if ((type == obj_t::undefined) && pl!=NULL) {
+		msg = pl->is_deletable(player);
+		if(msg) {
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing pillar at (%s)", pos.get_str());
+		pl->cleanup(player);
+		return true;
+	}
+
+	// check for signal
+	roadsign_t* rs = gr->find<signal_t>();
+	if (rs == NULL) rs = gr->find<roadsign_t>();
+	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
+		msg = rs->is_deletable(player);
+		if(msg) {
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
+		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
+		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
+			weg = gr->get_weg(track_wt);
+		}
+
+		rs->cleanup(player);
+		delete rs;
+
+		// no need to update way if there is none
+		// may happen when public player builds a signal on a company track,
+		// the company goes bankrupt and the public player tries to remove the signal
+		if (weg) {
+			weg->count_sign();
+		}
+
+		return true;
+	}
+
 	// check powerline (can cross ground of another player)
 	leitung_t* lt = gr->get_leitung();
 	// check whether powerline related stuff should be removed, and if there is any to remove
@@ -612,33 +652,6 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 			lt->cleanup(player);
 			delete lt;
 		}
-		return true;
-	}
-
-	// check for signal
-	roadsign_t* rs = gr->find<signal_t>();
-	if (rs == NULL) rs = gr->find<roadsign_t>();
-	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
-		msg = rs->is_deletable(player);
-		if(msg) {
-			return false;
-		}
-DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
-		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
-		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
-			weg = gr->get_weg(track_wt);
-		}
-
-		rs->cleanup(player);
-		delete rs;
-
-		// no need to update way if there is none
-		// may happen when public player builds a signal on a company track,
-		// the company goes bankrupt and the public player tries to remove the signal
-		if (weg) {
-			weg->count_sign();
-		}
-
 		return true;
 	}
 
