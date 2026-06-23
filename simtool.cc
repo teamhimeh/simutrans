@@ -559,7 +559,7 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 
 	// check for pillar
 	pillar_t* pl = gr->find<pillar_t>();
-	if ((type == obj_t::undefined) && pl!=NULL) {
+	if ((type == obj_t::undefined || type == obj_t::pillar) && pl!=NULL) {
 		msg = pl->is_deletable(player);
 		if(msg) {
 			return false;
@@ -1060,6 +1060,30 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 	}
 
 	return msg;
+}
+
+
+const char *tool_remove_pillar_t::process( player_t *player, koord3d pos )
+{
+	const char *fail = NULL;
+	if (!tool_remover_intern(player, pos, obj_t::pillar, fail)) {
+		return fail;
+	}
+
+	if (pos.x > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::west)->calc_image();
+	}
+	if (pos.y > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::north)->calc_image();
+	}
+	if (pos.x < welt->get_size().x-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::east)->calc_image();
+	}
+	if (pos.y < welt->get_size().y-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::south)->calc_image();
+	}
+
+	return NULL;
 }
 
 
