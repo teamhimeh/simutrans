@@ -566,6 +566,7 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 		}
 DBG_MESSAGE("tool_remover()",  "removing pillar at (%s)", pos.get_str());
 		pl->cleanup(player);
+		delete pl;
 		return true;
 	}
 

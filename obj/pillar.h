@@ -50,6 +50,8 @@ public:
 	 */
 	void show_info() OVERRIDE;
 
+	void cleanup(player_t *player) OVERRIDE;
+
 	void rotate90() OVERRIDE;
 };
 
