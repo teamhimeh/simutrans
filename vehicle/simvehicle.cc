@@ -1334,12 +1334,8 @@ void vehicle_t::hop(grund_t* gr)
 			steps_next = cnv->get_next_coupling_steps();
 		}
 		else if(  check_for_finish  ) {
-			if(  direction==ribi_t::north  ||  direction==ribi_t::west  ||  direction==ribi_t::southeast  ) {
+			if(  ribi_t::is_bend(direction)  ) {
 				steps_next = (steps_next/2)+1;
-			} else if(  direction==ribi_t::northeast  ) {
-				steps_next = (steps_next/4)+1;
-			} else if(  direction==ribi_t::northwest  ||  direction==ribi_t::southwest  ) {
-				steps_next = 1;
 			}
 		}
 		cnv->must_recalc_data_front();
