@@ -812,7 +812,7 @@ void convoi_t::add_running_cost( const weg_t *weg )
 				if(  roadsign_t const* const s = obj_cast<roadsign_t>(d)  ) {
 					if(  s->get_waytype() == weg->get_waytype()  ) {
 						signal_toll += (s->get_desc()->get_maintenance()*welt->get_settings().get_way_toll_waycost_percentage())/100l;
-						s->get_owner()->book_toll_received( signal_toll );
+						s->get_owner()->book_toll_received( signal_toll, get_schedule()->get_waytype() );
 					}
 				}
 			}
