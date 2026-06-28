@@ -179,9 +179,10 @@ void gui_convoiinfo_t::update_label()
 				}
 			}
 			pos_next_halt.set_targetpos3d( end );
-			label_next_halt.buf().printf(h.is_bound()?h->get_name():translator::translate("wegpunkt"));
+			label_next_halt.buf().printf("%s",h.is_bound()?h->get_name():translator::translate("wegpunkt"));
 		}
 	}
+	label_next_halt.update();
 
 	label_name.set_text_pointer(cnv->get_name());
 	label_name.set_color(cnv->get_status_color());
