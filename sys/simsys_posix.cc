@@ -201,6 +201,10 @@ sint16 dr_toggle_borderless()
 	return 0;
 }
 
+bool dr_pick_color_start(uint8, uint8, uint8) { return false; }
+color_pick_result_t dr_pick_color_poll(uint8 &, uint8 &, uint8 &) { return COLOR_PICK_NONE; }
+
+
 int main(int argc, char **argv)
 {
 	signal( SIGTERM, posix_sigterm );

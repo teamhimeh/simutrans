@@ -2093,7 +2093,7 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 	}
 	if( state==env_t::LINE_NAME_TOOLTIPS || color == 0 ) {
 		if(state==env_t::LINE_NAME_TOOLTIPS || state==env_t::LINE_NAME_AND_STATES_TOOLTIPS) {
-			color = color_idx_to_rgb( cnv->get_owner()->get_player_color1()+7 );
+			color = cnv->get_owner()->get_player_color1_pixval(7);
 		} else {
 			color = color_idx_to_rgb(COL_YELLOW);
 		}
@@ -2117,7 +2117,7 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 				if(  env_t::show_line_colors && lh.is_bound()  ) {
 					// show line colour
 					sint32 tooltip_width = proportional_string_width(tooltip_text);
-					display_fillbox_wh_clip_rgb( xpos, ypos-D_WAITINGBAR_WIDTH, tooltip_width+4, D_WAITINGBAR_WIDTH, color_idx_to_rgb(lh->get_colour()), dirty );
+					display_fillbox_wh_clip_rgb( xpos, ypos-D_WAITINGBAR_WIDTH, tooltip_width+4, D_WAITINGBAR_WIDTH, lh->get_colour(), dirty );
 				}
 			}
 		}

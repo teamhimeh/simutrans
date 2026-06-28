@@ -121,12 +121,12 @@ const uint8 minimap_t::severity_color[MAX_SEVERITY_COLORS] =
 };
 
 
-minimap_t::line_segment_t::line_segment_t(koord s, uint8 so, koord e, uint8 eo, schedule_t* sched, player_t* p, uint8 cc, bool diagonal, bool is_highlighted)
+minimap_t::line_segment_t::line_segment_t(koord s, uint8 so, koord e, uint8 eo, schedule_t* sched, player_t* p, PIXVAL lc, bool diagonal, bool is_highlighted)
 {
 	schedule = sched;
 	waytype = sched->get_waytype();
 	player = p;
-	colorcount = cc;
+	line_color = lc;
 	start_diagonal = diagonal;
 	if(  s.x<e.x  ||  (s.x==e.x  &&  s.y<e.y)  ) {
 		start = s;
@@ -167,7 +167,8 @@ bool minimap_t::LineSegmentOrdering::operator()(const minimap_t::line_segment_t&
 }
 
 
-static uint8 colore_idx = 0;
+static PIXVAL colore_idx = 0; // holds the final RGB pixel value for the next inserted line_segment_t
+static uint8 original_color_cycle = 0; // palette index cycled through in ORIGINAL color mode only
 static inthashtable_tpl< int, slist_tpl<schedule_t *> > waypoint_hash;
 
 
@@ -180,13 +181,14 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 	}
 	schedule_t *schedule = cnv->get_schedule();
 	if(  network_color_mode==ORIGINAL  ) {
-		colore_idx += 8;
-		if(  colore_idx >= 208  ) {
-			colore_idx = (colore_idx % 8) + 1;
-			if(  colore_idx == 7  ) {
-				colore_idx = 0;
+		original_color_cycle += 8;
+		if(  original_color_cycle >= 208  ) {
+			original_color_cycle = (original_color_cycle % 8) + 1;
+			if(  original_color_cycle == 7  ) {
+				original_color_cycle = 0;
 			}
 		}
+		colore_idx = color_idx_to_rgb(original_color_cycle);
 	}
 	else if(  network_color_mode==LOAD_FACTOR  ) {
 		//TODO: extract common part from with schedule_list_gui_t::display()
@@ -219,14 +221,14 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 		// and we do not like to divide by zero, do we?
 		if(capacity > 0) {
 			const uint32 load_idx = clamp(load * MAX_SEVERITY_COLORS / capacity, 0, MAX_SEVERITY_COLORS-1);
-			colore_idx = severity_color[MAX_SEVERITY_COLORS-1 - load_idx];
+			colore_idx = color_idx_to_rgb(severity_color[MAX_SEVERITY_COLORS-1 - load_idx]);
 		}
 		else {
-			colore_idx = severity_color[MAX_SEVERITY_COLORS-1];
+			colore_idx = color_idx_to_rgb(severity_color[MAX_SEVERITY_COLORS-1]);
 		}
 	}
 	else if(  network_color_mode==PLAYER_COLOR  ) {
-		colore_idx = cnv->get_owner()->get_player_color1();
+		colore_idx = cnv->get_owner()->get_player_color1_pixval(0);
 	}
 	else if(  network_color_mode==LINE_COLOR  ) {
 		if(  cnv->get_line().is_bound()  ) {
@@ -234,7 +236,7 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 			colore_idx = cnv->get_line()->get_colour();
 		} else {
 			// this convoy is not line's convoy. show player color
-			colore_idx = cnv->get_owner()->get_player_color1();
+			colore_idx = cnv->get_owner()->get_player_color1_pixval(0);
 		}
 	}
 
@@ -928,7 +930,7 @@ void minimap_t::calc_map_pixel(const koord k)
 			for( int i = 0; i < plan->get_haltlist_count(); i++  ) {
 				halthandle_t halt = plan->get_haltlist()[i];
 				if (halt->get_pax_enabled() && !halt->get_pax_connections().empty()) {
-					set_map_color( k, color_idx_to_rgb(halt->get_owner()->get_player_color1() + 3) );
+					set_map_color( k, halt->get_owner()->get_player_color1_pixval(3) );
 					break;
 				}
 			}
@@ -940,7 +942,7 @@ void minimap_t::calc_map_pixel(const koord k)
 			for( int i = 0; i < plan->get_haltlist_count(); i++  ) {
 				halthandle_t halt = plan->get_haltlist()[i];
 				if (halt->get_mail_enabled() && !halt->get_mail_connections().empty()) {
-					set_map_color( k, color_idx_to_rgb(halt->get_owner()->get_player_color1() + 3) );
+					set_map_color( k, halt->get_owner()->get_player_color1_pixval(3) );
 					break;
 				}
 			}
@@ -1047,14 +1049,14 @@ void minimap_t::calc_map_pixel(const koord k)
 			// show ownership
 			{
 				if(  gr->is_halt()  ) {
-					set_map_color(k, color_idx_to_rgb(gr->get_halt()->get_owner()->get_player_color1()+3));
+					set_map_color(k, gr->get_halt()->get_owner()->get_player_color1_pixval(3));
 				}
 				else if(  weg_t *weg = gr->get_weg_nr(0)  ) {
-					set_map_color(k, weg->get_owner()==NULL ? color_idx_to_rgb(COL_ORANGE) : color_idx_to_rgb(weg->get_owner()->get_player_color1()+3) );
+					set_map_color(k, weg->get_owner()==NULL ? color_idx_to_rgb(COL_ORANGE) : weg->get_owner()->get_player_color1_pixval(3) );
 				}
 				if(  gebaeude_t *gb = gr->find<gebaeude_t>()  ) {
 					if(  gb->get_owner()!=NULL  ) {
-						set_map_color(k, color_idx_to_rgb(gb->get_owner()->get_player_color1()+3) );
+						set_map_color(k, gb->get_owner()->get_player_color1_pixval(3) );
 					}
 				}
 				break;
@@ -1527,11 +1529,11 @@ void minimap_t::draw(scr_coord pos)
 		// DISPLAY STATIONS AND AIRPORTS: moved here so station spots are not overwritten by lines drawn
 		FOR(  vector_tpl<line_segment_t>, seg, schedule_cache  ) {
 
-			uint8 color = seg.colorcount;
+			PIXVAL color = seg.line_color;
 			if(  event_get_last_control_shift()==2  ||  is_cnv_schedule_bound()  ) {
 				// on control / single convoi use only player colors
-				static uint8 last_color = color;
-				color = seg.player->get_player_color1()+1;
+				static PIXVAL last_color = color;
+				color = seg.player->get_player_color1_pixval(1);
 				// all lines same thickness if same color
 				if(  color == last_color || is_cnv_schedule_bound()  ) {
 					offset = 0;
@@ -1550,9 +1552,9 @@ void minimap_t::draw(scr_coord pos)
 			}
 			// and finally draw ...
 			if (  current_schedule  ) {
-				line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color_idx_to_rgb(color), seg.is_minimap_route_visible );
+				line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color, seg.is_minimap_route_visible );
 			} else {
-				line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color_idx_to_rgb(color) );
+				line_segment_draw( seg.waytype, k1, seg.start_offset*offset, k2, seg.end_offset*offset, diagonal, color );
 			}
 		}
 	}
@@ -1658,7 +1660,7 @@ void minimap_t::draw(scr_coord pos)
 		}
 		else {
 			const int stype = station->get_connected_station_type();
-			color = color_idx_to_rgb(station->get_owner()->get_player_color1()+3);
+			color = station->get_owner()->get_player_color1_pixval(3);
 
 			if (  route_search_transfer_halts.is_contained(station) && current_schedule && current_schedule->is_minimap_route_search_found()  ) {
 				radius = 6;
@@ -1752,7 +1754,7 @@ void minimap_t::draw(scr_coord pos)
 	if(  display_station.is_bound()  ) {
 		scr_coord temp_stop = map_to_screen_coord( display_station->get_basis_pos() );
 		temp_stop = temp_stop + pos;
-		display_ddd_proportional_clip( temp_stop.x + 10, temp_stop.y + 7, color_idx_to_rgb(display_station->get_owner()->get_player_color1()+3), color_idx_to_rgb(COL_WHITE), display_station->get_name(), false );
+		display_ddd_proportional_clip( temp_stop.x + 10, temp_stop.y + 7, display_station->get_owner()->get_player_color1_pixval(3), color_idx_to_rgb(COL_WHITE), display_station->get_name(), false );
 	}
 	max_waiting_change = new_max_waiting_change; // update waiting tendencies
 
@@ -1889,7 +1891,7 @@ void minimap_t::draw(scr_coord pos)
 			const bool has_filter = !highlighted_depot_positions.empty();
 			const bool highlighted = !has_filter || highlighted_depot_positions.is_contained(d->get_pos().get_2d());
 			const sint16 r = highlighted ? 4 : 2;
-			display_filled_circle_rgb( depot_pos.x, depot_pos.y, r, color_idx_to_rgb(d->get_owner()->get_player_color1()+4) );
+			display_filled_circle_rgb( depot_pos.x, depot_pos.y, r, d->get_owner()->get_player_color1_pixval(4) );
 			display_circle_rgb( depot_pos.x, depot_pos.y, r, color_idx_to_rgb(COL_BLACK) );
 			if(  highlighted && has_filter  ) {
 				display_circle_rgb( depot_pos.x, depot_pos.y, r + 3, color_idx_to_rgb(COL_WHITE) );
@@ -2001,7 +2003,7 @@ void minimap_t::draw(scr_coord pos)
 			}
 			else {
 				display_fillbox_wh_clip_rgb(draw_pos.x - 3, draw_pos.y - 3, 7, 7, color_idx_to_rgb(COL_BLACK), true);
-				display_fillbox_wh_clip_rgb(draw_pos.x - 2, draw_pos.y - 2, 5, 5, color_idx_to_rgb(cnv->get_owner()->get_player_color1() + 3), true);
+				display_fillbox_wh_clip_rgb(draw_pos.x - 2, draw_pos.y - 2, 5, 5, cnv->get_owner()->get_player_color1_pixval(3), true);
 			}
 
 			if(  abs(cnv_scr.x - hover_scr.x) <= 8  &&  abs(cnv_scr.y - hover_scr.y) <= 8  ) {

@@ -305,8 +305,8 @@ void route_search_frame_t::append_connection_row(haltestelle_t::connection_t con
     const player_t* player = std::visit([&](const auto& t) {
         return t->get_owner();
     }, connection.best_weight_traveler);
-    const uint8 color_idx = player->get_player_color1();
-    result_container.new_component<gui_label_t>(best_weight_traveler_name, color_idx_to_rgb(color_idx));
+    // get_player_color1_pixval() (not get_player_color1()) so custom RGB player colors show correctly
+    result_container.new_component<gui_label_t>(best_weight_traveler_name, player->get_player_color1_pixval(0));
 
     result_container.end_table();
 }

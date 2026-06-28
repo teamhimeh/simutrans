@@ -48,18 +48,17 @@ class line_color_line_scroll_item_t: public line_scrollitem_t
 public:
 	line_color_line_scroll_item_t( linehandle_t l ) : line_scrollitem_t(l) {};
 	PIXVAL get_color() const OVERRIDE {
-		const uint8 color_idx = get_line()->get_colour();
-		return color_idx_to_rgb(color_idx);
+		return get_line()->get_colour();
 	}
 };
 
-class company_color_line_scroll_item_t: public line_scrollitem_t 
+class company_color_line_scroll_item_t: public line_scrollitem_t
 {
 public:
 	company_color_line_scroll_item_t( linehandle_t l ) : line_scrollitem_t(l) {};
 	PIXVAL get_color() const OVERRIDE {
-		const uint8 color_idx = get_line()->get_owner()->get_player_color1();
-		return color_idx_to_rgb(color_idx);
+		// get_player_color1_pixval() (not get_player_color1()) so custom RGB player colors show correctly
+		return get_line()->get_owner()->get_player_color1_pixval(0);
 	}
 };
 

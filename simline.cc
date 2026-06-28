@@ -13,6 +13,7 @@
 #include "dataobj/schedule.h"
 #include "dataobj/translator.h"
 #include "dataobj/loadsave.h"
+#include "display/simgraph.h"
 #include "gui/gui_theme.h"
 #include "player/simplay.h"
 #include "player/finance.h" // convert_money
@@ -46,7 +47,7 @@ simline_t::simline_t(player_t* player, linetype type)
 	sprintf(printname, "(%i) %s", self.get_id(), translator::translate("Line", welt->get_settings().get_name_language_id()));
 	name = printname;
 	memo = "";
-	colour = player->get_player_color1() + env_t::gui_player_color_bright;
+	colour = player->get_player_color1_pixval(env_t::gui_player_color_bright);
 
 	init_financial_history();
 	this->type = type;
@@ -147,7 +148,7 @@ void simline_t::set_memo(const char* new_memo)
 	memo = new_memo;
 }
 
-void simline_t::set_colour(const uint8 new_colour)
+void simline_t::set_colour(const PIXVAL new_colour)
 {
 	colour = new_colour;
 }
@@ -359,12 +360,30 @@ void simline_t::rdwr(loadsave_t *file)
 		memo = "";
 	}
 
-	if (file->get_OTRP_version() >= 51) {
-		file->rdwr_enum(colour);
-		// read colour of the line
+	if(file->get_OTRP_version() >= 56) {
+		// colour stored as portable R,G,B (3 bytes) so save files are readable
+		// regardless of whether the build uses RGB565 or RGB555 native pixels
+		uint8 r, g, b;
+		if(file->is_saving()) {
+			pixval_to_rgb8(colour, r, g, b);
+		}
+		file->rdwr_byte(r);
+		file->rdwr_byte(g);
+		file->rdwr_byte(b);
+		if(file->is_loading()) {
+			colour = make_rgb_pixval(r, g, b);
+		}
+	}
+	else if(file->get_OTRP_version() >= 51) {
+		// old format: palette index stored as sint32 via rdwr_enum (4 bytes)
+		sint32 old_idx = 0;
+		file->rdwr_long(old_idx);
+		colour = color_idx_to_rgb((uint8)old_idx);
 	}
 	else {
-		colour = player->get_player_color1();
+		// OTRP < 51: colour not stored; derive from palette index directly
+		// (player_offsets in display may not be updated yet before finish_rd)
+		colour = color_idx_to_rgb(player->get_player_color1() + env_t::gui_player_color_bright);
 	}
 	// otherwise initialized to zero if loading ...
 	financial_history[0][LINE_CONVOIS] = count_convoys();

@@ -91,9 +91,9 @@ private:
 	sint64 financial_history[MAX_MONTHS][MAX_LINE_COST];
 
 	/**
-	 * colour of line
+	 * colour of line (stored as PIXVAL = 16-bit RGB565/RGB555 native screen color)
 	 */
-	uint8 colour;
+	PIXVAL colour;
 
 	/**
 	 * creates empty schedule with type depending on line-type
@@ -161,8 +161,8 @@ public:
 	/**
 	 * get colour of line
 	 */
-	uint8 const get_colour() const { return colour; }
-	void set_colour(const uint8 colour);
+	PIXVAL get_colour() const { return colour; }
+	void set_colour(const PIXVAL colour);
 
 	/*
 	 * load or save the line

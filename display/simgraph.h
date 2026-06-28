@@ -174,13 +174,22 @@ void display_day_night_shift(int night);
 // scrolls horizontally, will ignore clipping etc.
 void display_scroll_band( const scr_coord_val start_y, const scr_coord_val x_offset, const scr_coord_val h );
 
-// set first and second company color for player
+// set first and second company color for player (preset palette index)
 void display_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2 );
+// set first and second company color for player using arbitrary RGB (r,g,b each 0-255)
+void display_set_player_color_scheme_rgb(const int player, uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint8 g2, uint8 b2);
+// returns the day-mode PIXVAL for shade 0-7 of a player's color slot (shade 4 = base/"bright" color)
+PIXVAL display_get_player_color_pixval(const int player, bool is_color2, int shade);
+// convert 8-bit R,G,B to native PIXVAL (RGB565 or RGB555)
+PIXVAL make_rgb_pixval(uint8 r, uint8 g, uint8 b);
+// convert native PIXVAL (RGB565 or RGB555) back to 8-bit R,G,B
+void pixval_to_rgb8(PIXVAL col, uint8 &r, uint8 &g, uint8 &b);
 
 // draw image with per-object line color substitution (live rendering, no image cache slot used)
-void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF);
+// line_color is the line's actual RGB pixel value (as returned by simline_t::get_colour()), not a palette index
+void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const PIXVAL line_color, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF);
 // base-image variant: uses base coords when GUI viewport scale differs from game zoom
-void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF);
+void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const PIXVAL line_color, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF);
 
 // only used for GUI, display image inside a rect
 void display_img_aligned( const image_id n, scr_rect area, int align, const bool dirty);

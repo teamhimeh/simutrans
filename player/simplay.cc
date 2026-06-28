@@ -20,6 +20,7 @@
 #include "../gui/simwin.h"
 #include "../simworld.h"
 #include "../display/viewport.h"
+#include "../display/simgraph.h"
 
 #include "../bauer/brueckenbauer.h"
 #include "../bauer/hausbauer.h"
@@ -222,7 +223,7 @@ void player_t::display_messages()
 
 		const scr_coord scr_pos = vp->get_screen_coord(koord3d(m->pos,welt->lookup_hgt(m->pos)),koord(0,m->alter >> 4)) + scr_coord((get_tile_raster_width()-display_calc_proportional_string_len_width(m->str, 0x7FFF))/2,0);
 
-		display_shadow_proportional_rgb( scr_pos.x, scr_pos.y, PLAYER_FLAG|color_idx_to_rgb(player_color_1+3), color_idx_to_rgb(COL_BLACK), m->str, true);
+		display_shadow_proportional_rgb( scr_pos.x, scr_pos.y, PLAYER_FLAG|get_player_color1_pixval(3), color_idx_to_rgb(COL_BLACK), m->str, true);
 		if(  m->pos.x < 3  ||  m->pos.y < 3  ) {
 			// very close to border => renew background
 			welt->set_background_dirty();
@@ -267,7 +268,26 @@ void player_t::set_player_color(uint8 col1, uint8 col2)
 {
 	player_color_1 = col1;
 	player_color_2 = col2;
+	player_color_custom = false;
 	display_set_player_color_scheme( player_nr, col1, col2 );
+}
+
+void player_t::set_player_color_rgb(uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint8 g2, uint8 b2)
+{
+	player_color_custom = true;
+	player_color_rgb[0][0] = r1; player_color_rgb[0][1] = g1; player_color_rgb[0][2] = b1;
+	player_color_rgb[1][0] = r2; player_color_rgb[1][1] = g2; player_color_rgb[1][2] = b2;
+	display_set_player_color_scheme_rgb(player_nr, r1, g1, b1, r2, g2, b2);
+}
+
+PIXVAL player_t::get_player_color1_pixval(int shade) const
+{
+	return display_get_player_color_pixval(player_nr, false, shade);
+}
+
+PIXVAL player_t::get_player_color2_pixval(int shade) const
+{
+	return display_get_player_color_pixval(player_nr, true, shade);
 }
 
 
@@ -296,7 +316,7 @@ bool player_t::new_month()
 				if(  finance->get_netwealth() < 0 ) {
 					destroy_all_win(true);
 					create_win( display_get_width()/2-128, 40, new news_img("Bankrott:\n\nDu bist bankrott.\n"), w_info, magic_none);
-					ticker::add_msg( translator::translate("Bankrott:\n\nDu bist bankrott.\n"), koord::invalid, PLAYER_FLAG + player_color_1 + 1 );
+					ticker::add_msg( translator::translate("Bankrott:\n\nDu bist bankrott.\n"), koord::invalid, PLAYER_FLAG | get_player_color1_pixval(1) );
 					welt->stop(false);
 				}
 				else if(  finance->get_netwealth()*10 < welt->get_settings().get_starting_money(welt->get_current_month()/12)  ){
@@ -670,6 +690,25 @@ void player_t::rdwr(loadsave_t *file)
 		file->rdwr_byte(player_color_2);
 	}
 
+	if(file->get_OTRP_version() >= 56) {
+		file->rdwr_bool(player_color_custom);
+		file->rdwr_byte(player_color_rgb[0][0]);
+		file->rdwr_byte(player_color_rgb[0][1]);
+		file->rdwr_byte(player_color_rgb[0][2]);
+		file->rdwr_byte(player_color_rgb[1][0]);
+		file->rdwr_byte(player_color_rgb[1][1]);
+		file->rdwr_byte(player_color_rgb[1][2]);
+	}
+	else if(file->is_loading()) {
+		player_color_custom = false;
+		// Migrate palette-based colors to player_color_rgb for clean OTRP 56 saves.
+		// color_idx_to_rgb uses specialcolormap_all_day which is ready during load.
+		PIXVAL col1 = color_idx_to_rgb(player_color_1 + env_t::gui_player_color_bright);
+		PIXVAL col2 = color_idx_to_rgb(player_color_2 + env_t::gui_player_color_bright);
+		pixval_to_rgb8(col1, player_color_rgb[0][0], player_color_rgb[0][1], player_color_rgb[0][2]);
+		pixval_to_rgb8(col2, player_color_rgb[1][0], player_color_rgb[1][1], player_color_rgb[1][2]);
+	}
+
 	sint32 halt_count=0;
 	if(file->is_version_less(99, 8)) {
 		file->rdwr_long(halt_count);
@@ -762,7 +801,14 @@ DBG_DEBUG("player_t::rdwr()","player %i: loading %i halts.",welt->sp2num( this )
 void player_t::finish_rd()
 {
 	simlinemgmt.finish_rd();
-	display_set_player_color_scheme( player_nr, player_color_1, player_color_2 );
+	if(player_color_custom) {
+		display_set_player_color_scheme_rgb(player_nr,
+			player_color_rgb[0][0], player_color_rgb[0][1], player_color_rgb[0][2],
+			player_color_rgb[1][0], player_color_rgb[1][1], player_color_rgb[1][2]);
+	}
+	else {
+		display_set_player_color_scheme( player_nr, player_color_1, player_color_2 );
+	}
 	// recalculate vehicle value
 	calc_assets();
 

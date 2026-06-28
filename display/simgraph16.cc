@@ -318,6 +318,20 @@ static uint8 transparent_map_all_day_rgb[(MAX_PLAYER_COUNT+LIGHT_COUNT+1024)*4];
 // offsets of first and second company color
 static uint8 player_offsets[MAX_PLAYER_COUNT][2];
 
+// Custom RGB colors (R,G,B as uint8) per player per color slot; active when player_use_custom is true
+static uint8 player_custom_rgb[MAX_PLAYER_COUNT][2][3];
+static bool  player_use_custom[MAX_PLAYER_COUNT];
+
+// Shade multipliers derived from actual Simutrans palette (relative to shade 4 = base color)
+// Values are numerators with denominator 189 (= shade4 value for reference blue channel)
+static const int SHADE_NUM[8] = { 103, 124, 145, 167, 189, 211, 233, 255 };
+static const int SHADE_BASE   = 189;
+
+static inline int shade_channel(int base_ch, int shade_idx)
+{
+	return min(255, base_ch * SHADE_NUM[shade_idx] / SHADE_BASE);
+}
+
 
 /*
  * Image map descriptor structure
@@ -358,6 +372,32 @@ struct imd {
 #define TWO_OUT_16 (0x39E7)
 #define ONE_OUT_15 (0x3DEF)
 #define TWO_OUT_15 (0x1CE7)
+
+// Fill 8 PIXVAL shade entries and 8 transparent entries for one player color slot,
+// applying the given night multipliers (same formula as calc_base_pal_from_night_shift).
+static void fill_custom_shades(PIXVAL* rgbmap8, PIXVAL* tmap8, uint8* tmap8_rgb,
+                                uint8 r, uint8 g, uint8 b,
+                                double rg_mult, double b_mult)
+{
+	for(int i = 0; i < 8; i++) {
+		const int R = (int)(shade_channel(r, i) * rg_mult);
+		const int G = (int)(shade_channel(g, i) * rg_mult);
+		const int B = (int)(shade_channel(b, i) * b_mult);
+		const PIXVAL col = get_system_color(R > 0 ? R : 0, G > 0 ? G : 0, B > 0 ? B : 0);
+		rgbmap8[i] = col;
+#ifdef RGB555
+		tmap8[i] = (col >> 2) & TWO_OUT_15;
+		tmap8_rgb[i*4+0] = col >> 10;
+		tmap8_rgb[i*4+1] = (col >> 5) & 0x1F;
+		tmap8_rgb[i*4+2] = col & 0x1F;
+#else
+		tmap8[i] = (col >> 2) & TWO_OUT_16;
+		tmap8_rgb[i*4+0] = col >> 11;
+		tmap8_rgb[i*4+1] = (col >> 5) & 0x3F;
+		tmap8_rgb[i*4+2] = col & 0x1F;
+#endif
+	}
+}
 
 static int bitdepth = 16;
 
@@ -1170,32 +1210,42 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 	// caches the last settings
 	if(!daynight) {
 		if(player_day!=player_nr) {
-			int i;
 			player_day = player_nr;
-			for(i=0;  i<8;  i++  ) {
-				rgbmap_all_day[0x8000+i] = specialcolormap_all_day[player_offsets[player_day][0]+i];
-				rgbmap_all_day[0x8008+i] = specialcolormap_all_day[player_offsets[player_day][1]+i];
+			if(player_use_custom[player_day]) {
+				fill_custom_shades(
+					&rgbmap_all_day[0x8000], &transparent_map_all_day[0], &transparent_map_all_day_rgb[0],
+					player_custom_rgb[player_day][0][0], player_custom_rgb[player_day][0][1], player_custom_rgb[player_day][0][2],
+					1.0, 1.0);
+				fill_custom_shades(
+					&rgbmap_all_day[0x8008], &transparent_map_all_day[8], &transparent_map_all_day_rgb[32],
+					player_custom_rgb[player_day][1][0], player_custom_rgb[player_day][1][1], player_custom_rgb[player_day][1][2],
+					1.0, 1.0);
+			}
+			else {
+				int i;
+				for(i=0;  i<8;  i++  ) {
+					rgbmap_all_day[0x8000+i] = specialcolormap_all_day[player_offsets[player_day][0]+i];
+					rgbmap_all_day[0x8008+i] = specialcolormap_all_day[player_offsets[player_day][1]+i];
 #ifdef RGB555
-				transparent_map_all_day[i] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
-				transparent_map_all_day[i + 8] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
-				// those save RGB components
-				transparent_map_all_day_rgb[i * 4 + 0] = specialcolormap_all_day[player_offsets[player_day][0] + i] >> 10;
-				transparent_map_all_day_rgb[i * 4 + 1] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 5) & 0x31;
-				transparent_map_all_day_rgb[i * 4 + 2] = specialcolormap_all_day[player_offsets[player_day][0] + i] & 0x1F;
-				transparent_map_all_day_rgb[i * 4 + 0 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] >> 10;
-				transparent_map_all_day_rgb[i * 4 + 1 + 32] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 5) & 0x1F;
-				transparent_map_all_day_rgb[i * 4 + 2 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] & 0x1F;
+					transparent_map_all_day[i] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
+					transparent_map_all_day[i + 8] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
+					transparent_map_all_day_rgb[i * 4 + 0] = specialcolormap_all_day[player_offsets[player_day][0] + i] >> 10;
+					transparent_map_all_day_rgb[i * 4 + 1] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 5) & 0x31;
+					transparent_map_all_day_rgb[i * 4 + 2] = specialcolormap_all_day[player_offsets[player_day][0] + i] & 0x1F;
+					transparent_map_all_day_rgb[i * 4 + 0 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] >> 10;
+					transparent_map_all_day_rgb[i * 4 + 1 + 32] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 5) & 0x1F;
+					transparent_map_all_day_rgb[i * 4 + 2 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] & 0x1F;
 #else
-				transparent_map_all_day[i] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_16;
-				transparent_map_all_day[i + 8] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_16;
-				// those save RGB components
-				transparent_map_all_day_rgb[i * 4 + 0] = specialcolormap_all_day[player_offsets[player_day][0] + i] >> 11;
-				transparent_map_all_day_rgb[i * 4 + 1] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 5) & 0x3F;
-				transparent_map_all_day_rgb[i * 4 + 2] = specialcolormap_all_day[player_offsets[player_day][0] + i] & 0x1F;
-				transparent_map_all_day_rgb[i * 4 + 0 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] >> 11;
-				transparent_map_all_day_rgb[i * 4 + 1 + 32] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 5) & 0x3F;
-				transparent_map_all_day_rgb[i * 4 + 2 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] & 0x1F;
+					transparent_map_all_day[i] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_16;
+					transparent_map_all_day[i + 8] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_16;
+					transparent_map_all_day_rgb[i * 4 + 0] = specialcolormap_all_day[player_offsets[player_day][0] + i] >> 11;
+					transparent_map_all_day_rgb[i * 4 + 1] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 5) & 0x3F;
+					transparent_map_all_day_rgb[i * 4 + 2] = specialcolormap_all_day[player_offsets[player_day][0] + i] & 0x1F;
+					transparent_map_all_day_rgb[i * 4 + 0 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] >> 11;
+					transparent_map_all_day_rgb[i * 4 + 1 + 32] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 5) & 0x3F;
+					transparent_map_all_day_rgb[i * 4 + 2 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] & 0x1F;
 #endif
+				}
 			}
 		}
 		rgbmap_current = rgbmap_all_day;
@@ -1203,32 +1253,44 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 	else {
 		// changing color table
 		if(player_night!=player_nr) {
-			int i;
 			player_night = player_nr;
-			for(i=0;  i<8;  i++  ) {
-				rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[player_night][0]+i];
-				rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[player_night][1]+i];
+			if(player_use_custom[player_night]) {
+				const double rg_mult = pow(0.75, night_shift) * ((light_level + 8.0) / 8.0);
+				const double b_mult  = pow(0.83, night_shift) * ((light_level + 8.0) / 8.0);
+				fill_custom_shades(
+					&rgbmap_day_night[0x8000], &transparent_map_day_night[0], &transparent_map_day_night_rgb[0],
+					player_custom_rgb[player_night][0][0], player_custom_rgb[player_night][0][1], player_custom_rgb[player_night][0][2],
+					rg_mult, b_mult);
+				fill_custom_shades(
+					&rgbmap_day_night[0x8008], &transparent_map_day_night[8], &transparent_map_day_night_rgb[32],
+					player_custom_rgb[player_night][1][0], player_custom_rgb[player_night][1][1], player_custom_rgb[player_night][1][2],
+					rg_mult, b_mult);
+			}
+			else {
+				int i;
+				for(i=0;  i<8;  i++  ) {
+					rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[player_night][0]+i];
+					rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[player_night][1]+i];
 #ifdef RGB555
-				transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
-				transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
-				// those save RGB components
-				transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 10;
-				transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x31;
-				transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
-				transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 10;
-				transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x1F;
-				transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
+					transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
+					transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
+					transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 10;
+					transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x31;
+					transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
+					transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 10;
+					transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x1F;
+					transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
 #else
-				transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0]+i] >> 2) & TWO_OUT_16;
-				transparent_map_day_night[i+8] = (specialcolormap_day_night[player_offsets[player_day][1]+i] >> 2) & TWO_OUT_16;
-				// those save RGB components
-				transparent_map_day_night_rgb[i*4+0] = specialcolormap_day_night[player_offsets[player_day][0]+i] >> 11;
-				transparent_map_day_night_rgb[i*4+1] = (specialcolormap_day_night[player_offsets[player_day][0]+i] >> 5) & 0x3F;
-				transparent_map_day_night_rgb[i*4+2] = specialcolormap_day_night[player_offsets[player_day][0]+i] & 0x1F;
-				transparent_map_day_night_rgb[i*4+0+32] = specialcolormap_day_night[player_offsets[player_day][1]+i] >> 11;
-				transparent_map_day_night_rgb[i*4+1+32] = (specialcolormap_day_night[player_offsets[player_day][1]+i] >> 5) & 0x3F;
-				transparent_map_day_night_rgb[i*4+2+32] = specialcolormap_day_night[player_offsets[player_day][1]+i] & 0x1F;
+					transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0]+i] >> 2) & TWO_OUT_16;
+					transparent_map_day_night[i+8] = (specialcolormap_day_night[player_offsets[player_day][1]+i] >> 2) & TWO_OUT_16;
+					transparent_map_day_night_rgb[i*4+0] = specialcolormap_day_night[player_offsets[player_day][0]+i] >> 11;
+					transparent_map_day_night_rgb[i*4+1] = (specialcolormap_day_night[player_offsets[player_day][0]+i] >> 5) & 0x3F;
+					transparent_map_day_night_rgb[i*4+2] = specialcolormap_day_night[player_offsets[player_day][0]+i] & 0x1F;
+					transparent_map_day_night_rgb[i*4+0+32] = specialcolormap_day_night[player_offsets[player_day][1]+i] >> 11;
+					transparent_map_day_night_rgb[i*4+1+32] = (specialcolormap_day_night[player_offsets[player_day][1]+i] >> 5) & 0x3F;
+					transparent_map_day_night_rgb[i*4+2+32] = specialcolormap_day_night[player_offsets[player_day][1]+i] & 0x1F;
 #endif
+				}
 			}
 		}
 		rgbmap_current = rgbmap_day_night;
@@ -1237,12 +1299,25 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 
 
 /**
- * Flag all images to recode colors on next draw
+ * Flag all images to recode colors on next draw.
+ * If player_nr is negative (default), every player's cached variant is
+ * invalidated (needed after a global change like a day/night shift).
+ * Otherwise only the single affected player's cached variant is invalidated,
+ * so changing one player's color does not force every other player's
+ * (and every other cached image's) recolor cache to be rebuilt as well.
  */
-static void recode()
+static void recode(sint8 player_nr = -1)
 {
-	for(  image_id n = 0;  n < anz_images;  n++  ) {
-		images[n].player_flags = 0xFFFF;  // recode all player colors
+	if(  player_nr < 0  ) {
+		for(  image_id n = 0;  n < anz_images;  n++  ) {
+			images[n].player_flags = 0xFFFF;  // recode all player colors
+		}
+	}
+	else {
+		const uint16 mask = 1 << player_nr;
+		for(  image_id n = 0;  n < anz_images;  n++  ) {
+			images[n].player_flags |= mask;  // recode only this player's color
+		}
 	}
 }
 
@@ -2010,32 +2085,44 @@ static void calc_base_pal_from_night_shift(const int night)
 		specialcolormap_day_night_for_line[i] = 0;
 	}
 
-	// default player colors
-	for(i=0;  i<8;  i++  ) {
-		rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[0][0]+i];
-		rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[0][1]+i];
+	// default player colors (player slot 0)
+	if(player_use_custom[0]) {
+		fill_custom_shades(
+			&rgbmap_day_night[0x8000], &transparent_map_day_night[0], &transparent_map_day_night_rgb[0],
+			player_custom_rgb[0][0][0], player_custom_rgb[0][0][1], player_custom_rgb[0][0][2],
+			RG_night_multiplier, B_night_multiplier);
+		fill_custom_shades(
+			&rgbmap_day_night[0x8008], &transparent_map_day_night[8], &transparent_map_day_night_rgb[32],
+			player_custom_rgb[0][1][0], player_custom_rgb[0][1][1], player_custom_rgb[0][1][2],
+			RG_night_multiplier, B_night_multiplier);
+	}
+	else {
+		for(i=0;  i<8;  i++  ) {
+			rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[0][0]+i];
+			rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[0][1]+i];
 #ifdef RGB555
-		// 15 bit colors from here!
-		transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
-		transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
-		transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 10;
-		transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 10;
-		transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
+			// 15 bit colors from here!
+			transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
+			transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
+			transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 10;
+			transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x1F;
+			transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
+			transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 10;
+			transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x1F;
+			transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
 #else
-		// 16 bit colors from here!
-		transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_16;
-		transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_16;
-		// save RGB components
-		transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 11;
-		transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x3F;
-		transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 11;
-		transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x3F;
-		transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
+			// 16 bit colors from here!
+			transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_16;
+			transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_16;
+			// save RGB components
+			transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 11;
+			transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x3F;
+			transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
+			transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 11;
+			transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x3F;
+			transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
 #endif
+		}
 	}
 	player_night = 0;
 
@@ -2088,6 +2175,7 @@ void display_day_night_shift(int night)
 // set first and second company color for player
 void display_set_player_color_scheme(const int player, const uint8 col1, const uint8 col2 )
 {
+	player_use_custom[player] = false;
 	if(player_offsets[player][0]!=col1  ||  player_offsets[player][1]!=col2) {
 		// set new player colors
 		player_offsets[player][0] = col1;
@@ -2104,11 +2192,81 @@ void display_set_player_color_scheme(const int player, const uint8 col1, const u
 			// calc_base_pal_from_night_shift resets player_night to 0
 			player_day = player_night;
 		}
-		recode();
+		// only this player's color actually changed; no need to force every
+		// other player's cached sprite variants to be rebuilt as well
+		recode(player);
 		mark_screen_dirty();
 	}
 }
 
+
+void display_set_player_color_scheme_rgb(const int player, uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint8 g2, uint8 b2)
+{
+	player_use_custom[player] = true;
+	player_custom_rgb[player][0][0] = r1;
+	player_custom_rgb[player][0][1] = g1;
+	player_custom_rgb[player][0][2] = b1;
+	player_custom_rgb[player][1][0] = r2;
+	player_custom_rgb[player][1][1] = g2;
+	player_custom_rgb[player][1][2] = b2;
+	// Invalidate cache so activate_player_color regenerates shades
+	player_day   = 0xFF;
+	player_night = 0xFF;
+	if(player == 0) {
+		// Slot 0 is also baked into the day/night maps by calc_base_pal_from_night_shift
+		calc_base_pal_from_night_shift(0);
+		memcpy(rgbmap_all_day, rgbmap_day_night, RGBMAPSIZE * sizeof(PIXVAL));
+		memcpy(transparent_map_all_day, transparent_map_day_night, lengthof(transparent_map_day_night) * sizeof(PIXVAL));
+		memcpy(transparent_map_all_day_rgb, transparent_map_day_night_rgb, lengthof(transparent_map_day_night_rgb) * sizeof(uint8));
+		if(night_shift != 0) {
+			calc_base_pal_from_night_shift(night_shift);
+		}
+	}
+	// only this player's color actually changed; no need to force every
+	// other player's cached sprite variants to be rebuilt as well
+	recode(player);
+	mark_screen_dirty();
+}
+
+
+// Returns the day-mode PIXVAL for a given player color slot and shade index (0-7).
+// shade 4 = gui_player_color_bright (the "base" color), 0 = darkest, 7 = lightest.
+PIXVAL display_get_player_color_pixval(const int player, bool is_color2, int shade)
+{
+	if(shade < 0) shade = 0;
+	if(shade > 7) shade = 7;
+	if(player_use_custom[player]) {
+		const uint8 r = player_custom_rgb[player][is_color2?1:0][0];
+		const uint8 g = player_custom_rgb[player][is_color2?1:0][1];
+		const uint8 b = player_custom_rgb[player][is_color2?1:0][2];
+		return get_system_color(
+			shade_channel(r, shade),
+			shade_channel(g, shade),
+			shade_channel(b, shade));
+	}
+	return specialcolormap_all_day[player_offsets[player][is_color2?1:0] + shade];
+}
+
+
+PIXVAL make_rgb_pixval(uint8 r, uint8 g, uint8 b)
+{
+	return get_system_color(r, g, b);
+}
+
+
+// Decode a native PIXVAL (RGB565 or RGB555) back into 8-bit R,G,B.
+void pixval_to_rgb8(PIXVAL col, uint8 &r, uint8 &g, uint8 &b)
+{
+#ifdef RGB555
+	r = ((col >> 10) & 0x1F) << 3;
+	g = ((col >>  5) & 0x1F) << 3;
+	b = ( col        & 0x1F) << 3;
+#else
+	r = ((col >> 11) & 0x1F) << 3;
+	g = ((col >>  5) & 0x3F) << 2;
+	b = ( col        & 0x1F) << 3;
+#endif
+}
 
 
 void register_image(image_t *image_in)
@@ -3214,12 +3372,35 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 
 
 /**
+ * Build an 8-shade ramp directly from a line's RGB565/555 color value (which may be an
+ * arbitrary custom color, not a palette family index), honoring the current night-shift
+ * dimming the same way fill_custom_shades() does for custom player colors.
+ */
+static void fill_line_color_shades(PIXVAL* out8, PIXVAL line_color, bool daynight)
+{
+	uint8 r, g, b;
+	pixval_to_rgb8(line_color, r, g, b);
+	double rg_mult = 1.0, b_mult = 1.0;
+	if(  daynight  &&  night_shift > 0  ) {
+		rg_mult = pow(0.75, night_shift) * ((light_level + 8.0) / 8.0);
+		b_mult  = pow(0.83, night_shift) * ((light_level + 8.0) / 8.0);
+	}
+	for(  int i = 0;  i < 8;  i++  ) {
+		const int R = (int)(shade_channel(r, i) * rg_mult);
+		const int G = (int)(shade_channel(g, i) * rg_mult);
+		const int B = (int)(shade_channel(b, i) * b_mult);
+		out8[i] = get_system_color(R > 0 ? R : 0, G > 0 ? G : 0, B > 0 ? B : 0);
+	}
+}
+
+
+/**
  * Draw image with a specific line color applied per-object, using live rendering.
  * Unlike display_color_img, this does NOT use the pre-recoded image cache.
  * It temporarily installs the line color into rgbmap and draws from raw zoom_data,
  * then restores the original mapping — so different objects can each use their own color.
  */
-void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const PIXVAL line_color, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  n < anz_images  ) {
 		if(  (images[n].recode_flags & FLAG_HAS_PLAYER_COLOR) == 0  ) {
@@ -3242,15 +3423,9 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 			mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 		}
 
-		// build local line-color ramp (no global state modified)
-		// player-color-family-based line colors (col%8==0) use a darker palette to distinguish from player colors
-		const PIXVAL *const specmap = (col % 8 == 0)
-			? (daynight ? specialcolormap_day_night_for_line : specialcolormap_all_day_for_line)
-			: (daynight ? specialcolormap_day_night           : specialcolormap_all_day);
+		// build local line-color ramp directly from the line's RGB color (no global state modified)
 		PIXVAL line_col[8];
-		for(  int i = 0;  i < 8;  i++  ) {
-			line_col[i] = specmap[(col/8)*8 + i];
-		}
+		fill_line_color_shades( line_col, line_color, daynight );
 
 		// build local player color 2 ramp from owner's palette (thread-safe, no global rgbmap)
 		const PIXVAL *const specmap2 = daynight ? specialcolormap_day_night : specialcolormap_all_day;
@@ -3356,11 +3531,11 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
  * Draw Image using line color, using base image data when GUI viewport scale differs from game zoom.
  * Parallel to display_base_img but substitutes player colors with line colors.
  */
-void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const uint8 col, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
+void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp, const PIXVAL line_color, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  base_tile_raster_width == tile_raster_width  ) {
 		// same scale: the zoomed-coord routine works correctly
-		display_color_img_line( n, xp, yp, col, player_nr, daynight, dirty  CLIP_NUM_PAR );
+		display_color_img_line( n, xp, yp, line_color, player_nr, daynight, dirty  CLIP_NUM_PAR );
 		return;
 	}
 	if(  n < anz_images  ) {
@@ -3383,13 +3558,8 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 			mark_rect_dirty_wc( x, y, x + w - 1, y + h - 1 );
 		}
 
-		const PIXVAL *const specmap = (col % 8 == 0)
-			? (daynight ? specialcolormap_day_night_for_line : specialcolormap_all_day_for_line)
-			: (daynight ? specialcolormap_day_night           : specialcolormap_all_day);
 		PIXVAL line_col[8];
-		for(  int i = 0;  i < 8;  i++  ) {
-			line_col[i] = specmap[(col/8)*8 + i];
-		}
+		fill_line_color_shades( line_col, line_color, daynight );
 
 		const PIXVAL *const specmap2 = daynight ? specialcolormap_day_night : specialcolormap_all_day;
 		PIXVAL player_col2[8];

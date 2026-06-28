@@ -76,7 +76,7 @@ labellist_stats_t::labellist_stats_t(koord label_pos)
 	label.update();
 
 	if (const label_t *lb = get_label()) {
-		label.set_color(PLAYER_FLAG | color_idx_to_rgb(lb->get_owner()->get_player_color1()+env_t::gui_player_color_dark));
+		label.set_color(PLAYER_FLAG | lb->get_owner()->get_player_color1_pixval(env_t::gui_player_color_dark));
 	}
 }
 

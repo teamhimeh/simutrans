@@ -16,19 +16,19 @@ gui_colorbox_t::gui_colorbox_t(PIXVAL c)
 
 scr_size gui_colorbox_t::get_min_size() const
 {
-	return scr_size(D_INDICATOR_WIDTH, D_INDICATOR_HEIGHT);
+	return scr_size(D_INDICATOR_WIDTH, max_size.h);
 }
 
 
 scr_size gui_colorbox_t::get_max_size() const
 {
-	return scr_size(max_size.w, D_INDICATOR_HEIGHT);
+	return max_size;
 }
 
 
 void gui_colorbox_t::draw(scr_coord offset)
 {
 	offset += pos;
-	display_ddd_box_clip_rgb(offset.x, offset.y, size.w, D_INDICATOR_HEIGHT, color_idx_to_rgb(MN_GREY0), color_idx_to_rgb(MN_GREY4));
-	display_fillbox_wh_clip_rgb(offset.x + 1, offset.y + 1, size.w - 2, D_INDICATOR_HEIGHT-2, color, true);
+	display_ddd_box_clip_rgb(offset.x, offset.y, size.w, size.h, color_idx_to_rgb(MN_GREY0), color_idx_to_rgb(MN_GREY4));
+	display_fillbox_wh_clip_rgb(offset.x + 1, offset.y + 1, size.w - 2, size.h - 2, color, true);
 }

@@ -185,6 +185,33 @@ void display_base_img(const image_id, scr_coord_val, scr_coord_val, const sint8,
 {
 }
 
+void display_color_img_line(const image_id, scr_coord_val, scr_coord_val, const PIXVAL, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
+{
+}
+
+void display_base_img_line(const image_id, scr_coord_val, scr_coord_val, const PIXVAL, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
+{
+}
+
+void display_set_player_color_scheme_rgb(const int, uint8, uint8, uint8, uint8, uint8, uint8)
+{
+}
+
+PIXVAL display_get_player_color_pixval(const int, bool, int)
+{
+	return 0;
+}
+
+PIXVAL make_rgb_pixval(uint8, uint8, uint8)
+{
+	return 0;
+}
+
+void pixval_to_rgb8(PIXVAL, uint8 &r, uint8 &g, uint8 &b)
+{
+	r = g = b = 0;
+}
+
 void display_fit_img_to_width( const image_id, sint16)
 {
 }

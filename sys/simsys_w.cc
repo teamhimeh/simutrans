@@ -1031,6 +1031,84 @@ int main()
 #endif
 
 
+// ChooseColor() runs its own modal message loop and does not return until the
+// dialog is closed. Since the game's simulation and rendering are stepped
+// synchronously from the same thread that would call it, doing so directly
+// would freeze the game for as long as the dialog stays open. Instead, the
+// dialog is run on a dedicated worker thread (with no owner window, so
+// Windows does not disable/grey out the main window either) and the result
+// is picked up later via dr_pick_color_poll(), called once per frame from
+// the GUI while a pick is pending.
+static LONG volatile color_pick_state = 0; // 0=idle, 1=running, 2=done, use Interlocked* for cross-thread visibility
+static HANDLE color_pick_thread = NULL;
+static uint8 color_pick_in_r, color_pick_in_g, color_pick_in_b;
+static uint8 color_pick_out_r, color_pick_out_g, color_pick_out_b;
+static bool color_pick_accepted = false;
+
+static DWORD WINAPI color_pick_proc(LPVOID)
+{
+	static COLORREF custom_colors[16] = {};
+	CHOOSECOLOR cc = {};
+	cc.lStructSize  = sizeof(cc);
+	cc.hwndOwner    = NULL; // no owner: keeps the main window enabled and responsive
+	cc.lpCustColors = custom_colors;
+	cc.rgbResult    = RGB(color_pick_in_r, color_pick_in_g, color_pick_in_b);
+	cc.Flags        = CC_FULLOPEN | CC_RGBINIT;
+	color_pick_accepted = ChooseColor(&cc) != 0;
+	if(  color_pick_accepted  ) {
+		color_pick_out_r = GetRValue(cc.rgbResult);
+		color_pick_out_g = GetGValue(cc.rgbResult);
+		color_pick_out_b = GetBValue(cc.rgbResult);
+	}
+	InterlockedExchange(&color_pick_state, 2);
+	return 0;
+}
+
+bool dr_pick_color_start(uint8 r, uint8 g, uint8 b)
+{
+	if(  InterlockedCompareExchange(&color_pick_state, 1, 0) != 0  ) {
+		// a pick is already running, or a finished result has not been collected yet
+		return false;
+	}
+	if(  color_pick_thread  ) {
+		CloseHandle( color_pick_thread );
+		color_pick_thread = NULL;
+	}
+	color_pick_in_r = r;
+	color_pick_in_g = g;
+	color_pick_in_b = b;
+	color_pick_thread = CreateThread( NULL, 0, color_pick_proc, NULL, 0, NULL );
+	if(  color_pick_thread == NULL  ) {
+		InterlockedExchange(&color_pick_state, 0);
+		return false;
+	}
+	return true;
+}
+
+color_pick_result_t dr_pick_color_poll(uint8 &r, uint8 &g, uint8 &b)
+{
+	const LONG state = InterlockedCompareExchange(&color_pick_state, 0, 0);
+	if(  state == 1  ) {
+		return COLOR_PICK_RUNNING;
+	}
+	if(  state != 2  ) {
+		return COLOR_PICK_NONE;
+	}
+	if(  color_pick_thread  ) {
+		CloseHandle( color_pick_thread ); // already signalled done, does not block
+		color_pick_thread = NULL;
+	}
+	InterlockedExchange(&color_pick_state, 0);
+	if(  color_pick_accepted  ) {
+		r = color_pick_out_r;
+		g = color_pick_out_g;
+		b = color_pick_out_b;
+		return COLOR_PICK_OK;
+	}
+	return COLOR_PICK_CANCELLED;
+}
+
+
 const char* dr_get_locale()
 {
 	static char LanguageCode[5]="";

@@ -271,4 +271,26 @@ sint16 dr_toggle_borderless();
 
 int sysmain(int argc, char** argv);
 
+enum color_pick_result_t {
+	COLOR_PICK_NONE,      // nothing in progress (never started, or already collected)
+	COLOR_PICK_RUNNING,   // dialog still open, keep polling
+	COLOR_PICK_OK,        // user confirmed, r/g/b filled in
+	COLOR_PICK_CANCELLED  // user cancelled
+};
+
+/**
+ * Open the OS native color picker dialog on a background thread, so the
+ * caller (and the game loop) is not blocked while it is open.
+ * @param r/g/b initial color
+ * @return false if a pick is already in progress (poll it first with dr_pick_color_poll)
+ *         or if not supported on this platform.
+ */
+bool dr_pick_color_start(uint8 r, uint8 g, uint8 b);
+
+/**
+ * Non-blocking poll for the outcome of a pick started with dr_pick_color_start().
+ * @param r/g/b out: chosen color, only valid when COLOR_PICK_OK is returned
+ */
+color_pick_result_t dr_pick_color_poll(uint8 &r, uint8 &g, uint8 &b);
+
 #endif

@@ -1681,18 +1681,22 @@ void grund_t::display_obj_fg(const sint16 xpos, const sint16 ypos, const bool is
 // display text label in player colors using different styles set by env_t::show_names
 void display_text_label(sint16 xpos, sint16 ypos, const char* text, const player_t *player, bool dirty)
 {
-	sint16 pc = player ? player->get_player_color1()+4 : SYSCOL_TEXT_HIGHLIGHT;
+	// For player: use shade-aware accessor; for null-player: fall back to palette index
+	const PIXVAL pc4 = player ? player->get_player_color1_pixval(4) : color_idx_to_rgb(SYSCOL_TEXT_HIGHLIGHT);
+	const PIXVAL pc7 = player ? player->get_player_color1_pixval(7) : color_idx_to_rgb(SYSCOL_TEXT_HIGHLIGHT+3);
+	const PIXVAL pc2 = player ? player->get_player_color1_pixval(2) : color_idx_to_rgb(SYSCOL_TEXT_HIGHLIGHT-2);
+	const PIXVAL pc6 = player ? player->get_player_color1_pixval(6) : color_idx_to_rgb(SYSCOL_TEXT_HIGHLIGHT+2);
 	switch( env_t::show_names >> 2 ) {
 		case 0:
-			display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
+			display_ddd_proportional_clip( xpos, ypos, pc4, color_idx_to_rgb(COL_BLACK), text, dirty );
 			break;
 		case 1:
-			display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
+			display_outline_proportional_rgb( xpos, ypos, pc7, color_idx_to_rgb(COL_BLACK), text, dirty );
 			break;
 		case 2: {
 			display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
-			display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
-			display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
+			display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   pc2, PLAYER_FLAG|pc6 );
+			display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, pc4, dirty );
 			break;
 		}
 	}

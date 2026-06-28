@@ -10,6 +10,7 @@
 #include "../utils/sha1_hash.h"
 #include "../simtypes.h"
 #include "../simlinemgmt.h"
+#include "../simcolor.h"
 
 #include "../halthandle_t.h"
 #include "../convoihandle_t.h"
@@ -91,9 +92,16 @@ protected:
 	void add_money_message(sint64 amount, koord k);
 
 	/**
-	 * Colors of the player
+	 * Colors of the player (palette indices, kept for save/load backward compat)
 	 */
 	uint8 player_color_1, player_color_2;
+
+	/**
+	 * Custom RGB color (r,g,b each 0-255) for each color slot, used when player_color_custom is true.
+	 * player_color_rgb[0] = primary, player_color_rgb[1] = secondary
+	 */
+	bool  player_color_custom;
+	uint8 player_color_rgb[2][3];
 
 	/**
 	 * Player number; only player 0 can do interaction
@@ -230,7 +238,16 @@ public:
 	/// Handles player colors
 	uint8 get_player_color1() const { return player_color_1; }
 	uint8 get_player_color2() const { return player_color_2; }
+	// Returns the display PIXVAL for this player's primary/secondary color at the given shade (0-7).
+	// shade 4 = gui_player_color_bright (base color). Works for both preset and custom RGB.
+	PIXVAL get_player_color1_pixval(int shade = 0) const;
+	PIXVAL get_player_color2_pixval(int shade = 0) const;
+	bool is_player_color_custom() const { return player_color_custom; }
+	uint8 get_player_color_r(int slot) const { return player_color_rgb[slot][0]; }
+	uint8 get_player_color_g(int slot) const { return player_color_rgb[slot][1]; }
+	uint8 get_player_color_b(int slot) const { return player_color_rgb[slot][2]; }
 	void set_player_color(uint8 col1, uint8 col2);
+	void set_player_color_rgb(uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint8 g2, uint8 b2);
 
 	/**
 	 * @return the name of the player; "player -1" sits in front of the screen

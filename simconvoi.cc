@@ -6405,7 +6405,7 @@ void convoi_t::next_stop_button_pressed() {
 		// However, if the convoy is coupled convoy, calling c->set_schedule() destroy coupling information.
 		// So, we only call c->set_schedule() if c is leading.
 		if( !c->is_coupled() ) {
-			c->set_schedule(schedule);
+			c->set_schedule(schedule);			
 		}
 		if( c->is_coupling_done() ) {
 			c->set_coupling_done(false);

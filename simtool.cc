@@ -15,6 +15,7 @@
 
 #include "gui/simwin.h"
 #include "display/viewport.h"
+#include "display/simgraph.h"
 
 #include "bauer/fabrikbauer.h"
 #include "bauer/vehikelbauer.h"
@@ -9899,10 +9900,12 @@ bool tool_change_line_t::init( player_t *player )
 			}
 			break;
 
-		case 'o': // change colour of line
+		case 'o': // change colour of line: "#RRGGBB", portable across RGB565/RGB555 builds
 			{
-				uint8 n_colour = atoi(p);
-				line->set_colour(n_colour);
+				unsigned int r = 0, g = 0, b = 0;
+				if(*p == '#'  &&  sscanf(p, "#%02x%02x%02x", &r, &g, &b) == 3) {
+					line->set_colour( make_rgb_pixval((uint8)r, (uint8)g, (uint8)b) );
+				}
 			}
 			break;
 
@@ -10868,30 +10871,82 @@ bool tool_recolour_t::init(player_t *sp)
 			return false;
 	}
 
-	const uint8 colour = atoi(p);
-
 	// now for action ...
+	player_t *target = welt->get_player(id);
+	if(!target) {
+		dbg->error( "wkz_recolour_t::init", "could not perform (%s)", default_param );
+		return false;
+	}
+
+	// Custom RGB format: "#RRGGBB,#RRGGBB" (both colors) or "#RRGGBB" with what=1 or what=2 (keep other)
+	if(*p == '#') {
+		// Parse hex RGB
+		unsigned int r1 = 0, g1 = 0, b1 = 0, r2 = 0, g2 = 0, b2 = 0;
+		if(sscanf(p, "#%02x%02x%02x", &r1, &g1, &b1) == 3) {
+			const char *q = strchr(p, ',');
+			if(q && *(q+1) == '#' && sscanf(q+1, "#%02x%02x%02x", &r2, &g2, &b2) == 3) {
+				// Both colors provided
+				target->set_player_color_rgb(r1, g1, b1, r2, g2, b2);
+			}
+			else if(what == '1') {
+				uint8 or2 = target->get_player_color_r(1);
+				uint8 og2 = target->get_player_color_g(1);
+				uint8 ob2 = target->get_player_color_b(1);
+				if(!target->is_player_color_custom()) {
+					// Convert existing preset to RGB first
+					PIXVAL col2 = target->get_player_color2_pixval(env_t::gui_player_color_bright);
+					pixval_to_rgb8(col2, or2, og2, ob2);
+				}
+				target->set_player_color_rgb(r1, g1, b1, or2, og2, ob2);
+			}
+			else {
+				uint8 or1 = target->get_player_color_r(0);
+				uint8 og1 = target->get_player_color_g(0);
+				uint8 ob1 = target->get_player_color_b(0);
+				if(!target->is_player_color_custom()) {
+					PIXVAL col1 = target->get_player_color1_pixval(env_t::gui_player_color_bright);
+					pixval_to_rgb8(col1, or1, og1, ob1);
+				}
+				target->set_player_color_rgb(or1, og1, ob1, r1, g1, b1);
+			}
+		}
+		return false;
+	}
+
+	// Legacy palette-index format
+	const uint8 colour = atoi(p);
 	switch(  what  )
 	{
 		case '1': // Change player colour 1
-		{
-			if(welt->get_player(id))
-			{
-				welt->get_player(id)->set_player_color(colour, welt->get_player(id)->get_player_color2());
-				return false;
+			if(  target->is_player_color_custom()  ) {
+				// player is currently using a custom RGB color: get_player_color2()
+				// only holds a stale preset index, not the real custom color of slot 2,
+				// so convert the newly chosen preset to RGB and keep slot 2 as-is
+				const PIXVAL new_col1 = color_idx_to_rgb(colour + env_t::gui_player_color_bright);
+				uint8 r1, g1, b1;
+				pixval_to_rgb8(new_col1, r1, g1, b1);
+				target->set_player_color_rgb(r1, g1, b1,
+					target->get_player_color_r(1), target->get_player_color_g(1), target->get_player_color_b(1));
 			}
-			break;
-		}
+			else {
+				target->set_player_color(colour, target->get_player_color2());
+			}
+			return false;
 
 		case '2': // Change player colour 2
-		{
-			if(welt->get_player(id))
-			{
-				welt->get_player(id)->set_player_color( welt->get_player(id)->get_player_color1(), colour);
-				return false;
+			if(  target->is_player_color_custom()  ) {
+				// same as above, mirrored for slot 2
+				const PIXVAL new_col2 = color_idx_to_rgb(colour + env_t::gui_player_color_bright);
+				uint8 r2, g2, b2;
+				pixval_to_rgb8(new_col2, r2, g2, b2);
+				target->set_player_color_rgb(
+					target->get_player_color_r(0), target->get_player_color_g(0), target->get_player_color_b(0),
+					r2, g2, b2);
 			}
-			break;
-		}
+			else {
+				target->set_player_color(target->get_player_color1(), colour);
+			}
+			return false;
 	}
 
 	// we are only getting here, if we could not process this request

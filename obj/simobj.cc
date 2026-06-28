@@ -217,7 +217,7 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 		ypos += tile_raster_scale_y(get_yoff(), raster_width);
 
 		// Determine if this vehicle should use its convoy's line color
-		uint8 line_colour = 0;
+		PIXVAL line_colour = 0;
 		bool line_color_active = false;
 		if(  owner_n != PLAYER_UNOWNED  ) {
 			if(  vt  ) {
@@ -236,7 +236,7 @@ void obj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
 
 			if(  owner_n != PLAYER_UNOWNED  ) {
 				if(  obj_t::show_owner  ) {
-					display_blend( image, xpos, ypos, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+					display_blend( image, xpos, ypos, owner_n, welt->get_player(owner_n)->get_player_color1_pixval(2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
 				}
 				else if(  line_color_active  ) {
 					// per-object live color substitution: each vehicle uses its own line color
@@ -315,7 +315,7 @@ void obj_t::display_after(int xpos, int ypos, bool) const
 
 		if(  owner_n != PLAYER_UNOWNED  ) {
 			if(  obj_t::show_owner  ) {
-				display_blend( image, xpos, ypos, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+				display_blend( image, xpos, ypos, owner_n, welt->get_player(owner_n)->get_player_color1_pixval(2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
 			}
 			else if(  obj_t::get_flag( highlight )  ) {
 				// highlight this tile

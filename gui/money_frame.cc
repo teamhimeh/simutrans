@@ -330,7 +330,7 @@ money_frame_t::money_frame_t(player_t *player) :
 		viewable_players[ 0 ] = 0;
 		for(  int np = 0, count = 0;  np < MAX_PLAYER_COUNT;  np++  ) {
 			if(  welt->get_player( np )  ) {
-				send_money_player_num.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(welt->get_player( np )->get_name(), color_idx_to_rgb(welt->get_player( np )->get_player_color1()+env_t::gui_player_color_dark));
+				send_money_player_num.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(welt->get_player( np )->get_name(), welt->get_player( np )->get_player_color1_pixval(env_t::gui_player_color_dark));
 				viewable_players[ count++ ] = np;
 			}
 		}

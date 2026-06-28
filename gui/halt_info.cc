@@ -384,7 +384,7 @@ void halt_info_t::init(halthandle_t halt)
 			add_table(1,1);
 			{
 				bt_change_to_owner.init(button_t::box_state | button_t::flexible, halt->get_owner()->get_name());
-				bt_change_to_owner.background_color = color_idx_to_rgb(halt->get_owner()->get_player_color1());
+				bt_change_to_owner.background_color = halt->get_owner()->get_player_color1_pixval(0);
 				bt_change_to_owner.add_listener(this);
 				add_component(&bt_change_to_owner);
 			}
@@ -756,7 +756,7 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 			new_component<gui_line_button_t>(line);
 
 			// Line labels with color of player
-			gui_label_buf_t *lb = new_component<gui_label_buf_t>(PLAYER_FLAG | color_idx_to_rgb(line->get_owner()->get_player_color1()+env_t::gui_player_color_dark) );
+			gui_label_buf_t *lb = new_component<gui_label_buf_t>(PLAYER_FLAG | line->get_owner()->get_player_color1_pixval(env_t::gui_player_color_dark) );
 			schedule_t::get_schedule_flag_text(lb->buf(), line->get_schedule());
 			lb->buf().append( line->get_name() );
 			lb->update();
@@ -777,7 +777,7 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 			new_component<gui_convoi_button_t>(cnv);
 
 			// Line labels with color of player
-			gui_label_buf_t *lb = new_component<gui_label_buf_t>(PLAYER_FLAG | color_idx_to_rgb(cnv->get_owner()->get_player_color1()+env_t::gui_player_color_dark) );
+			gui_label_buf_t *lb = new_component<gui_label_buf_t>(PLAYER_FLAG | cnv->get_owner()->get_player_color1_pixval(env_t::gui_player_color_dark) );
 			lb->buf().append( cnv->get_name() );
 			lb->update();
 		}

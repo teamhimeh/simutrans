@@ -22,6 +22,7 @@
 #include "money_frame.h" // for the finances
 #include "password_frame.h" // for the password
 #include "ai_selector.h"
+#include "kennfarbe.h"
 #include "player_frame_t.h"
 #include "player_merge_frame.h"
 
@@ -42,7 +43,7 @@ public:
 ki_kontroll_t::ki_kontroll_t() :
 	gui_frame_t( translator::translate("Spielerliste") )
 {
-	set_table_layout(5,0);
+	set_table_layout(6,0);
 
 	for(int i=0; i<MAX_PLAYER_COUNT-1; i++) {
 
@@ -69,7 +70,7 @@ ki_kontroll_t::ki_kontroll_t() :
 
 		// Prepare finances button
 		player_get_finances[i].init( button_t::box | button_t::flexible, "");
-		player_get_finances[i].background_color = PLAYER_FLAG | color_idx_to_rgb((player ? player->get_player_color1():i*8)+env_t::gui_player_color_bright);
+		player_get_finances[i].background_color = PLAYER_FLAG | (player ? player->get_player_color1_pixval(env_t::gui_player_color_bright) : color_idx_to_rgb(i*8+env_t::gui_player_color_bright));
 		player_get_finances[i].add_listener(this);
 
 		// Player type selector, Combobox
@@ -99,6 +100,13 @@ ki_kontroll_t::ki_kontroll_t() :
 		player_lock[i]->add_listener(this);
 		player_lock[i]->set_rigid(true);
 
+		// Company color button
+		player_color_btn[i] = new_component<password_button_t>();
+		player_color_btn[i]->background_color = player ? (PLAYER_FLAG | player->get_player_color1_pixval(env_t::gui_player_color_bright)) : color_idx_to_rgb(i*8+env_t::gui_player_color_bright);
+		player_color_btn[i]->set_visible(player != NULL);
+		player_color_btn[i]->set_rigid(true);
+		player_color_btn[i]->add_listener(this);
+
 		// Income label
 		ai_income[i] = new_component<gui_label_buf_t>(MONEY_PLUS, gui_label_t::money_right);
 		ai_income[i]->set_rigid(true);
@@ -108,13 +116,13 @@ ki_kontroll_t::ki_kontroll_t() :
 	freeplay.init( button_t::square_state, "freeplay mode");
 	freeplay.add_listener(this);
 	freeplay.pressed = welt->get_settings().is_freeplay();
-	add_component( &freeplay, 5 );
-	
+	add_component( &freeplay, 6 );
+
 	// player merging
 	merge_player.init( button_t::roundbox_state | button_t::flexible, "merge player");
 	merge_player.add_listener(this);
 	merge_player.pressed = false;
-	add_component( &merge_player, 5 );
+	add_component( &merge_player, 6 );
 	
 	update_data(); // calls reset_min_windowsize
 
@@ -209,6 +217,13 @@ bool ki_kontroll_t::action_triggered( gui_action_creator_t *comp,value_t p )
 			}
 		}
 
+		// Open company color dialog - only for the currently selected player
+		if(  comp == player_color_btn[i]  &&  welt->get_player(i)  &&  i == welt->get_active_player_nr()  ) {
+			player_color_btn[i]->pressed = false;
+			create_win( new farbengui_t(welt->get_player(i)), w_info, magic_farbengui_t );
+			break;
+		}
+
 		// New player assigned in an empty slot
 		if(  comp == (player_select+i)  ) {
 
@@ -271,8 +286,11 @@ void ki_kontroll_t::update_data()
 			}
 
 			// always update locking status
-			player_get_finances[i].background_color = PLAYER_FLAG | color_idx_to_rgb(player->get_player_color1()+env_t::gui_player_color_bright);
+			player_get_finances[i].background_color = PLAYER_FLAG | player->get_player_color1_pixval(env_t::gui_player_color_bright);
 			player_lock[i]->background_color = color_idx_to_rgb(player->is_locked() ? (player->is_unlock_pending() ? COL_YELLOW : COL_RED) : COL_GREEN);
+			player_color_btn[i]->background_color = PLAYER_FLAG | player->get_player_color1_pixval(env_t::gui_player_color_bright);
+			player_color_btn[i]->set_visible(true);
+			player_color_btn[i]->enable( i == welt->get_active_player_nr() );
 
 			// human players cannot be deactivated
 			if (i>1) {
@@ -288,6 +306,7 @@ void ki_kontroll_t::update_data()
 			player_change_to[i].set_visible(false);
 			player_select[i].set_visible(player_tools_allowed);
 			player_lock[i]->set_visible(false);
+			player_color_btn[i]->set_visible(false);
 
 			if (i>1) {
 				player_active[i-2].set_visible(0 < player_select[i].get_selection()  &&  player_select[i].get_selection() < player_t::MAX_AI);
@@ -373,6 +392,9 @@ void ki_kontroll_t::draw(scr_coord pos, scr_size size)
 		}
 
 		player_lock[i]->background_color = color_idx_to_rgb(player  &&  player->is_locked() ? (player->is_unlock_pending() ? COL_YELLOW : COL_RED) : COL_GREEN);
+		if(  player  ) {
+			player_color_btn[i]->enable( i == welt->get_active_player_nr() );
+		}
 	}
 
 	player_change_to[welt->get_active_player_nr()].pressed = true;

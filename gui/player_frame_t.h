@@ -31,6 +31,7 @@ class ki_kontroll_t : public gui_frame_t, private action_listener_t
 			player_get_finances[MAX_PLAYER_COUNT-1], // Finance buttons
 			player_change_to[MAX_PLAYER_COUNT-1],    // Set active player button
 			*player_lock[MAX_PLAYER_COUNT-1],         // Set name & password button
+			*player_color_btn[MAX_PLAYER_COUNT-1],   // Open company color dialog
 			freeplay,
 			merge_player;
 
