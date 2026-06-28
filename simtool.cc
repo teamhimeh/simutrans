@@ -1066,6 +1066,20 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 
 const char *tool_remove_pillar_t::process( player_t *player, koord3d pos )
 {
+	// When no pillar exists on the tile, tool_remover_intern (called with
+	// obj_t::pillar) falls through to "Requested object not found." and returns
+	// false.  In the shift/ctrl area-removal loop in do_work the return value
+	// of process() is used as the loop-exit sentinel: NULL means "keep going",
+	// non-NULL means "stop".  Returning an error string here would cause the
+	// whole operation to be reported as failed even though all pillars were
+	// successfully removed.  So we distinguish "no pillar on this tile" (normal
+	// end-of-iteration → "") from "pillar exists but cannot be deleted" (real
+	// error → propagate fail).
+	grund_t *gr = welt->lookup(pos);
+	if (gr == NULL  ||  gr->find<pillar_t>() == NULL) {
+		return "";
+	}
+
 	const char *fail = NULL;
 	if (!tool_remover_intern(player, pos, obj_t::pillar, fail)) {
 		return fail;
