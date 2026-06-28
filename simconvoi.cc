@@ -2714,7 +2714,7 @@ void convoi_t::vorfahren()
 				// we already calculated:
 				need_reverse_each_convoy = using_last_car_steps;
 			} else {
-				need_reverse_each_convoy = c->extra_check_for_go_same_direction(get_route());
+				need_reverse_each_convoy = c->go_same_direction_check_for_middle_convoys(get_route());
 			}
 		}
 		if (c->reversing_needed^((world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!need_reverse_each_convoy)){
@@ -2924,7 +2924,7 @@ void convoi_t::vorfahren()
 // a helper function for convoi_t::vorfahren()
 // we only use this function BEFORE RESET VEHICLES POSITION
 // Here, THEY DO NOT KNOW THE ROUTE!
-bool convoi_t::extra_check_for_go_same_direction(const route_t* const &r) const
+bool convoi_t::go_same_direction_check_for_middle_convoys(const route_t* const &r) const
 {
 	if(  r->get_count()<2  ) {
 		return true;
