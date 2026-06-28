@@ -386,7 +386,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -422,7 +423,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -472,7 +474,8 @@ public:
 	tool_build_wayobj_t(uint16 const id = TOOL_BUILD_WAYOBJ | GENERAL_TOOL, bool b = true) : two_click_tool_t(id), build(b) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
@@ -495,7 +498,7 @@ class tool_build_station_t : public two_click_tool_t {
 	const char *tool_station_building_aux(player_t *, bool, koord3d, const building_desc_t *, sint8 rotation );
 	const char *tool_station_dock_aux(player_t *, koord3d, const building_desc_t * );
 	const char *tool_station_flat_dock_aux(player_t *, koord3d, const building_desc_t *, sint8 );
-	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix );
+	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix, halthandle_t master_halt = halthandle_t());
 	const building_desc_t *get_desc( sint8 &rotation ) const;
 
   public:
@@ -510,21 +513,22 @@ class tool_build_station_t : public two_click_tool_t {
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
 
-	char const* process(player_t*, koord3d) ;
+	char const* process(player_t*, koord3d, halthandle_t master_halt = halthandle_t());
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE {return 2;};
 };
 
-class tool_rotate_building_t : public tool_t {
+class tool_rotate_building_t : public two_click_tool_t {
 private:
-	const char *tool_rotate_platform(koord3d);
-	const char *tool_rotate_building(koord3d);
+	const char *rotate_building_at(player_t*, koord3d);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
 
 public:
-	tool_rotate_building_t() : tool_t(TOOL_ROTATE_BUILDING | GENERAL_TOOL) {}
+	tool_rotate_building_t() : two_click_tool_t(TOOL_ROTATE_BUILDING | GENERAL_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Rotate Building"); }
-	char const* work(player_t *, koord3d) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
 };
 
@@ -1266,6 +1270,19 @@ public:
 	bool is_selected() const OVERRIDE { return env_t::show_way_offset_label; }
 	bool init( player_t * ) OVERRIDE {
 		env_t::show_way_offset_label = !env_t::show_way_offset_label;
+		welt->set_dirty();
+		return false;
+	}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
+class tool_follow_convoi_underground_t : public tool_t {
+public:
+	tool_follow_convoi_underground_t() : tool_t(TOOL_FOLLOW_CONVOI_UNDERGROUND | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Toggle convoy following underground mode"); }
+	bool init( player_t * ) OVERRIDE {
+		env_t::follow_convoi_underground = (env_t::follow_convoi_underground + 1) % grund_t::ugm_count;
 		welt->set_dirty();
 		return false;
 	}

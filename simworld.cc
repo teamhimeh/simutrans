@@ -521,6 +521,8 @@ void karte_t::destroy()
 
 assert( depot_t::get_depot_list().empty() );
 
+	convoy_templates.clear();
+
 	DBG_MESSAGE("karte_t::destroy()", "world destroyed");
 	destroying = false;
 }
@@ -1847,8 +1849,11 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	dbg->message("karte_t::enlarge_map()","heightfield name is %s",settings.heightfield.c_str());
 	if(  !settings.heightfield.empty()  ) {
 		// init from file
-		for(  sint16 y = 0;  y<=new_size_y;  y++  ) {
-			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<=new_size_x;  x++  ) {
+		// h_field has new_size_x * new_size_y pixels; the grid has one extra row and column.
+		// The rightmost column is mirrored by the per-row copy below; the bottom row is
+		// mirrored by the memcpy below — so the inner loops must stay within h_field bounds.
+		for(  sint16 y = 0;  y<new_size_y;  y++  ) {
+			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<new_size_x;  x++  ) {
 				grid_hgts[x + y*(cached_grid_size.x+1)] = h_field[x+(y*(sint32)cached_grid_size.x)]+1;
 			}
 			grid_hgts[cached_grid_size.x + y*(cached_grid_size.x+1)] = grid_hgts[cached_grid_size.x-1 + y*(cached_grid_size.x+1)];
@@ -5139,7 +5144,9 @@ bool karte_t::load(const char *filename)
 
 	if(file.rd_open(name) != loadsave_t::FILE_STATUS_OK) {
 
-		if(  file.get_version_int()==0  ||  file.get_version_int()>loadsave_t::int_version(LOADGAME_VER_NR, NULL ).version  ) {
+		if(  file.get_version_int()==0
+		  || file.get_version_int()>loadsave_t::int_version(LOADGAME_VER_NR, NULL ).version
+		  || file.get_OTRP_version()>loadsave_t::int_version(LOADGAME_VER_NR, NULL ).OTRP_version  ) {
 			dbg->warning("karte_t::load()", translator::translate("WRONGSAVE") );
 			create_win( new news_img("WRONGSAVE"), w_info, magic_none );
 		}
@@ -7009,7 +7016,7 @@ void karte_t::change_time_multiplier(sint32 delta)
 		if(time_multiplier<=0) {
 			time_multiplier = 1;
 		}
-		if(step_mode!=NORMAL) {
+		if(  !env_t::networkmode  &&  step_mode!=NORMAL  ) {
 			step_mode = NORMAL;
 			reset_timer();
 		}
@@ -7357,7 +7364,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					// already waiting longer than how far we're ahead, so set wait time shorter to the time ahead.
 					next_step_time = (sint64)timems - frame_timediff;
 			}
-			else if(  nwcid == NWC_CHECK  ) {
+			else {
 					// gentle slowing down
 					*ms_difference = timediff;
 				}
@@ -7369,7 +7376,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					next_step_time = timems;
 					*ms_difference = frame_timediff;
 				}
-				else if(  nwcid == NWC_CHECK  ) {
+				else {
 					// gentle catching up
 					*ms_difference = timediff;
 				}

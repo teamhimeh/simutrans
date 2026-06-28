@@ -418,8 +418,8 @@ Full Get on/off Time
 Always use maximum boarding and alighting time, regardless of boardings and alightings.
 乗降数に関わらず、常に最大乗降時間を使用します
 #------運行中編成のコピー------
-Copy this convoi
-この編成をコピーします
+Copy this convoi (ctrl pressed: copy vehicle list as template format to clipboard)
+この編成をコピーします（ctrlキーを押すと編成をテンプレート書式でクリップボードにコピーします）
 Paste Convoi
 編成を貼り付け
 Paste the copied convoi
@@ -663,6 +663,8 @@ Electrified
 Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
 #------その他の翻訳------
+v%d (current version)
+v%d (現在のバージョン)
 Freight ton-kilo
 輸送量(人キロ/トンキロ)
 Rotate Building
@@ -779,3 +781,9 @@ Show unused addons list
 未使用アドオンリストを表示
 Templates
 テンプレ
+crossconnect_factories is enabled!
+全産業が接続済みです!
+Avg. density
+平均輸送密度
+Toggle convoy following underground mode
+編成追跡時の表示モード変更
