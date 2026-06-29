@@ -788,7 +788,7 @@ private:
 // removes signal from tile
 class tool_remove_signal_t : public two_click_tool_t {
 public:
-	tool_remove_signal_t() : two_click_tool_t(TOOL_REMOVE_SIGNAL | GENERAL_TOOL) { one_click = true; }
+	tool_remove_signal_t() : two_click_tool_t(TOOL_REMOVE_SIGNAL | GENERAL_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove signal"); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
 private:
