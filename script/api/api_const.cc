@@ -104,7 +104,7 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_set_climate", TOOL_SET_CLIMATE | GENERAL_TOOL);
 	/// rotate a building
 	enum_slot(vm, "tool_rotate_building", TOOL_ROTATE_BUILDING | GENERAL_TOOL);
-	/// remove halt (two-click: route mode without ctrl, area mode with ctrl)
+	/// remove halt (two-click: ctrl=area, no ctrl/shift=route, drag=route)
 	enum_slot(vm, "tool_remove_halt", TOOL_REMOVE_HALT | GENERAL_TOOL);
 	/// merge two stops
 	enum_slot(vm, "tool_merge_stop", TOOL_MERGE_STOP | GENERAL_TOOL);

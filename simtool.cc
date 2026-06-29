@@ -8339,35 +8339,15 @@ bool tool_remove_halt_t::calc_route(route_t &route, player_t *, koord3d const &s
 }
 
 
-uint8 tool_remove_halt_t::is_valid_pos(player_t *, const koord3d &, const char *&, const koord3d &)
-{
-	// ctrl: two-click mode (route without shift, area with shift)
-	// no ctrl: single-click immediate removal (backward compatible)
-	return is_ctrl_pressed() ? 2 : 1;
-}
-
-
 char const* tool_remove_halt_t::do_work(player_t *player, const koord3d &last_pos, const koord3d &pos)
 {
 	if(  pos == koord3d::invalid  ) {
-		// Called from one_click=true path on first click.
-		if(  is_first_click() && is_ctrl_pressed()  ) {
-			// ctrl pressed: switch to two-click mode for route or area removal
-			init(player);
-			one_click = false;
-			koord3d newstart = last_pos;
-			start_at(newstart);
-			return NULL;
-		}
-		// no ctrl: single-tile immediate removal (backward compatible behavior)
-		one_click = true;
+		// safety fallback: unreachable with is_valid_pos=2 but kept for robustness
 		return remove_halt(player, last_pos) ? NULL : "The station cannot be removed.";
 	}
 
-	// two-click path: ctrl was pressed on first click
-	one_click = true; // reset for next use
-	if(  is_shift_pressed()  ) {
-		// ctrl + shift: area removal with height range
+	if(  is_ctrl_pressed()  ) {
+		// ctrl (with or without shift): area removal with height range
 		const sint16 z1 = min(last_pos.z, pos.z);
 		const sint16 z2 = max(last_pos.z, pos.z);
 		bool failed = false;
@@ -8385,7 +8365,7 @@ char const* tool_remove_halt_t::do_work(player_t *player, const koord3d &last_po
 		return failed ? "Some stations cannot be removed." : NULL;
 	}
 
-	// ctrl (no shift): route-based removal
+	// no ctrl (shift or no modifier, including drag): route-based removal
 	route_t route;
 	if(  !calc_route(route, player, last_pos, pos)  ) {
 		return NULL; // invalid route, do not remove
@@ -8399,8 +8379,8 @@ char const* tool_remove_halt_t::do_work(player_t *player, const koord3d &last_po
 
 void tool_remove_halt_t::mark_tiles(player_t *player, koord3d const &start, koord3d const &end)
 {
-	if(  is_shift_pressed()  ) {
-		// ctrl + shift: area marking with height range
+	if(  is_ctrl_pressed()  ) {
+		// ctrl (with or without shift): area marking with height range
 		const sint16 z1 = min(start.z, end.z);
 		const sint16 z2 = max(start.z, end.z);
 		for(  sint16 x = min(start.x, end.x);  x <= max(start.x, end.x);  x++  ) {
@@ -8417,7 +8397,7 @@ void tool_remove_halt_t::mark_tiles(player_t *player, koord3d const &start, koor
 		return;
 	}
 
-	// route-based marking
+	// no ctrl (shift or no modifier, including drag): route-based marking
 	route_t route;
 	if(  !calc_route(route, player, start, end)  ) { return; }
 	for(  uint32 i = 0;  i < route.get_count();  i++  ) {

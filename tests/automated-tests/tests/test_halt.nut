@@ -1278,8 +1278,8 @@ function test_remove_halt_area_same_height()
 		ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, y, 0), halt_desc.get_name()), null)
 	}
 
-	// ctrl+shift area removal: remove the middle three tiles (4,3,0)-(4,5,0)
-	remover.set_flags(3) // ctrl+shift = area mode
+	// ctrl area removal: remove the middle three tiles (4,3,0)-(4,5,0)
+	remover.set_flags(2) // ctrl = area mode
 	ASSERT_EQUAL(remover.work(pl, coord3d(4, 3, 0), coord3d(4, 5, 0), ""), null)
 
 	// removed tiles should have no halt building
@@ -1327,8 +1327,8 @@ function test_remove_halt_area_different_height()
 	ASSERT_TRUE(tile_x(3, 3, 0).find_object(mo_building) != null)
 	ASSERT_TRUE(tile_x(5, 3, 1).find_object(mo_building) != null)
 
-	// ctrl+shift area removal spanning x=3..5, y=3..4, z=0..1 — covers halt at z=0 and z=1
-	remover.set_flags(3) // ctrl+shift = area mode
+	// ctrl area removal spanning x=3..5, y=3..4, z=0..1 — covers halt at z=0 and z=1
+	remover.set_flags(2) // ctrl = area mode
 	ASSERT_EQUAL(remover.work(pl, coord3d(3, 3, 0), coord3d(5, 4, 1), ""), null)
 
 	// both halt buildings should be gone
@@ -1366,8 +1366,7 @@ function test_remove_halt_route_valid()
 		ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, y, 0), halt_desc.get_name()), null)
 	}
 
-	// ctrl (no shift) route removal from (4,2,0) to (4,4,0): only removes tiles on the route
-	remover.set_flags(2) // ctrl = route mode
+	// route removal from (4,2,0) to (4,4,0): only removes tiles on the route
 	ASSERT_EQUAL(remover.work(pl, coord3d(4, 2, 0), coord3d(4, 4, 0), ""), null)
 
 	// tiles on the route should have no halt building
@@ -1400,8 +1399,7 @@ function test_remove_halt_route_invalid()
 	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 2, 0), halt_desc.get_name()), null)
 	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(6, 3, 0), halt_desc.get_name()), null)
 
-	// ctrl (no shift) route removal: no route exists between the two disconnected segments -> no removal
-	remover.set_flags(2) // ctrl = route mode
+	// route removal: no route exists between the two disconnected segments -> no removal
 	ASSERT_EQUAL(remover.work(pl, coord3d(4, 2, 0), coord3d(6, 3, 0), ""), null)
 
 	// all halt buildings must still be present
@@ -1434,13 +1432,11 @@ function test_remove_halt_other_player()
 	ASSERT_EQUAL(command_x.build_way(public_pl, coord3d(4, 5, 0), coord3d(4, 7, 0), road, true), null)
 	ASSERT_EQUAL(command_x(tool_build_station).work(public_pl, coord3d(4, 6, 0), halt_desc.get_name()), null)
 
-	// player 0 tries to ctrl-route-remove public player's halt (same pos = single tile): check_owner fails
-	remover.set_flags(2) // ctrl = route mode
+	// player 0 tries to route-remove public player's halt (same pos = single tile): check_owner fails
 	ASSERT_EQUAL(remover.work(pl, coord3d(4, 6, 0), coord3d(4, 6, 0), ""), "Some stations cannot be removed.")
 	ASSERT_TRUE(tile_x(4, 6, 0).find_object(mo_building) != null)
 
 	// public player can route-remove player 0's halt
-	remover.set_flags(2) // ctrl = route mode
 	ASSERT_EQUAL(remover.work(public_pl, coord3d(4, 3, 0), coord3d(4, 3, 0), ""), null)
 	ASSERT_EQUAL(tile_x(4, 3, 0).find_object(mo_building), null)
 
