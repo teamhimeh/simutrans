@@ -648,11 +648,6 @@ void karte_t::init_tiles()
 			finance_history_month[month][cost_type] = 0;
 		}
 	}
-	for (int decade=0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
-		for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
-			finance_history_decade[decade][cost_type] = 0;
-		}
-	}
 	last_month_bev = 0;
 
 	tile_counter = 0;
@@ -4036,16 +4031,6 @@ void karte_t::new_year()
 		}
 	}
 
-	// record decade snapshot at 0, 10, 20, ... years after map start
-	if(  (last_year - settings.get_starting_year()) % 10 == 0  ) {
-		for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
-			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
-				finance_history_decade[d][hist] = finance_history_decade[d-1][hist];
-			}
-			finance_history_decade[0][hist] = finance_history_year[0][hist];
-		}
-	}
-
 DBG_MESSAGE("karte_t::new_year()","speedbonus for %d %i, %i, %i, %i, %i, %i, %i, %i", last_year,
 			average_speed[0], average_speed[1], average_speed[2], average_speed[3], average_speed[4], average_speed[5], average_speed[6], average_speed[7] );
 
@@ -4958,13 +4943,6 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 			}
 		}
 	}
-	if(  file->get_OTRP_version() >= 56  ) {
-		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
-			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
-				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
-			}
-		}
-	}
 
 	// finally a possible scenario
 	scenario->rdwr( file );
@@ -5561,13 +5539,6 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 
 		if (file->is_version_atleast(112, 5) &&  file->is_version_less(120, 6)) {
 			restore_history(true);
-		}
-	}
-	if(  file->get_OTRP_version() >= 56  ) {
-		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
-			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
-				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
-			}
 		}
 	}
 
