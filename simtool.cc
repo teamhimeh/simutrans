@@ -8326,6 +8326,12 @@ bool tool_remove_halt_t::calc_route(route_t &route, player_t *, koord3d const &s
 	if (weg_t *w = gr_start->get_weg_nr(0)) { wt = w->get_waytype(); }
 	if (wt == invalid_wt) { return false; }
 
+	if (start == end) {
+		route.clear();
+		route.append(start);
+		return true;
+	}
+
 	test_driver_t *test_driver = new way_checker_t(wt);
 	bool ok = route.calc_route(welt, start, end, test_driver, 0, 0);
 	delete test_driver;
@@ -8335,20 +8341,10 @@ bool tool_remove_halt_t::calc_route(route_t &route, player_t *, koord3d const &s
 
 char const* tool_remove_halt_t::do_work(player_t *player, const koord3d &last_pos, const koord3d &pos)
 {
-	if(  is_first_click()  ) {
-		// First click: enter two-click mode for both route and area selection.
-		// one_click=true causes work() to call do_work immediately without start_at();
-		// we intercept here and manually transition to the two-click flow.
-		init(player);
-		one_click = false;
-		koord3d newstart = last_pos;
-		start_at(newstart);
-		return NULL;
-	}
-	one_click = true;
-
+	// is_valid_pos returns 2 (area-drag only), so do_work is always called with a
+	// valid end pos from the second click. The pos==invalid branch is unreachable
+	// but kept as a safety fallback.
 	if(  pos == koord3d::invalid  ) {
-		// safety fallback
 		return remove_halt(player, last_pos) ? NULL : "The station cannot be removed.";
 	}
 
