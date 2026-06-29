@@ -82,6 +82,16 @@ sint8 vehicle_base_t::dxdy[ 8*2 ] = {
 	 0, -2  // nw
 };
 
+uint8 vehicle_base_t::stop_steps_offset[8] = {
+	0, //s
+	127, //w
+	diagonal_vehicle_steps_per_tile/2, //sw
+	0, //se
+	127, //n
+	0, //e
+	diagonal_vehicle_steps_per_tile/4, //ne
+	diagonal_vehicle_steps_per_tile/2 //nw
+};
 
 // Constants
 uint8 vehicle_base_t::old_diagonal_vehicle_steps_per_tile = 128;
@@ -361,7 +371,8 @@ uint32 vehicle_base_t::do_drive(uint32 distance)
 void vehicle_base_t::get_screen_offset( int &xoff, int &yoff, const sint16 raster_width ) const
 {
 	// vehicles needs finer steps to appear smoother
-	sint32 display_steps = (uint32)steps*(uint16)raster_width;
+	ribi_t::dir dir = ribi_t::get_dir(direction);
+	sint32 display_steps = ((uint32)steps-(uint32)stop_steps_offset[dir])*(uint16)raster_width;
 	if(dx && dy) {
 		display_steps &= 0xFFFFFC00;
 	}
