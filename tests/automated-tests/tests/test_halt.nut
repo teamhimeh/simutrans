@@ -1298,45 +1298,54 @@ function test_remove_halt_area_same_height()
 
 function test_remove_halt_area_different_height()
 {
-	local pl          = player_x(0)
-	local road        = way_desc_x.get_available_ways(wt_road, st_flat)[0]
-	local bridge_desc = bridge_desc_x.get_available_bridges(wt_road)[0]
-	local halt_desc   = building_desc_x.get_available_stations(building_desc_x.station, wt_road, {})[0]
-	local remover     = command_x(tool_remove_halt)
-	local setslope    = command_x.set_slope
+	local pl       = player_x(0)
+	local road     = way_desc_x.get_available_ways(wt_road, st_flat)[0]
+	local halt_desc = building_desc_x.get_available_stations(building_desc_x.station, wt_road, {})[0]
+	local remover  = command_x(tool_remove_halt)
 
 	ASSERT_TRUE(road != null)
-	ASSERT_TRUE(bridge_desc != null)
 	ASSERT_TRUE(halt_desc != null)
 
-	// build ground road (4,2,0)-(4,6,0) with halt at (4,4,0)
-	ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 6, 0), road, true), null)
-	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 4, 0), halt_desc.get_name()), null)
+	// --- z=0 halt: ground road at (3,3,0)-(3,4,0), halt at (3,3,0) ---
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(3, 3, 0), coord3d(3, 4, 0), road, true), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(3, 3, 0), halt_desc.get_name()), null)
 
-	// build bridge: ramp at (4,3,0) and (4,5,0), span at (4,4,1)
-	ASSERT_EQUAL(setslope(pl, coord3d(4, 3, 0), slope.south), null)
-	ASSERT_EQUAL(setslope(pl, coord3d(4, 5, 0), slope.north), null)
-	ASSERT_EQUAL(command_x(tool_build_bridge).work(pl, coord3d(4, 3, 0), bridge_desc.get_name()), null)
+	// --- z=1 halt: raise tiles (5,3) and (5,4) to height 1, build road + halt ---
+	// Raise all unique corners bounding both tiles:
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(5, 2, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(6, 2, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(5, 3, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(6, 3, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(5, 4, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(6, 4, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(5, 5, 0)), null)
+	ASSERT_EQUAL(command_x.grid_raise(pl, coord3d(6, 5, 0)), null)
+	// Tiles (5,3) and (5,4) are now flat at z=1
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(5, 3, 1), coord3d(5, 4, 1), road, true), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(5, 3, 1), halt_desc.get_name()), null)
 
-	// build halt on the bridge span
-	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 4, 1), halt_desc.get_name()), null)
+	ASSERT_TRUE(tile_x(3, 3, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(5, 3, 1).find_object(mo_building) != null)
 
-	ASSERT_TRUE(tile_x(4, 4, 0).find_object(mo_building) != null)
-	ASSERT_TRUE(tile_x(4, 4, 1).find_object(mo_building) != null)
-
-	// ctrl area removal spanning both heights: old code rejected this (same-z only)
+	// ctrl area removal spanning x=3..5, y=3..4, z=0..1 — covers halt at z=0 and z=1
 	remover.set_flags(2) // ctrl
-	ASSERT_EQUAL(remover.work(pl, coord3d(4, 4, 0), coord3d(4, 4, 1), ""), null)
+	ASSERT_EQUAL(remover.work(pl, coord3d(3, 3, 0), coord3d(5, 4, 1), ""), null)
 
 	// both halt buildings should be gone
-	ASSERT_EQUAL(tile_x(4, 4, 0).find_object(mo_building), null)
-	ASSERT_EQUAL(tile_x(4, 4, 1).find_object(mo_building), null)
+	ASSERT_EQUAL(tile_x(3, 3, 0).find_object(mo_building), null)
+	ASSERT_EQUAL(tile_x(5, 3, 1).find_object(mo_building), null)
 
-	// clean up: remove bridge then ground road
-	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(4, 3, 0)), null)
-	ASSERT_EQUAL(setslope(pl, coord3d(4, 3, 0), slope.flat), null)
-	ASSERT_EQUAL(setslope(pl, coord3d(4, 5, 0), slope.flat), null)
-	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 2, 0), coord3d(4, 6, 0), "" + wt_road), null)
+	// clean up: remove roads, then lower terrain
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(5, 3, 1), coord3d(5, 4, 1), "" + wt_road), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(3, 3, 0), coord3d(3, 4, 0), "" + wt_road), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(5, 2, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(6, 2, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(5, 3, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(6, 3, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(5, 4, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(6, 4, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(5, 5, 0)), null)
+	ASSERT_EQUAL(command_x.grid_lower(pl, coord3d(6, 5, 0)), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
 
@@ -1351,30 +1360,25 @@ function test_remove_halt_route_valid()
 	ASSERT_TRUE(road != null)
 	ASSERT_TRUE(halt_desc != null)
 
-	// main road (4,2,0)-(4,5,0) and side branch (4,4,0)-(5,4,0)
-	ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 5, 0), road, true), null)
-	ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 4, 0), coord3d(5, 4, 0), road, true), null)
-
-	// halts on all road tiles
-	foreach (pos in [coord3d(4,2,0), coord3d(4,3,0), coord3d(4,4,0), coord3d(4,5,0), coord3d(5,4,0)]) {
-		ASSERT_EQUAL(command_x(tool_build_station).work(pl, pos, halt_desc.get_name()), null)
+	// straight road (4,2,0)-(4,6,0) with halts on all 5 tiles — no junctions
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 6, 0), road, true), null)
+	foreach (y in [2, 3, 4, 5, 6]) {
+		ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, y, 0), halt_desc.get_name()), null)
 	}
 
-	// route removal (no ctrl) from (4,2,0) to (4,4,0)
-	// expected route: (4,2)->(4,3)->(4,4), side branch tile (5,4,0) is not on route
+	// route removal (no ctrl) from (4,2,0) to (4,4,0): only removes tiles on the route
 	ASSERT_EQUAL(remover.work(pl, coord3d(4, 2, 0), coord3d(4, 4, 0), ""), null)
 
 	// tiles on the route should have no halt building
 	ASSERT_EQUAL(tile_x(4, 2, 0).find_object(mo_building), null)
 	ASSERT_EQUAL(tile_x(4, 3, 0).find_object(mo_building), null)
 	ASSERT_EQUAL(tile_x(4, 4, 0).find_object(mo_building), null)
-	// tiles NOT on the route must be untouched
+	// tiles beyond the route end must be untouched
 	ASSERT_TRUE(tile_x(4, 5, 0).find_object(mo_building) != null)
-	ASSERT_TRUE(tile_x(5, 4, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(4, 6, 0).find_object(mo_building) != null)
 
 	// clean up
-	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 4, 0), coord3d(5, 4, 0), "" + wt_road), null)
-	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 2, 0), coord3d(4, 5, 0), "" + wt_road), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 2, 0), coord3d(4, 6, 0), "" + wt_road), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
 
