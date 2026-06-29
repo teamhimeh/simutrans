@@ -797,13 +797,14 @@ public:
 // removes station or stop from tile
 class tool_remove_halt_t : public two_click_tool_t {
 	public:
-	tool_remove_halt_t() : two_click_tool_t(TOOL_REMOVE_HALT | GENERAL_TOOL) {}
+	tool_remove_halt_t() : two_click_tool_t(TOOL_REMOVE_HALT | GENERAL_TOOL) { one_click = true; }
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove halt"); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); one_click = true; return true; }
 private:
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
-	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 2; };
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
 	image_id get_marker_image() const OVERRIDE;
 	bool remove_halt(player_t*, koord3d const&);
 	bool calc_route(route_t &, player_t *, koord3d const&, koord3d const&) const;
