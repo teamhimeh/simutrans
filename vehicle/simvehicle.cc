@@ -89,7 +89,7 @@ uint8 vehicle_base_t::stop_steps_offset[8] = {
 	0, //se
 	127, //n
 	0, //e
-	diagonal_vehicle_steps_per_tile/4, //ne
+	diagonal_vehicle_steps_per_tile/2, //ne
 	diagonal_vehicle_steps_per_tile/2 //nw
 };
 
@@ -371,8 +371,7 @@ uint32 vehicle_base_t::do_drive(uint32 distance)
 void vehicle_base_t::get_screen_offset( int &xoff, int &yoff, const sint16 raster_width ) const
 {
 	// vehicles needs finer steps to appear smoother
-	ribi_t::dir dir = ribi_t::get_dir(direction);
-	sint32 display_steps = ((uint32)steps-(uint32)stop_steps_offset[dir])*(uint16)raster_width;
+	sint32 display_steps = ((uint32)steps-(uint32)steps_offset)*(uint16)raster_width;
 	if(dx && dy) {
 		display_steps &= 0xFFFFFC00;
 	}
@@ -433,6 +432,7 @@ ribi_t::ribi vehicle_base_t::calc_set_direction(const koord3d& start, const koor
 		dy = 0;
 		steps_next = diagonal_vehicle_steps_per_tile - 1;
 	}
+	steps_offset = stop_steps_offset[ribi_t::get_dir(direction)];
 	// we could artificially make diagonals shorter: but this would break existing game behaviour
 	return direction;
 }
