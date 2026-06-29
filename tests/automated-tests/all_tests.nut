@@ -45,6 +45,7 @@ include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
 include("tests/test_otrp_signal_options")
+include("tests/test_pillar")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -274,7 +275,10 @@ all_tests <- [
 	test_road_choose_stop_behind_twoway_mode,
 	test_road_choose_stop_behind_loading_only_mode,
 	test_road_choose_stop_behind_inverted_mode,
-	test_road_choose_no_stop_behind_prohibited_mode
+	test_road_choose_no_stop_behind_prohibited_mode,
+	test_remove_pillar_tool_basic,
+	test_remover_pillar_priority,
+	test_remove_pillar_tool_shift_area,
 ]
 
 
