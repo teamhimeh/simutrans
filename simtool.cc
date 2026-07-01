@@ -2838,7 +2838,13 @@ const char* tool_build_way_t::get_tooltip(const player_t *) const
 	}
 	tooltip_with_price_maintenance( welt, desc->get_name(), -desc->get_price(), desc->get_maintenance() );
 	size_t n= strlen(toolstr);
-	sprintf(toolstr+n, ", %dkm/h", desc->get_topspeed() );
+	n += sprintf(toolstr+n, ", %dkm/h", desc->get_topspeed() );
+	if(  welt->get_settings().get_weight_mode() != settings_t::WEIGHT_UNLIMITED  ) {
+		const uint16 axle_load = desc->get_axle_load();
+		if(  axle_load < 9999  ) {
+			n += sprintf(toolstr+n, ", max %dt", axle_load );
+		}
+	}
 	return toolstr;
 }
 
@@ -3327,6 +3333,12 @@ const char* tool_build_bridge_t::get_tooltip(const player_t *) const
 	if(desc->get_max_length()>0) {
 		n += sprintf(toolstr+n, ", %dkm", desc->get_max_length());
 	}
+	if(  welt->get_settings().get_weight_mode() != settings_t::WEIGHT_UNLIMITED  ) {
+		const uint16 axle_load = desc->get_axle_load();
+		if(  axle_load < 9999  ) {
+			n += sprintf(toolstr+n, ", max %dt", axle_load );
+		}
+	}
 	return toolstr;
 }
 
@@ -3617,6 +3629,12 @@ const char* tool_build_tunnel_t::get_tooltip(const player_t *) const
 	size_t n= strlen(toolstr);
 	if(desc->get_waytype()!=powerline_wt) {
 		n += sprintf(toolstr+n, ", %dkm/h", desc->get_topspeed());
+	}
+	if(  welt->get_settings().get_weight_mode() != settings_t::WEIGHT_UNLIMITED  ) {
+		const uint16 axle_load = desc->get_axle_load();
+		if(  axle_load < 9999  ) {
+			n += sprintf(toolstr+n, ", max %dt", axle_load );
+		}
 	}
 	return toolstr;
 }

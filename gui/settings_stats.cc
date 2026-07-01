@@ -226,6 +226,22 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "allow overloading", sets->is_allow_overloading() );
 	INIT_BOOL( "overloading revenue reduced", sets->is_overloading_revenue_reduced() );
 	INIT_BOOL( "overloading runningcost increase", sets->is_overloading_runningcost_increase() );
+	{
+		static char const* const weight_mode_strings[] = {
+			"no weight limit",
+			"weight: increase running cost",
+			"weight: reduce speed limit",
+			"weight: prohibit entry"
+		};
+		weight_mode_selector.clear_elements();
+		for(  uint32 i=0;  i<lengthof(weight_mode_strings);  i++  ) {
+			weight_mode_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( weight_mode_strings[i], SYSCOL_TEXT );
+		}
+		weight_mode_selector.set_selection( (int)sets->get_weight_mode() );
+		weight_mode_selector.set_focusable( false );
+		add_component( &weight_mode_selector );
+		INIT_LB( "way weight limit mode" );
+	}
 	INIT_NUM( "station_coverage", sets->get_station_coverage(), 1, 127, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "allow_merge_distant_halt", sets->get_allow_merge_distant_halt(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	SEPERATOR
@@ -279,6 +295,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_BOOL_VALUE( sets->allow_overloading );
 	READ_BOOL_VALUE( sets->overloading_revenue_reduced );
 	READ_BOOL_VALUE( sets->overloading_runningcost_increase );
+	sets->weight_mode = (settings_t::weight_mode_t)clamp( weight_mode_selector.get_selection(), (int)settings_t::WEIGHT_UNLIMITED, (int)settings_t::WEIGHT_PROHIBIT );
 	READ_NUM_VALUE( sets->station_coverage_size );
 	READ_NUM_VALUE( sets->allow_merge_distant_halt );
 	READ_NUM_VALUE( sets->max_route_steps );
