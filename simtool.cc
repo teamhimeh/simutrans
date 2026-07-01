@@ -9916,8 +9916,9 @@ bool tool_change_line_t::init( player_t *player )
 				}
 				vector_tpl<linehandle_t> lines;
 				player->simlinemgmt.get_lines(simline_t::line, &lines);
+				const PIXVAL new_colour = player->get_player_color1_pixval(env_t::gui_player_color_bright);
 				FOR(vector_tpl<linehandle_t>, const l, lines) {
-					l->set_colour(player->get_player_color1()+env_t::gui_player_color_bright);
+					l->set_colour(new_colour);
 				}
 			}
 			break;
