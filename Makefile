@@ -67,7 +67,7 @@ else ifeq ($(OSTYPE),mingw)
   endif
   LDFLAGS   += -pthread
   CFLAGS    += -Wno-deprecated-copy -DNOMINMAX -DWIN32_LEAN_AND_MEAN -DWINVER=0x0501 -D_WIN32_IE=0x0500
-  LIBS      += -lmingw32 -lgdi32 -lwinmm -lws2_32 -limm32
+  LIBS      += -lmingw32 -lgdi32 -lwinmm -lws2_32 -limm32 -lcomdlg32
 
   # Disable the console on Windows unless WIN32_CONSOLE is set or graphics are disabled
   ifdef WIN32_CONSOLE
