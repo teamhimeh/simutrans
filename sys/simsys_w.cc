@@ -1066,9 +1066,18 @@ static DWORD WINAPI color_pick_proc(LPVOID)
 
 bool dr_pick_color_start(uint8 r, uint8 g, uint8 b)
 {
-	if(  InterlockedCompareExchange(&color_pick_state, 1, 0) != 0  ) {
-		// a pick is already running, or a finished result has not been collected yet
-		return false;
+	// Claim the slot from idle(0) or done-but-uncollected(2): the latter happens
+	// when the GUI that started a previous pick was closed before it could poll
+	// the result (e.g. the color picker window was closed after the requesting
+	// dialog had already been closed). Only a genuinely running(1) pick refuses.
+	for(;;) {
+		const LONG old_state = color_pick_state;
+		if(  old_state == 1  ) {
+			return false;
+		}
+		if(  InterlockedCompareExchange(&color_pick_state, 1, old_state) == old_state  ) {
+			break;
+		}
 	}
 	if(  color_pick_thread  ) {
 		CloseHandle( color_pick_thread );
