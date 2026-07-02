@@ -1968,7 +1968,8 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 			// nothing to show
 			return;
 		}
-		grund_t const* const gr = cnv->get_route()?welt->lookup(cnv->get_route()->back()):NULL;
+		const route_t* const route = cnv->get_route();
+		grund_t const* const gr = route->get_count() > 0 ? welt->lookup(route->back()) : NULL;
 		const float conversion_ratio = (float)world()->get_settings().get_spacing_shift_divisor()/world()->ticks_per_world_month;
 
 		
@@ -3415,6 +3416,17 @@ void road_vehicle_t::unreserve_all_tiles() {
 	reserving_tiles.clear();
 }
 
+void road_vehicle_t::unreserve_target_halt()
+{
+	if(  leading  &&  previous_direction!=ribi_t::none  &&  cnv  &&  target_halt.is_bound()  ) {
+		const route_t *rt = cnv->get_route();
+		for(  uint32 length=0;  length<cnv->get_tile_length()  &&  length+1<rt->get_count();  length++  ) {
+			target_halt->unreserve_position( welt->lookup( rt->at( rt->get_count()-length-1 ) ), cnv->self );
+		}
+	}
+	target_halt = halthandle_t();
+}
+
 road_vehicle_t::~road_vehicle_t() {
 	// unreserve tiles before this vehicle is disposed.
 	unreserve_all_tiles();
@@ -3872,7 +3884,26 @@ bool rail_vehicle_t::is_longblock_signal_clear(signal_t *sig, uint16 next_block,
 		return res;
 	}
 	else {
-		// we are in a sync_step. request to do this in a step.
+		// we are in a sync_step. 
+		// first we check we can use this as normal signal?
+		uint16 next_signal;
+		uint16 next_crossing;
+		if( !block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false ) ){
+			// no empty route to next stop or signal
+			sig->set_state( roadsign_t::STATE_RED );
+			restart_speed = 0;
+			return false;
+		}
+		if(  next_signal != route_t::INVALID_INDEX  ) {
+			// success, and there is a signal before end of route => finished
+			sig->set_state( roadsign_t::STATE_GREEN );
+			cnv->clear_reserved_tiles();
+			cnv->set_next_stop_index( min( next_crossing, next_signal ) );
+			return true;
+		}
+		// we need to check.
+		// request to do this in a step.
+		block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
 		if(!sig->is_stop_before_check()) { cnv->request_signal_check_in_step(); }
 		restart_speed = 0;
 		return false;
@@ -4149,16 +4180,11 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 		}
 
 		if(  !cnv->is_waiting()&&!call_by_step&&cnv->is_signal_check_in_step_needed()  ) {
-			// now we are in the sync_step.
-			// the next signal is choose or long, we check this signal in the next step!
-			block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, false, false );
-			sig->set_state( roadsign_t::STATE_RED );
+			sig->set_state( roadsign_t::STATE_YELLOW );
 			restart_speed = -1;
-
-			return false;
 		}
 		// when we reached here, the way after the last signal is not free though the way before is => we can still go
-		if(  cnv->get_next_reservation_index()<=next_signal+1  ) {
+		if(  cnv->get_next_reservation_index()<=next_signal+1 && cnv->is_reservation_empty()  ) {
 			// only show third aspect on last signal of cascade
 			cnv->set_next_stop_index(next_signal);
 			sig->set_state( roadsign_t::STATE_YELLOW );
@@ -4470,7 +4496,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				signal_t *enter_sig = gr_next_block->find<signal_t>();
 				if(  enter_sig  ) {
 					const roadsign_desc_t *enter_desc = enter_sig->get_desc();
-					if(  enter_desc->is_priority_signal()  ||  enter_desc->is_pre_signal()  ) {
+					if(  enter_desc->is_priority_signal()  ) {
 						// we need to re-check this signal.
 						signal_to_check = target_index;
 						break;
@@ -5552,6 +5578,11 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 		else {
 			// we un-reserve also nonexistent tiles! (may happen during deletion)
 			if(reserve) {
+				// never reserve taxiway tiles — stop here without reserving
+				if(  sch1->get_desc()->get_styp() != type_runway  ) {
+					end = i;
+					break;
+				}
 				start_now = true;
 				sch1->add_convoi_reservation(cnv->self);
 				if(  !sch1->reserve(cnv->self,ribi_t::none)  ) {
@@ -5560,8 +5591,8 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 					end = i;
 					break;
 				}
-				// end of runway?
-				if(  i > start  &&  (ribi_t::is_single( sch1->get_ribi_unmasked() )  ||  sch1->get_desc()->get_styp() != type_runway)   ) {
+				// end of runway by single ribi?
+				if(  i > start  &&  ribi_t::is_single( sch1->get_ribi_unmasked() )  ) {
 					end = i;
 					break;
 				}
@@ -5575,7 +5606,9 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 
 	// un-reserve if not successful
 	if(  !success  &&  reserve  ) {
-		for(  uint32 i=start;  i<end;  i++  ) {
+		// Use i<=end so that tile 'end' (where reserve() failed) also gets its
+		// add_convoi_reservation() entry removed via runway_t::unreserve().
+		for(  uint32 i=start;  i<=end;  i++  ) {
 			grund_t *gr = welt->lookup(route->at(i));
 			if (gr) {
 				runway_t* sch1 = (runway_t *)gr->get_weg(air_wt);
@@ -5596,6 +5629,22 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 						break;
 					}
 					sch1->add_convoi_reservation( cnv->self );
+				}
+			}
+		}
+	}
+
+	// When unreserving the takeoff section (end < touchdown), the landing runway
+	// tiles were never visited by the main loop, so their load-balancing
+	// reservations added during the original takeoff must be removed here.
+	if(  !reserve  &&  end<touchdown  ) {
+		for(  uint32 i=touchdown;  i<route->get_count();  i++  ) {
+			if(  grund_t *gr = welt->lookup(route->at(i))  ) {
+				if(  runway_t* sch1 = (runway_t *)gr->get_weg(air_wt)  ) {
+					if(  sch1->get_desc()->get_styp()!=type_runway  ) {
+						break;
+					}
+					sch1->remove_convoi_reservation( cnv->self );
 				}
 			}
 		}
@@ -5831,10 +5880,10 @@ void air_vehicle_t::set_convoi(convoi_t *c)
 		}
 		if (!r.empty()) {
 			// free runway reservation
-			if(route_index>=takeoff  &&  route_index<touchdown-4  ) {
-				block_reserver( 0, touchdown-4, false );
+			if(  state==departing  ||  (state==taxiing  &&  route_index>=takeoff)  ) {
+				block_reserver( takeoff, takeoff+100, false );
 			}
-			else if(route_index>=touchdown-1  &&  state!=taxiing) {
+			else if(  state==landing  ) {
 				block_reserver( touchdown, search_for_stop+1, false );
 			}
 		}
@@ -5852,16 +5901,22 @@ void air_vehicle_t::set_convoi(convoi_t *c)
 					target_halt->reserve_position(target,cnv->self);
 				}
 			}
-			// restore reservation
-			if(  grund_t *gr = welt->lookup(get_pos())  ) {
-				if(  weg_t *weg = gr->get_weg(air_wt)  ) {
-					if(  weg->get_desc()->get_styp()==type_runway  ) {
-						// but only if we are on a runway ...
-						if(  route_index>=takeoff  &&  route_index<touchdown-21  &&  state!=flying  ) {
+			// restore runway reservation by state
+			if(  state==departing  ) {
+				block_reserver( takeoff, takeoff+100, true );
+			}
+			else if(  state==landing  ) {
+				block_reserver( touchdown, search_for_stop+1, true );
+			}
+			else if(  state==taxiing  &&  route_index>=takeoff  &&  route_index<touchdown  ) {
+				// brief window: state is still taxiing but route_index has advanced to
+				// takeoff because the vehicle hopped onto the runway-start tip tile
+				// (reservation was already acquired when entering that tile; state
+				// transitions to departing on the very next tick)
+				if(  grund_t *gr = welt->lookup(get_pos())  ) {
+					if(  weg_t *weg = gr->get_weg(air_wt)  ) {
+						if(  weg->get_desc()->get_styp()==type_runway  ) {
 							block_reserver( takeoff, takeoff+100, true );
-						}
-						else if(  route_index>=touchdown-1  &&  state!=taxiing  ) {
-							block_reserver( touchdown, search_for_stop+1, true );
 						}
 					}
 				}
