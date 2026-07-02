@@ -8267,81 +8267,238 @@ const char *tool_merge_stop_t::do_work( player_t *player, const koord3d &last_po
 }
 
 
-const char* tool_remove_signal_t::work( player_t* player, koord3d pos )
+char const* tool_remove_signal_t::do_work(player_t *player, const koord3d &last_pos, const koord3d &pos)
 {
-	if(  grund_t *gr=welt->lookup(pos)  ) {
-		if(  signal_t *rs=gr->find<signal_t>()  ) {
-			const char *msg = rs->is_deletable(player);
-			if(msg) {
-				return msg;
-			}
-			DBG_MESSAGE("tool_remove_signal_t()",  "removing roadsign at (%s)", pos.get_str());
-			weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
-			if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
-				weg = gr->get_weg(track_wt);
-			}
-
-			rs->cleanup(player);
-			delete rs;
-
-			// no need to update way if there is none
-			// may happen when public player builds a signal on a company track,
-			// the company goes bankrupt and the public player tries to remove the signal
-			if (weg) {
-				weg->count_sign();
-			}
-
-			return NULL;
+	if(  is_ctrl_pressed()  ) {
+		// area mode
+		if(  pos==koord3d::invalid  ) {
+			return remove_signal(player, last_pos) ? NULL : "";
 		}
+		const sint16 z1 = min(last_pos.z, pos.z);
+		const sint16 z2 = max(last_pos.z, pos.z);
+		for(  sint16 x = min(pos.x, last_pos.x);  x <= max(pos.x, last_pos.x);  x++  ) {
+			for(  sint16 y = min(pos.y, last_pos.y);  y <= max(pos.y, last_pos.y);  y++  ) {
+				const planquadrat_t *pl = welt->access(koord(x, y));
+				if(  !pl  ) { continue; }
+				for(  unsigned i = 0;  i < pl->get_boden_count();  i++  ) {
+					grund_t *gr = pl->get_boden_bei(i);
+					if(  gr->get_hoehe() < z1  ||  gr->get_hoehe() > z2  ) { continue; }
+					remove_signal(player, gr->get_pos());
+				}
+			}
+		}
+		return NULL;
 	}
-	// fail silent
-	return "";
+
+	// route mode: single click does nothing
+	if(  pos==koord3d::invalid  ) {
+		return NULL;
+	}
+	route_t route;
+	if(  !calc_route(route, player, last_pos, pos)  ) {
+		return NULL;
+	}
+	for(  uint32 i = 0;  i < route.get_count();  i++  ) {
+		remove_signal(player, route.at(i));
+	}
+	return NULL;
+}
+
+bool tool_remove_signal_t::calc_route(route_t &verbindung, player_t *, const koord3d &start, const koord3d &end)
+{
+	grund_t *gr_start = welt->lookup(start);
+	if(  !gr_start  ) { return false; }
+
+	// derive waytype from signal at start, or fall back to first way
+	waytype_t wt = invalid_wt;
+	if(  signal_t *rs = gr_start->find<signal_t>()  ) {
+		wt = rs->get_desc()->get_wtyp();
+	}
+	else if(  gr_start->get_weg_nr(0)  ) {
+		wt = gr_start->get_weg_nr(0)->get_waytype();
+	}
+	if(  wt == invalid_wt  ) { return false; }
+	if(  wt == tram_wt  ) { wt = track_wt; }
+
+	test_driver_t *test_driver = new way_checker_t(wt);
+	bool ok = verbindung.calc_route(welt, start, end, test_driver, 0, 0);
+	delete test_driver;
+	return ok  &&  verbindung.get_count() > 1;
+}
+
+void tool_remove_signal_t::mark_tiles(player_t *player, koord3d const &start, koord3d const &end)
+{
+	if(  is_ctrl_pressed()  ) {
+		// area mode
+		const sint16 z1 = min(start.z, end.z);
+		const sint16 z2 = max(start.z, end.z);
+		for(  sint16 x = min(start.x, end.x);  x <= max(start.x, end.x);  x++  ) {
+			for(  sint16 y = min(start.y, end.y);  y <= max(start.y, end.y);  y++  ) {
+				const planquadrat_t *pl = welt->access(koord(x, y));
+				if(  !pl  ) { continue; }
+				for(  unsigned i = 0;  i < pl->get_boden_count();  i++  ) {
+					grund_t *gr = pl->get_boden_bei(i);
+					if(  gr->get_hoehe() < z1  ||  gr->get_hoehe() > z2  ) { continue; }
+					zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL);
+					const uint8 grund_hang = gr->get_grund_hang();
+					const uint8 weg_hang = gr->get_weg_hang();
+					const uint8 hang = max(corner_sw(grund_hang), corner_sw(weg_hang)) + 3 * max(corner_se(grund_hang), corner_se(weg_hang)) + 9 * max(corner_ne(grund_hang), corner_ne(weg_hang)) + 27 * max(corner_nw(grund_hang), corner_nw(weg_hang));
+					uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
+					marker->set_foreground_image(ground_desc_t::marker->get_image(grund_hang % 27));
+					marker->set_image(ground_desc_t::marker->get_image(back_hang));
+					marker->mark_image_dirty(marker->get_image(), 0);
+					gr->obj_add(marker);
+					marked.insert(marker);
+				}
+			}
+		}
+		return;
+	}
+
+	// route mode: highlight tiles on the route that have a signal
+	route_t route;
+	if(  !calc_route(route, player, start, end)  ) { return; }
+	for(  uint32 i = 0;  i < route.get_count();  i++  ) {
+		grund_t *gr = welt->lookup(route.at(i));
+		if(  !gr  ||  !gr->find<signal_t>()  ) { continue; }
+		zeiger_t *marker = new zeiger_t(gr->get_pos(), player);
+		marker->set_image(tool_t::general_tool[TOOL_REMOVER]->cursor);
+		gr->obj_add(marker);
+		marked.insert(marker);
+	}
+}
+
+image_id tool_remove_signal_t::get_marker_image() const
+{
+	return cursor;
+}
+
+bool tool_remove_signal_t::remove_signal(player_t *player, koord3d const &pos)
+{
+	grund_t *gr = welt->lookup(pos);
+	if(  !gr  ) { return true; }
+	signal_t *rs = gr->find<signal_t>();
+	if(  !rs  ) { return true; }
+	const char *msg = rs->is_deletable(player);
+	if(  msg  ) { return false; }
+	DBG_MESSAGE("tool_remove_signal_t()", "removing roadsign at (%s)", pos.get_str());
+	weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
+	if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
+		weg = gr->get_weg(track_wt);
+	}
+	rs->cleanup(player);
+	delete rs;
+	if(  weg  ) {
+		weg->count_sign();
+	}
+	return true;
+}
+
+
+void tool_remove_halt_t::add_marker(grund_t *gr)
+{
+	zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL);
+	const uint8 grund_hang = gr->get_grund_hang();
+	const uint8 weg_hang   = gr->get_weg_hang();
+	const uint8 hang = max(corner_sw(grund_hang), corner_sw(weg_hang)) +
+	                   3 * max(corner_se(grund_hang), corner_se(weg_hang)) +
+	                   9 * max(corner_ne(grund_hang), corner_ne(weg_hang)) +
+	                   27 * max(corner_nw(grund_hang), corner_nw(weg_hang));
+	uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
+	marker->set_foreground_image(ground_desc_t::marker->get_image(grund_hang % 27));
+	marker->set_image(ground_desc_t::marker->get_image(back_hang));
+	marker->mark_image_dirty(marker->get_image(), 0);
+	gr->obj_add(marker);
+	marked.insert(marker);
+}
+
+
+bool tool_remove_halt_t::calc_route(route_t &route, player_t *, koord3d const &start, koord3d const &end) const
+{
+	const grund_t *gr_start = welt->lookup(start);
+	if (!gr_start) { return false; }
+
+	waytype_t wt = invalid_wt;
+	if (weg_t *w = gr_start->get_weg_nr(0)) { wt = w->get_waytype(); }
+	if (wt == invalid_wt) { return false; }
+
+	if (start == end) {
+		route.clear();
+		route.append(start);
+		return true;
+	}
+
+	test_driver_t *test_driver = new way_checker_t(wt);
+	bool ok = route.calc_route(welt, start, end, test_driver, 0, 0);
+	delete test_driver;
+	return ok;
 }
 
 
 char const* tool_remove_halt_t::do_work(player_t *player, const koord3d &last_pos, const koord3d &pos)
 {
-	if(  pos==koord3d::invalid  ) {
-		// single tile removal
+	if(  pos == koord3d::invalid  ) {
+		// safety fallback: unreachable with is_valid_pos=2 but kept for robustness
 		return remove_halt(player, last_pos) ? NULL : "The station cannot be removed.";
 	}
 
-	// multiple tiles removal
-	if(  last_pos.z != pos.z  ) {
-		// allow only same height
-		return NULL;
-	}
-	bool failed_to_remove = false;
-	for(  sint16 x = min(pos.x, last_pos.x);  x <= max(pos.x, last_pos.x);  x++  ) {
-		for(  sint16 y = min(pos.y, last_pos.y);  y <= max(pos.y, last_pos.y);  y++  ) {
-			failed_to_remove |= !remove_halt(player, koord3d(x, y, pos.z));
+	if(  is_ctrl_pressed()  ) {
+		// ctrl (with or without shift): area removal with height range
+		const sint16 z1 = min(last_pos.z, pos.z);
+		const sint16 z2 = max(last_pos.z, pos.z);
+		bool failed = false;
+		for(  sint16 x = min(pos.x, last_pos.x);  x <= max(pos.x, last_pos.x);  x++  ) {
+			for(  sint16 y = min(pos.y, last_pos.y);  y <= max(pos.y, last_pos.y);  y++  ) {
+				const planquadrat_t *pl = welt->access(koord(x, y));
+				if(  !pl  ) { continue; }
+				for(  unsigned i = 0;  i < pl->get_boden_count();  i++  ) {
+					const grund_t *gr = pl->get_boden_bei(i);
+					if(  gr->get_hoehe() < z1  ||  gr->get_hoehe() > z2  ) { continue; }
+					failed |= !remove_halt(player, gr->get_pos());
+				}
+			}
 		}
+		return failed ? "Some stations cannot be removed." : NULL;
 	}
-	return failed_to_remove ? "Some stations cannot be removed." : NULL;
+
+	// no ctrl (shift or no modifier, including drag): route-based removal
+	route_t route;
+	if(  !calc_route(route, player, last_pos, pos)  ) {
+		return NULL; // invalid route, do not remove
+	}
+	bool failed = false;
+	for(  uint32 i = 0;  i < route.get_count();  i++  ) {
+		failed |= !remove_halt(player, route.at(i));
+	}
+	return failed ? "Some stations cannot be removed." : NULL;
 }
 
-void tool_remove_halt_t::mark_tiles(player_t *, koord3d const &start, koord3d const &end)
+void tool_remove_halt_t::mark_tiles(player_t *player, koord3d const &start, koord3d const &end)
 {
-	if (start.z != end.z) {
-		// allow only same height
+	if(  is_ctrl_pressed()  ) {
+		// ctrl (with or without shift): area marking with height range
+		const sint16 z1 = min(start.z, end.z);
+		const sint16 z2 = max(start.z, end.z);
+		for(  sint16 x = min(start.x, end.x);  x <= max(start.x, end.x);  x++  ) {
+			for(  sint16 y = min(start.y, end.y);  y <= max(start.y, end.y);  y++  ) {
+				const planquadrat_t *pl = welt->access(koord(x, y));
+				if(  !pl  ) { continue; }
+				for(  unsigned i = 0;  i < pl->get_boden_count();  i++  ) {
+					grund_t *gr = pl->get_boden_bei(i);
+					if(  gr->get_hoehe() < z1  ||  gr->get_hoehe() > z2  ) { continue; }
+					add_marker(gr);
+				}
+			}
+		}
 		return;
 	}
-	for (sint16 x = min(start.x, end.x); x <= max(start.x, end.x); x++) {
-		for (sint16 y = min(start.y, end.y); y <= max(start.y, end.y); y++) {
-			grund_t *gr = welt->lookup(koord3d(x, y, start.z));
-			if (  !gr  ) { continue; }
-			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL);
 
-			const uint8 grund_hang = gr->get_grund_hang();
-			const uint8 weg_hang = gr->get_weg_hang();
-			const uint8 hang = max(corner_sw(grund_hang), corner_sw(weg_hang)) + 3 * max(corner_se(grund_hang), corner_se(weg_hang)) + 9 * max(corner_ne(grund_hang), corner_ne(weg_hang)) + 27 * max(corner_nw(grund_hang), corner_nw(weg_hang));
-			uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
-			marker->set_foreground_image(ground_desc_t::marker->get_image(grund_hang % 27));
-			marker->set_image(ground_desc_t::marker->get_image(back_hang));
-			marker->mark_image_dirty(marker->get_image(), 0);
-			gr->obj_add(marker);
-			marked.insert(marker);
-		}
+	// no ctrl (shift or no modifier, including drag): route-based marking
+	route_t route;
+	if(  !calc_route(route, player, start, end)  ) { return; }
+	for(  uint32 i = 0;  i < route.get_count();  i++  ) {
+		grund_t *gr = welt->lookup(route.at(i));
+		if(  gr  ) { add_marker(gr); }
 	}
 }
 
@@ -8365,6 +8522,83 @@ bool tool_remove_halt_t::remove_halt(player_t* player, koord3d const &pos)
 	// halt and not a factory (oil rig etc.)
 	const player_t *owner = gb->get_owner();
 	return player_t::check_owner(owner, player) && haltestelle_t::remove(player, gr->get_pos());
+}
+
+// removes a single city building tile; returns true if removal succeeded or tile had nothing to remove
+bool tool_remove_house_t::remove_house(player_t* player, koord3d const& pos)
+{
+	grund_t* gr = welt->lookup_kartenboden(pos.get_2d());
+	if (!gr || gr->get_pos().z != pos.z) {
+		return true;
+	}
+	gebaeude_t* gb = gr->find<gebaeude_t>();
+	if (!gb) {
+		return true;
+	}
+	gb = gb->get_first_tile();
+	const building_desc_t* desc = gb->get_tile()->get_desc();
+	// only city buildings (residential/commercial/industrial) — skip everything else silently
+	if (!desc->is_city_building()) {
+		return true;
+	}
+	// skip if there's a halt on this tile
+	if (gr->get_halt().is_bound()) {
+		return true;
+	}
+	const char* err = gb->is_deletable(player);
+	if (err) {
+		return false;
+	}
+	hausbauer_t::remove(player, gb);
+	return true;
+}
+
+char const* tool_remove_house_t::do_work(player_t* player, const koord3d& last_pos, const koord3d& pos)
+{
+	if (pos == koord3d::invalid) {
+		return remove_house(player, last_pos) ? NULL : "Das Feld gehoert\neinem anderen Spieler\n";
+	}
+	if (last_pos.z != pos.z) {
+		return NULL;
+	}
+	bool failed = false;
+	for (sint16 x = min(pos.x, last_pos.x); x <= max(pos.x, last_pos.x); x++) {
+		for (sint16 y = min(pos.y, last_pos.y); y <= max(pos.y, last_pos.y); y++) {
+			failed |= !remove_house(player, koord3d(x, y, pos.z));
+		}
+	}
+	return failed ? "Das Feld gehoert\neinem anderen Spieler\n" : NULL;
+}
+
+void tool_remove_house_t::mark_tiles(player_t*, koord3d const& start, koord3d const& end)
+{
+	if (start.z != end.z) {
+		return;
+	}
+	for (sint16 x = min(start.x, end.x); x <= max(start.x, end.x); x++) {
+		for (sint16 y = min(start.y, end.y); y <= max(start.y, end.y); y++) {
+			grund_t* gr = welt->lookup(koord3d(x, y, start.z));
+			if (!gr) { continue; }
+			zeiger_t* marker = new zeiger_t(gr->get_pos(), NULL);
+			const uint8 grund_hang = gr->get_grund_hang();
+			const uint8 weg_hang   = gr->get_weg_hang();
+			const uint8 hang = max(corner_sw(grund_hang), corner_sw(weg_hang))
+			                 + 3  * max(corner_se(grund_hang), corner_se(weg_hang))
+			                 + 9  * max(corner_ne(grund_hang), corner_ne(weg_hang))
+			                 + 27 * max(corner_nw(grund_hang), corner_nw(weg_hang));
+			uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
+			marker->set_foreground_image(ground_desc_t::marker->get_image(grund_hang % 27));
+			marker->set_image(ground_desc_t::marker->get_image(back_hang));
+			marker->mark_image_dirty(marker->get_image(), 0);
+			gr->obj_add(marker);
+			marked.insert(marker);
+		}
+	}
+}
+
+image_id tool_remove_house_t::get_marker_image() const
+{
+	return cursor;
 }
 
 // only public player can copy public objects

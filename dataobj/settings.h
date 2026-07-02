@@ -750,6 +750,9 @@ public:
 	void set_advance_to_end(bool b) { advance_to_end = b; }
 
 	bool get_first_come_first_serve() const { return first_come_first_serve; }
+	void set_first_come_first_serve(bool b) { first_come_first_serve = b; }
+	bool get_first_come_first_serve(uint8 goods_catg_index) const
+		{ return first_come_first_serve || get_time_based_routing_enabled(goods_catg_index); }
 	uint32 get_waiting_limit_for_first_come_first_serve() const 
 		{ return waiting_limit_for_first_come_first_serve; }
 
@@ -772,6 +775,7 @@ public:
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
+	void set_use_route_cache(bool b) { use_route_cache = b; }
 };
 
 #endif
