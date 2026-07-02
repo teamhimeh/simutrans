@@ -47,6 +47,7 @@ include("tests/test_road_choose")
 include("tests/test_priority_signal")
 include("tests/test_otrp_signal_options")
 include("tests/test_reroute_reservation")
+include("tests/test_remove_house")
 include("tests/test_pillar")
 
 all_tests <- [
@@ -137,6 +138,11 @@ all_tests <- [
 	test_halt_make_public_multi_tile,
 	test_halt_make_public_underground,
 	test_halt_move_stop_invalid_param,
+	test_remove_halt_area_same_height,
+	test_remove_halt_area_different_height,
+	test_remove_halt_route_valid,
+	test_remove_halt_route_invalid,
+	test_remove_halt_other_player,
 	test_headquarters_build_flat,
 	test_label,
 	test_player_cash,
@@ -167,6 +173,9 @@ all_tests <- [
 	test_sign_build_private_way,
 	test_sign_build_signal,
 	test_sign_build_signal_multiple,
+	test_sign_remove_signal_route,
+	test_sign_remove_signal_area_ctrl,
+	test_sign_remove_signal_keeps_other_player_signal,
 	test_sign_signal_turns_red_on_leading_vehicle,
 	test_sign_signal_when_player_removed,
 	test_slope_to_dir,
@@ -284,6 +293,8 @@ all_tests <- [
 	test_rail_reroute_no_line,
 	test_rail_reroute_with_line_stale_cache,
 	test_rail_reroute_with_line_mid_travel,
+	test_remove_house_one_click,
+	test_remove_house_area,
 	test_remove_pillar_tool_basic,
 	test_remover_pillar_priority,
 	test_remove_pillar_tool_shift_area,

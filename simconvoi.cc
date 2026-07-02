@@ -3658,6 +3658,20 @@ void convoi_t::open_info_window()
 }
 
 
+const char* convoi_t::get_home_depot_name()
+{
+	grund_t* const g = welt->lookup(get_home_depot());
+	if(  !g  ) {
+		return "";
+	}
+	depot_t* const d = g->get_depot();
+	if(  !d  ) {
+		return "";
+	}
+	return d->get_name();
+}
+
+
 void convoi_t::info(cbuffer_t & buf) const
 {
 	const vehicle_t* v = fahr[0];
@@ -5022,7 +5036,7 @@ void convoi_t::register_stops()
 	if(  schedule  ) {
 		FOR(minivec_tpl<schedule_entry_t>, const& i, schedule->get_entries()) {
 			halthandle_t const halt = haltestelle_t::get_stoppable_halt(i.pos, get_owner(), front()->get_waytype());
-			if(  halt.is_bound()  ) {
+			if(  halt.is_bound()&&!i.is_pass_stop()  ) {
 				halt->add_convoy(self);
 			}
 		}
@@ -6205,7 +6219,11 @@ void convoi_t::trade_convoi() {
 	}
 	// because next line's owner is invalid, unset it.
 	schedule->unset_next_line();
-	set_owner(welt->get_player(get_accept_player_nr()));
+	player_t* const new_owner = welt->get_player(get_accept_player_nr());
+	set_owner(new_owner);
+	for(  uint8 i=0;  i<get_vehicle_count();  i++  ) {
+		get_vehikel(i)->set_owner(new_owner);
+	}
 	register_stops();
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	set_permit_trade(false);
