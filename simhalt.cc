@@ -3476,7 +3476,9 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 }
 
 bool haltestelle_t::is_connection_allowed(const player_t* player) const {
-	return !player  ||  (permissions & (1 << player->get_player_nr())) != 0;
+	return !player
+	       ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)
+	       ||  (permissions & (1 << player->get_player_nr())) != 0;
 }
 
 // merge stop
@@ -3591,7 +3593,11 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 	// transfer ownership
 	owner = player;
 
-	// Public halt: allow all players to stop here
+	// Public halt: allow all players to stop here, including future companies that reuse a deleted
+	// company's slot. Set HS_ALLOW_OTHER_PLAYER_CONNECTION so that is_connection_allowed() grants
+	// access based on the all-company flag rather than relying solely on per-slot bitmask bits that
+	// would be cleared by remove_player() when a company is removed.
+	flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
 	set_permissions(0xFFFF);
 
 	// set name to name of first public stop
