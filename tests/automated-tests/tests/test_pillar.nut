@@ -9,10 +9,6 @@
 //
 
 
-// TOOL_REMOVE_PILLAR | GENERAL_TOOL (general_tool[55])
-const tool_remove_pillar_id = 0x1037
-
-
 function count_pillars(pos)
 {
 	local count = 0
@@ -38,7 +34,7 @@ function build_pillared_road_bridge(pl, start_pos, end_pos)
 function test_remove_pillar_tool_basic()
 {
 	local pl = player_x(0)
-	local pillar_remover = command_x(tool_remove_pillar_id)
+	local pillar_remover = command_x(tool_remove_pillar)
 	local road = way_desc_x("cobblestone_road")
 	local target = coord3d(4, 4, 0)
 	local other = coord3d(4, 6, 0)
@@ -127,7 +123,7 @@ function test_remover_pillar_priority()
 function test_remove_pillar_tool_shift_area()
 {
 	local pl = player_x(0)
-	local pillar_remover = command_x(tool_remove_pillar_id)
+	local pillar_remover = command_x(tool_remove_pillar)
 	local setslope = command_x.set_slope
 
 	ASSERT_EQUAL(setslope(pl, coord3d(3, 2, 0), slope.south), null)

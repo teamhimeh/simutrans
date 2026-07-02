@@ -562,6 +562,7 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 	if ((type == obj_t::undefined || type == obj_t::pillar) && pl!=NULL) {
 		msg = pl->is_deletable(player);
 		if(msg) {
+			dbg->message("tool_remover_intern", "pillar not deletable: %s", msg);
 			return false;
 		}
 DBG_MESSAGE("tool_remover()",  "removing pillar at (%s)", pos.get_str());
