@@ -76,7 +76,7 @@ public:
 	gui_departure_board_t() : gui_aligned_container_t()
 	{
 		next_refresh = -1;
-		set_table_layout(3,0);
+		set_table_layout(4,0);
 	}
 
 	void update_departures(halthandle_t halt);
@@ -986,18 +986,23 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 	remove_all();
 	slist_tpl<halthandle_t> exclude;
 	if(  destinations.get_count()>0  ) {
-		new_component_span<gui_label_t>("Departures to\n", 3);
+		new_component_span<gui_label_t>("Departures to\n", 4);
 
 		FOR( vector_tpl<dest_info_t>, hi, destinations ) {
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
-				gui_label_buf_t *lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
+				linehandle_t l = hi.cnv->get_line();
+				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(c, gui_label_t::left);
+				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>(c, gui_label_t::left);
 				if( hi.delta_ticks == 0 ) {
-					lb->buf().append( translator::translate( "now" ) );
+					lb_time->buf().append( translator::translate( "now" ) );
 				}
 				else {
-					lb->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
+					lb_time->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
 				}
-				lb->update();
+				lb_name->buf().append(l.is_bound()? l->get_name(): hi.cnv->get_name());
+				lb_time->update();
+				lb_name->update();
 				insert_image(hi.cnv);
 
 				new_component<gui_label_t>(hi.halt->get_name() );
@@ -1007,18 +1012,23 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 	}
 	exclude.clear();
 	if(  origins.get_count()>0  ) {
-		new_component_span<gui_label_t>("Arrivals from\n", 3);
+		new_component_span<gui_label_t>("Arrivals from\n", 4);
 
 		FOR( vector_tpl<dest_info_t>, hi, origins ) {
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
-				gui_label_buf_t *lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
+				linehandle_t l = hi.cnv->get_line();
+				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(c, gui_label_t::left);
+				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>(c, gui_label_t::left);
 				if( hi.delta_ticks == 0 ) {
-					lb->buf().append( translator::translate( "now" ) );
+					lb_time->buf().append( translator::translate( "now" ) );
 				}
 				else {
-					lb->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
+					lb_time->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
 				}
-				lb->update();
+				lb_name->buf().append(l.is_bound()? l->get_name(): hi.cnv->get_name());
+				lb_time->update();
+				lb_name->update();
 
 				insert_image(hi.cnv);
 
