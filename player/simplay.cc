@@ -270,6 +270,11 @@ void player_t::set_player_color(uint8 col1, uint8 col2)
 	player_color_2 = col2;
 	player_color_custom = false;
 	display_set_player_color_scheme( player_nr, col1, col2 );
+
+	// update player window
+	if (ki_kontroll_t *frame = dynamic_cast<ki_kontroll_t *>( win_get_magic(magic_ki_kontroll_t) ) ) {
+		frame->update_data();
+	}
 }
 
 void player_t::set_player_color_rgb(uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint8 g2, uint8 b2)
@@ -278,6 +283,11 @@ void player_t::set_player_color_rgb(uint8 r1, uint8 g1, uint8 b1, uint8 r2, uint
 	player_color_rgb[0][0] = r1; player_color_rgb[0][1] = g1; player_color_rgb[0][2] = b1;
 	player_color_rgb[1][0] = r2; player_color_rgb[1][1] = g2; player_color_rgb[1][2] = b2;
 	display_set_player_color_scheme_rgb(player_nr, r1, g1, b1, r2, g2, b2);
+
+	// update player window
+	if (ki_kontroll_t *frame = dynamic_cast<ki_kontroll_t *>( win_get_magic(magic_ki_kontroll_t) ) ) {
+		frame->update_data();
+	}
 }
 
 PIXVAL player_t::get_player_color1_pixval(int shade) const
