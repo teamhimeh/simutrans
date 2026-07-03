@@ -1038,7 +1038,10 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
 				linehandle_t l = hi.cnv->get_line();
 				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
-				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(c, gui_label_t::left);
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(hi.cnv->get_owner()->get_player_color1(), gui_label_t::left);
+
+				insert_image(hi.cnv);
+
 				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>(c, gui_label_t::left);
 				if( hi.delta_ticks == 0 ) {
 					lb_time->buf().append( translator::translate( "now" ) );
@@ -1052,7 +1055,6 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 				lb_name->buf().append(l.is_bound()? l->get_name(): hi.cnv->get_name());
 				lb_time->update();
 				lb_name->update();
-				insert_image(hi.cnv);
 
 				new_component<gui_label_t>(hi.halt->get_name() );
 				exclude.append( hi.halt );
