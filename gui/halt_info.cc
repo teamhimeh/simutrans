@@ -1038,7 +1038,7 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
 				linehandle_t l = hi.cnv->get_line();
 				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
-				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(hi.cnv->get_owner()->get_player_color1(), gui_label_t::left);
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(color_idx_to_rgb(hi.cnv->get_owner()->get_player_color1()), gui_label_t::left);
 
 				insert_image(hi.cnv);
 
@@ -1069,7 +1069,7 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
 				linehandle_t l = hi.cnv->get_line();
 				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
-				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(hi.cnv->get_owner()->get_player_color1(), gui_label_t::left);
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(color_idx_to_rgb(hi.cnv->get_owner()->get_player_color1()), gui_label_t::left);
 
 				insert_image(hi.cnv);
 
