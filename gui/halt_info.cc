@@ -919,7 +919,23 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 		}
 		halthandle_t next_halt = cnv->get_schedule()->get_next_halt(cnv->get_owner(),halt);
 		if(  next_halt.is_bound()  ) {
-			dest_info_t next( next_halt, 0, cnv );
+			schedule_entry_t const e = cnv->get_schedule()->get_current_entry();
+			uint32 const departure_time = cnv->get_departure_time(); 
+			sint32 waiting_time = 0;
+			if(  departure_time>0  ) {
+				// we already set departure time
+				waiting_time = departure_time - welt->get_ticks();
+			}
+			else if(  e.get_wait_for_time()  ) {
+				// we need to get departure slot. but not yet.
+				// we set waiting_time as very big vale.
+				waiting_time = 0x7fffffff;
+			}
+			else if(  e.waiting_time_shift>0  ) {
+				waiting_time = welt->ticks_per_world_month/e.waiting_time_shift-(welt->get_ticks()-cnv->get_arrived_time());
+			}
+			dest_info_t next( next_halt, waiting_time, cnv );
+			destinations.insert_ordered( next, compare_hi );
 			destinations.append_unique( next );
 			if(  grund_t *gr = welt->lookup( cnv->get_vehikel(0)->last_stop_pos )  ) {
 				if(  gr->get_halt().is_bound()  &&  gr->get_halt() != halt  ) {
@@ -951,7 +967,22 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 				}
 				halthandle_t next_halt = cnv->get_schedule()->get_next_halt(cnv->get_owner(),halt);
 				if(  next_halt.is_bound()  ) {
-					dest_info_t next( next_halt, delta_t+2000, cnv );
+					schedule_entry_t const e = cnv->get_schedule()->get_current_entry();
+					uint32 const departure_time = cnv->get_departure_time(); 
+					sint32 waiting_time = delta_t+2000;
+					if(  departure_time>0  ) {
+						// we already set departure time
+						waiting_time = departure_time - welt->get_ticks();
+					}
+					else if(  e.get_wait_for_time()  ) {
+						// we need to get departure slot. but not yet.
+						// we set waiting_time as very big vale.
+						waiting_time = 0x7fffffff;
+					}
+					else if(  e.waiting_time_shift>0  ) {
+						waiting_time = delta_t + (welt->ticks_per_world_month/e.waiting_time_shift);
+					}
+					dest_info_t next( next_halt, waiting_time, cnv );
 					destinations.insert_ordered( next, compare_hi );
 				}
 			}
@@ -976,7 +1007,22 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 			}
 			halthandle_t next_halt = cnv->get_schedule()->get_next_halt(cnv->get_owner(),halt);
 			if(  next_halt.is_bound()  ) {
-				dest_info_t next( next_halt, delta_t+2000, cnv );
+				schedule_entry_t const e = cnv->get_schedule()->get_current_entry();
+				uint32 const departure_time = cnv->get_departure_time(); 
+				sint32 waiting_time = delta_t+2000;
+				if(  departure_time>0  ) {
+					// we already set departure time
+					waiting_time = departure_time - welt->get_ticks();
+				}
+				else if(  e.get_wait_for_time()  ) {
+					// we need to get departure slot. but not yet.
+					// we set waiting_time as very big vale.
+					waiting_time = 0x7fffffff;
+				}
+				else if(  e.waiting_time_shift>0  ) {
+					waiting_time = delta_t + (welt->ticks_per_world_month/e.waiting_time_shift);
+				}
+				dest_info_t next( next_halt, waiting_time, cnv );
 				destinations.insert_ordered( next, compare_hi );
 			}
 		}
@@ -996,6 +1042,9 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>(c, gui_label_t::left);
 				if( hi.delta_ticks == 0 ) {
 					lb_time->buf().append( translator::translate( "now" ) );
+				}
+				else if(  hi.delta_ticks == 0x7fffffff  ) {
+					lb_time->buf().append( translator::translate( "TBD" ) );
 				}
 				else {
 					lb_time->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
