@@ -207,6 +207,7 @@ void convoi_info_t::init(convoihandle_t cnv)
 
 		sort_button.init(button_t::roundbox, sort_text[env_t::default_sortmode]);
 		sort_button.set_tooltip("Sort by");
+		sort_button.set_focusable(false);
 		sort_button.add_listener(this);
 		container_freight.add_component(&sort_button);
 	}
