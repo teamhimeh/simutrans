@@ -882,7 +882,7 @@ void bridge_builder_t::build_bridge(player_t *player, const koord3d start, const
 	bool need_auffahrt = pos.z != end_slope_height;
 	if(  need_auffahrt  ) {
 		if(  weg_t const* const w = welt->lookup(end)->get_weg( way_desc->get_wtyp() )  ) {
-			need_auffahrt &= w->get_desc()->get_styp() != type_elevated;
+			need_auffahrt &= !w->get_desc()->is_elevated();
 		}
 	}
 

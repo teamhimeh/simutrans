@@ -352,6 +352,10 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	if(!w->needs_crossing(desc)) {
 		return true;
 	}
+	// never cross with (or as) a runway -- only normal airways may be crossed
+	if( (wtyp==air_wt && desc->is_runway())  ||  (w->get_waytype()==air_wt && w->get_desc()->is_runway()) ) {
+		return false;
+	}
 	// right owner of the other way
 	// exception: allow if we want to build road and road already exists, since this is passable for us
 	if(!check_owner(w->get_owner(),player)  &&  ! (wtyp==road_wt  &&  bd->has_two_ways()) ) {
@@ -2191,7 +2195,7 @@ uint32 ms = dr_time();
 		route_reversed = false;
 		keep_existing_city_roads |= (bautyp&bot_flag)!=0;
 		sint32 cost2;
-		if(desc->get_styp() == type_elevated) {
+		if(desc->is_elevated()) {
 			cost2 = intern_calc_route_elevated(start[0], ziel[0]);
 			INT_CHECK("wegbauer 1165");
 			if(cost2 < 0) {
@@ -2217,7 +2221,7 @@ uint32 ms = dr_time();
 		swap(terraform_index, terraform_index2);
 		route_reversed = true;
 		sint32 cost;
-		if(desc->get_styp() == type_elevated) {
+		if(desc->is_elevated()) {
 			cost = intern_calc_route_elevated(start[0], ziel[0]);
 		}
 		else {

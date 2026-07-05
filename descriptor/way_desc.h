@@ -102,6 +102,11 @@ public:
 
 	bool is_tram() const { return wtyp == track_wt  &&  styp == type_tram; }
 
+	// true for genuinely elevated ways; for air_wt this means an elevated airway, never a runway
+	bool is_elevated() const { return wtyp == air_wt ? styp == type_elevated_airway : styp == type_elevated; }
+
+	bool is_runway() const { return wtyp == air_wt  &&  styp == type_runway; }
+
 	bool is_clip_below() const { return clip_below; }
 
 	image_id get_image_id(ribi_t::ribi ribi, uint8 season, bool front = false) const
