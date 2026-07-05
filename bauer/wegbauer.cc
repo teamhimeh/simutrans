@@ -352,6 +352,10 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	if(!w->needs_crossing(desc)) {
 		return true;
 	}
+	// never cross with (or as) a runway -- only normal airways may be crossed
+	if( (wtyp==air_wt && desc->is_runway())  ||  (w->get_waytype()==air_wt && w->get_desc()->is_runway()) ) {
+		return false;
+	}
 	// right owner of the other way
 	// exception: allow if we want to build road and road already exists, since this is passable for us
 	if(!check_owner(w->get_owner(),player)  &&  ! (wtyp==road_wt  &&  bd->has_two_ways()) ) {
