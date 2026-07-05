@@ -332,7 +332,7 @@ public:
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
 	// remove preview necessary while building elevated ways
-	bool remove_preview_necessary() const OVERRIDE { return !is_first_click()  &&  (desc  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)); }
+	bool remove_preview_necessary() const OVERRIDE { return !is_first_click()  &&  desc  &&  desc->is_elevated(); }
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
 	void set_street_flag (uint8 a) { street_flag = a; }
