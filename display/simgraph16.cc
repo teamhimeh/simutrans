@@ -3504,7 +3504,13 @@ PIXVAL display_blend_colors(PIXVAL background, PIXVAL foreground, int percent_bl
 	switch( alpha ) {
 		case 0: // nothing to do ...
 			return background;
-#ifdef RGB555
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		case 64:
+			return foreground;
+
+		default:
+			return xrgb_blend64(background, foreground, alpha);
+#elif defined RGB555
 		case 16:
 		{
 			const PIXVAL two = TWO_OUT_15;
@@ -3578,6 +3584,103 @@ PIXVAL display_blend_colors(PIXVAL background, PIXVAL foreground, int percent_bl
 
 /* from here code for transparent images */
 typedef void (*blend_proc)(PIXVAL *dest, const PIXVAL *src, const PIXVAL colour, const PIXVAL len);
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static void pix_blend75_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, *src, 24);
+		dest++;
+		src++;
+	}
+}
+
+
+static void pix_blend50_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, *src, 16);
+		dest++;
+		src++;
+	}
+}
+
+
+static void pix_blend25_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, *src, 8);
+		dest++;
+		src++;
+	}
+}
+
+
+static void pix_blend_recode75_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, rgbmap_current[*src], 24);
+		dest++;
+		src++;
+	}
+}
+
+
+static void pix_blend_recode50_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, rgbmap_current[*src], 16);
+		dest++;
+		src++;
+	}
+}
+
+
+static void pix_blend_recode25_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, rgbmap_current[*src], 8);
+		dest++;
+		src++;
+	}
+}
+
+
+static void pix_outline75_32(PIXVAL *dest, const PIXVAL *, const PIXVAL colour, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, colour, 24);
+		dest++;
+	}
+}
+
+
+static void pix_outline50_32(PIXVAL *dest, const PIXVAL *, const PIXVAL colour, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, colour, 16);
+		dest++;
+	}
+}
+
+
+static void pix_outline25_32(PIXVAL *dest, const PIXVAL *, const PIXVAL colour, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+	while (dest < end) {
+		*dest = xrgb_blend32(*dest, colour, 8);
+		dest++;
+	}
+}
+#endif
 
 static void pix_blend75_15(PIXVAL *dest, const PIXVAL *src, const PIXVAL , const PIXVAL len)
 {
@@ -3809,6 +3912,16 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 				break;
 
 			default:
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				for(  ;  h>0;  yp++, h--  ) {
+					PIXVAL *dest = textur + yp*disp_width + xp;
+					const PIXVAL *const end = dest + w;
+					while (dest < end) {
+						*dest = xrgb_blend64(*dest, colval, alpha);
+						dest++;
+					}
+				}
+#else
 				// any percentage blending: SLOW!
 				if(  blend[0] == pix_blend25_15  ) {
 					// 555 BITMAPS
@@ -3848,6 +3961,7 @@ void display_blend_wh_rgb(scr_coord_val xp, scr_coord_val yp, scr_coord_val w, s
 						}
 					}
 				}
+#endif
 				break;
 		}
 	}
@@ -3895,6 +4009,61 @@ static void display_img_blend_wc(scr_coord_val h, const scr_coord_val xp, const 
 typedef void (*alpha_proc)(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const unsigned alpha_flags, const PIXVAL colour, const PIXVAL len);
 static alpha_proc alpha;
 static alpha_proc alpha_recode;
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static uint16 get_alpha_value_15bpp(PIXVAL alpha_pixel, unsigned alpha_flags)
+{
+	const uint16 rmask = alpha_flags & ALPHA_RED ? 0x7c00 : 0;
+	const uint16 gmask = alpha_flags & ALPHA_GREEN ? 0x03e0 : 0;
+	const uint16 bmask = alpha_flags & ALPHA_BLUE ? 0x001f : 0;
+	return (alpha_pixel & bmask) + ((alpha_pixel & gmask) >> 5) + ((alpha_pixel & rmask) >> 10);
+}
+
+
+static void pix_alpha_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const unsigned alpha_flags, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+
+	while(  dest < end  ) {
+		uint16 alpha_value = get_alpha_value_15bpp(*alphamap, alpha_flags);
+
+		if(  alpha_value > 30  ) {
+			*dest = *src;
+		}
+		else if(  alpha_value > 0  ) {
+			alpha_value = alpha_value > 15 ? alpha_value + 1 : alpha_value;
+			*dest = xrgb_blend32(*dest, *src, alpha_value);
+		}
+
+		dest++;
+		src++;
+		alphamap++;
+	}
+}
+
+
+static void pix_alpha_recode_32(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const unsigned alpha_flags, const PIXVAL, const PIXVAL len)
+{
+	const PIXVAL *const end = dest + len;
+
+	while(  dest < end  ) {
+		uint16 alpha_value = get_alpha_value_15bpp(*alphamap, alpha_flags);
+		const PIXVAL color = rgbmap_current[*src];
+
+		if(  alpha_value > 30  ) {
+			*dest = color;
+		}
+		else if(  alpha_value > 0  ) {
+			alpha_value = alpha_value > 15 ? alpha_value + 1 : alpha_value;
+			*dest = xrgb_blend32(*dest, color, alpha_value);
+		}
+
+		dest++;
+		src++;
+		alphamap++;
+	}
+}
+#endif
 
 
 static void pix_alpha_15(PIXVAL *dest, const PIXVAL *src, const PIXVAL *alphamap, const unsigned alpha_flags, const PIXVAL , const PIXVAL len)
@@ -5777,6 +5946,21 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 
 	// find out bit depth
 	{
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		bitdepth = 32;
+		blend[0] = pix_blend25_32;
+		blend[1] = pix_blend50_32;
+		blend[2] = pix_blend75_32;
+		blend_recode[0] = pix_blend_recode25_32;
+		blend_recode[1] = pix_blend_recode50_32;
+		blend_recode[2] = pix_blend_recode75_32;
+		outline[0] = pix_outline25_32;
+		outline[1] = pix_outline50_32;
+		outline[2] = pix_outline75_32;
+		alpha = pix_alpha_32;
+		alpha_recode = pix_alpha_recode_32;
+		recode_img_src_target = recode_img_src_target_32;
+#else
 		uint32 c = get_system_color( 0, 255, 0 );
 		while((c&1)==0) {
 			c >>= 1;
@@ -5817,6 +6001,7 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 			dr_fatal_notify( "Compiled for 15 bit color depth but using 16!" );
 #endif
 		}
+#endif
 	}
 
 	return true;
@@ -5911,7 +6096,11 @@ static raw_image_t *capture_snapshot(const scr_rect &area)
 		for (scr_coord_val x = 0; x < clipped_area.w; ++x) {
 			const PIXVAL pixel = *row++;
 
-#ifdef RGB555
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			*dst++ = xrgb_r(pixel); // R
+			*dst++ = xrgb_g(pixel); // G
+			*dst++ = xrgb_b(pixel); // B
+#elif defined RGB555
 			*dst++ = ((pixel >> 10) & 0x1F) << (8-5); // R
 			*dst++ = ((pixel >>  5) & 0x1F) << (8-5); // G
 			*dst++ = ((pixel >>  0) & 0x1F) << (8-5); // B
