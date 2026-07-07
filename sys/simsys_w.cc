@@ -316,7 +316,7 @@ void dr_os_close()
 
 
 // resizes screen
-int dr_textur_resize(unsigned short** const textur, int w, int const h)
+int dr_textur_resize(PIXVAL** const textur, int w, int const h)
 {
 #ifdef MULTI_THREAD
 	EnterCriticalSection( &redraw_underway );
@@ -344,10 +344,10 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 #ifdef SIM_ENABLE_RGB32_OUTPUT
 		AllDibData = MALLOCN(uint8, img_w * img_h * 4);
 		AllDibSimData = MALLOCN(PIXVAL, img_w * img_h);
-		*textur = (unsigned short*)AllDibSimData;
+		*textur = AllDibSimData;
 #else
 		AllDibData = MALLOCN(PIXVAL, img_w * img_h);
-		*textur = (unsigned short*)AllDibData;
+		*textur = (PIXVAL*)AllDibData;
 #endif
 	}
 
@@ -363,7 +363,7 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 }
 
 
-unsigned short *dr_textur_init()
+PIXVAL *dr_textur_init()
 {
 	size_t const n = AllDib->bmiHeader.biWidth * AllDib->bmiHeader.biHeight;
 #ifdef SIM_ENABLE_RGB32_OUTPUT
@@ -372,39 +372,17 @@ unsigned short *dr_textur_init()
 	// start with black
 	MEMZERON(AllDibData, n * 4);
 	MEMZERON(AllDibSimData, n);
-	return (unsigned short*)AllDibSimData;
+	return AllDibSimData;
 #else
 	AllDibData = MALLOCN(PIXVAL, n);
 	// start with black
 	MEMZERON(AllDibData, n);
-	return (unsigned short*)AllDibData;
+	return (PIXVAL*)AllDibData;
 #endif
 }
 
 
 #ifdef SIM_ENABLE_RGB32_OUTPUT
-static inline uint32 pixval_to_xrgb8888(PIXVAL const pix)
-{
-#ifdef RGB555
-	uint8 const r = (pix >> 10) & 0x1F;
-	uint8 const g = (pix >> 5) & 0x1F;
-	uint8 const b = pix & 0x1F;
-	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
-	uint32 const g8 = ((uint32)g << 3) | (g >> 2);
-	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
-	return (r8 << 16) | (g8 << 8) | b8;
-#else
-	uint8 const r = (pix >> 11) & 0x1F;
-	uint8 const g = (pix >> 5) & 0x3F;
-	uint8 const b = pix & 0x1F;
-	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
-	uint32 const g8 = ((uint32)g << 2) | (g >> 4);
-	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
-	return (r8 << 16) | (g8 << 8) | b8;
-#endif
-}
-
-
 static void update_gdi_xrgb8888_dib(int xp, int yp, int w, int h)
 {
 	w = min( xp + w, AllDib->bmiHeader.biWidth ) - xp;
@@ -417,10 +395,7 @@ static void update_gdi_xrgb8888_dib(int xp, int yp, int w, int h)
 	for(  int y = 0;  y < h;  y++  ) {
 		PIXVAL const *src = AllDibSimData + (yp + y) * AllDib->bmiHeader.biWidth + xp;
 		uint8 *dst = AllDibData + (yp + y) * pitch + xp * 4;
-		for(  int x = 0;  x < w;  x++  ) {
-			uint32 const pixel = pixval_to_xrgb8888( src[x] );
-			memcpy( dst + x * 4, &pixel, sizeof(pixel) );
-		}
+		memcpy( dst, src, w * sizeof(PIXVAL) );
 	}
 }
 #endif
@@ -432,10 +407,14 @@ static void update_gdi_xrgb8888_dib(int xp, int yp, int w, int h)
  */
 unsigned int get_system_color(unsigned int r, unsigned int g, unsigned int b)
 {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	return ((r & 0xFFu) << 16) | ((g & 0xFFu) << 8) | (b & 0xFFu);
+#else
 #ifdef RGB555
 	return ((r & 0x00F8) << 7) | ((g & 0x00F8) << 2) | (b >> 3); // 15 Bit
 #else
 	return ((r & 0x00F8) << 8) | ((g & 0x00FC) << 3) | (b >> 3);
+#endif
 #endif
 }
 

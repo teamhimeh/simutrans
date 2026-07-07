@@ -68,14 +68,14 @@ void dr_os_close()
 }
 
 // resizes screen
-int dr_textur_resize(unsigned short** const textur, int, int)
+int dr_textur_resize(PIXVAL** const textur, int, int)
 {
 	*textur = NULL;
 	return 1;
 }
 
 
-unsigned short *dr_textur_init()
+PIXVAL *dr_textur_init()
 {
 	return NULL;
 }

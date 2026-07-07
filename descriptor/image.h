@@ -62,8 +62,8 @@ public:
 
 	const image_t* get_pic() const { return this; }
 
-	uint16 const* get_data() const { return data; }
-	uint16*       get_data()       { return data; }
+	PIXVAL const* get_data() const { return data; }
+	PIXVAL*       get_data()       { return data; }
 
 	image_id get_id() const { return imageid; }
 

@@ -10,16 +10,32 @@
 #define LIGHT_COUNT         (15)
 #define SPECIAL_COLOR_COUNT (224)
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
 // this is a player color => use different table for conversion
-#define PLAYER_FLAG        (0x800000)
-#define TRANSPARENT_FLAGS  (0x780000)
-#define TRANSPARENT25_FLAG (0x200000)
-#define TRANSPARENT50_FLAG (0x400000)
-#define TRANSPARENT75_FLAG (0x600000)
-#define OUTLINE_FLAG       (0x080000)
+#define PLAYER_FLAG        (0x80000000u)
+#define TRANSPARENT_FLAGS  (0x78000000u)
+#define TRANSPARENT25_FLAG (0x20000000u)
+#define TRANSPARENT50_FLAG (0x40000000u)
+#define TRANSPARENT75_FLAG (0x60000000u)
+#define OUTLINE_FLAG       (0x08000000u)
+#define PIXVAL_COLOR_MASK  (0x00FFFFFFu)
+#else
+// this is a player color => use different table for conversion
+#define PLAYER_FLAG        (0x800000u)
+#define TRANSPARENT_FLAGS  (0x780000u)
+#define TRANSPARENT25_FLAG (0x200000u)
+#define TRANSPARENT50_FLAG (0x400000u)
+#define TRANSPARENT75_FLAG (0x600000u)
+#define OUTLINE_FLAG       (0x080000u)
+#define PIXVAL_COLOR_MASK  (0x0000FFFFu)
+#endif
 
-// pixels stored in system type (uint16)
+// pixels stored in system type
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+typedef unsigned int PIXVAL;
+#else
 typedef unsigned short PIXVAL;
+#endif
 // PIXVAL with above flags (eg. transparent) (uint32)
 typedef unsigned int FLAGGED_PIXVAL;
 

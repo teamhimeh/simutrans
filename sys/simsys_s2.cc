@@ -106,10 +106,6 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *screen_tx;
 static SDL_Surface *screen;
-#ifdef SIM_ENABLE_RGB32_OUTPUT
-static PIXVAL *sim_screen = NULL;
-#endif
-
 static int sync_blit = 0;
 static int use_dirty_tiles = 1;
 static sint16 fullscreen = WINDOWED;
@@ -505,12 +501,8 @@ void dr_os_close()
 {
 	SDL_FreeCursor( blank );
 	SDL_FreeCursor( hourglass );
-#ifdef SIM_ENABLE_RGB32_OUTPUT
-	free( sim_screen );
-	sim_screen = NULL;
 	SDL_FreeSurface( screen );
 	screen = NULL;
-#endif
 	SDL_DestroyRenderer( renderer );
 	SDL_DestroyWindow( window );
 	SDL_StopTextInput();
@@ -518,7 +510,7 @@ void dr_os_close()
 
 
 // resizes screen
-int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
+int dr_textur_resize(PIXVAL** const textur, int tex_w, int const tex_h)
 {
 	// enforce multiple of 16 pixels, or there are likely mismatches
 	const int tex_pitch = max((tex_w + 15) & 0x7FF0, 16);
@@ -531,10 +523,6 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 		// First free surface and then renderer.
 		SDL_FreeSurface( screen );
 		screen = NULL;
-#ifdef SIM_ENABLE_RGB32_OUTPUT
-		free( sim_screen );
-		sim_screen = NULL;
-#endif
 		// This destroys texture as well.
 		SDL_DestroyRenderer( renderer );
 		renderer = NULL;
@@ -565,67 +553,19 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 }
 
 
-unsigned short *dr_textur_init()
+PIXVAL *dr_textur_init()
 {
 #ifdef SIM_ENABLE_RGB32_OUTPUT
-	const size_t n = screen->w * screen->h;
-	if(  sim_screen == NULL  ) {
-		sim_screen = MALLOCN(PIXVAL, n);
-		MEMZERON(sim_screen, n);
-	}
-	return (unsigned short*)sim_screen;
+	return (PIXVAL*)screen->pixels;
 #else
 	// SDL_LockTexture modifies pixels, so copy it first
 	void *pixels = screen->pixels;
 	int pitch = screen->pitch;
 
 	SDL_LockTexture( screen_tx, NULL, &pixels, &pitch );
-	return (unsigned short*)screen->pixels;
+	return (PIXVAL*)screen->pixels;
 #endif
 }
-
-
-#ifdef SIM_ENABLE_RGB32_OUTPUT
-static inline uint32 pixval_to_xrgb8888(PIXVAL const pix)
-{
-#ifdef RGB555
-	uint8 const r = (pix >> 10) & 0x1F;
-	uint8 const g = (pix >> 5) & 0x1F;
-	uint8 const b = pix & 0x1F;
-	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
-	uint32 const g8 = ((uint32)g << 3) | (g >> 2);
-	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
-	return (r8 << 16) | (g8 << 8) | b8;
-#else
-	uint8 const r = (pix >> 11) & 0x1F;
-	uint8 const g = (pix >> 5) & 0x3F;
-	uint8 const b = pix & 0x1F;
-	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
-	uint32 const g8 = ((uint32)g << 2) | (g >> 4);
-	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
-	return (r8 << 16) | (g8 << 8) | b8;
-#endif
-}
-
-
-static void update_xrgb8888_surface(int xp, int yp, int w, int h)
-{
-	w = min( xp + w, screen->w ) - xp;
-	h = min( yp + h, screen->h ) - yp;
-	if(  w <= 0  ||  h <= 0  ) {
-		return;
-	}
-
-	for(  int y = 0;  y < h;  y++  ) {
-		PIXVAL const *src = sim_screen + (yp + y) * screen->w + xp;
-		uint8 *dst = (uint8*)screen->pixels + (yp + y) * screen->pitch + xp * 4;
-		for(  int x = 0;  x < w;  x++  ) {
-			uint32 const pixel = pixval_to_xrgb8888( src[x] );
-			memcpy( dst + x * 4, &pixel, sizeof(pixel) );
-		}
-	}
-}
-#endif
 
 
 /**
@@ -634,10 +574,14 @@ static void update_xrgb8888_surface(int xp, int yp, int w, int h)
  */
 unsigned int get_system_color(unsigned int r, unsigned int g, unsigned int b)
 {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	return ((r & 0xFFu) << 16) | ((g & 0xFFu) << 8) | (b & 0xFFu);
+#else
 	SDL_PixelFormat *fmt = SDL_AllocFormat( SDL_PIXELFORMAT_RGB565 );
 	unsigned int ret = SDL_MapRGB( fmt, (Uint8)r, (Uint8)g, (Uint8)b );
 	SDL_FreeFormat( fmt );
 	return ret;
+#endif
 }
 
 
@@ -651,9 +595,6 @@ void dr_flush()
 {
 	display_flush_buffer();
 	if(  !use_dirty_tiles  ) {
-#ifdef SIM_ENABLE_RGB32_OUTPUT
-		update_xrgb8888_surface( 0, 0, screen->w, screen->h );
-#endif
 		SDL_UpdateTexture( screen_tx, NULL, screen->pixels, screen->pitch );
 	}
 
@@ -673,7 +614,6 @@ void dr_textur(int xp, int yp, int w, int h)
 		r.w = xp + w > screen->w ? screen->w - xp : w;
 		r.h = yp + h > screen->h ? screen->h - yp : h;
 #ifdef SIM_ENABLE_RGB32_OUTPUT
-		update_xrgb8888_surface( r.x, r.y, r.w, r.h );
 		SDL_UpdateTexture( screen_tx, &r, (uint8 *)screen->pixels + yp * screen->pitch + xp * 4, screen->pitch );
 #else
 		SDL_UpdateTexture( screen_tx, &r, (uint8 *)screen->pixels + yp * screen->pitch + xp * sizeof(PIXVAL), screen->pitch );

@@ -336,7 +336,7 @@ void dr_os_close()
 
 
 // resizes screen
-int dr_textur_resize(unsigned short** const textur, int w, int const h)
+int dr_textur_resize(PIXVAL** const textur, int w, int const h)
 {
 #ifdef MULTI_THREAD
 	pthread_mutex_lock( &redraw_mutex );
@@ -369,7 +369,7 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 		fflush(NULL);
 	}
 
-	*textur = (unsigned short*)screen->pixels;
+	*textur = (PIXVAL*)screen->pixels;
 
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &redraw_mutex );
@@ -379,12 +379,12 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 }
 
 
-unsigned short *dr_textur_init()
+PIXVAL *dr_textur_init()
 {
 	if(  use_hw  ) {
 		SDL_LockSurface( screen );
 	}
-	return (unsigned short*)screen->pixels;
+	return (PIXVAL*)screen->pixels;
 }
 
 

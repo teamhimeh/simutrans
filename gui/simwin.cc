@@ -1131,7 +1131,7 @@ void display_win(int win)
 	gui_frame_t *comp = wins[win].gui;
 	scr_size size = comp->get_windowsize();
 	scr_coord pos = wins[win].pos;
-	FLAGGED_PIXVAL title_color = (comp->get_titlecolor()&0xFFFF);
+	FLAGGED_PIXVAL title_color = (comp->get_titlecolor()&PIXVAL_COLOR_MASK);
 	FLAGGED_PIXVAL text_color = env_t::front_window_text_color;
 	if(  (unsigned)win!=wins.get_count()-1  ) {
 		// not top => darker

@@ -8,6 +8,7 @@
 
 
 #include "../simtypes.h"
+#include "../simcolor.h"
 
 #ifndef NETTOOL
 #include <zlib.h>
@@ -165,7 +166,7 @@ char const* dr_query_homedir();
 /* query install directory (all user writable) */
 char const* dr_query_installdir();
 
-unsigned short* dr_textur_init();
+PIXVAL* dr_textur_init();
 
 // returns the file path to a font file (or more than one, if used with number higher than zero)
 const char *dr_query_fontpath( int );
@@ -176,7 +177,7 @@ std::string dr_get_system_font();
 void dr_textur(int xp, int yp, int w, int h);
 
 /* returns the actual width (might be larger than requested! */
-int dr_textur_resize(unsigned short** textur, int w, int h);
+int dr_textur_resize(PIXVAL** textur, int w, int h);
 
 // needed for screen update
 void dr_prepare_flush(); // waits, if previous update not yet finished
