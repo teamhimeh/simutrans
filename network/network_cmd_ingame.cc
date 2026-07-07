@@ -579,8 +579,13 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 			}
 			else if (player_nr < PLAYER_UNOWNED) {
 				// players with public service player access always pass password checks
-				if(  info.is_player_unlocked(1)  ) {
+				if(  info.is_player_unlocked(1)  &&  welt->get_settings().get_allow_unlock_by_public()  ) {
 					info.unlock_player(player_nr);
+					// when force-unlocking with empty hash, also clear the server-side password hash
+					if(  hash.empty()  &&  !welt->get_player(player_nr)->access_password_hash().empty()  ) {
+						welt->get_player(player_nr)->access_password_hash() = hash;
+						socket_list_t::unlock_player_all(player_nr, true, our_client_id);
+					}
 				}
 				// check password
 				else if (welt->get_player(player_nr)->access_password_hash() == hash) {

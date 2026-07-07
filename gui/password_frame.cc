@@ -94,7 +94,18 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 		// store the hash
 		welt->store_player_password_hash( player->get_player_nr(), hash );
 
+		const bool public_can_bypass = welt->get_active_player_nr()==PUBLIC_PLAYER_NR
+		                               &&  !welt->get_public_player()->is_locked()
+		                               &&  welt->get_settings().get_allow_unlock_by_public();
+
 		if(  env_t::networkmode) {
+			// block public player from acting on locked player when allow_unlock_by_public is disabled
+			if(  player->is_locked()
+			     &&  welt->get_active_player_nr()==PUBLIC_PLAYER_NR
+			     &&  !welt->get_public_player()->is_locked()
+			     &&  !welt->get_settings().get_allow_unlock_by_public()  ) {
+				return true;
+			}
 			player->unlock(!player->is_locked(), true);
 			// send hash to server: it will unlock player or change password
 			nwc_auth_player_t *nwc = new nwc_auth_player_t(player->get_player_nr(), hash);
@@ -104,7 +115,7 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 			/* if current active player is player 1 and this is unlocked, he may reset passwords
 			 * otherwise you need the valid previous password
 			 */
-			if(  !player->is_locked()  ||  (welt->get_active_player_nr()==PUBLIC_PLAYER_NR  &&  !welt->get_public_player()->is_locked())   ) {
+			if(  !player->is_locked()  ||  public_can_bypass  ) {
 				// set password
 				player->access_password_hash() = hash;
 				player->unlock(true, false);
