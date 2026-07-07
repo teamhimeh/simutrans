@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <windows.h>
 #include <winreg.h>
@@ -70,7 +71,12 @@ static RECT MaxSize;
 static HINSTANCE hInstance;
 
 static BITMAPINFO* AllDib = NULL;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static uint8*      AllDibData;
+static PIXVAL*     AllDibSimData;
+#else
 static PIXVAL*     AllDibData;
+#endif
 
 volatile HDC hdc = NULL;
 
@@ -210,7 +216,11 @@ int dr_os_open(int const w, int const h, sint16 fs)
 		// try to force display mode and size
 		settings.dmSize = sizeof(settings);
 		settings.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		settings.dmBitsPerPel = 32;
+#else
 		settings.dmBitsPerPel = COLOUR_DEPTH;
+#endif
 		settings.dmPelsWidth  = MaxSize.right;
 		settings.dmPelsHeight = MaxSize.bottom;
 		settings.dmDisplayFrequency = 0;
@@ -220,7 +230,11 @@ int dr_os_open(int const w, int const h, sint16 fs)
 			if(  COLOUR_DEPTH<32  ) {
 				settings.dmBitsPerPel = 32;
 			}
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			dbg->warning("dr_os_open(w32)", "Could not switch color depth to 32 Bit in fullscreen." );
+#else
 			dbg->warning("dr_os_open(w32)", "Could not reduce color depth to 16 Bit in fullscreen." );
+#endif
 		}
 		if(  ChangeDisplaySettings(&settings, CDS_TEST)!=DISP_CHANGE_SUCCESSFUL  ) {
 			ChangeDisplaySettings( NULL, 0 );
@@ -246,13 +260,18 @@ int dr_os_open(int const w, int const h, sint16 fs)
 	header.biWidth         = (w+15) & 0x7FF0;
 	header.biHeight        = h;
 	header.biPlanes        = 1;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	header.biBitCount      = 32;
+#else
 	header.biBitCount      = COLOUR_DEPTH;
+#endif
 	header.biCompression   = BI_RGB;
 	header.biSizeImage     = 0;
 	header.biXPelsPerMeter = 0;
 	header.biYPelsPerMeter = 0;
 	header.biClrUsed       = 0;
 	header.biClrImportant  = 0;
+#ifndef SIM_ENABLE_RGB32_OUTPUT
 	DWORD* const masks = (DWORD*)AllDib->bmiColors;
 #ifdef RGB555
 	masks[0]               = 0x01;
@@ -263,6 +282,7 @@ int dr_os_open(int const w, int const h, sint16 fs)
 	masks[0]               = 0x0000F800;
 	masks[1]               = 0x000007E0;
 	masks[2]               = 0x0000001F;
+#endif
 #endif
 
 	return header.biWidth;
@@ -283,6 +303,10 @@ void dr_os_close()
 	}
 	free(AllDibData);
 	AllDibData = NULL;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	free(AllDibSimData);
+	AllDibSimData = NULL;
+#endif
 	free(AllDib);
 	AllDib = NULL;
 	if(  fullscreen == FULLSCREEN ) {
@@ -311,10 +335,20 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 		// since the query routines that return the desktop data do not take into account a change of resolution
 		free(AllDibData);
 		AllDibData = NULL;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		free(AllDibSimData);
+		AllDibSimData = NULL;
+#endif
 		MaxSize.right = (w*32)/x_scale;
 		MaxSize.bottom = ((h+1)*32)/y_scale;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		AllDibData = MALLOCN(uint8, img_w * img_h * 4);
+		AllDibSimData = MALLOCN(PIXVAL, img_w * img_h);
+		*textur = (unsigned short*)AllDibSimData;
+#else
 		AllDibData = MALLOCN(PIXVAL, img_w * img_h);
 		*textur = (unsigned short*)AllDibData;
+#endif
 	}
 
 	AllDib->bmiHeader.biWidth  = img_w;
@@ -332,11 +366,64 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 unsigned short *dr_textur_init()
 {
 	size_t const n = AllDib->bmiHeader.biWidth * AllDib->bmiHeader.biHeight;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	AllDibData = MALLOCN(uint8, n * 4);
+	AllDibSimData = MALLOCN(PIXVAL, n);
+	// start with black
+	MEMZERON(AllDibData, n * 4);
+	MEMZERON(AllDibSimData, n);
+	return (unsigned short*)AllDibSimData;
+#else
 	AllDibData = MALLOCN(PIXVAL, n);
 	// start with black
 	MEMZERON(AllDibData, n);
 	return (unsigned short*)AllDibData;
+#endif
 }
+
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static inline uint32 pixval_to_xrgb8888(PIXVAL const pix)
+{
+#ifdef RGB555
+	uint8 const r = (pix >> 10) & 0x1F;
+	uint8 const g = (pix >> 5) & 0x1F;
+	uint8 const b = pix & 0x1F;
+	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
+	uint32 const g8 = ((uint32)g << 3) | (g >> 2);
+	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
+	return (r8 << 16) | (g8 << 8) | b8;
+#else
+	uint8 const r = (pix >> 11) & 0x1F;
+	uint8 const g = (pix >> 5) & 0x3F;
+	uint8 const b = pix & 0x1F;
+	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
+	uint32 const g8 = ((uint32)g << 2) | (g >> 4);
+	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
+	return (r8 << 16) | (g8 << 8) | b8;
+#endif
+}
+
+
+static void update_gdi_xrgb8888_dib(int xp, int yp, int w, int h)
+{
+	w = min( xp + w, AllDib->bmiHeader.biWidth ) - xp;
+	h = min( yp + h, AllDib->bmiHeader.biHeight ) - yp;
+	if(  w <= 0  ||  h <= 0  ) {
+		return;
+	}
+
+	int const pitch = AllDib->bmiHeader.biWidth * 4;
+	for(  int y = 0;  y < h;  y++  ) {
+		PIXVAL const *src = AllDibSimData + (yp + y) * AllDib->bmiHeader.biWidth + xp;
+		uint8 *dst = AllDibData + (yp + y) * pitch + xp * 4;
+		for(  int x = 0;  x < w;  x++  ) {
+			uint32 const pixel = pixval_to_xrgb8888( src[x] );
+			memcpy( dst + x * 4, &pixel, sizeof(pixel) );
+		}
+	}
+}
+#endif
 
 
 /**
@@ -404,6 +491,9 @@ void dr_textur(int xp, int yp, int w, int h)
 		w = min( xp+w, AllDib->bmiHeader.biWidth ) - xp;
 		h = min( yp+h, AllDib->bmiHeader.biHeight ) - yp;
 		if(  h>1  &&  w>0  ) {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			update_gdi_xrgb8888_dib( xp, yp, w, h );
+#endif
 			StretchDIBits(hdc, xp, yp, w, h, xp, yp+h+1, w, -h, AllDibData, AllDib, DIB_RGB_COLORS, SRCCOPY);
 		}
 	}
@@ -423,6 +513,9 @@ void dr_textur(int xp, int yp, int w, int h)
 		if(  h>1  &&  w>0  ) {
 			SetStretchBltMode( hdc, HALFTONE );
 			SetBrushOrgEx( hdc, 0, 0, NULL );
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			update_gdi_xrgb8888_dib( xp, yp, w, h );
+#endif
 			StretchDIBits(hdc, xscr, yscr, (w*x_scale)/32, (h*y_scale)/32, xp, yp+h+1, w, -h, AllDibData, AllDib, DIB_RGB_COLORS, SRCCOPY);
 		}
 	}
@@ -632,6 +725,9 @@ LRESULT WINAPI WindowProc(HWND this_hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 				hdcp = BeginPaint(hwnd, &ps);
 				AllDib->bmiHeader.biHeight = (WindowSize.bottom*32)/y_scale;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				update_gdi_xrgb8888_dib( 0, 0, AllDib->bmiHeader.biWidth, AllDib->bmiHeader.biHeight );
+#endif
 				StretchDIBits(hdcp, 0, 0, WindowSize.right, WindowSize.bottom, 0, AllDib->bmiHeader.biHeight + 1, AllDib->bmiHeader.biWidth, -AllDib->bmiHeader.biHeight, AllDibData, AllDib, DIB_RGB_COLORS, SRCCOPY);
 				EndPaint(this_hwnd, &ps);
 			}

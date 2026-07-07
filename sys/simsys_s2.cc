@@ -26,6 +26,7 @@ extern char **__argv;
 #include "../macros.h"
 #include "../simversion.h"
 #include "../simevent.h"
+#include "../simmem.h"
 #include "../display/simgraph.h"
 #include "../simdebug.h"
 #include "../dataobj/environment.h"
@@ -105,6 +106,9 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_Texture *screen_tx;
 static SDL_Surface *screen;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static PIXVAL *sim_screen = NULL;
+#endif
 
 static int sync_blit = 0;
 static int use_dirty_tiles = 1;
@@ -350,9 +354,13 @@ resolution dr_query_screen_resolution()
 
 bool internal_create_surfaces(int tex_width, int tex_height)
 {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	const Uint32 pixel_format = SDL_PIXELFORMAT_XRGB8888;
+#else
 	// The pixel format needs to match the graphics code within simgraph16.cc.
 	// Note that alpha is handled by simgraph16, not by SDL.
 	const Uint32 pixel_format = SDL_PIXELFORMAT_RGB565;
+#endif
 
 #ifdef MSG_LEVEL
 	// List all render drivers and their supported pixel formats.
@@ -404,17 +412,28 @@ bool internal_create_surfaces(int tex_width, int tex_height)
 		return false;
 	}
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	// Color component bitmasks for the XRGB8888 pixel format passed to SDL.
+#else
 	// Color component bitmasks for the RGB565 pixel format used by simgraph16.cc
+#endif
 	int bpp;
 	Uint32 rmask, gmask, bmask, amask;
 	if(  !SDL_PixelFormatEnumToMasks( pixel_format, &bpp, &rmask, &gmask, &bmask, &amask )  ) {
 		dbg->error( "internal_create_surfaces(SDL2)", "Pixel format error. Couldn't generate masks: %s", SDL_GetError() );
 		return false;
 	}
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	else if(  bpp != 32  ||  amask != 0  ) {
+		dbg->error( "internal_create_surfaces(SDL2)", "Pixel format error. Bpp got %d, needed 32. Amask got %d, needed 0.", bpp, amask );
+		return false;
+	}
+#else
 	else if(  bpp != COLOUR_DEPTH  ||  amask != 0  ) {
 		dbg->error( "internal_create_surfaces(SDL2)", "Pixel format error. Bpp got %d, needed %d. Amask got %d, needed 0.", bpp, COLOUR_DEPTH, amask );
 		return false;
 	}
+#endif
 
 	screen = SDL_CreateRGBSurface( 0, tex_width, tex_height, bpp, rmask, gmask, bmask, amask );
 	if(  screen == NULL  ) {
@@ -467,7 +486,11 @@ int dr_os_open(int screen_width, int screen_height, sint16 fs)
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0"); // no mouse emulation for touch
 #endif
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	assert(tex_pitch <= screen->pitch / 4);
+#else
 	assert(tex_pitch <= screen->pitch / (int)sizeof(PIXVAL));
+#endif
 	assert(tex_h <= screen->h);
 	assert(tex_w <= tex_pitch);
 
@@ -482,6 +505,12 @@ void dr_os_close()
 {
 	SDL_FreeCursor( blank );
 	SDL_FreeCursor( hourglass );
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	free( sim_screen );
+	sim_screen = NULL;
+	SDL_FreeSurface( screen );
+	screen = NULL;
+#endif
 	SDL_DestroyRenderer( renderer );
 	SDL_DestroyWindow( window );
 	SDL_StopTextInput();
@@ -494,12 +523,18 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 	// enforce multiple of 16 pixels, or there are likely mismatches
 	const int tex_pitch = max((tex_w + 15) & 0x7FF0, 16);
 
+#ifndef SIM_ENABLE_RGB32_OUTPUT
 	SDL_UnlockTexture( screen_tx );
+#endif
 	if(  tex_pitch != screen->w  ||  tex_h != screen->h  ) {
 		// Recreate the SDL surfaces at the new resolution.
 		// First free surface and then renderer.
 		SDL_FreeSurface( screen );
 		screen = NULL;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		free( sim_screen );
+		sim_screen = NULL;
+#endif
 		// This destroys texture as well.
 		SDL_DestroyRenderer( renderer );
 		renderer = NULL;
@@ -517,7 +552,11 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 
 	*textur = dr_textur_init();
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	assert(tex_pitch <= screen->pitch / 4);
+#else
 	assert(tex_pitch <= screen->pitch / (int)sizeof(PIXVAL));
+#endif
 	assert(tex_h <= screen->h);
 	assert(tex_w <= tex_pitch);
 
@@ -528,13 +567,65 @@ int dr_textur_resize(unsigned short** const textur, int tex_w, int const tex_h)
 
 unsigned short *dr_textur_init()
 {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	const size_t n = screen->w * screen->h;
+	if(  sim_screen == NULL  ) {
+		sim_screen = MALLOCN(PIXVAL, n);
+		MEMZERON(sim_screen, n);
+	}
+	return (unsigned short*)sim_screen;
+#else
 	// SDL_LockTexture modifies pixels, so copy it first
 	void *pixels = screen->pixels;
 	int pitch = screen->pitch;
 
 	SDL_LockTexture( screen_tx, NULL, &pixels, &pitch );
 	return (unsigned short*)screen->pixels;
+#endif
 }
+
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static inline uint32 pixval_to_xrgb8888(PIXVAL const pix)
+{
+#ifdef RGB555
+	uint8 const r = (pix >> 10) & 0x1F;
+	uint8 const g = (pix >> 5) & 0x1F;
+	uint8 const b = pix & 0x1F;
+	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
+	uint32 const g8 = ((uint32)g << 3) | (g >> 2);
+	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
+	return (r8 << 16) | (g8 << 8) | b8;
+#else
+	uint8 const r = (pix >> 11) & 0x1F;
+	uint8 const g = (pix >> 5) & 0x3F;
+	uint8 const b = pix & 0x1F;
+	uint32 const r8 = ((uint32)r << 3) | (r >> 2);
+	uint32 const g8 = ((uint32)g << 2) | (g >> 4);
+	uint32 const b8 = ((uint32)b << 3) | (b >> 2);
+	return (r8 << 16) | (g8 << 8) | b8;
+#endif
+}
+
+
+static void update_xrgb8888_surface(int xp, int yp, int w, int h)
+{
+	w = min( xp + w, screen->w ) - xp;
+	h = min( yp + h, screen->h ) - yp;
+	if(  w <= 0  ||  h <= 0  ) {
+		return;
+	}
+
+	for(  int y = 0;  y < h;  y++  ) {
+		PIXVAL const *src = sim_screen + (yp + y) * screen->w + xp;
+		uint8 *dst = (uint8*)screen->pixels + (yp + y) * screen->pitch + xp * 4;
+		for(  int x = 0;  x < w;  x++  ) {
+			uint32 const pixel = pixval_to_xrgb8888( src[x] );
+			memcpy( dst + x * 4, &pixel, sizeof(pixel) );
+		}
+	}
+}
+#endif
 
 
 /**
@@ -560,6 +651,9 @@ void dr_flush()
 {
 	display_flush_buffer();
 	if(  !use_dirty_tiles  ) {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		update_xrgb8888_surface( 0, 0, screen->w, screen->h );
+#endif
 		SDL_UpdateTexture( screen_tx, NULL, screen->pixels, screen->pitch );
 	}
 
@@ -578,7 +672,12 @@ void dr_textur(int xp, int yp, int w, int h)
 		r.y = yp;
 		r.w = xp + w > screen->w ? screen->w - xp : w;
 		r.h = yp + h > screen->h ? screen->h - yp : h;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		update_xrgb8888_surface( r.x, r.y, r.w, r.h );
+		SDL_UpdateTexture( screen_tx, &r, (uint8 *)screen->pixels + yp * screen->pitch + xp * 4, screen->pitch );
+#else
 		SDL_UpdateTexture( screen_tx, &r, (uint8 *)screen->pixels + yp * screen->pitch + xp * sizeof(PIXVAL), screen->pitch );
+#endif
 	}
 }
 
