@@ -359,6 +359,73 @@ struct imd {
 #define ONE_OUT_15 (0x3DEF)
 #define TWO_OUT_15 (0x1CE7)
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static inline PIXVAL xrgb_from_rgb(uint32 r, uint32 g, uint32 b)
+{
+	return ((r & 0xFFu) << 16) | ((g & 0xFFu) << 8) | (b & 0xFFu);
+}
+
+static inline uint8 xrgb_r(PIXVAL color)
+{
+	return (color >> 16) & 0xFF;
+}
+
+static inline uint8 xrgb_g(PIXVAL color)
+{
+	return (color >> 8) & 0xFF;
+}
+
+static inline uint8 xrgb_b(PIXVAL color)
+{
+	return color & 0xFF;
+}
+
+static inline PIXVAL xrgb_blend(PIXVAL background, PIXVAL foreground, uint32 alpha, uint32 scale)
+{
+	const uint32 inv = scale - alpha;
+	return xrgb_from_rgb(
+		(xrgb_r(foreground) * alpha + xrgb_r(background) * inv + (scale >> 1)) / scale,
+		(xrgb_g(foreground) * alpha + xrgb_g(background) * inv + (scale >> 1)) / scale,
+		(xrgb_b(foreground) * alpha + xrgb_b(background) * inv + (scale >> 1)) / scale
+	);
+}
+
+static inline PIXVAL xrgb_blend32(PIXVAL background, PIXVAL foreground, uint32 alpha)
+{
+	return xrgb_blend(background, foreground, alpha, 32);
+}
+
+static inline PIXVAL xrgb_blend64(PIXVAL background, PIXVAL foreground, uint32 alpha)
+{
+	return xrgb_blend(background, foreground, alpha, 64);
+}
+
+static inline PIXVAL xrgb_to_rgb343(PIXVAL color)
+{
+	return ((PIXVAL)(xrgb_r(color) >> 5) << 7) | ((PIXVAL)(xrgb_g(color) >> 4) << 3) | (xrgb_b(color) >> 5);
+}
+#endif
+
+static inline void set_transparent_color(PIXVAL *map, uint8 *rgb, uint32 index, PIXVAL color)
+{
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	map[index] = color;
+	rgb[index * 4 + 0] = xrgb_r(color);
+	rgb[index * 4 + 1] = xrgb_g(color);
+	rgb[index * 4 + 2] = xrgb_b(color);
+#elif defined RGB555
+	map[index] = (color >> 2) & TWO_OUT_15;
+	rgb[index * 4 + 0] = color >> 10;
+	rgb[index * 4 + 1] = (color >> 5) & 0x1F;
+	rgb[index * 4 + 2] = color & 0x1F;
+#else
+	map[index] = (color >> 2) & TWO_OUT_16;
+	rgb[index * 4 + 0] = color >> 11;
+	rgb[index * 4 + 1] = (color >> 5) & 0x3F;
+	rgb[index * 4 + 2] = color & 0x1F;
+#endif
+}
+
 static int bitdepth = 16;
 
 static scr_coord_val disp_width  = 640;
@@ -1175,27 +1242,8 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 			for(i=0;  i<8;  i++  ) {
 				rgbmap_all_day[0x8000+i] = specialcolormap_all_day[player_offsets[player_day][0]+i];
 				rgbmap_all_day[0x8008+i] = specialcolormap_all_day[player_offsets[player_day][1]+i];
-#ifdef RGB555
-				transparent_map_all_day[i] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
-				transparent_map_all_day[i + 8] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
-				// those save RGB components
-				transparent_map_all_day_rgb[i * 4 + 0] = specialcolormap_all_day[player_offsets[player_day][0] + i] >> 10;
-				transparent_map_all_day_rgb[i * 4 + 1] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 5) & 0x31;
-				transparent_map_all_day_rgb[i * 4 + 2] = specialcolormap_all_day[player_offsets[player_day][0] + i] & 0x1F;
-				transparent_map_all_day_rgb[i * 4 + 0 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] >> 10;
-				transparent_map_all_day_rgb[i * 4 + 1 + 32] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 5) & 0x1F;
-				transparent_map_all_day_rgb[i * 4 + 2 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] & 0x1F;
-#else
-				transparent_map_all_day[i] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_16;
-				transparent_map_all_day[i + 8] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_16;
-				// those save RGB components
-				transparent_map_all_day_rgb[i * 4 + 0] = specialcolormap_all_day[player_offsets[player_day][0] + i] >> 11;
-				transparent_map_all_day_rgb[i * 4 + 1] = (specialcolormap_all_day[player_offsets[player_day][0] + i] >> 5) & 0x3F;
-				transparent_map_all_day_rgb[i * 4 + 2] = specialcolormap_all_day[player_offsets[player_day][0] + i] & 0x1F;
-				transparent_map_all_day_rgb[i * 4 + 0 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] >> 11;
-				transparent_map_all_day_rgb[i * 4 + 1 + 32] = (specialcolormap_all_day[player_offsets[player_day][1] + i] >> 5) & 0x3F;
-				transparent_map_all_day_rgb[i * 4 + 2 + 32] = specialcolormap_all_day[player_offsets[player_day][1] + i] & 0x1F;
-#endif
+				set_transparent_color(transparent_map_all_day, transparent_map_all_day_rgb, i, specialcolormap_all_day[player_offsets[player_day][0] + i]);
+				set_transparent_color(transparent_map_all_day, transparent_map_all_day_rgb, i + 8, specialcolormap_all_day[player_offsets[player_day][1] + i]);
 			}
 		}
 		rgbmap_current = rgbmap_all_day;
@@ -1208,27 +1256,8 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 			for(i=0;  i<8;  i++  ) {
 				rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[player_night][0]+i];
 				rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[player_night][1]+i];
-#ifdef RGB555
-				transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
-				transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
-				// those save RGB components
-				transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 10;
-				transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x31;
-				transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
-				transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 10;
-				transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x1F;
-				transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
-#else
-				transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0]+i] >> 2) & TWO_OUT_16;
-				transparent_map_day_night[i+8] = (specialcolormap_day_night[player_offsets[player_day][1]+i] >> 2) & TWO_OUT_16;
-				// those save RGB components
-				transparent_map_day_night_rgb[i*4+0] = specialcolormap_day_night[player_offsets[player_day][0]+i] >> 11;
-				transparent_map_day_night_rgb[i*4+1] = (specialcolormap_day_night[player_offsets[player_day][0]+i] >> 5) & 0x3F;
-				transparent_map_day_night_rgb[i*4+2] = specialcolormap_day_night[player_offsets[player_day][0]+i] & 0x1F;
-				transparent_map_day_night_rgb[i*4+0+32] = specialcolormap_day_night[player_offsets[player_day][1]+i] >> 11;
-				transparent_map_day_night_rgb[i*4+1+32] = (specialcolormap_day_night[player_offsets[player_day][1]+i] >> 5) & 0x3F;
-				transparent_map_day_night_rgb[i*4+2+32] = specialcolormap_day_night[player_offsets[player_day][1]+i] & 0x1F;
-#endif
+				set_transparent_color(transparent_map_day_night, transparent_map_day_night_rgb, i, specialcolormap_day_night[player_offsets[player_day][0] + i]);
+				set_transparent_color(transparent_map_day_night, transparent_map_day_night_rgb, i + 8, specialcolormap_day_night[player_offsets[player_day][1] + i]);
 			}
 		}
 		rgbmap_current = rgbmap_day_night;
@@ -1328,6 +1357,45 @@ static void recode_img_src_target_16(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 		} while(  --h  );
 	}
 }
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static void recode_img_src_target_32(scr_coord_val h, PIXVAL *src, PIXVAL *target)
+{
+	if(  h > 0  ) {
+		do {
+			uint16 runlen = *target++ = *src++;
+			// decode rows
+			do {
+				// clear run is always ok
+				runlen = *target++ = *src++;
+				if(  runlen & TRANSPARENT_RUN  ) {
+					runlen &= ~TRANSPARENT_RUN;
+					while(  runlen--  ) {
+						if(  *src < 0x8020+(31*16)  ) {
+							// expand transparent player color
+							PIXVAL xrgb = rgbmap_day_night[(*src-0x8020)/31+0x8000];
+							PIXVAL alpha = (*src-0x8020) % 31;
+							PIXVAL pix = xrgb_to_rgb343(xrgb);
+							*target++ = 0x8020 + 31*31 + pix*31 + alpha;
+							src ++;
+						}
+						else {
+							*target++ = *src++;
+						}
+					}
+				}
+				else {
+					// now just convert the color pixels
+					while(  runlen--  ) {
+						*target++ = rgbmap_day_night[*src++];
+					}
+				}
+				// next clear run or zero = end
+			} while(  (runlen = *target++ = *src++)  );
+		} while(  --h  );
+	}
+}
+#endif
 
 
 image_id get_image_count()
@@ -1970,21 +2038,8 @@ static void calc_base_pal_from_night_shift(const int night)
 		G = (int)(G * RG_night_multiplier);
 		B = (int)(B * B_night_multiplier);
 
-#ifdef RGB555
-		// 15 bit colors form here!
 		PIXVAL color = get_system_color(R, G, B);
-		transparent_map_day_night[MAX_PLAYER_COUNT + LIGHT_COUNT + i] = (color >> 2) & TWO_OUT_15;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 0] = color >> 10;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 1] = (color >> 5) & 0x1F;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 2] = color & 0x1F;
-#else
-		// 16 bit colors form here!
-		PIXVAL color = get_system_color(R, G, B);
-		transparent_map_day_night[MAX_PLAYER_COUNT + LIGHT_COUNT + i] = (color >> 2) & TWO_OUT_16;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 0] = color >> 11;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 1] = (color >> 5) & 0x3F;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 2] = color & 0x1F;
-#endif
+		set_transparent_color(transparent_map_day_night, transparent_map_day_night_rgb, MAX_PLAYER_COUNT + LIGHT_COUNT + i, color);
 	}
 
 	// player color map (and used for map display etc.)
@@ -2014,28 +2069,8 @@ static void calc_base_pal_from_night_shift(const int night)
 	for(i=0;  i<8;  i++  ) {
 		rgbmap_day_night[0x8000+i] = specialcolormap_day_night[player_offsets[0][0]+i];
 		rgbmap_day_night[0x8008+i] = specialcolormap_day_night[player_offsets[0][1]+i];
-#ifdef RGB555
-		// 15 bit colors from here!
-		transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_15;
-		transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_15;
-		transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 10;
-		transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 10;
-		transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
-#else
-		// 16 bit colors from here!
-		transparent_map_day_night[i] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 2) & TWO_OUT_16;
-		transparent_map_day_night[i + 8] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 2) & TWO_OUT_16;
-		// save RGB components
-		transparent_map_day_night_rgb[i * 4 + 0] = specialcolormap_day_night[player_offsets[player_day][0] + i] >> 11;
-		transparent_map_day_night_rgb[i * 4 + 1] = (specialcolormap_day_night[player_offsets[player_day][0] + i] >> 5) & 0x3F;
-		transparent_map_day_night_rgb[i * 4 + 2] = specialcolormap_day_night[player_offsets[player_day][0] + i] & 0x1F;
-		transparent_map_day_night_rgb[i * 4 + 0 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] >> 11;
-		transparent_map_day_night_rgb[i * 4 + 1 + 32] = (specialcolormap_day_night[player_offsets[player_day][1] + i] >> 5) & 0x3F;
-		transparent_map_day_night_rgb[i * 4 + 2 + 32] = specialcolormap_day_night[player_offsets[player_day][1] + i] & 0x1F;
-#endif
+		set_transparent_color(transparent_map_day_night, transparent_map_day_night_rgb, i, specialcolormap_day_night[player_offsets[player_day][0] + i]);
+		set_transparent_color(transparent_map_day_night, transparent_map_day_night_rgb, i + 8, specialcolormap_day_night[player_offsets[player_day][1] + i]);
 	}
 	player_night = 0;
 
@@ -2055,19 +2090,7 @@ static void calc_base_pal_from_night_shift(const int night)
 
 		PIXVAL color = get_system_color(R > 0 ? R : 0, G > 0 ? G : 0, B > 0 ? B : 0);
 		rgbmap_day_night[0x8000 + MAX_PLAYER_COUNT + i] = color;
-#ifdef RGB555
-		// 15 bit colors from here!
-		transparent_map_day_night[i + MAX_PLAYER_COUNT] = (color >> 2) & TWO_OUT_15;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 0] = color >> 10;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 1] = (color >> 5) & 0x1F;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 2] = color & 0x1F;
-#else
-		// 16 bit colors from here!
-		transparent_map_day_night[i + MAX_PLAYER_COUNT] = (color >> 2) & TWO_OUT_16;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 0] = color >> 11;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 1] = (color >> 5) & 0x3F;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 2] = color & 0x1F;
-#endif
+		set_transparent_color(transparent_map_day_night, transparent_map_day_night_rgb, i + MAX_PLAYER_COUNT, color);
 	}
 
 	// convert to RGB xxx
@@ -2253,7 +2276,28 @@ static inline void pixcopy(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const
 
 
 
-#ifdef RGB555
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+/**
+ * Copy pixel, replace player color
+ */
+static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
+{
+	if (*src < 0x8020) {
+		while (src < end) {
+			*dest++ = rgbmap_current[*src++];
+		}
+	}
+	else {
+		while (src < end) {
+			const uint16 alpha = ((*src - 0x8020) % 31) + 1;
+			const uint16 idx = (*src++ - 0x8020) / 31;
+			const PIXVAL colval = transparent_map_day_night[idx];
+			*dest = xrgb_blend32(*dest, colval, alpha);
+			dest++;
+		}
+	}
+}
+#elif defined RGB555
 /**
  * Copy pixel, replace player color
  */
@@ -2339,7 +2383,28 @@ static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* c
 
 
 
-#ifdef RGB555
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+/**
+ * Copy pixel, replace player color
+ */
+static inline void colorpixcopydaytime(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
+{
+	if (*src < 0x8020) {
+		while (src < end) {
+			*dest++ = rgbmap_current[*src++];
+		}
+	}
+	else {
+		while (src < end) {
+			const uint16 alpha = ((*src - 0x8020) % 31) + 1;
+			const uint16 idx = (*src++ - 0x8020) / 31;
+			const PIXVAL colval = transparent_map_all_day[idx];
+			*dest = xrgb_blend32(*dest, colval, alpha);
+			dest++;
+		}
+	}
+}
+#elif defined RGB555
 /**
  * Copy pixel, replace player color
  */
@@ -2447,7 +2512,9 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 			if (idx < 16) {
 				// transparent player color 1 (idx 0-7) → line_col, color 2 (idx 8-15) → player_col2
 				const PIXVAL colval = (idx < 8) ? line_col[idx] : player_col2[idx & 7];
-#ifdef RGB555
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				*dest = xrgb_blend32(*dest, colval, alpha);
+#elif defined RGB555
 				if ((alpha & 7) == 0) {
 					alpha >>= 3;
 					*dest = alpha * ((colval >> 2) & TWO_OUT_15) + (4 - alpha) * ((*dest >> 2) & TWO_OUT_15);
@@ -2480,6 +2547,10 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 #endif
 			} else {
 				// transparent non-player color (idx 16+)
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				const PIXVAL colval = daynight ? transparent_map_day_night[idx] : transparent_map_all_day[idx];
+				*dest = xrgb_blend32(*dest, colval, alpha);
+#else
 				if ((alpha & 7) == 0) {
 					const PIXVAL colval = daynight ? transparent_map_day_night[idx] : transparent_map_all_day[idx];
 					alpha >>= 3;
@@ -2511,6 +2582,7 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 					*dest = (r << 11) | (g << 5) | b;
 #endif
 				}
+#endif
 			}
 			dest++;
 		}
@@ -2673,7 +2745,7 @@ static void display_img_nc(scr_coord_val h, const scr_coord_val xp, const scr_co
 					sp += runlen;
 				}
 				else {
-#ifdef LOW_LEVEL
+#if defined LOW_LEVEL && !defined SIM_ENABLE_RGB32_OUTPUT
 #ifdef SIM_BIG_ENDIAN
 					// low level c++ without any unrolling
 					while(  runlen--  ) {
@@ -4084,7 +4156,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 			// needed now ...
 			const scr_coord_val w = images[n].w;
 			// get the real color
-			const PIXVAL color = color_index & 0xFFFF;
+			const PIXVAL color = color_index & PIXVAL_COLOR_MASK;
 			// we use function pointer for the blend runs for the moment ...
 			blend_proc pix_blend = (color_index&OUTLINE_FLAG) ? outline[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ] : blend[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ];
 
@@ -4175,7 +4247,7 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 			// needed now ...
 			const scr_coord_val w = images[n].w;
 			// get the real color
-			const PIXVAL color = color_index & 0xFFFF;
+			const PIXVAL color = color_index & PIXVAL_COLOR_MASK;
 
 			// use horizontal clipping or skip it?
 			if(  xp >= CR.clip_rect.x  &&  xp + w  <= CR.clip_rect.xx  ) {
@@ -4244,7 +4316,7 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 
 		// new block for new variables
 		{
-			const PIXVAL color = color_index & 0xFFFF;
+			const PIXVAL color = color_index & PIXVAL_COLOR_MASK;
 			blend_proc pix_blend = (color_index&OUTLINE_FLAG) ? outline[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ] : blend_recode[ (color_index&TRANSPARENT_FLAGS)/TRANSPARENT25_FLAG - 1 ];
 
 			// recode is needed only for blending
@@ -4331,7 +4403,7 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 
 		// new block for new variables
 		{
-			const PIXVAL color = color_index & 0xFFFF;
+			const PIXVAL color = color_index & PIXVAL_COLOR_MASK;
 
 			// recode is needed only for blending
 			if(  !(color_index & OUTLINE_FLAG)  ) {
@@ -4417,7 +4489,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 		if (dirty) {
 			mark_rect_dirty_nc(xp, yp, xp + w - 1, yp + h - 1);
 		}
-#if defined USE_ASSEMBLER && defined __GNUC__ && defined __i686__
+#if defined USE_ASSEMBLER && defined __GNUC__ && defined __i686__ && !defined SIM_ENABLE_RGB32_OUTPUT
 		// GCC might not use "rep stos" so force its use
 		const uint32 longcolval = (colval << 16) | colval;
 		do {
@@ -4438,7 +4510,7 @@ static void display_fb_internal(scr_coord_val xp, scr_coord_val yp, scr_coord_va
 			);
 			p += dx;
 		} while (--h);
-#elif defined LOW_LEVEL
+#elif defined LOW_LEVEL && !defined SIM_ENABLE_RGB32_OUTPUT
 		// low level c++
 		const uint32 colvald = (colval << 16) | colval;
 		do {
