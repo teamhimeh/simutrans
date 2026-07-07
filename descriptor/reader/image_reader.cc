@@ -26,6 +26,45 @@
 #define skip_reading_pixels_if_no_graphics goto adjust_image
 #endif
 
+#define ALPHA_THRESHOLD (0xF8000000u)
+#define TRANSPARENT_RUN (0x8000u)
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static PIXVAL rgb888_to_runtime_pixval(uint32 rgb)
+{
+	rgb &= 0x00FFFFFFu;
+
+	for(  int i = 0;  i < SPECIAL;  i++  ) {
+		if(  image_t::rgbtab[i] == rgb  ) {
+			return 0x8000 + i;
+		}
+	}
+
+	return IMAGE_TRUECOLOR_FLAG | rgb;
+}
+
+static PIXVAL argb8888_to_runtime_pixval(uint32 argb)
+{
+	assert(  argb < ALPHA_THRESHOLD  );
+
+	if(  argb <= 0x00FFFFFFu  ) {
+		return rgb888_to_runtime_pixval(argb);
+	}
+
+	const uint32 rgb = argb & 0x00FFFFFFu;
+	const uint32 alpha = 30 - (argb >> 24) / 8;
+
+	for(  int i = 0;  i < SPECIAL;  i++  ) {
+		if(  image_t::rgbtab[i] == rgb  ) {
+			return 0x8020 + i * 31 + alpha;
+		}
+	}
+
+	const PIXVAL pix = ((rgb >> 14) & 0x0380) | ((rgb >> 9) & 0x0078) | ((rgb >> 5) & 0x07);
+	return 0x8020 + 31 * 31 + pix * 31 + alpha;
+}
+#endif
+
 obj_desc_t *image_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 {
 	array_tpl<char> desc_buf(node.size);
@@ -113,7 +152,40 @@ obj_desc_t *image_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 			}
 		}
 	}
-	else {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	else if(version==4) {
+		desc->x = decode_sint16(p);
+		desc->y = decode_sint16(p);
+		desc->w = decode_sint16(p);
+		p++; // skip version information
+		desc->h = decode_sint16(p);
+		desc->alloc((node.size-10)/4); // len
+		desc->zoomable = decode_uint8(p);
+		desc->imageid = IMG_EMPTY;
+		desc->truecolor = true;
+
+		skip_reading_pixels_if_no_graphics;
+		PIXVAL* dest = desc->data;
+		if (desc->h > 0) {
+			for (uint y = 0; y < desc->h; y++) {
+				PIXVAL runlen = decode_uint32(p);
+				*dest++ = runlen;
+				do {
+					runlen = decode_uint32(p);
+					*dest++ = runlen;
+					const uint32 colored = runlen & ~TRANSPARENT_RUN;
+					for (uint32 i = 0; i < colored; i++) {
+						*dest++ = argb8888_to_runtime_pixval(decode_uint32(p));
+					}
+					runlen = decode_uint32(p);
+					*dest++ = runlen;
+				} while(  runlen != 0  );
+			}
+		}
+	}
+#endif
+	else
+	{
 		dbg->fatal( "image_reader_t::read_node()", "Cannot handle too new node version %i", version );
 	}
 
@@ -202,9 +274,9 @@ adjust_image:
 		// get the adler hash (since we have zlib on board anyway ... )
 		bool do_register_image = true;
 		uint32 adler = adler32(0L, NULL, 0 );
-		// remember len is sizeof(uint16)!
+		// remember len is sizeof(PIXVAL)!
 		for(  uint i = 0;  i < desc->len;  i++  ) {
-			const uint16 data = desc->data[i];
+			const PIXVAL data = desc->data[i];
 			adler = adler32(adler, (const Bytef *)&data, sizeof(data));
 		}
 		static inthashtable_tpl<uint32, image_t *> images_adlers;
@@ -239,9 +311,6 @@ adjust_image:
 
 	return desc;
 }
-
-
-#define TRANSPARENT_RUN (0x8000u)
 
 bool image_reader_t::image_has_valid_data(image_t *image_in) const
 {

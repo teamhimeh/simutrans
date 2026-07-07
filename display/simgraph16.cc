@@ -349,6 +349,9 @@ struct imd {
 #define FLAG_HAS_TRANSPARENT_COLOR (2)
 #define FLAG_ZOOMABLE (4)
 #define FLAG_REZOOM (8)
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+#define FLAG_TRUECOLOR (16)
+#endif
 //#define FLAG_POSITION_CHANGED (16)
 
 #define TRANSPARENT_RUN (0x8000u)
@@ -1395,6 +1398,35 @@ static void recode_img_src_target_32(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 		} while(  --h  );
 	}
 }
+
+static void recode_img_src_target_truecolor(scr_coord_val h, PIXVAL *src, PIXVAL *target)
+{
+	if(  h > 0  ) {
+		do {
+			uint16 runlen = *target++ = *src++;
+			do {
+				runlen = *target++ = *src++;
+				if(  runlen & TRANSPARENT_RUN  ) {
+					runlen &= ~TRANSPARENT_RUN;
+					while(  runlen--  ) {
+						*target++ = *src++;
+					}
+				}
+				else {
+					while(  runlen--  ) {
+						const PIXVAL s = *src++;
+						if(  s & IMAGE_TRUECOLOR_FLAG  ) {
+							*target++ = s & IMAGE_TRUECOLOR_MASK;
+						}
+						else {
+							*target++ = rgbmap_day_night[s];
+						}
+					}
+				}
+			} while(  (runlen = *target++ = *src++)  );
+		} while(  --h  );
+	}
+}
 #endif
 
 
@@ -1425,6 +1457,12 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	}
 	// contains now the player color ...
 	activate_player_color( player_nr, true );
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	if(  images[n].recode_flags & FLAG_TRUECOLOR  ) {
+		recode_img_src_target_truecolor( images[n].h, src, images[n].data[player_nr] );
+	}
+	else
+#endif
 	recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
 	images[n].player_flags &= ~(1<<player_nr);
 #ifdef MULTI_THREAD
@@ -2172,6 +2210,11 @@ void register_image(image_t *image_in)
 	if(  image_in->zoomable  ) {
 		image->recode_flags |= FLAG_ZOOMABLE;
 	}
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	if(  image_in->truecolor  ) {
+		image->recode_flags |= FLAG_TRUECOLOR;
+	}
+#endif
 	image->player_flags = 0xFFFF; // recode all player colors
 
 	// find out if there are really player colors
@@ -2282,15 +2325,17 @@ static inline void pixcopy(PIXVAL *dest, const PIXVAL *src, const PIXVAL * const
  */
 static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
 {
-	if (*src < 0x8020) {
-		while (src < end) {
-			*dest++ = rgbmap_current[*src++];
+	while (src < end) {
+		const PIXVAL s = *src++;
+		if(  s & IMAGE_TRUECOLOR_FLAG  ) {
+			*dest++ = s & IMAGE_TRUECOLOR_MASK;
 		}
-	}
-	else {
-		while (src < end) {
-			const uint16 alpha = ((*src - 0x8020) % 31) + 1;
-			const uint16 idx = (*src++ - 0x8020) / 31;
+		else if(  s < 0x8020  ) {
+			*dest++ = rgbmap_current[s];
+		}
+		else {
+			const uint16 alpha = ((s - 0x8020) % 31) + 1;
+			const uint16 idx = (s - 0x8020) / 31;
 			const PIXVAL colval = transparent_map_day_night[idx];
 			*dest = xrgb_blend32(*dest, colval, alpha);
 			dest++;
@@ -2389,15 +2434,17 @@ static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* c
  */
 static inline void colorpixcopydaytime(PIXVAL* dest, const PIXVAL* src, const PIXVAL* const end)
 {
-	if (*src < 0x8020) {
-		while (src < end) {
-			*dest++ = rgbmap_current[*src++];
+	while (src < end) {
+		const PIXVAL s = *src++;
+		if(  s & IMAGE_TRUECOLOR_FLAG  ) {
+			*dest++ = s & IMAGE_TRUECOLOR_MASK;
 		}
-	}
-	else {
-		while (src < end) {
-			const uint16 alpha = ((*src - 0x8020) % 31) + 1;
-			const uint16 idx = (*src++ - 0x8020) / 31;
+		else if(  s < 0x8020  ) {
+			*dest++ = rgbmap_current[s];
+		}
+		else {
+			const uint16 alpha = ((s - 0x8020) % 31) + 1;
+			const uint16 idx = (s - 0x8020) / 31;
 			const PIXVAL colval = transparent_map_all_day[idx];
 			*dest = xrgb_blend32(*dest, colval, alpha);
 			dest++;
@@ -2497,6 +2544,11 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 	if (*src < 0x8020) {
 		while (src < end) {
 			const PIXVAL s = *src++;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			if(  s & IMAGE_TRUECOLOR_FLAG  ) {
+				*dest++ = s & IMAGE_TRUECOLOR_MASK;
+			} else
+#endif
 			if (s >= 0x8000 && s < 0x8008) {
 				*dest++ = line_col[s & 7];            // player color 1 → line color
 			} else if (s >= 0x8008 && s < 0x8010) {
@@ -2507,8 +2559,15 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 		}
 	} else {
 		while (src < end) {
-			uint16 alpha = ((*src - 0x8020) % 31) + 1;
-			const uint16 idx = (*src++ - 0x8020) / 31;
+			const PIXVAL s = *src++;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			if(  s & IMAGE_TRUECOLOR_FLAG  ) {
+				*dest++ = s & IMAGE_TRUECOLOR_MASK;
+				continue;
+			}
+#endif
+			uint16 alpha = ((s - 0x8020) % 31) + 1;
+			const uint16 idx = (s - 0x8020) / 31;
 			if (idx < 16) {
 				// transparent player color 1 (idx 0-7) → line_col, color 2 (idx 8-15) → player_col2
 				const PIXVAL colval = (idx < 8) ? line_col[idx] : player_col2[idx & 7];

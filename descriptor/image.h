@@ -17,6 +17,11 @@
 
 #define SPECIAL_TRANSPARENT (0x00E7FFFF)
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+#define IMAGE_TRUECOLOR_FLAG (0x01000000u)
+#define IMAGE_TRUECOLOR_MASK (0x00FFFFFFu)
+#endif
+
 
 
 /**
@@ -37,9 +42,16 @@ public:
 	scr_coord_val h;  ///< height of data[] image
 	image_id imageid; ///< set by register_image()
 	uint8 zoomable;   ///< some images may not be zoomed i.e. icons
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	bool truecolor;   ///< image data stores RGB888 pixels rather than RGB555 indices
+#endif
 	PIXVAL *data;     ///< RLE encoded image data
 
-	image_t(size_t len_=0) : data(NULL)
+	image_t(size_t len_=0) : len(0), imageid(IMG_EMPTY), zoomable(0),
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		truecolor(false),
+#endif
+		data(NULL)
 	{
 		if (len_) {
 			alloc(len_);

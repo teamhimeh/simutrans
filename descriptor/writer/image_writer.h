@@ -48,9 +48,12 @@ private:
 	/// @returns true on success
 	bool load_image_from_file(const char *fname);
 
-	/// Encodes an image into a sprite data structure, considers
-	/// special colors.
+	/// Encodes an image into a sprite data structure.
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	static uint32 *encode_image(int x, int y, dimension* dim, int* len);
+#else
 	static uint16 *encode_image(int x, int y, dimension* dim, int* len);
+#endif
 };
 
 #endif

@@ -89,6 +89,7 @@ CXXFLAGS += -DREVISION -Wall -Wextra -Wcast-qual -Wpointer-arith -Wcast-align $(
 # VARIANT_SOURCES contains those which need different .o files for makeobj and simutrans.
 # At the moment they're all treated identically, of course.
 SOLO_SOURCES += makeobj.cc
+SOLO_SOURCES += simsys_makeobj.cc
 SOLO_SOURCES += ../descriptor/writer/bridge_writer.cc
 SOLO_SOURCES += ../descriptor/writer/building_writer.cc
 SOLO_SOURCES += ../descriptor/writer/citycar_writer.cc

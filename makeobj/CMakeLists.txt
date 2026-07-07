@@ -5,6 +5,7 @@
 
 add_executable(makeobj
 	makeobj.cc
+	simsys_makeobj.cc
 )
 
 target_compile_options(makeobj PRIVATE ${SIMUTRANS_COMMON_COMPILE_OPTIONS})
@@ -78,4 +79,3 @@ target_sources(makeobj PRIVATE
 	../io/raw_image_ppm.cc
 	../utils/log.cc
 )
-

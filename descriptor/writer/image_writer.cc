@@ -75,7 +75,7 @@ uint32 image_writer_t::block_getpix(int x, int y)
 // colors with higher alpha are considered transparent
 #define ALPHA_THRESHOLD (0xF8000000u)
 
-
+#ifndef SIM_ENABLE_RGB32_OUTPUT
 /**
  * Encodes image data into the internal representation,
  * considers special colors.
@@ -122,6 +122,7 @@ static uint16 pixrgb_to_pixval(uint32 rgb)
 	pix = ((r & 0xF8) << 7) | ((g & 0xF8) << 2) | ((b & 0xF8) >> 3);
 	return pix;
 }
+#endif
 
 
 // true if transparent
@@ -159,9 +160,103 @@ static void init_dim(uint32 *image, dimension *dim, int img_size)
 
 
 /**
- * Encodes an image into a sprite data structure, considers
- * special colors.
+ * Encodes an image into a sprite data structure, preserving
+ * special-color RGB values for the reader.
  */
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+uint32 *image_writer_t::encode_image(int x, int y, dimension* dim, int* len)
+{
+	int line;
+	uint32 *dest;
+	uint32 *dest_base = new uint32[img_size * img_size * 2];
+	uint32 *colored_run_counter;
+
+	dest = dest_base;
+
+	x += dim->xmin;
+	y += dim->ymin;
+
+	const int img_width  = dim->xmax - dim->xmin + 1;
+	const int img_height = dim->ymax - dim->ymin + 1;
+
+	for(  line = 0;  line < img_height;  line++  ) {
+		int row_px_count = 0; // index of the currently handled pixel
+		uint16 clear_colored_run_pair_count = 0;
+
+		uint32 pix = block_getpix( x + row_px_count, y + line );
+		row_px_count++;
+
+		do { // read one row
+			uint32 count = 0;
+
+			// read transparent pixels
+			while(  is_transparent(pix)  ) {
+				count ++;
+				if (row_px_count >= img_width) { // end of line ?
+					break;
+				}
+				pix = block_getpix( x + row_px_count, y + line );
+				row_px_count++;
+			}
+			// write number of transparent pixels
+			*dest++ = endian(count);
+
+			// position to write number of colored pixels to
+			colored_run_counter = dest++;
+			count = 0;
+
+			uint32 has_transparent = 0;
+			while(  !is_transparent(pix)  ) {
+				const bool is_alpha = pix > 0x00FFFFFFu;
+				if(  is_alpha  &&  !has_transparent  ) {
+					if(  count  ) {
+						*colored_run_counter = endian(count);
+						*dest++ = endian(uint32(0x8000));
+						colored_run_counter = dest++;
+						count = 0;
+					}
+					has_transparent = 0x8000;
+				}
+				else if(  !is_alpha  &&  has_transparent  ) {
+					if(  count  ) {
+						*colored_run_counter = endian(count+has_transparent);
+						*dest++ = endian(uint32(0x8000));
+						colored_run_counter = dest++;
+						count = 0;
+					}
+					has_transparent = 0;
+				}
+				*dest++ = endian(pix);
+				count++;
+				if (row_px_count >= img_width) { // end of line ?
+					break;
+				}
+				pix = block_getpix( x + row_px_count, y + line );
+				row_px_count++;
+			}
+
+			/*
+			 * If it is not the first clear-colored-run pair and its colored run is empty
+			 * --> it is superfluous and can be removed by rolling back the pointer
+			 */
+			if(  clear_colored_run_pair_count > 0  &&  count == 0  ) {
+				dest -= 2;
+				// this only happens at the end of a line, so no need to increment clear_colored_run_pair_count
+			}
+			else {
+				*colored_run_counter = endian(count + has_transparent);
+				clear_colored_run_pair_count++;
+			}
+		} while(  row_px_count < img_width  );
+
+		*dest++ = 0;
+	}
+
+	*len = dest - dest_base;
+
+	return dest_base;
+}
+#else
 uint16 *image_writer_t::encode_image(int x, int y, dimension* dim, int* len)
 {
 	int line;
@@ -255,6 +350,7 @@ uint16 *image_writer_t::encode_image(int x, int y, dimension* dim, int* len)
 
 	return dest_base;
 }
+#endif
 
 
 bool image_writer_t::block_load(const char *fname)
@@ -349,9 +445,21 @@ void image_writer_t::write_obj(FILE* outfp, obj_node_t& parent, std::string an_i
 {
 	image_t image;
 	dimension dim;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	uint32 *pixdata = NULL;
+#else
 	uint16 *pixdata = NULL;
+#endif
 
-	MEMZERO(image);
+	image.len = 0;
+	image.x = 0;
+	image.y = 0;
+	image.w = 0;
+	image.h = 0;
+	image.imageid = IMG_EMPTY;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	image.truecolor = false;
+#endif
 
 	// if first char is a '>' then this image is not zoomable
 	if(  an_imagekey[0] == '>'  ) {
@@ -487,6 +595,24 @@ void image_writer_t::write_obj(FILE* outfp, obj_node_t& parent, std::string an_i
 	if (image.len) {
 		// only called, if there is something to store
 		node.write_data_at(outfp, pixdata, 10, image.len * sizeof(PIXVAL));
+		delete [] pixdata;
+	}
+#elif defined(SIM_ENABLE_RGB32_OUTPUT)
+	// version 4: RGB888/ARGB8888 payload
+	obj_node_t node(this, 10 + (image.len * sizeof(uint32)), &parent);
+
+	// to avoid any problems due to structure changes, we write manually the data
+	node.write_uint16(outfp, image.x,        0);
+	node.write_uint16(outfp, image.y,        2);
+	node.write_uint16(outfp, image.w,        4);
+	node.write_uint8 (outfp, 4,              6); // version, always at position 6!
+	node.write_uint16(outfp, image.h,        7);
+	// len is now automatically calculated
+	node.write_uint8 (outfp, image.zoomable, 9);
+
+	if (image.len) {
+		// only called, if there is something to store
+		node.write_data_at(outfp, pixdata, 10, image.len * sizeof(uint32));
 		delete [] pixdata;
 	}
 #else

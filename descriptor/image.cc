@@ -63,6 +63,9 @@ image_t* image_t::copy_image(const image_t& other)
 	img->h   = other.h;
 	img->imageid  = IMG_EMPTY;
 	img->zoomable = other.zoomable;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	img->truecolor = other.truecolor;
+#endif
 	memcpy(img->data, other.data, other.len * sizeof(PIXVAL));
 	return img;
 }
@@ -77,6 +80,9 @@ image_t* image_t::create_single_pixel()
 	desc->w = 1;
 	desc->h = 1;
 	desc->zoomable = 0;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	desc->truecolor = false;
+#endif
 	desc->data[0] = 0;
 	desc->data[1] = 0;
 	desc->data[2] = 0;
