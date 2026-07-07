@@ -22,6 +22,8 @@
 #define IMAGE_TRUECOLOR_MASK (0x00FFFFFFu)
 #endif
 
+typedef uint16 image_pixel_t;
+
 
 
 /**
@@ -44,12 +46,13 @@ public:
 	uint8 zoomable;   ///< some images may not be zoomed i.e. icons
 #ifdef SIM_ENABLE_RGB32_OUTPUT
 	bool truecolor;   ///< image data stores RGB888 pixels rather than RGB555 indices
+	PIXVAL *truecolor_data; ///< RLE encoded RGB888/ARGB8888 image data
 #endif
-	PIXVAL *data;     ///< RLE encoded image data
+	image_pixel_t *data;     ///< RLE encoded 16-bit pak image data
 
 	image_t(size_t len_=0) : len(0), imageid(IMG_EMPTY), zoomable(0),
 #ifdef SIM_ENABLE_RGB32_OUTPUT
-		truecolor(false),
+		truecolor(false), truecolor_data(NULL),
 #endif
 		data(NULL)
 	{
@@ -61,21 +64,41 @@ public:
 	~image_t()
 	{
 		delete [] data;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		delete [] truecolor_data;
+#endif
 	}
 
 	void alloc(size_t len_)
 	{
 		delete [] data;
-		data = new PIXVAL[len_];
+		data = new image_pixel_t[len_];
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		delete [] truecolor_data;
+		truecolor_data = NULL;
+		truecolor = false;
+#endif
 		len = len_;
 	}
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	void alloc_truecolor(size_t len_)
+	{
+		delete [] data;
+		data = NULL;
+		delete [] truecolor_data;
+		truecolor_data = new PIXVAL[len_];
+		truecolor = true;
+		len = len_;
+	}
+#endif
 
 	static image_t* copy_image(const image_t& other);
 
 	const image_t* get_pic() const { return this; }
 
-	PIXVAL const* get_data() const { return data; }
-	PIXVAL*       get_data()       { return data; }
+	image_pixel_t const* get_data() const { return data; }
+	image_pixel_t*       get_data()       { return data; }
 
 	image_id get_id() const { return imageid; }
 

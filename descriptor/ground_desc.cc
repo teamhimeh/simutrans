@@ -43,9 +43,9 @@ static image_t* create_textured_tile(const image_t* image_lightmap, const image_
 
 	image_t *image_dest = image_lightmap->copy_rotate(0);
 #if COLOUR_DEPTH != 0
-	PIXVAL* dest = image_dest->get_data();
+	image_pixel_t* dest = image_dest->get_data();
 
-	PIXVAL const* const texture = image_texture->get_data();
+	image_pixel_t const* const texture = image_texture->get_data();
 	sint16        const x_y     = image_texture->get_pic()->w;
 	// now mix the images
 	for (int j = 0; j < image_dest->get_pic()->h; j++) {
@@ -111,7 +111,7 @@ static image_t* create_alpha_tile(const image_t* image_lightmap, slope_t::type s
 
 	image_t *image_dest = image_lightmap->copy_rotate(0);
 
-	PIXVAL const* const alphamap  = image_alphamap->get_data();
+	image_pixel_t const* const alphamap  = image_alphamap->get_data();
 	const sint32 x_y     = image_dest->get_pic()->w;
 	const sint32 mix_x_y = image_alphamap->get_pic()->w;
 	sint16 tile_x, tile_y;
@@ -140,7 +140,7 @@ static image_t* create_alpha_tile(const image_t* image_lightmap, slope_t::type s
 	const sint16 corner_nw_y = (x_y / 2) - corner_nw(slope) * tile_raster_scale_y( TILE_HEIGHT_STEP, x_y );
 	const sint16 middle_y = (corner_se_y + corner_nw_y) / 2;
 	// now mix the images
-	PIXVAL* dest = image_dest->get_data();
+	image_pixel_t* dest = image_dest->get_data();
 	for(  int j = 0;  j < image_dest->get_pic()->h;  j++  ) {
 		tile_y = image_dest->get_pic()->y + j;
 		tile_x = *dest++;
@@ -239,7 +239,7 @@ static image_t* create_texture_from_tile(const image_t* image, const image_t* re
 	}
 	// assumes ref is texture image with no clear runs, full rows.
 	image_t *image_dest = image_t::copy_image(*ref);
-	PIXVAL *const sp2 = image_dest->get_data();
+	image_pixel_t *const sp2 = image_dest->get_data();
 
 	assert(ref->w == ref->y + ref->h  &&  ref->x == 0);
 
@@ -247,7 +247,7 @@ static image_t* create_texture_from_tile(const image_t* image, const image_t* re
 	const sint32 height= image->get_pic()->h;
 
 	// decode image and put it into dest
-	const PIXVAL* sp = image->get_data();
+	const image_pixel_t* sp = image->get_data();
 
 	for(int y = 0;  y < height;  y++  ) {
 
@@ -262,7 +262,7 @@ static image_t* create_texture_from_tile(const image_t* image, const image_t* re
 			runlen = (*sp++);
 
 			for(uint16 i=0; i<runlen; i++) {
-				PIXVAL p = *sp++;
+				image_pixel_t p = *sp++;
 
 				// macro to copy pixels into rle-encoded image, with range check
 #				define copypixel(xx, yy) \

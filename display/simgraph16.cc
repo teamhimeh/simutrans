@@ -333,7 +333,8 @@ struct imd {
 
 	PIXVAL* data[MAX_PLAYER_COUNT]; // current data - zoomed and recolored (player + daynight)
 
-	PIXVAL* zoom_data; // zoomed original data
+	image_pixel_t* zoom_data; // zoomed original 16-bit pak data
+	PIXVAL* truecolor_zoom_data; // zoomed original truecolor data
 	uint32 len;    // current zoom image data size (or base if not zoomed) (used for allocation purposes only)
 
 	sint16 base_x; // min x offset
@@ -341,7 +342,8 @@ struct imd {
 	sint16 base_w; // width
 	sint16 base_h; // height
 
-	PIXVAL* base_data; // original image data
+	image_pixel_t* base_data; // original 16-bit pak image data
+	PIXVAL* truecolor_base_data; // original truecolor image data
 };
 
 // Flags for recoding
@@ -440,7 +442,7 @@ static scr_coord_val disp_height = 480;
  * Static buffers for rezoom_img()
  */
 static uint8 *rezoom_baseimage[MAX_THREADS];
-static PIXVAL *rezoom_baseimage2[MAX_THREADS];
+static image_pixel_t *rezoom_baseimage2[MAX_THREADS];
 static size_t rezoom_size[MAX_THREADS];
 
 /*
@@ -1280,14 +1282,14 @@ static void recode()
 
 
 // to switch between 15 bit and 16 bit recoding ...
-typedef void (*display_recode_img_src_target_proc)(scr_coord_val h, PIXVAL *src, PIXVAL *target);
+typedef void (*display_recode_img_src_target_proc)(scr_coord_val h, const image_pixel_t *src, PIXVAL *target);
 static display_recode_img_src_target_proc recode_img_src_target = NULL;
 
 
 /**
  * Convert a certain image data to actual output data
  */
-static void recode_img_src_target_15(scr_coord_val h, PIXVAL *src, PIXVAL *target)
+static void recode_img_src_target_15(scr_coord_val h, const image_pixel_t *src, PIXVAL *target)
 {
 	if(  h > 0  ) {
 		do {
@@ -1324,7 +1326,7 @@ static void recode_img_src_target_15(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 	}
 }
 
-static void recode_img_src_target_16(scr_coord_val h, PIXVAL *src, PIXVAL *target)
+static void recode_img_src_target_16(scr_coord_val h, const image_pixel_t *src, PIXVAL *target)
 {
 	if(  h > 0  ) {
 		do {
@@ -1362,7 +1364,7 @@ static void recode_img_src_target_16(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 }
 
 #ifdef SIM_ENABLE_RGB32_OUTPUT
-static void recode_img_src_target_32(scr_coord_val h, PIXVAL *src, PIXVAL *target)
+static void recode_img_src_target_32(scr_coord_val h, const image_pixel_t *src, PIXVAL *target)
 {
 	if(  h > 0  ) {
 		do {
@@ -1399,7 +1401,7 @@ static void recode_img_src_target_32(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 	}
 }
 
-static void recode_img_src_target_truecolor(scr_coord_val h, PIXVAL *src, PIXVAL *target)
+static void recode_img_src_target_truecolor(scr_coord_val h, const PIXVAL *src, PIXVAL *target)
 {
 	if(  h > 0  ) {
 		do {
@@ -1450,8 +1452,6 @@ static void recode_img(const image_id n, const sint8 player_nr)
 		return;
 	}
 #endif
-	PIXVAL *src = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
-
 	if(  images[n].data[player_nr] == NULL  ) {
 		images[n].data[player_nr] = MALLOCN( PIXVAL, images[n].len );
 	}
@@ -1459,11 +1459,15 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	activate_player_color( player_nr, true );
 #ifdef SIM_ENABLE_RGB32_OUTPUT
 	if(  images[n].recode_flags & FLAG_TRUECOLOR  ) {
+		const PIXVAL *src = images[n].truecolor_zoom_data != NULL ? images[n].truecolor_zoom_data : images[n].truecolor_base_data;
 		recode_img_src_target_truecolor( images[n].h, src, images[n].data[player_nr] );
 	}
 	else
 #endif
-	recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
+	{
+		const image_pixel_t *src = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
+		recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
+	}
 	images[n].player_flags &= ~(1<<player_nr);
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &recode_img_mutex );
@@ -1551,12 +1555,132 @@ static void rezoom_img(const image_id n)
 			free( images[n].zoom_data );
 			images[n].zoom_data = NULL;
 		}
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		if(  images[n].truecolor_zoom_data != NULL  ) {
+			free( images[n].truecolor_zoom_data );
+			images[n].truecolor_zoom_data = NULL;
+		}
+#endif
 		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
 			if(  images[n].data[i] != NULL  ) {
 				free( images[n].data[i] );
 				images[n].data[i] = NULL;
 			}
 		}
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		if(  images[n].recode_flags & FLAG_TRUECOLOR  ) {
+			const bool base_size = zoom_factor == ZOOM_NEUTRAL || (images[n].recode_flags & FLAG_ZOOMABLE) == 0;
+			if(  base_size  ) {
+				images[n].x = images[n].base_x;
+				images[n].w = images[n].base_w;
+				images[n].y = images[n].base_y;
+				images[n].h = images[n].base_h;
+				const PIXVAL *sp = images[n].truecolor_base_data;
+				sint16 h = images[n].base_h;
+				while(  h-- > 0  ) {
+					do {
+						sp++;
+						sp += (*sp) & (~TRANSPARENT_RUN);
+						sp++;
+					} while(  *sp  );
+					sp++;
+				}
+				images[n].len = (uint32)(size_t)(sp - images[n].truecolor_base_data);
+			}
+			else {
+				images[n].x = (images[n].base_x * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+				images[n].y = (images[n].base_y * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+				images[n].w = (images[n].base_w * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+				images[n].h = (images[n].base_h * zoom_num[zoom_factor]) / zoom_den[zoom_factor];
+
+				if(  images[n].w > 0  &&  images[n].h > 0  ) {
+					const PIXVAL transparent_pixel = 0xFFFFFFFFu;
+					const sint32 base_pixels = images[n].base_w * images[n].base_h;
+					PIXVAL *base = MALLOCN(PIXVAL, base_pixels);
+					for(  sint32 i = 0;  i < base_pixels;  i++  ) {
+						base[i] = transparent_pixel;
+					}
+
+					const PIXVAL *src = images[n].truecolor_base_data;
+					for(  sint16 y = 0;  y < images[n].base_h;  y++  ) {
+						sint16 x = 0;
+						PIXVAL runlen = *src++;
+						do {
+							x += runlen & ~TRANSPARENT_RUN;
+							runlen = *src++;
+							const uint16 colored = runlen & ~TRANSPARENT_RUN;
+							for(  uint16 i = 0;  i < colored;  i++  ) {
+								base[y * images[n].base_w + x++] = *src++;
+							}
+							runlen = *src++;
+						} while(  runlen != 0  );
+					}
+
+					const size_t max_zoom_len = (size_t)images[n].h * ((size_t)images[n].w * 3u + 1u);
+					PIXVAL *zoom = MALLOCN(PIXVAL, max_zoom_len);
+					PIXVAL *dest = zoom;
+					for(  sint16 y = 0;  y < images[n].h;  y++  ) {
+						const sint32 sy = (sint32)y * images[n].base_h / images[n].h;
+						sint16 x = 0;
+						while(  x < images[n].w  ) {
+							PIXVAL clear_count = 0;
+							while(  x < images[n].w  ) {
+								const sint32 sx = (sint32)x * images[n].base_w / images[n].w;
+								if(  base[sy * images[n].base_w + sx] != transparent_pixel  ) {
+									break;
+								}
+								clear_count++;
+								x++;
+							}
+							*dest++ = clear_count;
+
+							PIXVAL alpha_flag = 0;
+							PIXVAL color_count = 0;
+							while(  x < images[n].w  ) {
+								const sint32 sx = (sint32)x * images[n].base_w / images[n].w;
+								const PIXVAL pixval = base[sy * images[n].base_w + sx];
+								if(  pixval == transparent_pixel  ) {
+									break;
+								}
+								const PIXVAL current_alpha_flag = ((pixval & IMAGE_TRUECOLOR_FLAG) == 0  &&  pixval >= 0x8020) ? TRANSPARENT_RUN : 0;
+								if(  color_count > 0  &&  current_alpha_flag != alpha_flag  ) {
+									break;
+								}
+								alpha_flag = current_alpha_flag;
+								dest[color_count + 1] = pixval;
+								color_count++;
+								x++;
+							}
+
+							if(  color_count == 0  &&  x >= images[n].w  ) {
+								dest--;
+							}
+							else {
+								*dest++ = color_count | alpha_flag;
+								dest += color_count;
+							}
+						}
+						*dest++ = 0;
+					}
+
+					images[n].len = (uint32)(dest - zoom);
+					images[n].truecolor_zoom_data = MALLOCN(PIXVAL, images[n].len);
+					memcpy(images[n].truecolor_zoom_data, zoom, images[n].len * sizeof(PIXVAL));
+					free(zoom);
+					free(base);
+				}
+				else {
+					images[n].h = 0;
+				}
+			}
+			images[n].recode_flags &= ~FLAG_REZOOM;
+#ifdef MULTI_THREAD
+			pthread_mutex_unlock( &rezoom_img_mutex[n % env_t::num_threads] );
+#endif
+			return;
+		}
+#endif
 
 		// just restore original size?
 		if(  zoom_factor == ZOOM_NEUTRAL  ||  (images[n].recode_flags&FLAG_ZOOMABLE) == 0  ) {
@@ -1567,7 +1691,7 @@ static void rezoom_img(const image_id n)
 			images[n].h = images[n].base_h;
 			// recalculate length
 			sint16 h = images[n].base_h;
-			PIXVAL *sp = images[n].base_data;
+			const image_pixel_t *sp = images[n].base_data;
 
 			while(  h-- > 0  ) {
 				do {
@@ -1595,8 +1719,8 @@ static void rezoom_img(const image_id n)
 
 		if(  images[n].h > 0  &&  images[n].w > 0  ) {
 			// just recalculate the image in the new size
-			PIXVAL *src = images[n].base_data;
-			PIXVAL *dest = NULL;
+			const image_pixel_t *src = images[n].base_data;
+			image_pixel_t *dest = NULL;
 			// embed the baseimage in an image with margin ~ remainder
 			const sint16 x_rem = (images[n].base_x * zoom_num[zoom_factor]) % zoom_den[zoom_factor];
 			const sint16 y_rem = (images[n].base_y * zoom_num[zoom_factor]) % zoom_den[zoom_factor];
@@ -1624,7 +1748,7 @@ static void rezoom_img(const image_id n)
 			// We end with an over sized buffer for the normal usage, but since it's re-used for all re-zooms,
 			// it's not performance critical and we are safe from all possible inputs.
 
-			size_t new_size = ( ( (newzoomwidth * 3) / 2 ) + 1 + 2) * newzoomheight * sizeof(PIXVAL);
+			size_t new_size = ( ( (newzoomwidth * 3) / 2 ) + 1 + 2) * newzoomheight * sizeof(image_pixel_t);
 			size_t unpack_size = (xl_margin + orgzoomwidth + xr_margin) * (yl_margin + orgzoomheight + yr_margin) * 4;
 			if(  unpack_size > new_size  ) {
 				new_size = unpack_size;
@@ -1635,7 +1759,7 @@ static void rezoom_img(const image_id n)
 				free( rezoom_baseimage[n % env_t::num_threads] );
 				rezoom_size[n % env_t::num_threads] = new_size;
 				rezoom_baseimage[n % env_t::num_threads]  = MALLOCN( uint8, new_size );
-				rezoom_baseimage2[n % env_t::num_threads] = (PIXVAL *)MALLOCN( uint8, new_size );
+				rezoom_baseimage2[n % env_t::num_threads] = (image_pixel_t *)MALLOCN( uint8, new_size );
 			}
 			memset( rezoom_baseimage[n % env_t::num_threads], 255, new_size ); // fill with invalid data to mark transparent regions
 
@@ -1927,10 +2051,10 @@ static void rezoom_img(const image_id n)
 			}
 
 			// now encode the image again
-			dest = (PIXVAL*)rezoom_baseimage[n % env_t::num_threads];
+			dest = (image_pixel_t*)rezoom_baseimage[n % env_t::num_threads];
 			for(  sint16 y = 0;  y < newzoomheight;  y++  ) {
-				PIXVAL *line = ((PIXVAL *)rezoom_baseimage2[n % env_t::num_threads]) + (y * newzoomwidth);
-				PIXVAL count;
+				image_pixel_t *line = rezoom_baseimage2[n % env_t::num_threads] + (y * newzoomwidth);
+				image_pixel_t count;
 				sint16 x = 0;
 				uint16 clear_colored_run_pair_count = 0;
 
@@ -1944,7 +2068,7 @@ static void rezoom_img(const image_id n)
 					// copy for non-transparent
 					count = 0;
 					while(  x < newzoomwidth  &&  line[x] != 0x73FE  ) {
-						PIXVAL pixval = line[x++];
+						image_pixel_t pixval = line[x++];
 						if(  pixval >= 0x8020  &&  !has_alpha  ) {
 							if(  count  ) {
 								*dest++ = count;
@@ -1989,8 +2113,8 @@ static void rezoom_img(const image_id n)
 			images[n].h = newzoomheight;
 			if(  newzoomheight > 0  ) {
 				const size_t zoom_len = (size_t)(((uint8 *)dest) - ((uint8 *)rezoom_baseimage[n % env_t::num_threads]));
-				images[n].len = (uint32)(zoom_len / sizeof(PIXVAL));
-				images[n].zoom_data = MALLOCN(PIXVAL, images[n].len);
+				images[n].len = (uint32)(zoom_len / sizeof(image_pixel_t));
+				images[n].zoom_data = MALLOCN(image_pixel_t, images[n].len);
 				assert( images[n].zoom_data );
 				memcpy( images[n].zoom_data, rezoom_baseimage[n % env_t::num_threads], zoom_len );
 			}
@@ -2218,8 +2342,46 @@ void register_image(image_t *image_in)
 	image->player_flags = 0xFFFF; // recode all player colors
 
 	// find out if there are really player colors
-	for(  PIXVAL *src = image_in->data, y = 0;  y < image_in->h;  ++y  ) {
+	for(  uint y = 0;  y < image_in->h;  ++y  ) {
 		uint16 runlen;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		if(  image_in->truecolor  ) {
+			PIXVAL *src = image_in->truecolor_data;
+			for(  uint yy = 0;  yy < y;  yy++  ) {
+				do {
+					src++;
+					src += (*src)&(~TRANSPARENT_RUN);
+					src++;
+				} while(  *src  );
+				src++;
+			}
+			runlen = *src++;
+			do {
+				runlen = *src++;
+				if(  runlen & TRANSPARENT_RUN  ) {
+					image->recode_flags |= FLAG_HAS_TRANSPARENT_COLOR;
+					runlen &= ~TRANSPARENT_RUN;
+				}
+				while(  runlen--  ) {
+					const PIXVAL s = *src++;
+					if(  s>=0x8000  &&  s<0x8008  ) {
+						image->recode_flags |= FLAG_HAS_PLAYER_COLOR;
+					}
+				}
+				runlen = *src++;
+			} while(  runlen!=0  );
+			continue;
+		}
+#endif
+		image_pixel_t *src = image_in->data;
+		for(  uint yy = 0;  yy < y;  yy++  ) {
+			do {
+				src++;
+				src += (*src)&(~TRANSPARENT_RUN);
+				src++;
+			} while(  *src  );
+			src++;
+		}
 
 		// decode line
 		runlen = *src++;
@@ -2247,6 +2409,9 @@ void register_image(image_t *image_in)
 	}
 
 	image->zoom_data = NULL;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	image->truecolor_zoom_data = NULL;
+#endif
 	image->len = image_in->len;
 
 	image->base_x = image_in->x;
@@ -2256,6 +2421,9 @@ void register_image(image_t *image_in)
 
 	// since we do not recode them, we can work with the original data
 	image->base_data = image_in->data;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	image->truecolor_base_data = image_in->truecolor_data;
+#endif
 
 	// now find out, it contains player colors
 
@@ -2271,6 +2439,11 @@ void display_free_all_images_above( image_id above )
 		if(  images[anz_images].zoom_data != NULL  ) {
 			free( images[anz_images].zoom_data );
 		}
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		if(  images[anz_images].truecolor_zoom_data != NULL  ) {
+			free( images[anz_images].truecolor_zoom_data );
+		}
+#endif
 		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
 			if(  images[anz_images].data[i] != NULL  ) {
 				free( images[anz_images].data[i] );
@@ -2421,6 +2594,68 @@ static inline void colorpixcopy(PIXVAL* dest, const PIXVAL* src, const PIXVAL* c
 				const PIXVAL b = b_dest + (((b_src - b_dest) * alpha) >> 5);
 				*dest++ = (r << 11) | (g << 5) | b;
 			}
+		}
+	}
+}
+#endif
+
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static inline void colorpixcopy_source(PIXVAL* dest, const image_pixel_t* src, const image_pixel_t* const end)
+{
+	while (src < end) {
+		const image_pixel_t s = *src++;
+		if(  s < 0x8020  ) {
+			*dest++ = rgbmap_current[s];
+		}
+		else {
+			const uint16 alpha = ((s - 0x8020) % 31) + 1;
+			const uint16 idx = (s - 0x8020) / 31;
+			const PIXVAL colval = transparent_map_day_night[idx];
+			*dest = xrgb_blend32(*dest, colval, alpha);
+			dest++;
+		}
+	}
+}
+
+static inline void colorpixcopydaytime_source(PIXVAL* dest, const image_pixel_t* src, const image_pixel_t* const end)
+{
+	while (src < end) {
+		const image_pixel_t s = *src++;
+		if(  s < 0x8020  ) {
+			*dest++ = rgbmap_current[s];
+		}
+		else {
+			const uint16 alpha = ((s - 0x8020) % 31) + 1;
+			const uint16 idx = (s - 0x8020) / 31;
+			const PIXVAL colval = transparent_map_all_day[idx];
+			*dest = xrgb_blend32(*dest, colval, alpha);
+			dest++;
+		}
+	}
+}
+
+static inline void colorpixcopy_line_source(PIXVAL* dest, const image_pixel_t* src, const image_pixel_t* const end, const PIXVAL line_col[8], const PIXVAL player_col2[8], const bool daynight)
+{
+	while (src < end) {
+		const image_pixel_t s = *src++;
+		if (s < 0x8020) {
+			if (s >= 0x8000 && s < 0x8008) {
+				*dest++ = line_col[s & 7];
+			}
+			else if (s >= 0x8008 && s < 0x8010) {
+				*dest++ = player_col2[s & 7];
+			}
+			else {
+				*dest++ = rgbmap_current[s];
+			}
+		}
+		else {
+			const uint16 alpha = ((s - 0x8020) % 31) + 1;
+			const uint16 idx = (s - 0x8020) / 31;
+			const PIXVAL colval = idx < 16 ? (idx < 8 ? line_col[idx] : player_col2[idx & 7]) : (daynight ? transparent_map_day_night[idx] : transparent_map_all_day[idx]);
+			*dest = xrgb_blend32(*dest, colval, alpha);
+			dest++;
 		}
 	}
 }
@@ -2731,6 +2966,42 @@ static void display_img_pc(scr_coord_val h, const scr_coord_val xp, const scr_co
 		} while (--h);
 	}
 }
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static void display_img_pc_source(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const image_pixel_t *sp, const bool daynight  CLIP_NUM_DEF)
+{
+	if(  h > 0  ) {
+		PIXVAL *tp = textur + yp * disp_width;
+
+		init_ranges( yp  CLIP_NUM_PAR);
+		do {
+			int xpos = xp;
+			int runlen = *sp++;
+			int xmin, xmax;
+			get_xrange_and_step_y( xmin, xmax  CLIP_NUM_PAR );
+			do {
+				xpos += (runlen & ~TRANSPARENT_RUN);
+				runlen = *sp++;
+				const uint16 has_alpha = runlen & TRANSPARENT_RUN;
+				runlen &= ~TRANSPARENT_RUN;
+				if (xmin < xmax  &&  xpos + runlen > xmin && xpos < xmax) {
+					const int left = (xpos >= xmin ? 0 : xmin - xpos);
+					const int len  = (xmax - xpos >= runlen ? runlen : xmax - xpos);
+					if(  daynight || has_alpha  ) {
+						colorpixcopy_source(tp + xpos + left, sp + left, sp + len);
+					}
+					else {
+						colorpixcopydaytime_source(tp + xpos + left, sp + left, sp + len);
+					}
+				}
+				sp += runlen;
+				xpos += runlen;
+			} while ((runlen = *sp++));
+			tp += disp_width;
+		} while (--h);
+	}
+}
+#endif
 
 
 /**
@@ -3216,6 +3487,35 @@ static void display_color_img_wc_daytime(const PIXVAL* sp, scr_coord_val x, scr_
 	} while (--h);
 }
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static void display_color_img_wc_source(const image_pixel_t* sp, scr_coord_val x, scr_coord_val y, scr_coord_val h, const bool daynight  CLIP_NUM_DEF)
+{
+	PIXVAL* tp = textur + y * disp_width;
+
+	do {
+		int xpos = x;
+		uint16 runlen = *sp++;
+		do {
+			xpos += (runlen & ~TRANSPARENT_RUN);
+			runlen = (*sp++) & ~TRANSPARENT_RUN;
+			if (xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx) {
+				const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
+				const int len = (CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos);
+				if(  daynight  ) {
+					colorpixcopy_source(tp + xpos + left, sp + left, sp + len);
+				}
+				else {
+					colorpixcopydaytime_source(tp + xpos + left, sp + left, sp + len);
+				}
+			}
+			sp += runlen;
+			xpos += runlen;
+		} while ((runlen = *sp++));
+		tp += disp_width;
+	} while (--h);
+}
+#endif
+
 
 /**
  * Draw Image, replace player color using a local line-color ramp (thread-safe)
@@ -3240,6 +3540,29 @@ static void display_color_img_wc_line(const PIXVAL* sp, scr_coord_val x, scr_coo
 		tp += disp_width;
 	} while (--h);
 }
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static void display_color_img_wc_line_source(const image_pixel_t* sp, scr_coord_val x, scr_coord_val y, scr_coord_val h, const PIXVAL line_col[8], const PIXVAL player_col2[8], const bool daynight  CLIP_NUM_DEF)
+{
+	PIXVAL* tp = textur + y * disp_width;
+	do {
+		int xpos = x;
+		uint16 runlen = *sp++;
+		do {
+			xpos += (runlen & ~TRANSPARENT_RUN);
+			runlen = (*sp++) & ~TRANSPARENT_RUN;
+			if (xpos + runlen > CR.clip_rect.x && xpos < CR.clip_rect.xx) {
+				const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
+				const int len  = (CR.clip_rect.xx - xpos > runlen ? runlen : CR.clip_rect.xx - xpos);
+				colorpixcopy_line_source(tp + xpos + left, sp + left, sp + len, line_col, player_col2, daynight);
+			}
+			sp += runlen;
+			xpos += runlen;
+		} while ((runlen = *sp++));
+		tp += disp_width;
+	} while (--h);
+}
+#endif
 
 
 /**
@@ -3271,6 +3594,35 @@ static void display_img_pc_line(scr_coord_val h, const scr_coord_val xp, const s
 		} while (--h);
 	}
 }
+
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+static void display_img_pc_line_source(scr_coord_val h, const scr_coord_val xp, const scr_coord_val yp, const image_pixel_t* sp, const PIXVAL line_col[8], const PIXVAL player_col2[8], const bool daynight  CLIP_NUM_DEF)
+{
+	if (h > 0) {
+		PIXVAL* tp = textur + yp * disp_width;
+		init_ranges(yp  CLIP_NUM_PAR);
+		do {
+			int xpos = xp;
+			int runlen = *sp++;
+			int xmin, xmax;
+			get_xrange_and_step_y(xmin, xmax  CLIP_NUM_PAR);
+			do {
+				xpos += (runlen & ~TRANSPARENT_RUN);
+				runlen = *sp++;
+				runlen &= ~TRANSPARENT_RUN;
+				if (xmin < xmax && xpos + runlen > xmin && xpos < xmax) {
+					const int left = (xpos >= xmin ? 0 : xmin - xpos);
+					const int len  = (xmax - xpos >= runlen ? runlen : xmax - xpos);
+					colorpixcopy_line_source(tp + xpos + left, sp + left, sp + len, line_col, player_col2, daynight);
+				}
+				sp += runlen;
+				xpos += runlen;
+			} while ((runlen = *sp++));
+			tp += disp_width;
+		} while (--h);
+	}
+}
+#endif
 
 
 /**
@@ -3314,7 +3666,7 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 			activate_player_color( player_nr, daynight );
 
 			// color replacement needs the original data => sp points to non-cached data
-			const PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
+			const image_pixel_t *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
 			// clip top/bottom
 			scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -3332,12 +3684,21 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 				}
 
 				// clipping at poly lines?
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				if(  CR.number_of_clips > 0  ) {
+					display_img_pc_source(h, x, y, sp, daynight  CLIP_NUM_PAR);
+				}
+				else {
+					display_color_img_wc_source(sp, x, y, h, daynight  CLIP_NUM_PAR);
+				}
+#else
 				if(  CR.number_of_clips > 0  ) {
 					daynight ? display_img_pc<colored>(h, x, y, sp  CLIP_NUM_PAR) : display_img_pc<daytime>(h, x, y, sp  CLIP_NUM_PAR);
 				}
 				else {
 					daynight ? display_color_img_wc(sp, x, y, h  CLIP_NUM_PAR) : display_color_img_wc_daytime(sp, x, y, h  CLIP_NUM_PAR);
 				}
+#endif
 			}
 		}
 	} // number ok
@@ -3393,7 +3754,7 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 
 		activate_player_color( player_nr, daynight );
 
-		const PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
+		const image_pixel_t *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
 		scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
 		if(  h > 0  ) {
@@ -3408,10 +3769,18 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 			}
 
 			if(  CR.number_of_clips > 0  ) {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				display_img_pc_line_source(h, x, y, sp, line_col, player_col2, daynight  CLIP_NUM_PAR);
+#else
 				display_img_pc_line(h, x, y, sp, line_col, player_col2, daynight  CLIP_NUM_PAR);
+#endif
 			}
 			else {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				display_color_img_wc_line_source(sp, x, y, h, line_col, player_col2, daynight  CLIP_NUM_PAR);
+#else
 				display_color_img_wc_line(sp, x, y, h, line_col, player_col2, daynight  CLIP_NUM_PAR);
+#endif
 			}
 		}
 	}
@@ -3454,7 +3823,7 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 		}
 
 		// color replacement needs the original data => sp points to non-cached data
-		const PIXVAL *sp = images[n].base_data;
+		const image_pixel_t *sp = images[n].base_data;
 
 		// clip top/bottom
 		scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
@@ -3471,12 +3840,21 @@ void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, cons
 				sp++;
 			}
 			// clipping at poly lines?
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			if(  CR.number_of_clips > 0  ) {
+				display_img_pc_source(h, x, y, sp, daynight  CLIP_NUM_PAR);
+			}
+			else {
+				display_color_img_wc_source(sp, x, y, h, daynight  CLIP_NUM_PAR);
+			}
+#else
 			if(  CR.number_of_clips > 0  ) {
 				daynight ? display_img_pc<colored>(h, x, y, sp  CLIP_NUM_PAR) : display_img_pc<daytime>(h, x, y, sp  CLIP_NUM_PAR);
 			}
 			else {
 				daynight ? display_color_img_wc(sp, x, y, h  CLIP_NUM_PAR) : display_color_img_wc_daytime(sp, x, y, h  CLIP_NUM_PAR);
 			}
+#endif
 		}
 
 	} // number ok
@@ -3531,7 +3909,7 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 
 		activate_player_color( player_nr, daynight );
 
-		const PIXVAL *sp = images[n].base_data;
+		const image_pixel_t *sp = images[n].base_data;
 
 		scr_coord_val yoff = clip_wh( &y, &h, CR.clip_rect.y, CR.clip_rect.yy );
 		if(  h > 0  ) {
@@ -3545,10 +3923,18 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 				sp++;
 			}
 			if(  CR.number_of_clips > 0  ) {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				display_img_pc_line_source( h, x, y, sp, line_col, player_col2, daynight  CLIP_NUM_PAR );
+#else
 				display_img_pc_line( h, x, y, sp, line_col, player_col2, daynight  CLIP_NUM_PAR );
+#endif
 			}
 			else {
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+				display_color_img_wc_line_source( sp, x, y, h, line_col, player_col2, daynight  CLIP_NUM_PAR );
+#else
 				display_color_img_wc_line( sp, x, y, h, line_col, player_col2, daynight  CLIP_NUM_PAR );
+#endif
 			}
 		}
 	}
@@ -4422,9 +4808,12 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		if(  (images[alpha_n].recode_flags & FLAG_REZOOM)  ) {
 			rezoom_img( alpha_n );
 		}
+		if(  (images[alpha_n].player_flags & 1)  ) {
+			recode_img( alpha_n, 0 );
+		}
 		PIXVAL *sp = images[n].data[0];
 		// alphamap image uses base data as we don't want to recode
-		PIXVAL *alphamap = images[alpha_n].zoom_data != NULL ? images[alpha_n].zoom_data : images[alpha_n].base_data;
+		PIXVAL *alphamap = images[alpha_n].data[0];
 		// now, since zooming may have change this image
 		xp += images[n].x;
 		yp += images[n].y;
@@ -4516,7 +4905,14 @@ void display_base_img_blend(const image_id n, scr_coord_val xp, scr_coord_val yp
 			return;
 		}
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		if(  (images[n].player_flags & 1)  ) {
+			recode_img( n, 0 );
+		}
+		PIXVAL *sp = images[n].data[0];
+#else
 		PIXVAL *sp = images[n].base_data;
+#endif
 
 		// must the height be reduced?
 		scr_coord_val reduce_h = y + h - CR.clip_rect.yy;
@@ -4595,8 +4991,19 @@ void display_base_img_alpha(const image_id n, const image_id alpha_n, const unsi
 			return;
 		}
 
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+		if(  (images[n].player_flags & 1)  ) {
+			recode_img( n, 0 );
+		}
+		if(  (images[alpha_n].player_flags & 1)  ) {
+			recode_img( alpha_n, 0 );
+		}
+		PIXVAL *sp = images[n].data[0];
+		PIXVAL *alphamap = images[alpha_n].data[0];
+#else
 		PIXVAL *sp = images[n].base_data;
 		PIXVAL *alphamap = images[alpha_n].base_data;
+#endif
 
 		// must the height be reduced?
 		scr_coord_val reduce_h = y + h - CR.clip_rect.yy;

@@ -55,7 +55,7 @@ const uint32 image_t::rgbtab[SPECIAL] = {
 
 image_t* image_t::copy_image(const image_t& other)
 {
-	image_t* img = new image_t(other.len);
+	image_t* img = new image_t();
 	img->len = other.len;
 	img->x   = other.x;
 	img->y   = other.y;
@@ -65,8 +65,23 @@ image_t* image_t::copy_image(const image_t& other)
 	img->zoomable = other.zoomable;
 #ifdef SIM_ENABLE_RGB32_OUTPUT
 	img->truecolor = other.truecolor;
+	if(  other.truecolor  ) {
+		img->alloc_truecolor(other.len);
+	}
+	else
 #endif
-	memcpy(img->data, other.data, other.len * sizeof(PIXVAL));
+	{
+		img->alloc(other.len);
+	}
+
+	if(  img->data  ) {
+		memcpy(img->data, other.data, other.len * sizeof(image_pixel_t));
+	}
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	else {
+		memcpy(img->truecolor_data, other.truecolor_data, other.len * sizeof(PIXVAL));
+	}
+#endif
 	return img;
 }
 
@@ -114,8 +129,42 @@ image_t *image_t::copy_rotate(const sint16 angle) const
 	// now you should understand below arithmetics ...
 
 	sint16        const x_y    = w;
-	PIXVAL const* const src    = get_data();
-	PIXVAL*       const target = target_image->get_data();
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	if(  truecolor  ) {
+		PIXVAL const* const src    = truecolor_data;
+		PIXVAL*       const target = target_image->truecolor_data;
+
+		switch(angle) {
+			case 90:
+				for(int j=0; j<x_y; j++) {
+					for(int i=0; i<x_y; i++) {
+						target[j*(x_y+3)+i+2]=src[i*(x_y+3)+(x_y-j-1)+2];
+					}
+				}
+			break;
+
+			case 180:
+				for(int j=0; j<x_y; j++) {
+					for(int i=0; i<x_y; i++) {
+						target[j*(x_y+3)+i+2]=src[(x_y-j-1)*(x_y+3)+(x_y-i-1)+2];
+					}
+				}
+			break;
+			case 270:
+				for(int j=0; j<x_y; j++) {
+					for(int i=0; i<x_y; i++) {
+						target[j*(x_y+3)+i+2]=src[(x_y-i-1)*(x_y+3)+j+2];
+					}
+				}
+			break;
+			default:
+				;
+		}
+		return target_image;
+	}
+#endif
+	image_pixel_t const* const src    = get_data();
+	image_pixel_t*       const target = target_image->get_data();
 
 	switch(angle) {
 		case 90:
@@ -160,8 +209,20 @@ image_t *image_t::copy_flipvertical() const
 	// now you should understand below arithmetics ...
 
 	sint16        const x_y    = w;
-	PIXVAL const* const src    = get_data();
-	PIXVAL*       const target = target_image->get_data();
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	if(  truecolor  ) {
+		PIXVAL const* const src    = truecolor_data;
+		PIXVAL*       const target = target_image->truecolor_data;
+		for(  int j = 0;  j < x_y;  j++  ) {
+			for(  int i = 0;  i < x_y;  i++  ) {
+				target[i * (x_y + 3) + j + 2] = src[(x_y - i - 1) * (x_y + 3) + j + 2];
+			}
+		}
+		return target_image;
+	}
+#endif
+	image_pixel_t const* const src    = get_data();
+	image_pixel_t*       const target = target_image->get_data();
 
 	for(  int j = 0;  j < x_y;  j++  ) {
 		for(  int i = 0;  i < x_y;  i++  ) {
@@ -185,8 +246,20 @@ image_t *image_t::copy_fliphorizontal() const
 	// now you should understand below arithmetics ...
 
 	sint16        const x_y    = w;
-	PIXVAL const* const src    = get_data();
-	PIXVAL*       const target = target_image->get_data();
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	if(  truecolor  ) {
+		PIXVAL const* const src    = truecolor_data;
+		PIXVAL*       const target = target_image->truecolor_data;
+		for(  int i = 0;  i < x_y;  i++  ) {
+			for(  int j = 0;  j < x_y;  j++  ) {
+				target[i * (x_y + 3) + j + 2] = src[i * (x_y + 3) + (x_y - j - 1) + 2];
+			}
+		}
+		return target_image;
+	}
+#endif
+	image_pixel_t const* const src    = get_data();
+	image_pixel_t*       const target = target_image->get_data();
 
 	for(  int i = 0;  i < x_y;  i++  ) {
 		for(  int j = 0;  j < x_y;  j++  ) {

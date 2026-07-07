@@ -102,7 +102,7 @@ obj_desc_t *image_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		skip_reading_pixels_if_no_graphics;
 		//DBG_DEBUG("image_t::read_node()","x,y=%d,%d  w,h=%d,%d, len=%i",desc->x,desc->y,desc->w,desc->h, desc->len);
 
-		PIXVAL* dest = desc->data;
+		image_pixel_t* dest = desc->data;
 		p = desc_buf.begin()+12;
 
 		if (desc->h > 0) {
@@ -127,7 +127,7 @@ obj_desc_t *image_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->imageid = IMG_EMPTY;
 
 		skip_reading_pixels_if_no_graphics;
-		PIXVAL* dest = desc->data;
+		image_pixel_t* dest = desc->data;
 		if (desc->h > 0) {
 			for (uint i = 0; i < desc->len; i++) {
 				*dest++ = decode_uint16(p);
@@ -145,7 +145,7 @@ obj_desc_t *image_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->imageid = IMG_EMPTY;
 
 		skip_reading_pixels_if_no_graphics;
-		PIXVAL* dest = desc->data;
+		image_pixel_t* dest = desc->data;
 		if (desc->h > 0) {
 			for (uint i = 0; i < desc->len; i++) {
 				*dest++ = decode_uint16(p);
@@ -159,13 +159,13 @@ obj_desc_t *image_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->w = decode_sint16(p);
 		p++; // skip version information
 		desc->h = decode_sint16(p);
-		desc->alloc((node.size-10)/4); // len
+		desc->alloc_truecolor((node.size-10)/4); // len
 		desc->zoomable = decode_uint8(p);
 		desc->imageid = IMG_EMPTY;
 		desc->truecolor = true;
 
 		skip_reading_pixels_if_no_graphics;
-		PIXVAL* dest = desc->data;
+		PIXVAL* dest = desc->truecolor_data;
 		if (desc->h > 0) {
 			for (uint y = 0; y < desc->h; y++) {
 				PIXVAL runlen = decode_uint32(p);
@@ -200,7 +200,7 @@ adjust_image:
 	}
 	if(  desc->len > 0  ) {
 		desc->len = 4;
-		memset(desc->data, 0, desc->len*sizeof(PIXVAL));
+		memset(desc->data, 0, desc->len*sizeof(image_pixel_t));
 	}
 	desc->x = 0;
 	desc->y = 0;
@@ -215,8 +215,8 @@ adjust_image:
 	if(version<2  &&  desc->h>0) {
 		// find left border
 		uint16 left = 255;
-		PIXVAL *dest = desc->data;
-		PIXVAL *end  = desc->data + desc->len;
+		image_pixel_t *dest = desc->data;
+		image_pixel_t *end  = desc->data + desc->len;
 
 		for( uint8 y=0;  y<desc->h;  y++  ) {
 #if COLOUR_DEPTH != 0
@@ -274,10 +274,20 @@ adjust_image:
 		// get the adler hash (since we have zlib on board anyway ... )
 		bool do_register_image = true;
 		uint32 adler = adler32(0L, NULL, 0 );
-		// remember len is sizeof(PIXVAL)!
+		// remember len is in source pixel units
 		for(  uint i = 0;  i < desc->len;  i++  ) {
-			const PIXVAL data = desc->data[i];
-			adler = adler32(adler, (const Bytef *)&data, sizeof(data));
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			if(  desc->truecolor  ) {
+				const PIXVAL data = desc->truecolor_data[i];
+				adler = adler32(adler, (const Bytef *)&data, sizeof(data));
+			}
+			else {
+#endif
+				const image_pixel_t data = desc->data[i];
+				adler = adler32(adler, (const Bytef *)&data, sizeof(data));
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			}
+#endif
 		}
 		static inthashtable_tpl<uint32, image_t *> images_adlers;
 		image_t *same = images_adlers.get(adler);
@@ -285,6 +295,14 @@ adjust_image:
 			// same checksum => if same then skip!
 			image_t const& a = *desc;
 			image_t const& b = *same;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+			const bool same_storage = a.truecolor == b.truecolor;
+			const bool same_data = same_storage && a.len == b.len && (a.truecolor
+				? memcmp(a.truecolor_data, b.truecolor_data, sizeof(*a.truecolor_data) * a.len) == 0
+				: memcmp(a.data, b.data, sizeof(*a.data) * a.len) == 0);
+#else
+			const bool same_data = a.len == b.len && memcmp(a.data, b.data, sizeof(*a.data) * a.len) == 0;
+#endif
 			do_register_image =
 				a.x        != b.x        ||
 				a.y        != b.y        ||
@@ -292,7 +310,7 @@ adjust_image:
 				a.h        != b.h        ||
 				a.zoomable != b.zoomable ||
 				a.len      != b.len      ||
-				memcmp(a.data, b.data, sizeof(*a.data) * a.len) != 0;
+				!same_data;
 		}
 		// unique image here
 		if(  do_register_image  ) {
@@ -314,8 +332,34 @@ adjust_image:
 
 bool image_reader_t::image_has_valid_data(image_t *image_in) const
 {
-	PIXVAL *src = image_in->data;
-	PIXVAL *end = image_in->data + image_in->len;
+#ifdef SIM_ENABLE_RGB32_OUTPUT
+	if(  image_in->truecolor  ) {
+		PIXVAL *src = image_in->truecolor_data;
+		PIXVAL *end = image_in->truecolor_data + image_in->len;
+
+		for( int y = 0;  y < image_in->h;  ++y  ) {
+			uint16 runlen = *src++;
+			do {
+				if (src >= end) {
+					return false;
+				}
+
+				runlen = *src++ & ~TRANSPARENT_RUN;
+				src += runlen;
+
+				if (src >= end) {
+					return false;
+				}
+
+				runlen = *src++;
+			} while(  runlen!=0  );
+		}
+
+		return src == end;
+	}
+#endif
+	image_pixel_t *src = image_in->data;
+	image_pixel_t *end = image_in->data + image_in->len;
 
 	for( int y = 0;  y < image_in->h;  ++y  ) {
 		// decode line
