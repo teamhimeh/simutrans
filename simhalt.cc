@@ -4130,7 +4130,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	if(  file->get_OTRP_version()>=42  ) {
 		uint8 temp_flags=flags;
-		if(  file->is_saving() && (get_permissions()|~(1U<<(uint16)get_owner()->get_player_nr()))>0 && file->get_OTRP_version()<56  ) {
+		if(  file->is_saving() && (get_permissions()|~(1U<<(uint16)get_owner()->get_player_nr()))>0 && file->get_OTRP_version()<57  ) {
 			// for old version saving.
 			// we only has "all connection" flag.
 			temp_flags|=HS_ALLOW_OTHER_PLAYER_CONNECTION;
@@ -4142,7 +4142,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	}
 
-	if(  file->get_OTRP_version() >= 56  ||  file->is_version_atleast(124, 5)  ) {
+	if(  file->get_OTRP_version() >= 57  ||  file->is_version_atleast(124, 5)  ) {
 		file->rdwr_short(permissions);
 		if(  file->is_loading()  ) {
 			set_permissions(permissions);

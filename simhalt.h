@@ -99,7 +99,7 @@ public:
 	};
 
 	enum station_flag {
-		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station. (>=v56, we use uint16 permissions, but IT MUST BE KEPT TO READ/WRITE OLD SAVEDATA!)
+		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station. (>=v57, we use uint16 permissions, but IT MUST BE KEPT TO READ/WRITE OLD SAVEDATA!)
 		HS_NO_HANDLE_PAX				 = 1 << 1,// do not handle goods type passenger
 		HS_NO_HANDLE_POST				 = 1 << 2,// do not handle goods type post
 		HS_NO_HANDLE_WARE				 = 1 << 3,// do not handle goods type ware
