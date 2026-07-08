@@ -1324,6 +1324,7 @@ bool convoi_t::drive_to()
 		// Also for road vehicles, unreserve tiles.
 		else if(road_vehicle_t* r = dynamic_cast<road_vehicle_t*>(fahr[0])) {
 			r->unreserve_all_tiles();
+			r->unreserve_target_halt();
 		}
 
 		koord3d start = front()->get_pos();
@@ -1353,7 +1354,7 @@ bool convoi_t::drive_to()
 						welt->get_route_cache().remove(line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
 					}
 				}
-				if(!r&&!need_electric) {
+				if(!need_electric) {
 					// no electric route found
 					route_t *cached = welt->get_route_cache().find(
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
@@ -2705,7 +2706,18 @@ void convoi_t::vorfahren()
 	c = self;
 	while(  c.is_bound()  ) {
 		// the back vehicles position is set.
-		if (c->reversing_needed^((world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!go_same_direction)){
+		bool need_reverse_each_convoy = go_same_direction;
+		if(  c->is_coupled()&&(go_same_direction^using_last_car_steps)  ) {
+			// the front convoy go back but last convoy go same direction:
+			// we need to check the exact direction for each convoy!
+			if(  !c->get_coupling_convoi().is_bound()  ) {
+				// we already calculated:
+				need_reverse_each_convoy = using_last_car_steps;
+			} else {
+				need_reverse_each_convoy = c->go_same_direction_check_for_middle_convoys(get_route());
+			}
+		}
+		if (c->reversing_needed^((world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!need_reverse_each_convoy)){
 			c->reverse_vehicles_at_halt_if_needed();
 		}
 		// reset uncouple done flag
@@ -2907,6 +2919,25 @@ void convoi_t::vorfahren()
 	wait_lock = 0;
 	INT_CHECK("simconvoi 711");
 	reversing_needed = false;
+}
+
+// a helper function for convoi_t::vorfahren()
+// we only use this function BEFORE RESET VEHICLES POSITION
+// Here, THEY DO NOT KNOW THE ROUTE!
+bool convoi_t::go_same_direction_check_for_middle_convoys(const route_t* const &r) const
+{
+	if(  r->get_count()<2  ) {
+		return true;
+	}
+	const koord3d k = front()->get_pos();
+	ribi_t::ribi next_dir = ribi_t::all;
+	for(uint16 i=0; i<r->get_count()-1; i++) {
+		if(r->at(i)==k) {
+			next_dir = front()->calc_direction(r->at(i),r->at(i+1));
+			break;
+		}
+	}
+	return (alte_richtung&next_dir)>0;
 }
 
 // a helper function for convoi_t::vorfahren()
@@ -3188,8 +3219,13 @@ void convoi_t::rdwr(loadsave_t *file)
 					state = INITIAL;
 				}
 				// add to blockstrecke
-				if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype()))) {
-					sch->reserve(self,ribi_t::none);
+				// air vehicles manage all tile reservations via block_reserver in
+				// set_convoi; reserving the occupied tile here would permanently lock
+				// taxiway tiles (which have no leave_tile unreservation path)
+				if(v->get_waytype() != air_wt) {
+					if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype()))) {
+						sch->reserve(self,ribi_t::none);
+					}
 				}
 				// add to crossing
 				if(crossing_t *cr = gr->get_crossing()) {
@@ -3589,7 +3625,7 @@ void convoi_t::rdwr(loadsave_t *file)
 void convoi_t::set_use_electric(bool y) {
 	convoihandle_t c = self;
 	while(c.is_bound()) {
-		c->use_electric = y&&!c->get_schedule()->is_no_use_electric();
+		c->use_electric = y && (!c->get_schedule() || !c->get_schedule()->is_no_use_electric());
 		c=c->get_coupling_convoi();
 	}
 }
@@ -3619,6 +3655,20 @@ void convoi_t::open_info_window()
 		}
 		create_win( new convoi_info_t(self), w_info, magic_convoi_info+self.get_id() );
 	}
+}
+
+
+const char* convoi_t::get_home_depot_name()
+{
+	grund_t* const g = welt->lookup(get_home_depot());
+	if(  !g  ) {
+		return "";
+	}
+	depot_t* const d = g->get_depot();
+	if(  !d  ) {
+		return "";
+	}
+	return d->get_name();
 }
 
 
@@ -4456,7 +4506,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 uint16 convoi_t::fetch_goods_and_load(vehicle_t* vehicle, const halthandle_t halt, const vector_tpl<halthandle_t> destination_halts, uint32 requested_amount) {
 	slist_tpl<ware_t> fetched_goods;
-	if(  welt->get_settings().get_first_come_first_serve()  ) {
+	if(  welt->get_settings().get_first_come_first_serve(vehicle->get_cargo_type()->get_catg_index())  ) {
 		halt->fetch_goods_FIFO(fetched_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
 	} else {
 		halt->fetch_goods_nearest_first(fetched_goods, vehicle->get_cargo_type(), requested_amount, destination_halts);
@@ -4986,7 +5036,7 @@ void convoi_t::register_stops()
 	if(  schedule  ) {
 		FOR(minivec_tpl<schedule_entry_t>, const& i, schedule->get_entries()) {
 			halthandle_t const halt = haltestelle_t::get_stoppable_halt(i.pos, get_owner(), front()->get_waytype());
-			if(  halt.is_bound()  ) {
+			if(  halt.is_bound()&&!i.is_pass_stop()  ) {
 				halt->add_convoy(self);
 			}
 		}
@@ -6088,7 +6138,7 @@ void convoi_t::check_electrification() {
 	convoihandle_t c = most_parent_convoi;
 	// Are there electric cars?
 	while(  c.is_bound()  &&  !is_electric  ) {
-		if(  !c->is_invalid_convoy() && !c->get_schedule()->is_no_use_electric()  ) {
+		if(  !c->is_invalid_convoy() && (!c->get_schedule() || !c->get_schedule()->is_no_use_electric())  ) {
 			for(uint8 i=0; i<c->get_vehicle_count(); i++) {
 				is_electric |= c->get_vehikel(i)->get_desc()->get_engine_type()==vehicle_desc_t::electric;
 			}
@@ -6099,7 +6149,7 @@ void convoi_t::check_electrification() {
 	need_electric = is_electric;
 	// If electric cars are, do they have other engine?
 	while(  c.is_bound()  &&  need_electric  ) {
-		if(  !c->is_invalid_convoy() && !c->get_schedule()->is_no_use_electric()  ) {
+		if(  !c->is_invalid_convoy() && (!c->get_schedule() || !c->get_schedule()->is_no_use_electric())  ) {
 			for(uint8 i=0;  i<c->get_vehicle_count();  i++) {
 				need_electric &= !(c->get_vehikel(i)->get_desc()->get_engine_type()!=vehicle_desc_t::electric && c->get_vehikel(i)->get_desc()->get_power()>0 );
 			}
@@ -6169,7 +6219,11 @@ void convoi_t::trade_convoi() {
 	}
 	// because next line's owner is invalid, unset it.
 	schedule->unset_next_line();
-	set_owner(welt->get_player(get_accept_player_nr()));
+	player_t* const new_owner = welt->get_player(get_accept_player_nr());
+	set_owner(new_owner);
+	for(  uint8 i=0;  i<get_vehicle_count();  i++  ) {
+		get_vehikel(i)->set_owner(new_owner);
+	}
 	register_stops();
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	set_permit_trade(false);
