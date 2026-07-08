@@ -67,6 +67,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_build_station", TOOL_BUILD_STATION | GENERAL_TOOL);
 	/// build signals and road signs
 	enum_slot(vm, "tool_build_roadsign", TOOL_BUILD_ROADSIGN | GENERAL_TOOL);
+	/// remove signals
+	enum_slot(vm, "tool_remove_signal", TOOL_REMOVE_SIGNAL | GENERAL_TOOL);
 	/// build depot
 	enum_slot(vm, "tool_build_depot", TOOL_BUILD_DEPOT | GENERAL_TOOL);
 	/// build city houses
@@ -93,6 +95,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_make_stop_public", TOOL_MAKE_STOP_PUBLIC | GENERAL_TOOL);
 	/// remove way objects like overheadwires
 	enum_slot(vm, "tool_remove_wayobj", TOOL_REMOVE_WAYOBJ | GENERAL_TOOL);
+	/// remove city buildings (not factories, attractions, halts, or cityhalls)
+	enum_slot(vm, "tool_remove_house", TOOL_REMOVE_HOUSE | GENERAL_TOOL);
 	// not needed? enum__slot(vm, "tool_sliced_and_underground_view", TOOL_SLICED_AND_UNDERGROUND_VIEW | GENERAL_TOOL);
 	/// buy a house
 	enum_slot(vm, "tool_buy_house", TOOL_BUY_HOUSE | GENERAL_TOOL);
@@ -104,6 +108,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_set_climate", TOOL_SET_CLIMATE | GENERAL_TOOL);
 	/// rotate a building
 	enum_slot(vm, "tool_rotate_building", TOOL_ROTATE_BUILDING | GENERAL_TOOL);
+	/// remove halt (two-click: ctrl=area, no ctrl/shift=route, drag=route)
+	enum_slot(vm, "tool_remove_halt", TOOL_REMOVE_HALT | GENERAL_TOOL);
 	/// merge two stops
 	enum_slot(vm, "tool_merge_stop", TOOL_MERGE_STOP | GENERAL_TOOL);
 	/// scripted tool (one-click)

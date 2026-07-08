@@ -384,6 +384,10 @@ private:
 	// can unload cargo even if stop length is too short
 	bool allow_unload_longer_convoy;
 
+	// Graphical and step offsets for reversing vehicles
+	// [direction][offset]: direction order matches ribi_t::dir, offsets are {x, y, length_steps}
+	sint8 reverse_base_offsets[8][3];
+	
 	// can build elevated way over other player's halt
 	bool allow_elevated_way_over_others_halt;
 
@@ -753,6 +757,9 @@ public:
 	void set_advance_to_end(bool b) { advance_to_end = b; }
 
 	bool get_first_come_first_serve() const { return first_come_first_serve; }
+	void set_first_come_first_serve(bool b) { first_come_first_serve = b; }
+	bool get_first_come_first_serve(uint8 goods_catg_index) const
+		{ return first_come_first_serve || get_time_based_routing_enabled(goods_catg_index); }
 	uint32 get_waiting_limit_for_first_come_first_serve() const 
 		{ return waiting_limit_for_first_come_first_serve; }
 
@@ -773,10 +780,13 @@ public:
 	bool is_default_reverse() const {return default_reverse;}
 	// allow unload longer convoy
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+	// get reverse base offsets for a given direction
+	const sint8* get_reverse_base_offsets(uint8 dir) const { return reverse_base_offsets[dir]; }
 
 	bool get_allow_elevated_way_over_others_halt() const { return allow_elevated_way_over_others_halt; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
+	void set_use_route_cache(bool b) { use_route_cache = b; }
 };
 
 #endif
