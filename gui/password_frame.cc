@@ -99,8 +99,10 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 		                               &&  welt->get_settings().get_allow_unlock_by_public();
 
 		if(  env_t::networkmode) {
-			// block public player from acting on locked player when allow_unlock_by_public is disabled
-			if(  player->is_locked()
+			// block public player bypass (empty hash = no password entered) when allow_unlock_by_public is disabled;
+			// a non-empty hash is a genuine password attempt and must reach the server for normal verification
+			if(  hash.empty()
+			     &&  player->is_locked()
 			     &&  welt->get_active_player_nr()==PUBLIC_PLAYER_NR
 			     &&  !welt->get_public_player()->is_locked()
 			     &&  !welt->get_settings().get_allow_unlock_by_public()  ) {
