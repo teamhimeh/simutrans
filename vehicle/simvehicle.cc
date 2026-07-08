@@ -2138,12 +2138,12 @@ uint32 vehicle_t::get_total_weight() const {
 	if(  welt->get_settings().is_overloaded_acceleration()  ) {
 		// even if not overcrowded, we always use the overcrowded weight
 		if(  uint32* val = full_load_weights.access(desc)  ) {
-			return *val*get_cargo_max()*max(max_load,100)/100;
+			return *val*max(max_load,100)/100;
 		} else {
 			// full load is not calculated. calculate and register.
 			const uint32 w = calc_full_load_weight(desc);
 			full_load_weights.put(desc, w);
-			return w*get_cargo_max()*max(max_load,100)/100;
+			return w*max(max_load,100)/100;
 		}
 	} else {
 		// we use 100% weight, if not overcrowded
