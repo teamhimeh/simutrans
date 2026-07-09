@@ -1095,7 +1095,7 @@ void settings_t::rdwr(loadsave_t *file)
 			signal_reverse_front_back = false;
 			roadsign_reverse_front_back = false;
 		}
-		if(  file->get_OTRP_version() >= 56  ) {
+		if(  file->get_OTRP_version() >= 57  ) {
 			file->rdwr_bool(allow_elevated_way_over_others_halt);
 		} else {
 			allow_elevated_way_over_others_halt = false;
