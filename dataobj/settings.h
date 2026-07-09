@@ -784,6 +784,7 @@ public:
 	const sint8* get_reverse_base_offsets(uint8 dir) const { return reverse_base_offsets[dir]; }
 
 	bool get_allow_elevated_way_over_others_halt() const { return allow_elevated_way_over_others_halt; }
+	void set_allow_elevated_way_over_others_halt(bool b) { allow_elevated_way_over_others_halt = b; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
 	void set_use_route_cache(bool b) { use_route_cache = b; }
