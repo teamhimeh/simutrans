@@ -4958,7 +4958,7 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 			}
 		}
 	}
-	if(  file->get_OTRP_version() >= 56  ) {
+	if(  file->get_OTRP_version() >= 57  ) {
 		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
 			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
 				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
@@ -5563,7 +5563,7 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 			restore_history(true);
 		}
 	}
-	if(  file->get_OTRP_version() >= 56  ) {
+	if(  file->get_OTRP_version() >= 57  ) {
 		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
 			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
 				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
