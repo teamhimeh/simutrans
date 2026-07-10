@@ -59,7 +59,9 @@ password_frame_t::password_frame_t( player_t *player ) :
 	const bool public_can_unlock = welt->get_settings().get_allow_unlock_by_public()
 	                               &&  welt->get_active_player_nr() == PUBLIC_PLAYER_NR
 	                               &&  !welt->get_public_player()->is_locked();
-	unlock_button.enable(  player->is_password_hash()  &&  ( (!player->is_locked()  &&  active_is_this)  ||  public_can_unlock) );
+	// use welt->is_player_password_set(): on a network client the local hash is not
+	// authoritative, the server reports the password-set state via nwc_auth_player_t
+	unlock_button.enable(  welt->is_player_password_set(player->get_player_nr())  &&  ( (!player->is_locked()  &&  active_is_this)  ||  public_can_unlock) );
 	add_component( &unlock_button, 2 );
 
 	reset_min_windowsize();
@@ -108,9 +110,12 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 			     &&  !welt->get_settings().get_allow_unlock_by_public()  ) {
 				return true;
 			}
+			// an unlocked player changes its own password; the public player (with
+			// allow_unlock_by_public) sets it by proxy; a locked player authenticates
+			const bool set_password = !player->is_locked()  ||  public_can_bypass;
 			player->unlock(!player->is_locked(), true);
 			// send hash to server: it will unlock player or change password
-			nwc_auth_player_t *nwc = new nwc_auth_player_t(player->get_player_nr(), hash);
+			nwc_auth_player_t *nwc = new nwc_auth_player_t(player->get_player_nr(), hash, set_password);
 			network_send_server(nwc);
 		}
 		else {
@@ -144,8 +149,10 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 		pwd_hash_t empty_hash;
 		welt->store_player_password_hash( player->get_player_nr(), empty_hash );
 		if(  env_t::networkmode  ) {
-			player->unlock(true, true);
-			nwc_auth_player_t *nwc = new nwc_auth_player_t(player->get_player_nr(), empty_hash);
+			player->unlock(false, true);
+			// request the server to clear the password: an unlocked owner passes the
+			// "change password" branch, the public player the set_password proxy branch
+			nwc_auth_player_t *nwc = new nwc_auth_player_t(player->get_player_nr(), empty_hash, true);
 			network_send_server(nwc);
 		}
 		else {

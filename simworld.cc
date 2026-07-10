@@ -2157,6 +2157,7 @@ karte_t::karte_t() :
 		players[i] = NULL;
 		player_password_hash[i].clear();
 	}
+	player_password_set_bits = 0;
 
 	// no distance to show at first ...
 	show_distance = koord3d::invalid;
@@ -3130,7 +3131,7 @@ void karte_t::set_tool( tool_t *tool_in, player_t *player )
 	// check for password-protected players
 	if(  (!tool_in->is_init_network_safe()  ||  !tool_in->is_work_network_safe())  &&  needs_check  &&
 		 !(tool_in->get_id()==(TOOL_CHANGE_PLAYER|SIMPLE_TOOL)  ||  tool_in->get_id()==(TOOL_ADD_MESSAGE | GENERAL_TOOL))  &&
-		 player  &&  player->is_locked()  ) {
+		 player  &&  !player_can_act_unrestricted(player)  ) {
 		// player is currently password protected => request unlock first
 		create_win( -1, -1, new password_frame_t(player), w_info, magic_pwd_t + player->get_player_nr() );
 		return;
@@ -7936,4 +7937,28 @@ const vector_tpl<const goods_desc_t*> &karte_t::get_goods_list()
 player_t *karte_t::get_public_player() const
 {
 	return get_player(1);
+}
+
+
+bool karte_t::player_can_act_unrestricted(player_t *player) const
+{
+	if (!player  ||  !player->is_locked()) {
+		return true;
+	}
+	// in network mode an unlocked public player can proxy-manage any locked company
+	return env_t::networkmode  &&  players[PUBLIC_PLAYER_NR]  &&  !players[PUBLIC_PLAYER_NR]->is_locked();
+}
+
+
+bool karte_t::is_player_password_set(uint8 player_nr) const
+{
+	if (player_nr >= PLAYER_UNOWNED) {
+		return false;
+	}
+	if (env_t::networkmode  &&  !env_t::server) {
+		// client: local hashes are not authoritative, use the state reported by the server
+		return (player_password_set_bits & (1<<player_nr)) != 0;
+	}
+	player_t *player = get_player(player_nr);
+	return player  &&  player->is_password_hash();
 }
