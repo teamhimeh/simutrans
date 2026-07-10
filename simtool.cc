@@ -2956,7 +2956,7 @@ bool tool_build_way_t::exit( player_t *player )
 
 void tool_build_way_t::draw_after(scr_coord k, bool dirty) const
 {
-	if(  desc  &&  (desc->get_waytype()==road_wt  ||  desc->get_styp()==type_elevated)  ) {
+	if(  desc  &&  (desc->get_waytype()==road_wt  ||  desc->is_elevated())  ) {
 		if(  icon!=IMG_EMPTY  &&  is_selected()  ) {
 			display_img_blend( icon, k.x, k.y, TRANSPARENT50_FLAG|OUTLINE_FLAG|color_idx_to_rgb(COL_BLACK), false, dirty );
 			char mode_str[8], offset_str[8];
@@ -2967,7 +2967,7 @@ void tool_build_way_t::draw_after(scr_coord k, bool dirty) const
 				display_proportional_rgb( k.x+4, k.y+4, mode_str, ALIGN_LEFT, color_idx_to_rgb(color), true );
 			}
 			// show height offset when height offset is set for this elevated way.
-			if(  desc->get_styp()==type_elevated  &&  height_offset!=0  ) {
+			if(  desc->is_elevated()  &&  height_offset!=0  ) {
 				sprintf(offset_str, "%d", height_offset);
 				display_proportional_rgb( k.x+28, k.y+4, offset_str, ALIGN_RIGHT, color_idx_to_rgb(COL_YELLOW), true );
 			}
@@ -2988,7 +2988,7 @@ waytype_t tool_build_way_t::get_waytype() const
 
 void tool_build_way_t::start_at( koord3d &new_start )
 {
-	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
+	if(  is_shift_pressed()  &&  desc->is_elevated()  ) {
 		grund_t *gr=welt->lookup(new_start);
 		if(  gr->get_weg( desc->get_waytype() )  ) {
 			new_start.z -= welt->get_settings().get_way_height_clearance();
@@ -3007,7 +3007,7 @@ uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, cons
 		if(  gr->get_typ() == grund_t::tunnelboden  &&  !gr->ist_karten_boden()  && !( desc->is_tram()  && ( gr->hat_weg(track_wt) || gr->hat_weg(road_wt) || gr->hat_weg(monorail_wt) || gr->hat_weg(maglev_wt) || gr->hat_weg(narrowgauge_wt) ) )  ) {
 			return 0;
 		}
-		bool const elevated = desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt;
+		bool const elevated = desc->is_elevated();
 		// ignore water
 		if(  desc->get_wtyp() != water_wt  &&  gr->get_typ() == grund_t::wasser  ) {
 			if(  !elevated  ||  welt->lookup_hgt( pos.get_2d() ) < welt->get_water_hgt( pos.get_2d() )  ) {
@@ -3072,7 +3072,7 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 		bautyp = way_builder_t::schiene_tram;
 	}
 	// elevated track?
-	if(desc->get_styp()==type_elevated  &&  desc->get_wtyp()!=air_wt) {
+	if(desc->is_elevated()) {
 		sint8 hf = height_offset;
 		tool_build_way_t* toolbar_tool;
 		if(  look_toolbar  &&  (toolbar_tool=get_build_way_tool_from_toolbar(desc))!=NULL  ) {
@@ -3097,7 +3097,7 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 
 	koord3d my_end = end;
 	// ending point is applied that elevated ways with SHIFT selects the current layer, when already on an elevated way
-	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
+	if(  is_shift_pressed()  &&  desc->is_elevated()  ) {
 		grund_t *gr=welt->lookup(my_end);
 		if(  gr->get_weg( desc->get_waytype() )  ) {
 			my_end.z -= welt->get_settings().get_way_height_clearance();
@@ -3165,7 +3165,7 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 		hf = toolbar_tool->get_height_offset();
 	}
 
-	uint8 offset = (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt) ? welt->get_settings().get_way_height_clearance() + hf : 0;
+	uint8 offset = desc->is_elevated() ? welt->get_settings().get_way_height_clearance() + hf : 0;
 
 	if(  bauigel.get_count()>1  ) {
 		// Set tooltip first (no dummygrounds, if bauigel.calc_casts() is called).

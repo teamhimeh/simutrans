@@ -2191,7 +2191,7 @@ uint32 ms = dr_time();
 		route_reversed = false;
 		keep_existing_city_roads |= (bautyp&bot_flag)!=0;
 		sint32 cost2;
-		if(desc->get_styp() == type_elevated) {
+		if(desc->is_elevated()) {
 			cost2 = intern_calc_route_elevated(start[0], ziel[0]);
 			INT_CHECK("wegbauer 1165");
 			if(cost2 < 0) {
@@ -2217,7 +2217,7 @@ uint32 ms = dr_time();
 		swap(terraform_index, terraform_index2);
 		route_reversed = true;
 		sint32 cost;
-		if(desc->get_styp() == type_elevated) {
+		if(desc->is_elevated()) {
 			cost = intern_calc_route_elevated(start[0], ziel[0]);
 		}
 		else {
