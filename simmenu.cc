@@ -123,6 +123,7 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_RECREATE_HALT_NAME);
 		CASE_TO_STRING(TOOL_CHANGE_WAY_SETTINGS);
 		CASE_TO_STRING(TOOL_CHANGE_WAY_OFFSET);
+		CASE_TO_STRING(TOOL_REMOVE_HOUSE);
 		}
 	}
 	else if (id & SIMPLE_TOOL) {
@@ -289,6 +290,7 @@ tool_t *create_general_tool(int toolnr)
 		case TOOL_RECREATE_HALT_NAME:          tool = new tool_recreate_halt_name_t();  break;
 		case TOOL_CHANGE_WAY_SETTINGS:         tool = new tool_change_way_settings_t(); break;
 		case TOOL_CHANGE_WAY_OFFSET:           tool = new tool_change_way_offset_t();  break;
+		case TOOL_REMOVE_HOUSE:                tool = new tool_remove_house_t();       break;
 		default:
 			dbg->error("create_general_tool()","cannot satisfy request for general_tool[%i]!",toolnr);
 			return NULL;
@@ -356,6 +358,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_FIX_GAME_SPEED:	 tool = new tool_fix_game_speed_t(); break;
 		case TOOL_SHOW_WAY_OFFSET_LABEL: tool = new tool_show_way_offset_label_t(); break;
 		case TOOL_SHOW_ONLY_OWN_VEHICLE_STATES:		tool = new tool_only_own_vehicle_states_t(); break;
+		case TOOL_FOLLOW_CONVOI_UNDERGROUND:		tool = new tool_follow_convoi_underground_t(); break;
 		default:                    dbg->error("create_simple_tool()","cannot satisfy request for simple_tool[%i]!",toolnr);
 		                            return NULL;
 	}
@@ -1438,6 +1441,15 @@ const char *two_click_tool_t::move(player_t *player, uint16 buttonstate, koord3d
 		if(tool_build_way_t* t = dynamic_cast<tool_build_way_t*>(this)) {
 			// This is tool_build_way_t. The mode selection window should not be called.
 			t->init( player, true );
+		} else if(tool_build_bridge_t* tb = dynamic_cast<tool_build_bridge_t*>(this)) {
+			// This is tool_build_bridge_t. The mode selection window should not be called.
+			tb->init( player, true );
+		} else if(tool_build_tunnel_t* tt = dynamic_cast<tool_build_tunnel_t*>(this)) {
+			// This is tool_build_tunnel_t. The mode selection window should not be called.
+			tt->init( player, true );
+		} else if(tool_build_wayobj_t* two = dynamic_cast<tool_build_wayobj_t*>(this)) {
+			// This is tool_build_wayobj_t. The mode selection window should not be called.
+			two->init( player, true );
 		} else {
 			init( player );
 		}
