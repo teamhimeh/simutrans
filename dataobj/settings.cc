@@ -1060,17 +1060,11 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_bool(overloading_revenue_reduced);
 			file->rdwr_bool(overloading_runningcost_increase);
 			file->rdwr_bool(default_reverse);
-			if(  file->get_OTRP_version() >= 56  ) {
-				file->rdwr_bool(overloaded_acceleration);
-			} else {
-				overloaded_acceleration = false;
-			}
 		} else {
 			allow_overloading = false;
 			overloading_revenue_reduced = false;
 			overloading_runningcost_increase = true;
 			default_reverse = false;
-			overloaded_acceleration = false;
 		}
 		if(  file->get_OTRP_version() >= 51  ) {
 			file->rdwr_bool(env_t::use_old_friction);
@@ -1100,6 +1094,11 @@ void settings_t::rdwr(loadsave_t *file)
 		} else {
 			signal_reverse_front_back = false;
 			roadsign_reverse_front_back = false;
+		}
+		if(  file->get_OTRP_version() >= 57  ) {
+			file->rdwr_bool(overloaded_acceleration);
+		} else {
+			overloaded_acceleration = false;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
