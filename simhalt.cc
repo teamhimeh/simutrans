@@ -1971,6 +1971,10 @@ void haltestelle_t::fill_connected_component(uint8 catg_idx, uint16 comp)
 	all_links[catg_idx].catg_connected_component = comp;
 
 	FOR(vector_tpl<connection_t>, &c, all_links[catg_idx].connections) {
+		// halt may have been deleted or joined => test if still valid
+		if(  !c.halt.is_bound()  ) {
+			continue;
+		}
 		c.halt->fill_connected_component(catg_idx, comp);
 		// cache the is_transfer value
 		c.is_transfer = c.halt->is_transfer(catg_idx);
