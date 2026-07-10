@@ -40,6 +40,85 @@
 
 static karte_ptr_t welt;
 
+// spacing_shift and delay_tolerance are stored as fractions of a month (0..spacing_shift_divisor),
+// which map linearly onto a virtual 24h day (86400 "seconds").
+static void linear_raw_to_hms(uint16 raw, uint16 divisor, uint8 &h, uint8 &m, uint8 &s)
+{
+	uint32 seconds = divisor>0 ? (uint32)( ((uint64)raw * 86400ull) / divisor ) : 0;
+	if(  seconds > 86400  ) {
+		seconds = 86400;
+	}
+	h = (uint8)(seconds / 3600);
+	m = (uint8)((seconds % 3600) / 60);
+	s = (uint8)(seconds % 60);
+}
+
+static uint16 linear_hms_to_raw(uint8 h, uint8 m, uint8 s, uint16 divisor)
+{
+	const uint32 seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	// round to nearest, since a divisor step may not evenly divide a second
+	const uint64 raw = ( (uint64)seconds * divisor + 43200ull ) / 86400ull;
+	return (uint16)min(raw, (uint64)0xFFFFu);
+}
+
+// waiting_time_shift is a frequency: the actual waiting period is (a virtual month)/waiting_time_shift.
+static void wait_raw_to_hms(uint16 raw, uint8 &h, uint8 &m, uint8 &s)
+{
+	const uint32 seconds = raw>0 ? 86400u / raw : 86400u;
+	h = (uint8)(seconds / 3600);
+	m = (uint8)((seconds % 3600) / 60);
+	s = (uint8)(seconds % 60);
+}
+
+static uint16 wait_hms_to_raw(uint8 h, uint8 m, uint8 s)
+{
+	const uint32 seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	if(  seconds == 0  ) {
+		// no waiting time requested -> shortest possible period
+		return 65535;
+	}
+	const uint32 raw = (86400u + seconds/2) / seconds; // round to nearest
+	return (uint16)clamp(raw, 1u, 65535u);
+}
+
+// Plain rounding can leave the raw value unchanged when a 1-second h:m:s edit is smaller than
+// one divisor step - which looks like the input did nothing. These variants compare against the
+// previously stored raw value and nudge the result by (at least) one step in the same direction
+// the requested time actually moved, so every edit is perceptible.
+static uint16 linear_hms_to_raw_monotonic(uint8 h, uint8 m, uint8 s, uint16 divisor, uint16 old_raw)
+{
+	const uint32 new_seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	uint8 oh, om, os;
+	linear_raw_to_hms(old_raw, divisor, oh, om, os);
+	const uint32 old_seconds = (uint32)oh*3600u + (uint32)om*60u + (uint32)os;
+	uint16 new_raw = linear_hms_to_raw(h, m, s, divisor);
+	if(  new_seconds > old_seconds  &&  new_raw <= old_raw  ) {
+		new_raw = (uint16)min((uint32)old_raw+1u, (uint32)divisor);
+	}
+	else if(  new_seconds < old_seconds  &&  new_raw >= old_raw  &&  old_raw>0  ) {
+		new_raw = old_raw-1;
+	}
+	return new_raw;
+}
+
+// waiting_time_shift is inverse to time (bigger raw = shorter wait), so "later" h:m:s must
+// translate to a *smaller* raw value, and vice versa.
+static uint16 wait_hms_to_raw_monotonic(uint8 h, uint8 m, uint8 s, uint16 old_raw)
+{
+	const uint32 new_seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	uint8 oh, om, os;
+	wait_raw_to_hms(old_raw, oh, om, os);
+	const uint32 old_seconds = (uint32)oh*3600u + (uint32)om*60u + (uint32)os;
+	uint16 new_raw = wait_hms_to_raw(h, m, s);
+	if(  new_seconds > old_seconds  &&  new_raw >= old_raw  &&  old_raw>1  ) {
+		new_raw = old_raw-1;
+	}
+	else if(  new_seconds < old_seconds  &&  new_raw <= old_raw  ) {
+		new_raw = (uint16)min((uint32)old_raw+1u, 65535u);
+	}
+	return new_raw;
+}
+
 /**
  * One entry in the list of schedule entries.
  */
@@ -488,9 +567,38 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		numimp_wait_load.add_listener(this);
 		add_component(&numimp_wait_load);
 		end_table();
-		sprintf(lb_wait_load_time_str,"");
-		lb_wait_load_time.set_text_pointer(lb_wait_load_time_str);
-		add_component(&lb_wait_load_time);
+
+		add_table(6, 1);
+		{
+			numimp_wait_load_divisor.set_width( 60 );
+			numimp_wait_load_divisor.set_value( 0 );
+			numimp_wait_load_divisor.set_limits( 0, world()->get_settings().get_spacing_shift_divisor() );
+			numimp_wait_load_divisor.set_increment_mode(1);
+			numimp_wait_load_divisor.add_listener(this);
+			numimp_wait_load_divisor.disable();
+			add_component(&numimp_wait_load_divisor);
+
+			numimp_wait_load_h.init(0, 0, 24, 1, true, 2);
+			numimp_wait_load_h.set_width(35);
+			numimp_wait_load_h.add_listener(this);
+			numimp_wait_load_h.disable();
+			add_component(&numimp_wait_load_h);
+			lb_wait_load_colon1 = new_component<gui_label_t>(":");
+			lb_wait_load_colon1->set_visible(true);
+			numimp_wait_load_m.init(0, 0, 59, 1, true, 2);
+			numimp_wait_load_m.set_width(35);
+			numimp_wait_load_m.add_listener(this);
+			numimp_wait_load_m.disable();
+			add_component(&numimp_wait_load_m);
+			lb_wait_load_colon2 = new_component<gui_label_t>(":");
+			lb_wait_load_colon2->set_visible(true);
+			numimp_wait_load_s.init(0, 0, 59, 1, true, 2);
+			numimp_wait_load_s.set_width(35);
+			numimp_wait_load_s.add_listener(this);
+			numimp_wait_load_s.disable();
+			add_component(&numimp_wait_load_s);
+		}
+		end_table();
 
 		// load and unload settings
 		bt_no_load.init(button_t::square_state, "No Load");
@@ -676,10 +784,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		lb_spacing.set_text_pointer(lb_spacing_str);
 		add_component(&lb_spacing);
 		
-		lb_spacing_shift.set_align(gui_label_t::align_t::centered);
-		sprintf(lb_spacing_shift_str,"");
-		lb_spacing_shift.set_text_pointer(lb_spacing_shift_str);
-		add_component(&lb_spacing_shift);
+		add_component(&sp_departure_settings);
 		
 		lb_title1.set_text("Spacing cnv/month, shift");
 		add_component(&lb_title1);
@@ -694,24 +799,72 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		numimp_spacing.add_listener(this);
 		add_component(&numimp_spacing);
 		
-		numimp_spacing_shift.set_width( 90 );
-		numimp_spacing_shift.set_value( 0 );
-		numimp_spacing_shift.set_limits( 0, spacing_divisor );
-		numimp_spacing_shift.set_increment_mode(1);
-		numimp_spacing_shift.add_listener(this);
-		numimp_spacing_shift.disable();
-		add_component(&numimp_spacing_shift);
-		
+		add_table(6, 1);
+		{
+			numimp_spacing_shift.set_width( 60 );
+			numimp_spacing_shift.set_value( 0 );
+			numimp_spacing_shift.set_limits( 0, spacing_divisor );
+			numimp_spacing_shift.set_increment_mode(1);
+			numimp_spacing_shift.add_listener(this);
+			numimp_spacing_shift.disable();
+			add_component(&numimp_spacing_shift);
+
+			numimp_spacing_shift_h.init(0, 0, 24, 1, true, 2);
+			numimp_spacing_shift_h.set_width(35);
+			numimp_spacing_shift_h.add_listener(this);
+			numimp_spacing_shift_h.disable();
+			add_component(&numimp_spacing_shift_h);
+			lb_spacing_shift_colon1 = new_component<gui_label_t>(":");
+			lb_spacing_shift_colon1->set_visible(false);
+			numimp_spacing_shift_m.init(0, 0, 59, 1, true, 2);
+			numimp_spacing_shift_m.set_width(35);
+			numimp_spacing_shift_m.add_listener(this);
+			numimp_spacing_shift_m.disable();
+			add_component(&numimp_spacing_shift_m);
+			lb_spacing_shift_colon2 = new_component<gui_label_t>(":");
+			lb_spacing_shift_colon2->set_visible(false);
+			numimp_spacing_shift_s.init(0, 0, 59, 1, true, 2);
+			numimp_spacing_shift_s.set_width(35);
+			numimp_spacing_shift_s.add_listener(this);
+			numimp_spacing_shift_s.disable();
+			add_component(&numimp_spacing_shift_s);
+		}
+		end_table();
+
 		lb_title2.set_text("Delay tolerance");
 		add_component(&lb_title2);
-		
-		numimp_delay_tolerance.set_width( 90 );
-		numimp_delay_tolerance.set_value( 0 );
-		numimp_delay_tolerance.set_increment_mode(1);
-		numimp_delay_tolerance.disable();
-		numimp_delay_tolerance.add_listener(this);
-		add_component(&numimp_delay_tolerance);
-		
+
+		add_table(6, 1);
+		{
+			numimp_delay_tolerance.set_width( 60 );
+			numimp_delay_tolerance.set_value( 0 );
+			numimp_delay_tolerance.set_increment_mode(1);
+			numimp_delay_tolerance.disable();
+			numimp_delay_tolerance.add_listener(this);
+			add_component(&numimp_delay_tolerance);
+
+			numimp_delay_tolerance_h.init(0, 0, 24, 1, true, 2);
+			numimp_delay_tolerance_h.set_width(35);
+			numimp_delay_tolerance_h.add_listener(this);
+			numimp_delay_tolerance_h.disable();
+			add_component(&numimp_delay_tolerance_h);
+			lb_delay_tolerance_colon1 = new_component<gui_label_t>(":");
+			lb_delay_tolerance_colon1->set_visible(false);
+			numimp_delay_tolerance_m.init(0, 0, 59, 1, true, 2);
+			numimp_delay_tolerance_m.set_width(35);
+			numimp_delay_tolerance_m.add_listener(this);
+			numimp_delay_tolerance_m.disable();
+			add_component(&numimp_delay_tolerance_m);
+			lb_delay_tolerance_colon2 = new_component<gui_label_t>(":");
+			lb_delay_tolerance_colon2->set_visible(false);
+			numimp_delay_tolerance_s.init(0, 0, 59, 1, true, 2);
+			numimp_delay_tolerance_s.set_width(35);
+			numimp_delay_tolerance_s.add_listener(this);
+			numimp_delay_tolerance_s.disable();
+			add_component(&numimp_delay_tolerance_s);
+		}
+		end_table();
+
 		add_component(&sp_departure_settings);
 
 		// departure setting detail
@@ -850,6 +1003,10 @@ void schedule_gui_t::update_selection()
 	// First, disable all.
 	lb_wait.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 	numimp_wait_load.disable();
+	numimp_wait_load_h.disable();
+	numimp_wait_load_m.disable();
+	numimp_wait_load_s.disable();
+	numimp_wait_load_divisor.disable();
 	bt_wait_load.disable();
 	lb_load.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 	numimp_load.disable();
@@ -866,7 +1023,17 @@ void schedule_gui_t::update_selection()
 	bt_wait_coupling_done.disable();
 	numimp_spacing.disable();
 	numimp_spacing_shift.disable();
+	numimp_spacing_shift_h.disable();
+	numimp_spacing_shift_m.disable();
+	numimp_spacing_shift_s.disable();
+	lb_spacing_shift_colon1->set_visible(false);
+	lb_spacing_shift_colon2->set_visible(false);
 	numimp_delay_tolerance.disable();
+	numimp_delay_tolerance_h.disable();
+	numimp_delay_tolerance_m.disable();
+	numimp_delay_tolerance_s.disable();
+	lb_delay_tolerance_colon1->set_visible(false);
+	lb_delay_tolerance_colon2->set_visible(false);
 	bt_load_before_departure.disable();
 	bt_transfer_interval.disable();
 	bt_reverse_convoy.disable();
@@ -963,21 +1130,35 @@ void schedule_gui_t::update_selection()
 				uint8 minute = (second - hour * 3600)/60;
 				second = second % 60;
 				sprintf(lb_spacing_str, "%d (%02d:%02d:%02d)", divisor/schedule->at(current_stop).spacing,hour,minute,second);
-
-				uint32 second_shift = schedule->at(current_stop).spacing_shift * month_ratio_second;
-				uint8 hour_shift = second_shift/3600;
-				uint8 minute_shift = (second_shift - hour_shift * 3600)/60;
-				second_shift = second_shift % 60;
-				sprintf(lb_spacing_shift_str, "(%02d:%02d:%02d)", hour_shift,minute_shift,second_shift);
 				numimp_spacing.enable();
 				numimp_spacing_shift.enable();
+				numimp_spacing_shift_h.enable();
+				numimp_spacing_shift_m.enable();
+				numimp_spacing_shift_s.enable();
 				numimp_delay_tolerance.enable();
+				numimp_delay_tolerance_h.enable();
+				numimp_delay_tolerance_m.enable();
+				numimp_delay_tolerance_s.enable();
 				bt_load_before_departure.enable();
 				bt_wait_coupling_done.enable(); // this button is always enable because waiting convoy is not always itself(child convoy also can be wait for coupling).
 				bt_wait_coupling_done.pressed = schedule->at(current_stop).is_wait_coupling_done();
 			} else {
 				sprintf(lb_spacing_str, "off");
-				sprintf(lb_spacing_shift_str,"");
+			}
+			// recalculate the h:m:s fields from the raw values, since the raw value is authoritative
+			// and the h:m:s input may not represent it exactly (rounding).
+			{
+				const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+				uint8 h, m, s;
+				linear_raw_to_hms( schedule->at(current_stop).spacing_shift, divisor, h, m, s );
+				numimp_spacing_shift_h.set_value( h );
+				numimp_spacing_shift_m.set_value( m );
+				numimp_spacing_shift_s.set_value( s );
+
+				linear_raw_to_hms( schedule->at(current_stop).delay_tolerance, divisor, h, m, s );
+				numimp_delay_tolerance_h.set_value( h );
+				numimp_delay_tolerance_m.set_value( m );
+				numimp_delay_tolerance_s.set_value( s );
 			}
 			lb_load.set_color( SYSCOL_TEXT );
 			numimp_load.enable();
@@ -999,23 +1180,35 @@ void schedule_gui_t::update_selection()
 				if(  wait>0  ) {
 					lb_wait.set_color( SYSCOL_TEXT );
 					numimp_wait_load.enable();
+					numimp_wait_load_h.enable();
+					numimp_wait_load_m.enable();
+					numimp_wait_load_s.enable();
+					numimp_wait_load_divisor.enable();
 					if(  schedule->at(current_stop).minimum_loading  >  100  ){
 						bt_load_before_departure.enable();
 					}
-					const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
-					const uint16 month_ratio_second = 86400/divisor;
-					uint32 second = (86400/wait)/month_ratio_second*month_ratio_second;
-					uint8 hour = second/3600;
-					uint8 minute = (second - hour * 3600)/60;
-					second = second % 60;
-					sprintf(lb_wait_load_time_str, "%d (%02d:%02d:%02d)", divisor/wait,hour,minute,second);
+
+					// recalculate the h:m:s fields from the raw value (authoritative), since
+					// the raw <-> h:m:s conversion is not always exact.
+					uint8 h, m, s;
+					wait_raw_to_hms( wait, h, m, s );
+					numimp_wait_load_h.set_value( h );
+					numimp_wait_load_m.set_value( m );
+					numimp_wait_load_s.set_value( s );
+					numimp_wait_load_divisor.set_value( linear_hms_to_raw( h, m, s, world()->get_settings().get_spacing_shift_divisor() ) );
 				} else {
-					sprintf(lb_wait_load_time_str,"");
+					numimp_wait_load_h.disable();
+					numimp_wait_load_m.disable();
+					numimp_wait_load_s.disable();
+					numimp_wait_load_divisor.disable();
 				}
 			} else {
-				sprintf(lb_wait_load_time_str,"");
+				numimp_wait_load_h.disable();
+				numimp_wait_load_m.disable();
+				numimp_wait_load_s.disable();
+				numimp_wait_load_divisor.disable();
 			}
-			
+
 			numimp_load.set_value( schedule->at(current_stop).minimum_loading );
 			numimp_wait_load.set_value( max(1, schedule->at(current_stop).waiting_time_shift) );
 			numimp_spacing.set_value( schedule->at(current_stop).spacing );
@@ -1226,6 +1419,23 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
+	else if(  (comp == &numimp_wait_load_h  ||  comp == &numimp_wait_load_m  ||  comp == &numimp_wait_load_s)  &&  bt_wait_load.pressed  ) {
+		if(!schedule->empty()) {
+			schedule_entry_t &entry = schedule->at(schedule->get_current_stop());
+			entry.waiting_time_shift = wait_hms_to_raw_monotonic( (uint8)numimp_wait_load_h.get_value(), (uint8)numimp_wait_load_m.get_value(), (uint8)numimp_wait_load_s.get_value(), entry.waiting_time_shift );
+			update_selection();
+		}
+	}
+	else if(comp == &numimp_wait_load_divisor && bt_wait_load.pressed) {
+		if(!schedule->empty()) {
+			schedule_entry_t &entry = schedule->at(schedule->get_current_stop());
+			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+			uint8 h, m, s;
+			linear_raw_to_hms( (uint16)p.i, divisor, h, m, s );
+			entry.waiting_time_shift = wait_hms_to_raw_monotonic( h, m, s, entry.waiting_time_shift );
+			update_selection();
+		}
+	}
 	else if(comp == &bt_uncouple_child) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_uncouple_child(!bt_uncouple_child.pressed);
@@ -1375,12 +1585,36 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
+	else if(  comp == &numimp_spacing_shift_h  ||  comp == &numimp_spacing_shift_m  ||  comp == &numimp_spacing_shift_s  ) {
+		if (!schedule->empty()) {
+			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+			const uint16 raw = linear_hms_to_raw_monotonic( (uint8)numimp_spacing_shift_h.get_value(), (uint8)numimp_spacing_shift_m.get_value(), (uint8)numimp_spacing_shift_s.get_value(), divisor, schedule->at(schedule->get_current_stop()).spacing_shift );
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_spacing_shift_for_all(raw);
+			} else {
+				schedule->at(schedule->get_current_stop()).spacing_shift = raw;
+			}
+			update_selection();
+		}
+	}
 	else if(comp == &numimp_delay_tolerance) {
 		if (!schedule->empty()) {
 			if(  schedule->is_same_dep_time()  ) {
 				schedule->set_delay_tolerance_for_all((uint16)p.i);
 			} else {
 				schedule->at(schedule->get_current_stop()).delay_tolerance = (uint16)p.i;
+			}
+			update_selection();
+		}
+	}
+	else if(  comp == &numimp_delay_tolerance_h  ||  comp == &numimp_delay_tolerance_m  ||  comp == &numimp_delay_tolerance_s  ) {
+		if (!schedule->empty()) {
+			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+			const uint16 raw = linear_hms_to_raw_monotonic( (uint8)numimp_delay_tolerance_h.get_value(), (uint8)numimp_delay_tolerance_m.get_value(), (uint8)numimp_delay_tolerance_s.get_value(), divisor, schedule->at(schedule->get_current_stop()).delay_tolerance );
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_delay_tolerance_for_all(raw);
+			} else {
+				schedule->at(schedule->get_current_stop()).delay_tolerance = raw;
 			}
 			update_selection();
 		}
@@ -1782,12 +2016,21 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	bt_extract_driving_settings.set_typ(yesno ? button_t::arrowup : button_t::arrowdown);
 	bt_wait_for_time.set_visible(yesno);
 	lb_spacing.set_visible(yesno);
-	lb_spacing_shift.set_visible(yesno);
 	lb_title1.set_visible(yesno);
 	lb_title2.set_visible(yesno);
 	numimp_spacing.set_visible(yesno);
 	numimp_spacing_shift.set_visible(yesno);
+	numimp_spacing_shift_h.set_visible(yesno);
+	numimp_spacing_shift_m.set_visible(yesno);
+	numimp_spacing_shift_s.set_visible(yesno);
+	lb_spacing_shift_colon1->set_visible(yesno);
+	lb_spacing_shift_colon2->set_visible(yesno);
 	numimp_delay_tolerance.set_visible(yesno);
+	numimp_delay_tolerance_h.set_visible(yesno);
+	numimp_delay_tolerance_m.set_visible(yesno);
+	numimp_delay_tolerance_s.set_visible(yesno);
+	lb_delay_tolerance_colon1->set_visible(yesno);
+	lb_delay_tolerance_colon2->set_visible(yesno);
 	bt_same_dep_time.set_visible(yesno);
 	bt_load_before_departure.set_visible(yesno);
 	bt_max_speed_kmh_of_convoi.set_visible(yesno);
