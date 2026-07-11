@@ -2134,13 +2134,27 @@ uint32 vehicle_t::get_total_weight() const {
 		return sum_weight;
 	}
 	// use full load weight
-	if(  uint32* val = full_load_weights.access(desc)  ) {
-		return *val*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+	uint8 const max_load = cnv->get_schedule()->get_count()>0? cnv->get_schedule()->at(cnv->get_schedule()->get_current_stop()>0?cnv->get_schedule()->get_current_stop()-1:cnv->get_schedule()->get_count()-1).maximum_loading:100; 
+	if(  welt->get_settings().is_overloaded_acceleration()  ) {
+		// even if not overcrowded, we always use the overcrowded weight
+		if(  uint32* val = full_load_weights.access(desc)  ) {
+			return *val*max(max_load,100)/100;
+		} else {
+			// full load is not calculated. calculate and register.
+			const uint32 w = calc_full_load_weight(desc);
+			full_load_weights.put(desc, w);
+			return w*max(max_load,100)/100;
+		}
 	} else {
-		// full load is not calculated. calculate and register.
-		const uint32 w = calc_full_load_weight(desc);
-		full_load_weights.put(desc, w);
-		return w*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+		// we use 100% weight, if not overcrowded
+		if(  uint32* val = full_load_weights.access(desc)  ) {
+			return *val*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+		} else {
+			// full load is not calculated. calculate and register.
+			const uint32 w = calc_full_load_weight(desc);
+			full_load_weights.put(desc, w);
+			return w*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+		}
 	}
 }
 

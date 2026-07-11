@@ -124,6 +124,7 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_CHANGE_WAY_SETTINGS);
 		CASE_TO_STRING(TOOL_CHANGE_WAY_OFFSET);
 		CASE_TO_STRING(TOOL_REMOVE_HOUSE);
+		CASE_TO_STRING(TOOL_REMOVE_PILLAR);
 		}
 	}
 	else if (id & SIMPLE_TOOL) {
@@ -291,6 +292,7 @@ tool_t *create_general_tool(int toolnr)
 		case TOOL_CHANGE_WAY_SETTINGS:         tool = new tool_change_way_settings_t(); break;
 		case TOOL_CHANGE_WAY_OFFSET:           tool = new tool_change_way_offset_t();  break;
 		case TOOL_REMOVE_HOUSE:                tool = new tool_remove_house_t();       break;
+		case TOOL_REMOVE_PILLAR:               tool = new tool_remove_pillar_t();      break;
 		default:
 			dbg->error("create_general_tool()","cannot satisfy request for general_tool[%i]!",toolnr);
 			return NULL;
@@ -353,6 +355,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_SENDING_MONEY:             tool = new tool_sending_money_t(); break;
 		case TOOL_MERGE_PLAYER:      tool = new tool_merge_player_t(); break;
 		case TOOL_CHANGE_HALT:       tool = new tool_change_halt_t(); break;
+		case TOOL_HALT_PERMISSION:   tool = new tool_change_permission_t(); break;
 		case TOOL_CHANGE_FACTORY:	 tool = new tool_change_factory_t(); break;
 		case TOOL_RESET_GAME_SPEED:	 tool = new tool_reset_game_speed_t(); break;
 		case TOOL_FIX_GAME_SPEED:	 tool = new tool_fix_game_speed_t(); break;

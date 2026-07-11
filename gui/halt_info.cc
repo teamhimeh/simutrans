@@ -209,7 +209,9 @@ private:
 	uint32 cached_convoy_count;
 
 	halthandle_t halt;
+	uint16 halt_permissions;
 	button_t other_players_connection_button;
+	button_t connected_players[MAX_PLAYER_COUNT];
 	button_t bt_no_handle_pax, bt_no_handle_post, bt_no_handle_ware;
 	button_t bt_allow_unload_longer_convoy;
 
@@ -238,9 +240,13 @@ public:
 		last_connection_update_counter = 0xFF;
 		cached_line_count = 0xFFFFFFFFul;
 		cached_convoy_count = 0xFFFFFFFFul;
+		halt_permissions = 0;
 		halt = h;
-		other_players_connection_button.init(button_t::square, "Allow other players to connect");
+		other_players_connection_button.init(button_t::square_automatic, "Allow other players");
 		other_players_connection_button.add_listener(this);
+		for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+			connected_players[i].add_listener(this);
+		}
 		bt_no_handle_pax.init(button_t::square, "Passagiere");
 		bt_no_handle_pax.add_listener(this);
 		bt_no_handle_post.init(button_t::square, "Post");
@@ -635,9 +641,15 @@ void halt_info_t::draw(scr_coord pos, scr_size size)
 
 void gui_halt_detail_t::update_button_states()
 {
-	other_players_connection_button.set_visible(!halt->get_owner()->is_public_service());
-	other_players_connection_button.enable(player_t::check_owner(halt->get_owner(), world()->get_active_player()));
-	other_players_connection_button.pressed = halt->is_other_player_connection_allowed();
+	// Update per-player permission button states
+	const bool allow_change = player_t::check_owner(halt->get_owner(), world()->get_active_player());
+	const bool allow_all = halt->is_allow_other_player_connection();
+	other_players_connection_button.enable(allow_change);
+	other_players_connection_button.pressed = allow_all;
+	for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		connected_players[i].enable(allow_change && !allow_all);
+		connected_players[i].pressed = halt->get_permissions() & (1 << i);
+	}
 	bt_no_handle_pax.set_visible(true);
 	bt_no_handle_post.set_visible(true);
 	bt_no_handle_ware.set_visible(true);
@@ -665,11 +677,29 @@ void gui_halt_detail_t::update_button_states()
 
 bool gui_halt_detail_t::action_triggered(gui_action_creator_t *comp, value_t)
 {
-	if(comp == &other_players_connection_button) {
+	if(  comp == &other_players_connection_button  ) {
 		cbuffer_t buf;
 		buf.printf("c,%u", halt.get_id());
 		tool_t::simple_tool[TOOL_CHANGE_HALT]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_CHANGE_HALT], world()->get_active_player());
+		return true;
+	}
+	// Check if a permission button was clicked
+	bool perm_changed = false;
+	uint16 new_perms = 0;
+	for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+		if(  comp == &connected_players[i]  ) {
+			perm_changed = true;
+		}
+		if(  connected_players[i].pressed  ) {
+			new_perms |= (1 << i);
+		}
+	}
+	if(  perm_changed  ) {
+		cbuffer_t buf;
+		buf.printf("%u,%u", halt.get_id(), (uint32)new_perms);
+		tool_t::simple_tool[TOOL_HALT_PERMISSION]->set_default_param(buf);
+		world()->set_tool(tool_t::simple_tool[TOOL_HALT_PERMISSION], world()->get_active_player());
 	}
 	else if(comp == &bt_no_handle_pax) {
 		cbuffer_t buf;
@@ -710,21 +740,49 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 
 	if(  halt->get_reconnect_counter()==destination_counter  &&
 		 halt->get_connection_update_counter()==last_connection_update_counter  &&
+		 halt->get_permissions()==halt_permissions  &&
 		 halt->registered_lines.get_count()==cached_line_count  &&  halt->registered_convoys.get_count()==cached_convoy_count  ) {
 		// all current, so do nothing
 		return;
 	}
+
+	halt_permissions = halt->get_permissions();
 
 	// update connections from here
 	remove_all();
 
 	set_table_layout(2,0);
 
-	// settings buttons spanning both columns
-	{
-		gui_aligned_container_t *row = new_component_span<gui_aligned_container_t>(2);
-		row->set_table_layout(1, 0);
-		row->add_component(&other_players_connection_button);
+	// Per-player stop permissions (shown only for non-public halts)
+	if(  !halt->get_owner()->is_public_service()  ) {
+		{
+			gui_aligned_container_t *row = new_component_span<gui_aligned_container_t>(2);
+			row->set_table_layout(1, 0);
+			row->add_component(&other_players_connection_button);
+		}
+
+		int how_many = 0;
+		for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+			if(  player_t *pl = world()->get_player(i)  ) {
+				if(  pl == halt->get_owner()  ) { continue; }
+				connected_players[i].init(button_t::square_automatic, pl->get_name());
+				connected_players[i].text_color = PLAYER_FLAG | color_idx_to_rgb(pl->get_player_color1() + env_t::gui_player_color_dark);
+				connected_players[i].pressed = halt_permissions & (1 << i);
+				connected_players[i].enable(!halt->is_allow_other_player_connection());
+				how_many++;
+			}
+		}
+		if(  how_many > 0  ) {
+			gui_aligned_container_t *t = new_component_span<gui_aligned_container_t>(2);
+			t->set_table_layout(2, 0);
+			t->new_component_span<gui_label_t>("Stopping permissions", 2);
+			for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+				if(  player_t *pl = world()->get_player(i)  ) {
+					if(  pl == halt->get_owner()  ) { continue; }
+					t->add_component(&connected_players[i]);
+				}
+			}
+		}
 	}
 	{
 		gui_aligned_container_t *row = new_component_span<gui_aligned_container_t>(2);

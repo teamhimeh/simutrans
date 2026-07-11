@@ -102,6 +102,7 @@ public:
 
 	#define MAX_WORLD_HISTORY_YEARS   (12) // number of years to keep history
 	#define MAX_WORLD_HISTORY_MONTHS  (12) // number of months to keep history
+	#define MAX_WORLD_HISTORY_DECADES (12) // number of decades to keep history
 
 	enum {
 		NORMAL       = 0,
@@ -311,6 +312,11 @@ private:
 	sint64 finance_history_month[MAX_WORLD_HISTORY_MONTHS][MAX_WORLD_COST];
 
 	/**
+	 * The recorded history so far (one entry per decade).
+	 */
+	sint64 finance_history_decade[MAX_WORLD_HISTORY_DECADES][MAX_WORLD_COST];
+
+	/**
 	 * World record speed manager.
 	 * Keeps track of the fastest vehicles in game.
 	 */
@@ -443,6 +449,12 @@ private:
 	 * Locally stored password hashes, will be used after reconnect to a server.
 	 */
 	pwd_hash_t player_password_hash[MAX_PLAYER_COUNT];
+
+	/**
+	 * Network client only: bitmask of players that have a password stored on the server
+	 * (bit i = player i). Updated by nwc_auth_player_t; not saved.
+	 */
+	uint16 player_password_set_bits;
 	/** @} */
 
 	/**
@@ -830,6 +842,16 @@ public:
 	const sint64* get_finance_history_month() const { return *finance_history_month; }
 
 	/**
+	 * Returns the decade finance history for world.
+	 */
+	sint64 get_finance_history_decade(int decade, int type) const { return finance_history_decade[decade][type]; }
+
+	/**
+	 * Returns pointer to decade finance history for world.
+	 */
+	const sint64* get_finance_history_decade() const { return *finance_history_decade; }
+
+	/**
 	 * Recalcs all map images.
 	 */
 	void update_map();
@@ -930,6 +952,23 @@ public:
 	* @return the default public service player
 	*/
 	player_t *get_public_player() const;
+
+	/**
+	 * Returns true when the given player can act without entering a password:
+	 * either the player is not locked, or (in network mode) the public player
+	 * is unlocked and can proxy-manage any company.
+	 */
+	bool player_can_act_unrestricted(player_t *player) const;
+
+	/**
+	 * Returns true when the given player has a password set.
+	 * Offline and on the server this checks the actual hash; on a network
+	 * client it uses the state reported by the server via nwc_auth_player_t.
+	 */
+	bool is_player_password_set(uint8 player_nr) const;
+
+	/// network client only: store password-set state received from the server
+	void set_player_password_set_bits(uint16 bits) { player_password_set_bits = bits; }
 
 	/**
 	 * Network safe initiation of new and deletion of players, change freeplay.

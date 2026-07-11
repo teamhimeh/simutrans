@@ -248,6 +248,8 @@ settings_t::settings_t() :
 	// off
 	unprotect_abandoned_player_months = 0;
 
+	allow_unlock_by_public = true;
+
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
 	way_toll_waycost_percentage = 0;
@@ -303,6 +305,7 @@ settings_t::settings_t() :
 	avoid_overcrowding = false;
 	overloading_revenue_reduced = false;
 	overloading_runningcost_increase = true;
+	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
 
@@ -343,6 +346,7 @@ settings_t::settings_t() :
 	default_reverse=false;
 	allow_unload_longer_convoy=false;
 	allow_higher_flight = true;
+	allow_elevated_way_over_others_halt = false;
 
 	use_route_cache = false;
 }
@@ -1094,6 +1098,15 @@ void settings_t::rdwr(loadsave_t *file)
 			signal_reverse_front_back = false;
 			roadsign_reverse_front_back = false;
 		}
+		if(  file->get_OTRP_version() >= 57  ) {
+			file->rdwr_bool(allow_unlock_by_public);
+			file->rdwr_bool(allow_elevated_way_over_others_halt);
+			file->rdwr_bool(overloaded_acceleration);
+		} else {
+			allow_unlock_by_public = true;
+			allow_elevated_way_over_others_halt = false;
+			overloaded_acceleration = false;
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
@@ -1588,6 +1601,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	allow_overloading					 = contents.get_int( "allow_overloading", allow_overloading) != 0;
 	overloading_revenue_reduced 		 = contents.get_int( "overloading_revenue_reduced", overloading_revenue_reduced) != 0;
 	overloading_runningcost_increase	 = contents.get_int( "overloading_runningcost_increase", overloading_runningcost_increase) != 0;
+	overloaded_acceleration				 = contents.get_int( "overloaded_acceleration", overloaded_acceleration ) != 0;
 
 	// city stuff
 	passenger_multiplier   = contents.get_int_clamped( "passenger_multiplier",   passenger_multiplier,   0, 100 );
@@ -1728,6 +1742,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// .. read twice: old and correct spelling
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abondoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abandoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
+	allow_unlock_by_public = contents.get_int( "allow_unlock_by_public", allow_unlock_by_public ) != 0;
 	default_player_color_random       = contents.get_int( "random_player_colors", default_player_color_random ) != 0;
 
 	for( int i = 0; i < MAX_PLAYER_COUNT; i++ ) {
@@ -1947,6 +1962,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	
 	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
 	use_route_cache = contents.get_int("use_route_cache", use_route_cache);
+	allow_elevated_way_over_others_halt = contents.get_int("allow_elevated_way_over_others_halt", allow_elevated_way_over_others_halt) != 0;
 
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);
