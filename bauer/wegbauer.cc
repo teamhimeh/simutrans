@@ -486,8 +486,8 @@ bool way_builder_t::check_building( const grund_t *to, const koord dir ) const
 		if(  layouts==4  ) {
 			return  r == ribi_t::layout_to_ribi[layout];
 		}
-		if(  layout<16  ) {
-			// straight way tile
+		if(  layout<16  ||  (layouts > 48 && layout >= 48)  ) {
+			// straight way tile (layout>=48 with layouts>48 is a slope stop, also straight)
 			return ribi_t::is_straight( r | ribi_t::doubles(ribi_t::layout_to_ribi[layout&1]) );
 		}
 		// diagonal way tile
