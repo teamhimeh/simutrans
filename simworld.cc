@@ -648,6 +648,11 @@ void karte_t::init_tiles()
 			finance_history_month[month][cost_type] = 0;
 		}
 	}
+	for (int decade=0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+		for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
+			finance_history_decade[decade][cost_type] = 0;
+		}
+	}
 	last_month_bev = 0;
 
 	tile_counter = 0;
@@ -2157,6 +2162,7 @@ karte_t::karte_t() :
 		players[i] = NULL;
 		player_password_hash[i].clear();
 	}
+	player_password_set_bits = 0;
 
 	// no distance to show at first ...
 	show_distance = koord3d::invalid;
@@ -3130,7 +3136,7 @@ void karte_t::set_tool( tool_t *tool_in, player_t *player )
 	// check for password-protected players
 	if(  (!tool_in->is_init_network_safe()  ||  !tool_in->is_work_network_safe())  &&  needs_check  &&
 		 !(tool_in->get_id()==(TOOL_CHANGE_PLAYER|SIMPLE_TOOL)  ||  tool_in->get_id()==(TOOL_ADD_MESSAGE | GENERAL_TOOL))  &&
-		 player  &&  player->is_locked()  ) {
+		 player  &&  !player_can_act_unrestricted(player)  ) {
 		// player is currently password protected => request unlock first
 		create_win( -1, -1, new password_frame_t(player), w_info, magic_pwd_t + player->get_player_nr() );
 		return;
@@ -3475,7 +3481,7 @@ bool karte_t::rem_fab(fabrik_t *fab)
 				// first remove all the tiles that do not connect
 				plan->remove_from_haltlist( list[i] );
 				// then reconnect
-				list[i]->verbinde_fabriken();
+				list[i]->reconnect_factories();
 			}
 		}
 
@@ -4031,6 +4037,16 @@ void karte_t::new_year()
 		}
 	}
 
+	// record decade snapshot at 0, 10, 20, ... years after map start
+	if(  (last_year - settings.get_starting_year()) % 10 == 0  ) {
+		for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
+			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
+				finance_history_decade[d][hist] = finance_history_decade[d-1][hist];
+			}
+			finance_history_decade[0][hist] = finance_history_year[0][hist];
+		}
+	}
+
 DBG_MESSAGE("karte_t::new_year()","speedbonus for %d %i, %i, %i, %i, %i, %i, %i, %i", last_year,
 			average_speed[0], average_speed[1], average_speed[2], average_speed[3], average_speed[4], average_speed[5], average_speed[6], average_speed[7] );
 
@@ -4508,6 +4524,7 @@ void karte_t::update_history()
 {
 	finance_history_year[0][WORLD_CONVOIS] = finance_history_month[0][WORLD_CONVOIS] = convoi_array.get_count();
 	finance_history_year[0][WORLD_FACTORIES] = finance_history_month[0][WORLD_FACTORIES] = fab_list.get_count();
+	finance_history_year[0][WORLD_HALTS] = finance_history_month[0][WORLD_HALTS] = haltestelle_t::get_alle_haltestellen().get_count();
 
 	// now step all towns (to generate passengers)
 	sint64 bev=0;
@@ -4940,6 +4957,22 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 		for (int month = 0;month</*MAX_WORLD_HISTORY_MONTHS*/12;month++) {
 			for (int cost_type = 0; cost_type</*MAX_WORLD_COST*/12; cost_type++) {
 				file->rdwr_longlong(finance_history_month[month][cost_type]);
+			}
+		}
+		// WORLD_HALTS added in OTRP v56
+		if(  file->get_OTRP_version()>55  ) {
+			for(int year = 0; year < /*MAX_WORLD_HISTORY_YEARS*/12; year++) {
+				file->rdwr_longlong(finance_history_year[year][WORLD_HALTS]);
+			}
+			for(int month = 0; month < /*MAX_WORLD_HISTORY_MONTHS*/12; month++) {
+				file->rdwr_longlong(finance_history_month[month][WORLD_HALTS]);
+			}
+		}
+	}
+	if(  file->get_OTRP_version() >= 57  ) {
+		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
 			}
 		}
 	}
@@ -5526,19 +5559,43 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 	else {
 		for (int year = 0;  year</*MAX_WORLD_HISTORY_YEARS*/12;  year++) {
-			for (int cost_type = 0; cost_type</*MAX_WORLD_COST*/12; cost_type++) {
+			for (int cost_type = 0; cost_type<WORLD_HALTS; cost_type++) {
 				file->rdwr_longlong(finance_history_year[year][cost_type]);
 			}
 		}
 		for (int month = 0;month</*MAX_WORLD_HISTORY_MONTHS*/12;month++) {
-			for (int cost_type = 0; cost_type</*MAX_WORLD_COST*/12; cost_type++) {
+			for (int cost_type = 0; cost_type<WORLD_HALTS; cost_type++) {
 				file->rdwr_longlong(finance_history_month[month][cost_type]);
+			}
+		}
+		// WORLD_HALTS added in OTRP v56; older files have no recorded data
+		if(  file->get_OTRP_version() > 55  ) {
+			for(int year = 0; year < /*MAX_WORLD_HISTORY_YEARS*/12; year++) {
+				file->rdwr_longlong(finance_history_year[year][WORLD_HALTS]);
+			}
+			for(int month = 0; month < /*MAX_WORLD_HISTORY_MONTHS*/12; month++) {
+				file->rdwr_longlong(finance_history_month[month][WORLD_HALTS]);
+			}
+		}
+		else {
+			for(int year = 0; year < /*MAX_WORLD_HISTORY_YEARS*/12; year++) {
+				finance_history_year[year][WORLD_HALTS] = 0;
+			}
+			for(int month = 0; month < /*MAX_WORLD_HISTORY_MONTHS*/12; month++) {
+				finance_history_month[month][WORLD_HALTS] = 0;
 			}
 		}
 		last_month_bev = finance_history_month[1][WORLD_CITIZENS];
 
 		if (file->is_version_atleast(112, 5) &&  file->is_version_less(120, 6)) {
 			restore_history(true);
+		}
+	}
+	if(  file->get_OTRP_version() >= 57  ) {
+		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
+			}
 		}
 	}
 
@@ -7092,6 +7149,12 @@ void karte_t::remove_player(uint8 player_nr)
 		players[player_nr]->ai_bankrupt();
 		delete players[player_nr];
 		players[player_nr] = 0;
+		// Clear removed player's bit from all halt permissions
+		for(  halthandle_t const& h : haltestelle_t::get_alle_haltestellen()  ) {
+			if(  h.is_bound()  &&  !h->is_allow_other_player_connection()  ) {
+				h->set_permissions( h->get_permissions() & ~(1 << player_nr) );
+			}
+		}
 		nwc_chg_player_t::company_removed(player_nr);
 		// if default human, create new instace of it (to avoid crashes)
 		if(  player_nr == 0  ) {
@@ -7909,4 +7972,28 @@ const vector_tpl<const goods_desc_t*> &karte_t::get_goods_list()
 player_t *karte_t::get_public_player() const
 {
 	return get_player(1);
+}
+
+
+bool karte_t::player_can_act_unrestricted(player_t *player) const
+{
+	if (!player  ||  !player->is_locked()) {
+		return true;
+	}
+	// in network mode an unlocked public player can proxy-manage any locked company
+	return env_t::networkmode  &&  players[PUBLIC_PLAYER_NR]  &&  !players[PUBLIC_PLAYER_NR]->is_locked();
+}
+
+
+bool karte_t::is_player_password_set(uint8 player_nr) const
+{
+	if (player_nr >= PLAYER_UNOWNED) {
+		return false;
+	}
+	if (env_t::networkmode  &&  !env_t::server) {
+		// client: local hashes are not authoritative, use the state reported by the server
+		return (player_password_set_bits & (1<<player_nr)) != 0;
+	}
+	player_t *player = get_player(player_nr);
+	return player  &&  player->is_password_hash();
 }

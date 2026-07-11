@@ -14,6 +14,7 @@
 #include "../simdebug.h"
 #include "../simworld.h"
 #include "../bauer/wegbauer.h"
+#include "../bauer/goods_manager.h"
 #include "../descriptor/way_desc.h"
 #include "../utils/simrandom.h"
 #include "../utils/simstring.h"
@@ -247,6 +248,8 @@ settings_t::settings_t() :
 	// off
 	unprotect_abandoned_player_months = 0;
 
+	allow_unlock_by_public = true;
+
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
 	way_toll_waycost_percentage = 0;
@@ -338,9 +341,11 @@ settings_t::settings_t() :
 	base_waiting_ticks_for_ship_convoi = 60000;
 	base_waiting_ticks_for_air_convoi = 200000;
 
+	MEMZERON(reverse_base_offsets, 8);
 	default_reverse=false;
 	allow_unload_longer_convoy=false;
 	allow_higher_flight = true;
+	allow_elevated_way_over_others_halt = false;
 
 	use_route_cache = false;
 }
@@ -1006,7 +1011,44 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_long(base_waiting_ticks_for_ship_convoi);
 			file->rdwr_long(base_waiting_ticks_for_air_convoi);
 		}
-		if(  file->get_OTRP_version() >= 43  ) {
+		if(  file->get_OTRP_version() >= 56  ) {
+			if(  file->is_saving()  ) {
+				// count enabled entries that have a valid goods desc
+				uint16 count = 0;
+				for(uint16 i = 0; i < 256; i++) {
+					if(  is_time_based_routing_enabled[i]  ) {
+						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
+						if(  desc  ) { count++; }
+					}
+				}
+				file->rdwr_short(count);
+				for(uint16 i = 0; i < 256; i++) {
+					if(  is_time_based_routing_enabled[i]  ) {
+						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
+						if(  desc  ) {
+							const char *name = desc->get_name();
+							file->rdwr_str(name);
+						}
+					}
+				}
+			}
+			else {
+				// loading: reset all flags first, then restore by name
+				MEMZERON(is_time_based_routing_enabled, 256);
+				uint16 count = 0;
+				file->rdwr_short(count);
+				for(uint16 j = 0; j < count; j++) {
+					char name[256];
+					file->rdwr_str(name, lengthof(name));
+					const goods_desc_t *desc = goods_manager_t::get_info(name);
+					// get_info() falls back to 'none' when unknown — skip that case
+					if(  desc  &&  desc != goods_manager_t::none  ) {
+						is_time_based_routing_enabled[desc->get_catg_index()] = true;
+					}
+				}
+			}
+		}
+		else if(  file->get_OTRP_version() >= 43  ) {
 			for(uint16 i=0; i<256; i++) {
 				file->rdwr_bool(is_time_based_routing_enabled[i]);
 			}
@@ -1055,6 +1097,13 @@ void settings_t::rdwr(loadsave_t *file)
 			signal_reverse_front_back = false;
 			roadsign_reverse_front_back = false;
 		}
+		if(  file->get_OTRP_version() >= 57  ) {
+			file->rdwr_bool(allow_unlock_by_public);
+			file->rdwr_bool(allow_elevated_way_over_others_halt);
+		} else {
+			allow_unlock_by_public = true;
+			allow_elevated_way_over_others_halt = false;
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
@@ -1102,6 +1151,37 @@ void settings_t::rdwr(loadsave_t *file)
 		if (file->is_version_atleast(124, 4)||file->get_OTRP_version()>=54) {
 			file->rdwr_long(cst_kw_per_credit);
 		}
+		if(  file->get_OTRP_version() >= 56  ) {
+			// network clients must use the server's values; others always use simuconf.tab
+			// (parse_simuconf has already set the field, so non-clients just skip reading)
+			const bool use_local = !env_t::networkmode  ||  env_t::server;
+			if(  use_local  ) {
+				// write local simuconf.tab values so the server can sync them to clients
+				// on load, skip reading so the parse_simuconf values remain
+				if(  file->is_saving()  ) {
+					for(uint8 d = 0; d < 8; d++) {
+						for(uint8 i = 0; i < 3; i++) {
+							file->rdwr_byte(reverse_base_offsets[d][i]);
+						}
+					}
+				} else {
+					// skip the 24 bytes in the stream
+					for(uint8 d = 0; d < 8; d++) {
+						for(uint8 i = 0; i < 3; i++) {
+							sint8 dummy;
+							file->rdwr_byte(dummy);
+						}
+					}
+				}
+			} else {
+				for(uint8 d = 0; d < 8; d++) {
+					for(uint8 i = 0; i < 3; i++) {
+						file->rdwr_byte(reverse_base_offsets[d][i]);
+					}
+				}
+			}
+		}
+		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
 	// sometimes broken savegames could have no legal direction for take off ...
@@ -1214,12 +1294,12 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 		vector_tpl<int> temp_offset = contents.get_ints(buf);
 		if (temp_offset.get_count()>=3) {
 			for(uint8 i=0; i<3; i++) {
-				env_t::reverse_base_offsets[d_idx][i] = temp_offset[i];
+				reverse_base_offsets[d_idx][i] = temp_offset[i];
 			}
 		} else {
 			for(uint8 i=0; i<3; i++) {
-				env_t::reverse_base_offsets[d_idx][i] = 0;
-			}			
+				reverse_base_offsets[d_idx][i] = 0;
+			}
 		}
 	}
 	// setting default reverse or not when next direction is opposite
@@ -1658,6 +1738,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// .. read twice: old and correct spelling
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abondoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abandoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
+	allow_unlock_by_public = contents.get_int( "allow_unlock_by_public", allow_unlock_by_public ) != 0;
 	default_player_color_random       = contents.get_int( "random_player_colors", default_player_color_random ) != 0;
 
 	for( int i = 0; i < MAX_PLAYER_COUNT; i++ ) {
@@ -1877,6 +1958,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	
 	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
 	use_route_cache = contents.get_int("use_route_cache", use_route_cache);
+	allow_elevated_way_over_others_halt = contents.get_int("allow_elevated_way_over_others_halt", allow_elevated_way_over_others_halt) != 0;
 
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);
