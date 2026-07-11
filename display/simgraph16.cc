@@ -2437,7 +2437,13 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 			} else if (s >= 0x8008 && s < 0x8010) {
 				*dest++ = player_col2[s & 7];         // player color 2 → owner's color 2
 			} else {
-				*dest++ = rgbmap_current[s];          // regular or special color
+				// regular or special color: read the day/night-selected map directly.
+				// Do NOT use the global rgbmap_current/activate_player_color() here - this
+				// function is called from the multi-threaded per-object draw path, and
+				// activate_player_color() mutates shared statics (player_day/player_night,
+				// rgbmap_*[0x8000..0x800F], transparent_map_*) without any locking, which
+				// races with other threads concurrently drawing other players' vehicles.
+				*dest++ = daynight ? rgbmap_day_night[s] : rgbmap_all_day[s];
 			}
 		}
 	} else {
@@ -3260,7 +3266,9 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 			player_col2[i] = specmap2[player_offsets[p2][1] + i];
 		}
 
-		activate_player_color( player_nr, daynight );
+		// note: intentionally NOT calling activate_player_color() here - it mutates
+		// global, unlocked state (see colorpixcopy_line) and this function may run
+		// concurrently with other threads drawing other players' vehicles.
 
 		const PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
@@ -3398,7 +3406,9 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 			player_col2[i] = specmap2[player_offsets[p2][1] + i];
 		}
 
-		activate_player_color( player_nr, daynight );
+		// note: intentionally NOT calling activate_player_color() here - see
+		// colorpixcopy_line for why this global-mutating call is unsafe in this
+		// multi-threaded, per-object live-draw path.
 
 		const PIXVAL *sp = images[n].base_data;
 
