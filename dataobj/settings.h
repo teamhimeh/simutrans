@@ -303,6 +303,8 @@ private:
 	bool overloading_revenue_reduced;
 	/* if set, overcrowded car's running cost is increase*/
 	bool overloading_runningcost_increase;
+	/* if set, acceleration is set as overcrowded when is_full_load_acceleration*/
+	bool overloaded_acceleration;
 
 	// lowest possible income with speedbonus (1000=1) default 125
 	sint32 bonus_basefactor;
@@ -624,6 +626,7 @@ public:
 	bool is_allow_overloading() const {return allow_overloading;}
 	bool is_overloading_revenue_reduced() const {return overloading_revenue_reduced;}
 	bool is_overloading_runningcost_increase() const {return overloading_runningcost_increase;}
+	bool is_overloaded_acceleration() const {return overloaded_acceleration;}
 
 	sint16 get_river_number() const { return river_number; }
 	sint16 get_min_river_length() const { return min_river_length; }

@@ -575,6 +575,8 @@ overloading revenue reduced
 過積載時に収入を減額(overloading_revenue_reduced)
 overloading runningcost increase
 過積載時に走行費を増額(overloading_runningcost_increase)
+overloaded_acceleration
+応荷重制御時,常に過積載時の重量を使用(overloaded_acceleration)
 advance_to_end
 ホーム終端まで進む(advance_to_end)
 reverse_by_default
