@@ -357,7 +357,7 @@ void convoi_detail_t::update_labels()
 
 void convoi_detail_t::draw(scr_coord offset)
 {
-	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()  ;
+	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())  ;
 	sale_button.enable(selling_allowed && !cnv->get_coupling_convoi().is_bound());
 	withdraw_button.enable(selling_allowed  &&  !cnv->get_coupling_convoi().is_bound()  &&  !cnv->is_coupled());
 	bool show_move_to_depot_button = selling_allowed;

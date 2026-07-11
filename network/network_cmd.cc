@@ -100,6 +100,8 @@ void nwc_auth_player_t::rdwr()
 	}
 	packet->rdwr_byte( player_nr );
 	packet->rdwr_short(player_unlocked);
+	packet->rdwr_short(player_has_password);
+	packet->rdwr_bool(set_password);
 }
 
 
