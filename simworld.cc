@@ -4977,7 +4977,7 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
 			}
 		}
-	} 
+	}
 
 	// finally a possible scenario
 	scenario->rdwr( file );
@@ -5600,7 +5600,7 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 			}
 		}
 	}
-	else if(  file->is_loading()  ) {
+	else {
 		// we set first decades values
 		for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
 			finance_history_decade[0][cost_type] = finance_history_year[1][cost_type];
