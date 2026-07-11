@@ -4333,8 +4333,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
 	}
-	// after unload all, this flag should be false
-	set_unload_all(false);
+	if(  !schedule->get_current_entry().is_no_unload()  ) 
+	{
+		// after unload all, this flag should be false
+		set_unload_all(false);
+	}
 	unloading_done = true;
 	freight_info_resort |= changed_loading_level;
 	if(  changed_loading_level  ) {
