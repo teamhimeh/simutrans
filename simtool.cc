@@ -9268,7 +9268,9 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'l' : apply new line [number]
  * 'L' : create new line
  * 'd' : go to nearest depot
- * 'y' : move to depoot immediately
+ * 'y' : move to depot immediately
+ * 'D' : go to the specified depot
+ * 'Y' : move to the specified depot immediately
  * 'r' : release the child convoy
  * 'a' : set convoy trading acceptance
  * 'o' : change convoy owner by trading
@@ -9280,6 +9282,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'b' : apply balance speed (limit power)
  * 'i' : set invalid convoy
  * 'u' : suspension
+ * 'k' : force get off
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -9561,6 +9564,12 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'u':
 		{
 			cnv->set_suspension(atoi(p)!=0);
+		}
+		break;
+
+		case 'k':
+		{
+			cnv->set_unload_all(atoi(p)!=0);
 		}
 		break;
 	}
