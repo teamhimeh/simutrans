@@ -345,6 +345,7 @@ settings_t::settings_t() :
 	default_reverse=false;
 	allow_unload_longer_convoy=false;
 	allow_higher_flight = true;
+	allow_elevated_way_over_others_halt = false;
 
 	use_route_cache = false;
 }
@@ -1098,8 +1099,10 @@ void settings_t::rdwr(loadsave_t *file)
 		}
 		if(  file->get_OTRP_version() >= 57  ) {
 			file->rdwr_bool(allow_unlock_by_public);
+			file->rdwr_bool(allow_elevated_way_over_others_halt);
 		} else {
 			allow_unlock_by_public = true;
+			allow_elevated_way_over_others_halt = false;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1955,6 +1958,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	
 	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
 	use_route_cache = contents.get_int("use_route_cache", use_route_cache);
+	allow_elevated_way_over_others_halt = contents.get_int("allow_elevated_way_over_others_halt", allow_elevated_way_over_others_halt) != 0;
 
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);

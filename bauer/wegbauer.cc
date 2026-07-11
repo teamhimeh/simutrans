@@ -576,8 +576,13 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			if(gb) {
 				// no halt => citybuilding => do not touch
 				// also check for too high buildings ...
-				if(!check_owner(gb->get_owner(),player_builder)  ||  gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
+				if(gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
 					return false;
+				}
+				if(!check_owner(gb->get_owner(),player_builder)) {
+					if(!welt->get_settings().get_allow_elevated_way_over_others_halt()  ||  !to->get_halt().is_bound()) {
+						return false;
+					}
 				}
 				// building above houses is expensive ... avoid it!
 				*costs += 4;
