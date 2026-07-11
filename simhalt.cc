@@ -4344,12 +4344,48 @@ void haltestelle_t::recalc_status()
  */
 void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 {
+	// we do not need to show allowed players for public halt
+	const bool show_allowed_players = ((env_t::show_names & env_t::SHOW_ALLOWED_PLAYERS) != 0) && get_owner()!=welt->get_public_player();
+	const bool show_waiting_bars    = (env_t::show_names & env_t::SHOW_WAITING_BARS)    != 0;
+
 	// Count how many distinct players are permitted to stop here
 	uint16 player_count = 0;
-	for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
-		if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
-			player_count++;
+	if(  show_allowed_players  ) {
+		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
+			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
+				player_count++;
+			}
 		}
+	}
+
+	// Track permission changes for dirty-rect management
+	bool players_dirty = false;
+	if(  show_allowed_players  &&  permissions != last_permissions  ) {
+		if(  last_player_count > 1  ) {
+			// Erase the old player color strip
+			const sint16 x = xpos - (last_player_count * 17 - get_tile_raster_width()) / 2;
+			mark_rect_dirty_wc( x, ypos - D_WAITINGBAR_WIDTH - 1, x + last_player_count * 17, ypos );
+		}
+		last_permissions = permissions;
+		last_player_count = player_count;
+		players_dirty = true;
+	}
+
+	// Draw one colored rectangle per permitted player (only when >1 to avoid clutter on single-owner stops)
+	if(  show_allowed_players  &&  player_count > 1  ) {
+		sint16 x = xpos - (player_count * 17 - get_tile_raster_width()) / 2;
+		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
+			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
+				const PIXVAL color = color_idx_to_rgb( welt->get_player(i)->get_player_color1() + 4 );
+				display_fillbox_wh_clip_rgb( x, ypos - D_WAITINGBAR_WIDTH, 16, D_WAITINGBAR_WIDTH, color, players_dirty );
+				x += 17;
+			}
+		}
+		ypos += -D_WAITINGBAR_WIDTH - 1;
+	}
+
+	if(  !show_waiting_bars  ) {
+		return;
 	}
 
 	// ignore freight that cannot reach to this station
@@ -4363,31 +4399,6 @@ void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 		}
 	}
 
-	// Track permission changes for dirty-rect management
-	bool players_dirty = false;
-	if(  permissions != last_permissions  ) {
-		if(  last_player_count > 1  ) {
-			// Erase the old player color strip
-			const sint16 x = xpos - (last_player_count * 17 - get_tile_raster_width()) / 2;
-			mark_rect_dirty_wc( x, ypos - D_WAITINGBAR_WIDTH - 1, x + last_player_count * 17, ypos );
-		}
-		last_permissions = permissions;
-		last_player_count = player_count;
-		players_dirty = true;
-	}
-
-	// Draw one colored rectangle per permitted player (only when >1 to avoid clutter on single-owner stops)
-	if(  player_count > 1  ) {
-		sint16 x = xpos - (player_count * 17 - get_tile_raster_width()) / 2;
-		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
-			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
-				const PIXVAL color = color_idx_to_rgb( welt->get_player(i)->get_player_color1() + 4 );
-				display_fillbox_wh_clip_rgb( x, ypos - D_WAITINGBAR_WIDTH, 16, D_WAITINGBAR_WIDTH, color, players_dirty );
-				x += 17;
-			}
-		}
-		ypos += -D_WAITINGBAR_WIDTH - 1;
-	}
 	ypos += -D_WAITINGBAR_WIDTH - LINESPACE/6;
 
 	if(  count != last_bar_count  ||  players_dirty  ) {

@@ -360,11 +360,26 @@ public:
 	static bool draw_outside_tile;
 
 	/**
+	 * Bit flags for show_names.
+	 * @see grund_t::display_overlay
+	 * @see haltestelle_t::display_status
+	 */
+	enum show_names_flags_t {
+		SHOW_NAME             = 1 << 0, ///< show city/station name label
+		SHOW_WAITING_BARS     = 1 << 1, ///< show station waiting bars
+		SHOW_NAME_TYPE2       = 1 << 2, ///< name label style 2 (outline)
+		SHOW_NAME_TYPE3       = 1 << 3, ///< name label style 3 (boxed)
+		SHOW_ALLOWED_PLAYERS  = 1 << 4  ///< show per-player stop permission bars
+	};
+
+	/**
 	 * Show labels (city and station names, ...)
-	 * and waiting indicator bar for stations
+	 * and waiting indicator bar / allowed player bars for stations
 	 * @see grund_t::display_overlay
 	 */
 	static sint32 show_names;
+
+	static sint32 const bars_settings = env_t::SHOW_WAITING_BARS|env_t::SHOW_ALLOWED_PLAYERS;
 
 	/// Show factory storage bar
 	static uint8 show_factory_storage_bar;
