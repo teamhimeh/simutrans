@@ -49,6 +49,7 @@ include("tests/test_priority_signal")
 include("tests/test_otrp_signal_options")
 include("tests/test_reroute_reservation")
 include("tests/test_remove_house")
+include("tests/test_pillar")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -298,6 +299,9 @@ all_tests <- [
 	test_rail_reroute_with_line_mid_travel,
 	test_remove_house_one_click,
 	test_remove_house_area,
+	test_remove_pillar_tool_basic,
+	test_remover_pillar_priority,
+	test_remove_pillar_tool_shift_area,
 ]
 
 

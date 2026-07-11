@@ -73,6 +73,7 @@
 #include "obj/baum.h"
 #include "obj/field.h"
 #include "obj/label.h"
+#include "obj/pillar.h"
 
 #include "dataobj/koord.h"
 #include "dataobj/settings.h"
@@ -556,6 +557,47 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 
 	koord k(pos.get_2d());
 
+	// check for pillar
+	pillar_t* pl = gr->find<pillar_t>();
+	if ((type == obj_t::undefined || type == obj_t::pillar) && pl!=NULL) {
+		msg = pl->is_deletable(player);
+		if(msg) {
+			dbg->message("tool_remover_intern", "pillar not deletable: %s", msg);
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing pillar at (%s)", pos.get_str());
+		pl->cleanup(player);
+		delete pl;
+		return true;
+	}
+
+	// check for signal
+	roadsign_t* rs = gr->find<signal_t>();
+	if (rs == NULL) rs = gr->find<roadsign_t>();
+	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
+		msg = rs->is_deletable(player);
+		if(msg) {
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
+		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
+		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
+			weg = gr->get_weg(track_wt);
+		}
+
+		rs->cleanup(player);
+		delete rs;
+
+		// no need to update way if there is none
+		// may happen when public player builds a signal on a company track,
+		// the company goes bankrupt and the public player tries to remove the signal
+		if (weg) {
+			weg->count_sign();
+		}
+
+		return true;
+	}
+
 	// check powerline (can cross ground of another player)
 	leitung_t* lt = gr->get_leitung();
 	// check whether powerline related stuff should be removed, and if there is any to remove
@@ -612,33 +654,6 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 			lt->cleanup(player);
 			delete lt;
 		}
-		return true;
-	}
-
-	// check for signal
-	roadsign_t* rs = gr->find<signal_t>();
-	if (rs == NULL) rs = gr->find<roadsign_t>();
-	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
-		msg = rs->is_deletable(player);
-		if(msg) {
-			return false;
-		}
-DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
-		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
-		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
-			weg = gr->get_weg(track_wt);
-		}
-
-		rs->cleanup(player);
-		delete rs;
-
-		// no need to update way if there is none
-		// may happen when public player builds a signal on a company track,
-		// the company goes bankrupt and the public player tries to remove the signal
-		if (weg) {
-			weg->count_sign();
-		}
-
 		return true;
 	}
 
@@ -1047,6 +1062,44 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 	}
 
 	return msg;
+}
+
+
+const char *tool_remove_pillar_t::process( player_t *player, koord3d pos )
+{
+	// When no pillar exists on the tile, tool_remover_intern (called with
+	// obj_t::pillar) falls through to "Requested object not found." and returns
+	// false.  In the shift/ctrl area-removal loop in do_work the return value
+	// of process() is used as the loop-exit sentinel: NULL means "keep going",
+	// non-NULL means "stop".  Returning an error string here would cause the
+	// whole operation to be reported as failed even though all pillars were
+	// successfully removed.  So we distinguish "no pillar on this tile" (normal
+	// end-of-iteration → "") from "pillar exists but cannot be deleted" (real
+	// error → propagate fail).
+	grund_t *gr = welt->lookup(pos);
+	if (gr == NULL  ||  gr->find<pillar_t>() == NULL) {
+		return "";
+	}
+
+	const char *fail = NULL;
+	if (!tool_remover_intern(player, pos, obj_t::pillar, fail)) {
+		return fail;
+	}
+
+	if (pos.x > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::west)->calc_image();
+	}
+	if (pos.y > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::north)->calc_image();
+	}
+	if (pos.x < welt->get_size().x-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::east)->calc_image();
+	}
+	if (pos.y < welt->get_size().y-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::south)->calc_image();
+	}
+
+	return NULL;
 }
 
 
