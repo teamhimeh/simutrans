@@ -102,6 +102,7 @@ public:
 
 	#define MAX_WORLD_HISTORY_YEARS   (12) // number of years to keep history
 	#define MAX_WORLD_HISTORY_MONTHS  (12) // number of months to keep history
+	#define MAX_WORLD_HISTORY_DECADES (12) // number of decades to keep history
 
 	enum {
 		NORMAL       = 0,
@@ -309,6 +310,11 @@ private:
 	 * The recorded history so far.
 	 */
 	sint64 finance_history_month[MAX_WORLD_HISTORY_MONTHS][MAX_WORLD_COST];
+
+	/**
+	 * The recorded history so far (one entry per decade).
+	 */
+	sint64 finance_history_decade[MAX_WORLD_HISTORY_DECADES][MAX_WORLD_COST];
 
 	/**
 	 * World record speed manager.
@@ -828,6 +834,16 @@ public:
 	 * Returns pointer to finance history for player.
 	 */
 	const sint64* get_finance_history_month() const { return *finance_history_month; }
+
+	/**
+	 * Returns the decade finance history for world.
+	 */
+	sint64 get_finance_history_decade(int decade, int type) const { return finance_history_decade[decade][type]; }
+
+	/**
+	 * Returns pointer to decade finance history for world.
+	 */
+	const sint64* get_finance_history_decade() const { return *finance_history_decade; }
 
 	/**
 	 * Recalcs all map images.
