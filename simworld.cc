@@ -4038,13 +4038,15 @@ void karte_t::new_year()
 	}
 
 	// record decade snapshot at 0, 10, 20, ... years after map start
-	if(  (last_year - settings.get_starting_year()) % 10 == 0  ) {
-		for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
+	for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
+		if(  (last_year - settings.get_starting_year()) % 10 == 0  ) {
+			// we record the old dates values once in 10 years.
 			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
 				finance_history_decade[d][hist] = finance_history_decade[d-1][hist];
 			}
-			finance_history_decade[0][hist] = finance_history_year[0][hist];
 		}
+		// the 0 values of history_decade is the last year's values.
+		finance_history_decade[0][hist] = finance_history_year[1][hist];
 	}
 
 DBG_MESSAGE("karte_t::new_year()","speedbonus for %d %i, %i, %i, %i, %i, %i, %i, %i", last_year,
@@ -5596,6 +5598,12 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
 				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
 			}
+		}
+	}
+	else {
+		// we set first decades values
+		for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+			finance_history_decade[0][cost_type] = finance_history_year[1][cost_type];
 		}
 	}
 
