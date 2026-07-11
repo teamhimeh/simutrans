@@ -486,8 +486,8 @@ bool way_builder_t::check_building( const grund_t *to, const koord dir ) const
 		if(  layouts==4  ) {
 			return  r == ribi_t::layout_to_ribi[layout];
 		}
-		if(  layout<16  ) {
-			// straight way tile
+		if(  layout<16  ||  (layouts > 48 && layout >= 48)  ) {
+			// straight way tile (layout>=48 with layouts>48 is a slope stop, also straight)
 			return ribi_t::is_straight( r | ribi_t::doubles(ribi_t::layout_to_ribi[layout&1]) );
 		}
 		// diagonal way tile
@@ -576,8 +576,13 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			if(gb) {
 				// no halt => citybuilding => do not touch
 				// also check for too high buildings ...
-				if(!check_owner(gb->get_owner(),player_builder)  ||  gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
+				if(gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
 					return false;
+				}
+				if(!check_owner(gb->get_owner(),player_builder)) {
+					if(!welt->get_settings().get_allow_elevated_way_over_others_halt()  ||  !to->get_halt().is_bound()) {
+						return false;
+					}
 				}
 				// building above houses is expensive ... avoid it!
 				*costs += 4;
@@ -2656,6 +2661,7 @@ void way_builder_t::build_road()
 				player_t::add_maintenance(s, -str->get_desc()->get_maintenance(), str->get_desc()->get_finance_waytype());
 				// cost is the more expensive one, so downgrading is between removing and new building
 				cost -= max( str->get_desc()->get_price(), desc->get_price() );
+				str->set_gehweg(add_sidewalk);
 				str->set_desc(desc);
 				str->set_overtaking_mode(overtaking_mode);
 				str->set_street_flag(street_flag);
@@ -2664,7 +2670,6 @@ void way_builder_t::build_road()
 				if (wo  &&  wo->get_desc()->get_topspeed() < str->get_max_speed()) {
 					str->set_max_speed( wo->get_desc()->get_topspeed() );
 				}
-				str->set_gehweg(add_sidewalk);
 				player_t::add_maintenance( player_builder, str->get_desc()->get_maintenance(), str->get_desc()->get_finance_waytype());
 				str->set_owner(player_builder);
 				str->set_way_building(false);// show ribi
@@ -3159,5 +3164,4 @@ void way_builder_t::update_ribi_mask_oneway(strasse_t* str, uint32 i) {
 		}
 	}
 }
-
 
