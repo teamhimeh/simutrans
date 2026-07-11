@@ -203,7 +203,7 @@ bool farbengui_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 		}
 
 		if(comp==&bt_all_line_color_change) {
-			if(  player==welt->get_active_player() && !player->is_locked()  ) {
+			if(  player==welt->get_active_player() && welt->player_can_act_unrestricted(player)  ) {
 				cbuffer_t buf;
 				buf.printf( "O,%i,%i", 0, player->get_player_nr());
 				tool_t* w = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );

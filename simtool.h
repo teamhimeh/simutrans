@@ -1486,6 +1486,14 @@ public:
 	bool is_init_network_safe() const OVERRIDE { return false; }
 };
 
+// set per-player stop permissions; default_param = "halt_id,perms"
+class tool_change_permission_t : public tool_t {
+public:
+	tool_change_permission_t() : tool_t(TOOL_HALT_PERMISSION | SIMPLE_TOOL) {}
+	bool init(player_t*) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return false; }
+};
+
 // internal tool: rename stuff
 class tool_rename_t : public tool_t {
 public:
