@@ -76,13 +76,71 @@ public:
 	gui_departure_board_t() : gui_aligned_container_t()
 	{
 		next_refresh = -1;
-		set_table_layout(3,0);
+		set_table_layout(4,0);
 	}
 
 	void update_departures(halthandle_t halt);
 
 	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+
+	char const *tick_to_d_h_m_departure_board( uint32 ticks );
+	char const *tick_to_string_departure_board( uint32 ticks );
 };
+
+char const* gui_departure_board_t::tick_to_d_h_m_departure_board( uint32 ticks )  {
+	static char time [128];
+
+	time[0] = 0;
+
+	// World model might not be initalized if this is called while reading saved windows.
+	if ( world() == NULL) {
+		return time;
+	}
+
+	// suppress as much as possible, assuming this is an relative offset to the current month
+	const uint32 divisor = world()->ticks_per_world_month;
+	const uint32 num_days = ticks/divisor;
+	const uint32 ticks_of_day = ticks%divisor; // reduce before scaling, else the *86400 below overflows uint32
+	const uint32 times = (uint32)( ( (uint64)ticks_of_day * 86400 ) / divisor );
+	char days[64];
+	days[0] = 0;
+	if(  num_days!=0  ) {
+		sprintf( days, "%+i ", num_days );
+	}
+
+	uint32 hours, minuten, second;
+	hours = (times/3600)%24;
+	minuten = (times/60)%60;
+	second = times%60;
+	sprintf(time, "%s%2d:%02d:%02d", days, hours, minuten, second);
+
+	return time;
+}
+
+char const* gui_departure_board_t::tick_to_string_departure_board( uint32 ticks )  {
+	static char time [128];
+
+	time[0] = 0;
+
+	// World model might not be initalized if this is called while reading saved windows.
+	if ( world() == NULL) {
+		return time;
+	}
+
+	// suppress as much as possible, assuming this is an relative offset to the current month
+	uint32 const divisor = (uint32)world()->get_settings().get_spacing_shift_divisor();
+	uint32 const month_ticks = world()->ticks_per_world_month;
+	uint32 const num_days = ticks / month_ticks;
+	uint32 const ticks_of_month = ticks % month_ticks; // reduce before scaling, else the *divisor below can overflow uint32
+	uint32 const times = (uint32)( ( (uint64)ticks_of_month * divisor ) / month_ticks );
+	char days[64];
+	days[0] = 0;
+	if(  num_days!=0  ) {
+		sprintf( days, "%+i ", num_days );
+	}
+	sprintf(time, "%s%5d", days, times);
+	return time;
+}
 
 // all connections
 class gui_halt_detail_t : public gui_aligned_container_t, private action_listener_t
@@ -977,7 +1035,25 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 		}
 		halthandle_t next_halt = cnv->get_schedule()->get_next_halt(cnv->get_owner(),halt);
 		if(  next_halt.is_bound()  ) {
-			dest_info_t next( next_halt, 0, cnv );
+			schedule_entry_t const e = cnv->get_schedule()->get_current_entry();
+			uint32 const departure_time = cnv->get_departure_time(); 
+			sint32 waiting_time = 0;
+			if(  departure_time>0  ) {
+				// we already set departure time
+				waiting_time = departure_time - welt->get_ticks();
+				// but time is over->deparutre delayed(waiting time should be 0)
+				waiting_time = waiting_time > 0 ? waiting_time : 0;
+			}
+			else if(  e.get_wait_for_time()  ) {
+				// we need to get departure slot. but not yet.
+				// we set waiting_time as very big vale.
+				waiting_time = 0x7fffffff;
+			}
+			else if(  e.waiting_time_shift>0  ) {
+				waiting_time = welt->ticks_per_world_month/e.waiting_time_shift-(welt->get_ticks()-cnv->get_arrived_time());
+			}
+			dest_info_t next( next_halt, waiting_time, cnv );
+			destinations.insert_ordered( next, compare_hi );
 			destinations.append_unique( next );
 			if(  grund_t *gr = welt->lookup( cnv->get_vehikel(0)->last_stop_pos )  ) {
 				if(  gr->get_halt().is_bound()  &&  gr->get_halt() != halt  ) {
@@ -1009,7 +1085,22 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 				}
 				halthandle_t next_halt = cnv->get_schedule()->get_next_halt(cnv->get_owner(),halt);
 				if(  next_halt.is_bound()  ) {
-					dest_info_t next( next_halt, delta_t+2000, cnv );
+					schedule_entry_t const e = cnv->get_schedule()->get_current_entry();
+					uint32 const departure_time = cnv->get_departure_time(); 
+					sint32 waiting_time = delta_t+2000;
+					if(  departure_time>0  ) {
+						// we already set departure time
+						waiting_time = departure_time - welt->get_ticks();
+					}
+					else if(  e.get_wait_for_time()  ) {
+						// we need to get departure slot. but not yet.
+						// we set waiting_time as very big vale.
+						waiting_time = 0x7fffffff;
+					}
+					else if(  e.waiting_time_shift>0  ) {
+						waiting_time = delta_t + (welt->ticks_per_world_month/e.waiting_time_shift);
+					}
+					dest_info_t next( next_halt, waiting_time, cnv );
 					destinations.insert_ordered( next, compare_hi );
 				}
 			}
@@ -1019,7 +1110,7 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 	FOR( vector_tpl<convoihandle_t>, cnv, halt->registered_convoys ) {
 		if(  cnv.is_bound()  &&  ( cnv->get_state() == convoi_t::DRIVING  ||  cnv->is_waiting() )  &&  haltestelle_t::get_stoppable_halt( cnv->get_schedule()->get_current_entry().pos, cnv->get_owner(), cnv->front()->get_waytype() ) == halt  ) {
 			halthandle_t prev_halt = haltestelle_t::get_stoppable_halt( cnv->front()->last_stop_pos, cnv->get_owner(), cnv->front()->get_waytype() );
-			sint32 delta_t = cur_ticks + calc_ticks_until_arrival( cnv );
+			sint32 delta_t = calc_ticks_until_arrival( cnv );
 			if(  prev_halt.is_bound()  ) {
 				dest_info_t prev( prev_halt, delta_t, cnv );
 				// smooth times a little
@@ -1034,7 +1125,22 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 			}
 			halthandle_t next_halt = cnv->get_schedule()->get_next_halt(cnv->get_owner(),halt);
 			if(  next_halt.is_bound()  ) {
-				dest_info_t next( next_halt, delta_t+2000, cnv );
+				schedule_entry_t const e = cnv->get_schedule()->get_current_entry();
+				uint32 const departure_time = cnv->get_departure_time(); 
+				sint32 waiting_time = delta_t+2000;
+				if(  departure_time>0  ) {
+					// we already set departure time
+					waiting_time = departure_time - welt->get_ticks();
+				}
+				else if(  e.get_wait_for_time()  ) {
+					// we need to get departure slot. but not yet.
+					// we set waiting_time as very big vale.
+					waiting_time = 0x7fffffff;
+				}
+				else if(  e.waiting_time_shift>0  ) {
+					waiting_time = delta_t + (welt->ticks_per_world_month/e.waiting_time_shift);
+				}
+				dest_info_t next( next_halt, waiting_time, cnv );
 				destinations.insert_ordered( next, compare_hi );
 			}
 		}
@@ -1044,43 +1150,63 @@ void gui_departure_board_t::update_departures(halthandle_t halt)
 	remove_all();
 	slist_tpl<halthandle_t> exclude;
 	if(  destinations.get_count()>0  ) {
-		new_component_span<gui_label_t>("Departures to\n", 3);
+		new_component_span<gui_label_t>("Departures to\n", 4);
 
 		FOR( vector_tpl<dest_info_t>, hi, destinations ) {
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
-				gui_label_buf_t *lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
-				if( hi.delta_ticks == 0 ) {
-					lb->buf().append( translator::translate( "now" ) );
-				}
-				else {
-					lb->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
-				}
-				lb->update();
+				linehandle_t l = hi.cnv->get_line();
+				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::left);
+
 				insert_image(hi.cnv);
 
-				new_component<gui_label_t>(hi.halt->get_name() );
+				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>(c, gui_label_t::left);
+				if( hi.delta_ticks == 0 ) {
+					lb_time->buf().printf("%s (%s) (now)", tick_to_d_h_m_departure_board( hi.delta_ticks + cur_ticks ), tick_to_string_departure_board( hi.delta_ticks + cur_ticks ) );
+				}
+				else if(  hi.delta_ticks == 0x7fffffff  ) {
+					lb_time->buf().append( translator::translate( "TBD" ) );
+				}
+				else {
+					char depart_slot[128];
+					tstrncpy( depart_slot, tick_to_string_departure_board( hi.delta_ticks + cur_ticks ), lengthof(depart_slot) );
+					lb_time->buf().printf("%s (%s) (%s left)", tick_to_d_h_m_departure_board( hi.delta_ticks + cur_ticks ), depart_slot, tick_to_string_departure_board( hi.delta_ticks ) );
+				}
+				lb_name->buf().append(l.is_bound()? l->get_name(): hi.cnv->get_name());
+				lb_time->update();
+				lb_name->update();
+
+				new_component<gui_label_t>(hi.halt->get_name(), color_idx_to_rgb(hi.cnv->get_owner()->get_player_color1()));
 				exclude.append( hi.halt );
 			}
 		}
 	}
 	exclude.clear();
 	if(  origins.get_count()>0  ) {
-		new_component_span<gui_label_t>("Arrivals from\n", 3);
+		new_component_span<gui_label_t>("Arrivals from\n", 4);
 
 		FOR( vector_tpl<dest_info_t>, hi, origins ) {
 			if(  freight_list_sorter_t::by_via_sum != env_t::default_sortmode  ||  !exclude.is_contained( hi.halt )  ) {
-				gui_label_buf_t *lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
-				if( hi.delta_ticks == 0 ) {
-					lb->buf().append( translator::translate( "now" ) );
-				}
-				else {
-					lb->buf().printf("%s", difftick_to_string( hi.delta_ticks, true ) );
-				}
-				lb->update();
+				linehandle_t l = hi.cnv->get_line();
+				PIXVAL c = color_idx_to_rgb(l.is_bound()?l->get_colour():hi.cnv->get_owner()->get_player_color1());
+				gui_label_buf_t *lb_time = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::left);
 
 				insert_image(hi.cnv);
 
-				new_component<gui_label_t>(hi.halt->get_name() );
+				gui_label_buf_t *lb_name = new_component<gui_label_buf_t>(c, gui_label_t::left);
+				if( hi.delta_ticks == 0 ) {
+					lb_time->buf().printf("%s (%s) (now)", tick_to_d_h_m_departure_board( hi.delta_ticks + cur_ticks ), tick_to_string_departure_board( hi.delta_ticks + cur_ticks ));
+				}
+				else {
+					char depart_slot[128];
+					tstrncpy( depart_slot, tick_to_string_departure_board( hi.delta_ticks + cur_ticks ), lengthof(depart_slot) );
+					lb_time->buf().printf("%s (%s) (%s left)", tick_to_d_h_m_departure_board( hi.delta_ticks + cur_ticks ), depart_slot, tick_to_string_departure_board( hi.delta_ticks ) );
+				}
+				lb_name->buf().append(l.is_bound()? l->get_name(): hi.cnv->get_name());
+				lb_time->update();
+				lb_name->update();
+
+				new_component<gui_label_t>(hi.halt->get_name(), color_idx_to_rgb(hi.cnv->get_owner()->get_player_color1()));
 				exclude.append( hi.halt );
 			}
 		}

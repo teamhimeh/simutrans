@@ -2105,7 +2105,7 @@ void depot_frame_t::image_from_storage_list(gui_image_list_t::image_data_t *imag
 		}
 		else {
 			convoihandle_t cnv = depot->get_convoi( icnv );
-			if(  !cnv.is_bound()  &&   !depot->get_owner()->is_locked()  ) {
+			if(  !cnv.is_bound()  &&   welt->player_can_act_unrestricted(depot->get_owner())  ) {
 				// adding new convoi, block depot actions until command executed
 				// otherwise in multiplayer it's likely multiple convois get created
 				// rather than one new convoi with multiple vehicles
@@ -2427,7 +2427,7 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 						veh_buf.append(vehs[i].c_str());
 					}
 				}
-				if (!cnv.is_bound() && !depot->get_owner()->is_locked()) {
+				if (!cnv.is_bound() && welt->player_can_act_unrestricted(depot->get_owner())) {
 					depot->set_command_pending();
 				}
 				depot->call_depot_tool('T', cnv, veh_buf);

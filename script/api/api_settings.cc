@@ -168,5 +168,14 @@ void export_settings(HSQUIRRELVM vm)
 	 */
 	register_method(vm, &settings_t::set_use_route_cache, "set_use_route_cache");
 
+	/// @returns true if building elevated way over another player's halt is allowed
+	register_method(vm, &settings_t::get_allow_elevated_way_over_others_halt, "get_allow_elevated_way_over_others_halt");
+
+	/**
+	 * Enables or disables building elevated ways over another player's halt.
+	 * @param b true to allow building elevated way over other players' halts
+	 */
+	register_method(vm, &settings_t::set_allow_elevated_way_over_others_halt, "set_allow_elevated_way_over_others_halt");
+
 	end_class(vm);
 }
