@@ -2000,6 +2000,7 @@ void convoi_t::start()
 
 		alte_richtung = ribi_t::none;
 		no_load = false;
+		unload_all = false;
 
 		state = ROUTING_1;
 
@@ -3622,6 +3623,11 @@ void convoi_t::rdwr(loadsave_t *file)
 	} else {
 		invalid_convoy = false;
 	}
+	if(  file->get_OTRP_version()>=57  ) {
+		file->rdwr_bool(unload_all);
+	} else {
+		unload_all = false;
+	}
 
 	if(  file->is_loading()  ) {
 		recalc_catg_index();
@@ -4275,7 +4281,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	}
 	
 
-	for(unsigned i=0; i<(halt->is_allow_unload_longer_convoy()?anz_vehikel:vehicles_loading); i++) {
+	for(unsigned i=0; i<((halt->is_allow_unload_longer_convoy()||get_unload_all())?anz_vehikel:vehicles_loading); i++) {
 		vehicle_t* v = fahr[i];
 
 		// we need not to call this on the same position
@@ -4290,7 +4296,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		// The total amount of goods which are loaded and unloaded
 		uint16 amount;
 		if(  !schedule->get_current_entry().is_no_unload() ) {
-			amount = v->unload_cargo(halt, next_depot  ||  (schedule->get_current_entry().is_unload_all()  &&  !unloading_done)  );
+			amount = v->unload_cargo(halt, next_depot  ||  ((schedule->get_current_entry().is_unload_all()  ||  get_unload_all())  &&  !unloading_done)  );
 		} else {
 			amount = 0;
 		}
@@ -4325,6 +4331,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		else if( halt.is_bound() && schedule->is_full_load_time() ){
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
+	}
+	if(  !schedule->get_current_entry().is_no_unload()  ) 
+	{
+		// after unload all, this flag should be false
+		set_unload_all(false);
 	}
 	unloading_done = true;
 	freight_info_resort |= changed_loading_level;
@@ -5167,6 +5178,7 @@ void convoi_t::set_withdraw(bool new_withdraw)
 			// do not touch line bound convois in depots
 			withdraw = false;
 			no_load = false;
+			unload_all = false;
 #else
 			// disassemble also line bound convois in depots
 			gr->get_depot()->disassemble_convoi(self, true);
@@ -5892,7 +5904,7 @@ bool convoi_t::is_users_at_next_stop() const{
 			fracht_menge += v->get_total_cargo();
 		}
 	}
-	if(  get_schedule()->get_current_entry().is_unload_all() && (fracht_menge>0)  ) {
+	if(  (get_schedule()->get_current_entry().is_unload_all() || get_unload_all()) && (fracht_menge>0)  ) {
 		// we need to unload all goods at the next stop!
 		return true;
 	}

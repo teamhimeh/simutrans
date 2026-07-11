@@ -276,6 +276,12 @@ private:
 	bool no_load;
 
 	/**
+	* get off all goods at the next stop
+	* this flag should be reset when get off all goods.
+	*/
+	bool unload_all;
+
+	/**
 	* uncouple at this stop
 	*/
 	bool uncouple_done;
@@ -1086,6 +1092,10 @@ public:
 	bool get_no_load() const { return no_load; }
 
 	void set_no_load(bool new_no_load) { no_load = new_no_load; }
+
+	bool get_unload_all() const { return unload_all; }
+
+	void set_unload_all(bool new_unload_all) { unload_all = new_unload_all; }
 
 	void must_recalc_data() { recalc_data = true; }
 	void must_recalc_data_front() { recalc_data_front = true; }
