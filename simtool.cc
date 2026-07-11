@@ -7545,7 +7545,7 @@ uint8 tool_stop_mover_t::is_valid_pos(  player_t *player, const koord3d &pos, co
 	}
 	// check halt ownership
 	halthandle_t h = haltestelle_t::get_stoppable_halt(pos,player,waytype_t::any_wt);
-	if(  h.is_bound()  &&  !(  player_t::check_owner( player, h->get_owner() )  ||  h->is_other_player_connection_allowed()  )  ) {
+	if(  bd->is_halt()  &&  !h.is_bound()  ) {
 		error = "Das Feld gehoert\neinem anderen Spieler\n";
 		return 0;
 	}
@@ -10720,6 +10720,23 @@ bool tool_change_halt_t::init(player_t *player) {
 }
 
 
+bool tool_change_permission_t::init(player_t *player)
+{
+	uint32 halt_id = 0;
+	uint32 perms = 0;
+	const char *p = default_param;
+	while(  *p  &&  *p <= ' '  ) { p++; }
+	sscanf( p, "%u,%u", &halt_id, &perms );
+
+	halthandle_t halt;
+	halt.set_id(halt_id);
+	if(  halt.is_bound()  &&  player_t::check_owner(halt->get_owner(), player)  ) {
+		halt->set_permissions((uint16)perms);
+	}
+	return false;
+}
+
+
 /* Handles renaming of ingame entities. Needs a default param:
  * [object='c|h|l|m|t|p|f'][id|pos],[name]
  * c=convoi, h=halt, l=line,  m=marker, t=town, p=player, f=factory
@@ -10973,6 +10990,11 @@ bool tool_merge_player_t::init( player_t *player )
 	FOR(vector_tpl<halthandle_t>, const halt, haltestelle_t::get_alle_haltestellen()) {
 		if(  halt->get_owner()==merged_player  ) {
 			halt->make_private_and_join(merger_player, false);
+		}
+		else if(  !halt->is_allow_other_player_connection()
+		          &&  (halt->get_permissions() & (1 << merged_player_num))  ) {
+			// Transfer merged player's stop permission to the merger player
+			halt->set_permissions( halt->get_permissions() | (1 << merger_player_num) );
 		}
 	}
 	
