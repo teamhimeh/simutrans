@@ -83,12 +83,10 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 		numimp_delay_tolerance, numimp_max_speed, numimp_max_speed_kmh_of_convoi , numimp_tbgr_waiting_time, numimp_length_coupling_done;
 	gui_numberinput_t numimp_balance_speed_kmh_of_convoi;
 
-	// h:m:s input columns for wait_load_time, spacing_shift and delay_tolerance
-	gui_numberinput_t numimp_wait_load_h, numimp_wait_load_m, numimp_wait_load_s;
-	gui_numberinput_t numimp_spacing_shift_h, numimp_spacing_shift_m, numimp_spacing_shift_s;
-	gui_numberinput_t numimp_delay_tolerance_h, numimp_delay_tolerance_m, numimp_delay_tolerance_s;
-	// ':' separators between the h/m/s wait_load_time input fields; only shown while those fields are active
-	gui_label_t *lb_wait_load_colon1, *lb_wait_load_colon2, *lb_spacing_shift_colon1, *lb_spacing_shift_colon2, *lb_delay_tolerance_colon1, *lb_delay_tolerance_colon2;
+	// single packed h:m:s input for wait_load_time, spacing_shift and delay_tolerance, encoded as
+	// hours*10000 + minutes*100 + seconds; minutes/seconds may be typed up to 99 and are normalized
+	// (carried into the next larger unit) by update_labels().
+	gui_numberinput_t numimp_wait_load_hms, numimp_spacing_shift_hms, numimp_delay_tolerance_hms;
 	gui_label_t lb_spacing, lb_title1, lb_title2, lb_max_speed, lb_tbgr_waiting_time, lb_next_line, lb_length_coupling_done;
 
 	char lb_spacing_str[20];
@@ -109,7 +107,11 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// changes the waiting/loading levels if allowed
 	void update_selection();
-	
+
+	// recalculates the packed h:m:s input fields (and the wait_load divisor field) from the
+	// current schedule entry's raw values
+	void update_labels();
+
 	// void extract_advanced_settings(bool yesno);
 	void extract_schedule_settings(bool yesno);
 	void extract_loading_settings(bool yesno);
