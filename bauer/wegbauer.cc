@@ -359,7 +359,7 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	}
 	// check for existing crossing
 	crossing_t *cr = bd->find<crossing_t>();
-	if (cr) {
+	if (cr&&zv!=koord(0,0)) {
 		// index of the waytype in ns-direction at the crossing
 		const uint8 ns_way = cr->get_dir();
 		// only cross with the right direction
@@ -380,7 +380,7 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 		// both ways must be straight and no ends
 		return  ribi_t::is_straight(w_ribi)
 					&&  !ribi_t::is_single(w_ribi)
-					&&  ribi_t::is_straight(ribi_type(zv))
+					&&  (ribi_t::is_straight(ribi_type(zv))||zv==koord(0,0))
 				&&  (w_ribi&ribi_type(zv))==0;
 	}
 	// cannot build crossing here
@@ -403,7 +403,7 @@ bool way_builder_t::check_powerline(const koord zv, const grund_t *bd) const
 		return
 		  ribi_t::is_straight(lt_ribi)
 		  &&  !ribi_t::is_single(lt_ribi)
-		  &&  ribi_t::is_straight(ribi_type(zv))
+		  &&  (ribi_t::is_straight(ribi_type(zv))||zv==koord(0,0))
 		  &&  (lt_ribi&ribi_type(zv))==0
 		  &&  !bd->ist_tunnel();
 	}
@@ -1556,6 +1556,12 @@ void way_builder_t::intern_calc_straight_route(const koord3d start, const koord3
 
 	sint32 dummy_cost;
 	const grund_t *test_bd = welt->lookup(start);
+	if(  start==ziel  ) {
+		// we need to check crossing
+		if(!check_crossing(koord(0,0), test_bd, desc, player_builder)) {
+			return;
+		}
+	}
 	ok = false;
 	if (test_bd  &&  is_allowed_step(test_bd,test_bd,&dummy_cost)  ) {
 		//there is a legal ground at the start
