@@ -5258,6 +5258,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
 		}
+		// On a slope tile the direction is determined by the slope, even at a track end.
+		if(  bd->get_weg_hang() != slope_t::flat  &&  !ribi_t::is_straight(ribi)  ) {
+			ribi = ribi_t::doubles( ribi_type( bd->get_weg_hang() ) );
+		}
 		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
 			// cannot build here ...
 			return p_error;
@@ -5273,6 +5277,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
 		}
+		// On a slope tile the direction is determined by the slope, even at a track end.
+		if(  bd->get_weg_hang() != slope_t::flat  &&  !ribi_t::is_straight(ribi)  ) {
+			ribi = ribi_t::doubles( ribi_type( bd->get_weg_hang() ) );
+		}
 		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
 			// cannot build here ...
 			return p_error;
@@ -5287,6 +5295,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		// On a slope tile the direction is determined by the slope, even at a track end.
+		if(  bd->get_weg_hang() != slope_t::flat  &&  !ribi_t::is_straight(ribi)  ) {
+			ribi = ribi_t::doubles( ribi_type( bd->get_weg_hang() ) );
 		}
 		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
 			// cannot build here ...
