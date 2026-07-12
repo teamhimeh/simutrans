@@ -99,7 +99,7 @@ public:
 	};
 
 	enum station_flag {
-		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station
+		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station. (>=v57, we use uint16 permissions, but IT MUST BE KEPT TO READ/WRITE OLD SAVEDATA!)
 		HS_NO_HANDLE_PAX				 = 1 << 1,// do not handle goods type passenger
 		HS_NO_HANDLE_POST				 = 1 << 2,// do not handle goods type post
 		HS_NO_HANDLE_WARE				 = 1 << 3,// do not handle goods type ware
@@ -133,6 +133,8 @@ private:
 
 	PIXVAL status_color, last_status_color;
 	sint16 last_bar_count;
+	uint16 last_permissions;
+	uint16 last_player_count;
 	vector_tpl<scr_coord_val> last_bar_height; // caches the last height of the station bar for each good type drawn in display_status(). used for dirty tile management
 	uint32 capacity[3]; // passenger, mail, goods
 	uint8 overcrowded[256/8]; ///< bit field for each goods type (max 256)
@@ -373,6 +375,10 @@ private:
 	/* station flags. See station_flag enum for the definition. */
 	uint8 flags;
 
+	/// Bitfield: bit i set means player i is allowed to stop at this halt.
+	/// Owner and public service are always set. 0xFFFF for public halts.
+	uint16 permissions;
+
 	/**
 	 * versucht die ware mit beriets wartender ware zusammenzufassen
 	 */
@@ -435,7 +441,7 @@ public:
 	 * sucht umliegende, erreichbare fabriken und baut daraus die
 	 * Fabrikliste auf.
 	 */
-	void verbinde_fabriken();
+	void reconnect_factories();
 
 	/**
 	 * Connects factory to this halt if not already connected and
@@ -446,6 +452,13 @@ public:
 	bool connect_factory(fabrik_t *fab);
 
 	void remove_fabriken(fabrik_t *fab);
+
+	/**
+	 * Re-registers lines and lineless convoys according to current permissions.
+	 * Removes entries for players who lost permission; adds entries for newly permitted players.
+	 * @return true if registered_lines or registered_convoys changed
+	 */
+	bool rebuilt_schedule_registration();
 
 	/**
 	 * Rebuilds the list of connections to reachable halts
@@ -620,13 +633,15 @@ public:
 	 *
 	 * if avoid_overcrowding is set, a valid route in only found when there is no overflowing stop in between
 	 */
+
 	/**
 	 * @param start_pos  2D origin position (building tile). When valid and transit_by_foot is
 	 *                   enabled, the Manhattan distance to each start halt is added to the initial
 	 *                   route weight so that nearby stops are preferred over distant ones.
 	 *                   The destination walking cost is derived from ware.get_zielpos() internally.
 	 */
-	static int search_route( const halthandle_t *const start_halts, const uint16 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL, const koord start_pos=koord::invalid );
+	static int search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL, const koord start_pos=koord::invalid );
+
 
 	/**
 	 * A separate version of route searching code for re-calculating routes
@@ -686,7 +701,24 @@ public:
 		return get_ware_enabled();
 	}
 
-	bool is_other_player_connection_allowed() const { return flags & HS_ALLOW_OTHER_PLAYER_CONNECTION; }
+	/**
+	 * @return true if the given player is allowed to stop at this halt.
+	 * NULL player (unowned) is always allowed.
+	 */
+	bool is_connection_allowed(const player_t *player) const;
+
+	/**
+	 * Sets per-player stop permissions.
+	 * Owner's bit and public-service bit are always forced on.
+	 * Public-service owner forces all bits on.
+	 * Also rebuilds registered lines/convoys if the set changed.
+	 */
+	void set_permissions(uint16 perms);
+
+	uint16 get_permissions() const { return permissions; }
+
+	bool is_allow_other_player_connection() const { return (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION) != 0; }
+
 	void toggle_other_player_connection_allowed();
 
 	/**
@@ -716,7 +748,7 @@ public:
 
 	/**
 	 * Add tile to list of station tiles.
-	 * @param relink_factories if true call verbinde_fabriken, if not true take care of factory connections yourself
+	 * @param relink_factories if true call reconnect_factories, if not true take care of factory connections yourself
 	 */
 	bool add_grund(grund_t *gb, bool relink_factories = true);
 	bool rem_grund(grund_t *gb);

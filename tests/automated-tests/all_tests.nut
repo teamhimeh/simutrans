@@ -16,6 +16,7 @@ include("tests/test_dir")
 include("tests/test_factory")
 include("tests/test_convoy_cargo")
 include("tests/test_good")
+include("tests/test_gui_accessibility")
 include("tests/test_groundobj")
 include("tests/test_halt")
 include("tests/test_headquarters")
@@ -27,11 +28,15 @@ include("tests/test_scenario")
 include("tests/test_sign")
 include("tests/test_start_signal")
 include("tests/test_stop_before_check_signal")
+include("tests/test_longblock_signal")
+include("tests/test_advance_to_end")
+include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
 include("tests/test_trees")
 include("tests/test_way_bridge")
+include("tests/test_way_elevated")
 include("tests/test_way_road")
 include("tests/test_way_runway")
 include("tests/test_way_tram")
@@ -40,8 +45,11 @@ include("tests/test_wayobj")
 include("tests/test_schedule")
 include("tests/test_road_api")
 include("tests/test_road_choose")
-
-
+include("tests/test_priority_signal")
+include("tests/test_otrp_signal_options")
+include("tests/test_reroute_reservation")
+include("tests/test_remove_house")
+include("tests/test_pillar")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -98,6 +106,7 @@ all_tests <- [
 	test_convoy_cargo_loaded,
 	test_good_is_interchangeable,
 	test_good_speed_bonus,
+	test_gui_accessibility_windows_and_components,
 	test_groundobj_build_invalid_param,
 	test_groundobj_build_invalid_pos,
 	test_groundobj_build_random,
@@ -130,10 +139,17 @@ all_tests <- [
 	test_halt_make_public_multi_tile,
 	test_halt_make_public_underground,
 	test_halt_move_stop_invalid_param,
+	test_remove_halt_area_same_height,
+	test_remove_halt_area_different_height,
+	test_remove_halt_route_valid,
+	test_remove_halt_route_invalid,
+	test_remove_halt_other_player,
 	test_headquarters_build_flat,
 	test_label,
 	test_player_cash,
 	test_player_isactive,
+	test_player_create,
+	test_gui_open_dialog_tool_invalid,
 	test_player_headquarters,
 	test_player_name,
 	test_player_lines,
@@ -158,6 +174,9 @@ all_tests <- [
 	test_sign_build_private_way,
 	test_sign_build_signal,
 	test_sign_build_signal_multiple,
+	test_sign_remove_signal_route,
+	test_sign_remove_signal_area_ctrl,
+	test_sign_remove_signal_keeps_other_player_signal,
 	test_sign_signal_turns_red_on_leading_vehicle,
 	test_sign_signal_when_player_removed,
 	test_slope_to_dir,
@@ -180,6 +199,9 @@ all_tests <- [
 	test_trees_plant_single_max_per_square,
 	test_way_bridge_build_ground,
 	test_way_bridge_planner,
+	test_way_elevated_build_over_other_player_halt_setting_off,
+	test_way_elevated_build_over_other_player_halt_setting_on,
+	test_way_elevated_build_over_other_player_non_halt_forbidden,
 	test_way_road_has_double_slopes,
 	test_way_road_build_single_tile,
 	test_way_road_build_straight,
@@ -222,7 +244,6 @@ all_tests <- [
 	test_transport_route_cache_need_electric,
 	test_transport_two_convoys_on_same_line,
 	test_start_signal_default_false,
-	test_start_signal_set_get,
 	test_start_signal_convoy_stays_at_station,
 	test_start_signal_false_convoy_advances_to_signal,
 	test_start_signal_convoy_passes_when_clear,
@@ -232,6 +253,25 @@ all_tests <- [
 	test_stop_before_check_longblock_signal_convoy_stops,
 	test_stop_before_check_choose_signal_convoy_stops,
 	test_stop_before_check_false_convoy_does_not_stop,
+	test_priority_signal_reserve,
+	test_longblock_open_no_prefix_signal,
+	test_longblock_blocked_no_prefix_signal,
+	test_longblock_open_pre_signal,
+	test_longblock_blocked_pre_signal,
+	test_longblock_open_priority_signal,
+	test_longblock_blocked_priority_signal,
+	test_otrp_signal_options_roundtrip,
+	test_choose_signal_false_behavior,
+	test_skip_default_route_false_behavior,
+	test_margin_length_behavior,
+	test_length_based_behavior,
+	test_longblock_blocked_priority_priority_long,
+	test_longblock_blocked_priority_pre_long,
+	test_longblock_blocked_pre_priority_long,
+	test_advance_to_end_true_behavior,
+	test_advance_to_end_false_behavior,
+	test_two_ways_false_blocks_reverse,
+	test_two_ways_true_allows_reverse,
 	test_trees_plant_single_invalid_param,
 	test_way_tunnel_build_straight,
 	test_schedule_entry_maximum_load,
@@ -253,7 +293,15 @@ all_tests <- [
 	test_road_choose_stop_behind_twoway_mode,
 	test_road_choose_stop_behind_loading_only_mode,
 	test_road_choose_stop_behind_inverted_mode,
-	test_road_choose_no_stop_behind_prohibited_mode
+	test_road_choose_no_stop_behind_prohibited_mode,
+	test_rail_reroute_no_line,
+	test_rail_reroute_with_line_stale_cache,
+	test_rail_reroute_with_line_mid_travel,
+	test_remove_house_one_click,
+	test_remove_house_area,
+	test_remove_pillar_tool_basic,
+	test_remover_pillar_priority,
+	test_remove_pillar_tool_shift_area,
 ]
 
 

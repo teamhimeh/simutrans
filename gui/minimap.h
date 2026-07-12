@@ -66,10 +66,11 @@ public:
 		MAP_CLIMATES     = 1 << 24,
 		MAP_CITIZENS     = 1 << 25,
 		MAP_CITY_GROWTH  = 1 << 26,
+		MAP_LABELS       = 1 << 27,
 
 		MAP_MODE_HALT_FLAGS = (MAP_STATUS|MAP_SERVICE|MAP_ORIGIN|MAP_TRANSFER|MAP_WAITING|MAP_WAITCHANGE),
 		MAP_MODE_CITY_FLAGS = (MAP_CITIZENS|MAP_CITY_GROWTH),
-		MAP_MODE_FLAGS = (MAP_TOWN|MAP_CITYLIMIT|MAP_STATUS|MAP_SERVICE|MAP_WAITING|MAP_WAITCHANGE|MAP_TRANSFER|MAP_LINES|MAP_FACTORIES|MAP_ORIGIN|MAP_DEPOT|MAP_TOURIST|MAP_PAX_DEST|MAP_CITIZENS|MAP_CITY_GROWTH)
+		MAP_MODE_FLAGS = (MAP_TOWN|MAP_CITYLIMIT|MAP_STATUS|MAP_SERVICE|MAP_WAITING|MAP_WAITCHANGE|MAP_TRANSFER|MAP_LINES|MAP_FACTORIES|MAP_ORIGIN|MAP_DEPOT|MAP_TOURIST|MAP_PAX_DEST|MAP_CITIZENS|MAP_CITY_GROWTH|MAP_LABELS)
 	};
 
 	enum NETWORK_COLOR_MODE {
@@ -184,6 +185,8 @@ private:
 	vector_tpl<halthandle_t> route_search_transfer_halts;
 	halthandle_t route_search_from_halt, route_search_dest_halt;
 
+	vector_tpl<koord> highlighted_depot_positions;
+
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
 
@@ -291,6 +294,12 @@ public:
 
 	void add_route_halt(halthandle_t halt) { route_search_highlighted_halts.append_unique(halt); }
 	void add_transfer_halt(halthandle_t halt) { route_search_transfer_halts.append_unique(halt); }
+
+	void set_highlighted_depots(const vector_tpl<koord> &positions) {
+		highlighted_depot_positions.clear();
+		for (koord const& k : positions) { highlighted_depot_positions.append(k); }
+	}
+	void clear_highlighted_depots() { highlighted_depot_positions.clear(); }
 	void set_from_dest_halt(halthandle_t from_halt, halthandle_t dest_halt) {
 		if (  from_halt.is_bound() && dest_halt.is_bound()  ) {
 			route_search_from_halt = from_halt;

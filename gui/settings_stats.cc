@@ -226,12 +226,13 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "allow overloading", sets->is_allow_overloading() );
 	INIT_BOOL( "overloading revenue reduced", sets->is_overloading_revenue_reduced() );
 	INIT_BOOL( "overloading runningcost increase", sets->is_overloading_runningcost_increase() );
+	INIT_BOOL( "overloaded acceleration", sets->is_overloaded_acceleration() );
 	INIT_NUM( "station_coverage", sets->get_station_coverage(), 1, 127, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "allow_merge_distant_halt", sets->get_allow_merge_distant_halt(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	SEPERATOR
 	INIT_NUM( "max_route_steps", sets->get_max_route_steps(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	INIT_NUM( "max_choose_route_steps", sets->get_max_choose_route_steps(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
-	INIT_NUM( "max_hops", sets->get_max_hops(), 100, 65000, gui_numberinput_t::POWER2, false );
+	INIT_NUM( "max_hops", sets->get_max_hops(), 100, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	INIT_NUM( "max_transfers", sets->get_max_transfers(), 1, 100, gui_numberinput_t::AUTOLINEAR, false );
 	SEPERATOR
 	INIT_BOOL( "use_old_friction", env_t::use_old_friction );
@@ -266,11 +267,13 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	SEPERATOR
 	INIT_BOOL( "allow_higher_flight", sets->allow_higher_flight );
 	INIT_BOOL( "use_route_cache", sets->use_route_cache );
+	INIT_BOOL( "allow_elevated_way_over_others_halt", sets->allow_elevated_way_over_others_halt );
 	SEPERATOR
 	INIT_BOOL( "transit_by_foot", sets->transit_by_foot );
 	INIT_NUM( "foot_path_weight", sets->foot_path_weight, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	INIT_NUM( "foot_path_time_ticks", sets->foot_path_time_ticks, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	INIT_BOOL( "walk_cost_to_halt", sets->walk_cost_to_halt );
+
 	INIT_END
 }
 
@@ -284,6 +287,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_BOOL_VALUE( sets->allow_overloading );
 	READ_BOOL_VALUE( sets->overloading_revenue_reduced );
 	READ_BOOL_VALUE( sets->overloading_runningcost_increase );
+	READ_BOOL_VALUE( sets->overloaded_acceleration );
 	READ_NUM_VALUE( sets->station_coverage_size );
 	READ_NUM_VALUE( sets->allow_merge_distant_halt );
 	READ_NUM_VALUE( sets->max_route_steps );
@@ -322,6 +326,7 @@ void settings_routing_stats_t::read(settings_t* const sets)
 
 	READ_BOOL_VALUE( sets->allow_higher_flight );
 	READ_BOOL_VALUE( sets->use_route_cache );
+	READ_BOOL_VALUE( sets->allow_elevated_way_over_others_halt );
 	READ_BOOL_VALUE( sets->transit_by_foot );
 	READ_NUM_VALUE( sets->foot_path_weight );
 	READ_NUM_VALUE( sets->foot_path_time_ticks );
@@ -334,6 +339,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	INIT_INIT
 	INIT_NUM( "remove_dummy_player_months", sets->get_remove_dummy_player_months(), 0, MAX_PLAYER_HISTORY_YEARS*12, 12, false );
 	INIT_NUM( "unprotect_abandoned_player_months", sets->get_unprotect_abandoned_player_months(), 0, MAX_PLAYER_HISTORY_YEARS*12, 12, false );
+	INIT_BOOL( "allow_unlock_by_public", sets->get_allow_unlock_by_public() );
 	INIT_NUM( "ai_construction_speed", sets->get_default_ai_construction_speed(), 0, 1000000000, 1000, false );
 	SEPERATOR
 
@@ -431,6 +437,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	sint64 start_money_temp;
 	READ_NUM_VALUE( sets->remove_dummy_player_months );
 	READ_NUM_VALUE( sets->unprotect_abandoned_player_months );
+	READ_BOOL_VALUE( sets->allow_unlock_by_public );
 	READ_NUM_VALUE( sets->default_ai_construction_speed );
 	env_t::default_ai_construction_speed = sets->get_default_ai_construction_speed();
 	READ_COST_VALUE( start_money_temp );

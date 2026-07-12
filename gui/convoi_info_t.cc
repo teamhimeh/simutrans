@@ -380,7 +380,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	next_reservation_index = cnv->get_next_reservation_index();
 
 	// make titlebar dirty to display the correct coordinates
-	if(cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()) {
+	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
 		if (line_bound != cnv->get_line().is_bound()  ) {
 			line_bound = cnv->get_line().is_bound();
@@ -462,7 +462,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		}
 		bt_promote_to_line.disable();
 		button.set_text(cnv->get_owner()->get_name());
-		if(  !cnv->get_owner()->is_locked()  ) {
+		if(  welt->player_can_act_unrestricted(cnv->get_owner())  ) {
 			button.set_tooltip("move to the owner");
 			button.enable();
 		} else {
@@ -495,9 +495,10 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_show_button.pressed = is_route_show;
 	route_show_button.enable();
 
+	// update layout before rendering so upper section width matches current window size
+	set_windowsize(size);
 	// all gui stuff set => display it
 	gui_frame_t::draw(pos, size);
-	set_windowsize(size);
 }
 
 
@@ -602,7 +603,7 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	}
 
 	// some actions only allowed, when I am the player
-	if(cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()) {
+	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
 		if(  comp == &button  ) {
 			if(  cnv->get_coupling_convoi().is_bound()  ) {

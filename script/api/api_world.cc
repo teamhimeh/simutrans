@@ -13,6 +13,7 @@
 #include "../api_function.h"
 #include "../../simworld.h"
 #include "../../simversion.h"
+#include "../../simmenu.h"
 #include "../../player/simplay.h"
 #include "../../obj/gebaeude.h"
 #include "../../obj/label.h"
@@ -64,6 +65,23 @@ bool world_remove_player(karte_t *welt, player_t *player)
 	}
 	// now call - will not have immediate effect in network games
 	welt->call_change_player_tool(karte_t::delete_player, player->get_player_nr(), 0, true /*scripted*/);
+	return true;
+}
+
+
+bool world_create_player(karte_t *welt, sint32 player_nr, sint32 player_type)
+{
+	if (player_nr < 2  ||  player_nr >= PLAYER_UNOWNED  ||
+	    player_type < player_t::HUMAN  ||  player_type >= player_t::MAX_AI) {
+		return false;
+	}
+	// First test whether this player slot and type can be created.
+	bool ok = welt->change_player_tool(karte_t::new_player, (uint8)player_nr, (uint16)player_type, true /*unlocked*/, false /*exec*/);
+	if (!ok) {
+		return false;
+	}
+	// This will not have an immediate effect in network games.
+	welt->call_change_player_tool(karte_t::new_player, (uint8)player_nr, (uint16)player_type, true /*scripted*/);
 	return true;
 }
 
@@ -271,6 +289,25 @@ void export_world(HSQUIRRELVM vm, bool scenario)
 	STATIC register_method(vm, &karte_t::get_season, "get_season");
 
 	if (scenario) {
+		/**
+		* Creates a player company in an unused player slot.
+		*
+		* Player numbers 0 and 1 are reserved for the default human and public
+		* players. Valid new player numbers are 2 through 14.
+		*
+		* Player types are 1 = human, 2 = goods AI, 3 = passenger AI, and
+		* 4 = scripted AI.
+		*
+		* In network games, there will be a delay between the call to this
+		* function and creation of the player.
+		*
+		* @param player_nr unused player number
+		* @param player_type player type to create
+		* @ingroup scen_only
+		* @returns whether the creation request was accepted
+		*/
+		STATIC register_method(vm, &world_create_player, "create_player", true);
+
 		/**
 		* Removes player company: removes all assets. Use with care.
 		*
