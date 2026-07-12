@@ -2437,7 +2437,13 @@ static inline void colorpixcopy_line(PIXVAL* dest, const PIXVAL* src, const PIXV
 			} else if (s >= 0x8008 && s < 0x8010) {
 				*dest++ = player_col2[s & 7];         // player color 2 → owner's color 2
 			} else {
-				*dest++ = rgbmap_current[s];          // regular or special color
+				// regular or special color: read the day/night-selected map directly.
+				// Do NOT use the global rgbmap_current/activate_player_color() here - this
+				// function is called from the multi-threaded per-object draw path, and
+				// activate_player_color() mutates shared statics (player_day/player_night,
+				// rgbmap_*[0x8000..0x800F], transparent_map_*) without any locking, which
+				// races with other threads concurrently drawing other players' vehicles.
+				*dest++ = daynight ? rgbmap_day_night[s] : rgbmap_all_day[s];
 			}
 		}
 	} else {
@@ -3260,7 +3266,9 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 			player_col2[i] = specmap2[player_offsets[p2][1] + i];
 		}
 
-		activate_player_color( player_nr, daynight );
+		// note: intentionally NOT calling activate_player_color() here - it mutates
+		// global, unlocked state (see colorpixcopy_line) and this function may run
+		// concurrently with other threads drawing other players' vehicles.
 
 		const PIXVAL *sp = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
@@ -3398,7 +3406,9 @@ void display_base_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp,
 			player_col2[i] = specmap2[player_offsets[p2][1] + i];
 		}
 
-		activate_player_color( player_nr, daynight );
+		// note: intentionally NOT calling activate_player_color() here - see
+		// colorpixcopy_line for why this global-mutating call is unsafe in this
+		// multi-threaded, per-object live-draw path.
 
 		const PIXVAL *sp = images[n].base_data;
 
@@ -5822,28 +5832,18 @@ void simgraph_resize(scr_size new_window_size)
 /**
  * Take Screenshot
  */
-bool display_snapshot( const scr_rect &area )
+static raw_image_t *capture_snapshot(const scr_rect &area)
 {
-	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
-		return false; // directory not accessible
-	}
-
-	static int number = 0;
-	char filename[80];
-
-	// find the first not used screenshot image
-	do {
-		sprintf(filename, SCREENSHOT_PATH_X "simscr%02d.png", number++);
-	} while (access(filename, W_OK) != -1);
-
-	// now save the screenshot
 	scr_rect clipped_area = area;
 	clipped_area.clip(scr_rect(0, 0, disp_actual_width, disp_height));
+	if (clipped_area.w <= 0 || clipped_area.h <= 0) {
+		return NULL;
+	}
 
-	raw_image_t img(clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888);
+	raw_image_t *img = new raw_image_t(clipped_area.w, clipped_area.h, raw_image_t::FMT_RGB888);
 
 	for (scr_coord_val y = 0; y < clipped_area.h; ++y) {
-		uint8 *dst = img.access_pixel(0, y);
+		uint8 *dst = img->access_pixel(0, y);
 		const PIXVAL *row = textur + (clipped_area.x + 0) + (clipped_area.y + y) * disp_width;
 
 		for (scr_coord_val x = 0; x < clipped_area.w; ++x) {
@@ -5861,5 +5861,44 @@ bool display_snapshot( const scr_rect &area )
 		}
 	}
 
-	return img.write_png(filename);
+	return img;
+}
+
+
+bool display_snapshot_png(const scr_rect &area, std::string &png_data)
+{
+	raw_image_t *img = capture_snapshot(area);
+	if (img == NULL) {
+		png_data.clear();
+		return false;
+	}
+
+	const bool ok = img->write_png(png_data);
+	delete img;
+	return ok;
+}
+
+
+bool display_snapshot(const scr_rect &area)
+{
+	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
+		return false; // directory not accessible
+	}
+
+	static int number = 0;
+	char filename[80];
+
+	// find the first not used screenshot image
+	do {
+		sprintf(filename, SCREENSHOT_PATH_X "simscr%02d.png", number++);
+	} while (access(filename, W_OK) != -1);
+
+	raw_image_t *img = capture_snapshot(area);
+	if (img == NULL) {
+		return false;
+	}
+
+	const bool ok = img->write_png(filename);
+	delete img;
+	return ok;
 }
