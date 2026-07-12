@@ -3183,9 +3183,11 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	bauigel.set_overtaking_mode(mode);
 	bauigel.set_street_flag(flag);
 	bauigel.set_vehicle_offset(vehicle_offset);
-	if(  bauigel.get_route().get_count()>1  ) {
+	// allow building an isolated one-tile way: ctrl held and start/end coincide
+	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_route().get_count() == 1;
+	if(  bauigel.get_route().get_count()>1  ||  single_tile_way  ) {
 		welt->mute_sound(true);
-		bauigel.build();
+		bauigel.build(single_tile_way);
 		welt->mute_sound(false);
 
 		// set default newly constructed type
@@ -3220,7 +3222,8 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 
 	uint8 offset = (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt) ? welt->get_settings().get_way_height_clearance() + hf : 0;
 
-	if(  bauigel.get_count()>1  ) {
+	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_count() == 1;
+	if(  bauigel.get_count()>1  ||  single_tile_way  ) {
 		// Set tooltip first (no dummygrounds, if bauigel.calc_casts() is called).
 		win_set_static_tooltip( tooltip_with_price_length("Building costs estimates", bauigel.calc_costs(), bauigel.get_count() ) );
 

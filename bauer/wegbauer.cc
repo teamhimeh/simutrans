@@ -2707,7 +2707,7 @@ void way_builder_t::build_road()
 
 void way_builder_t::build_track()
 {
-	if(get_count() > 1) {
+	if(get_count() > 0) {
 		// init undo
 		player_builder->init_undo(desc->get_wtyp(), get_count());
 
@@ -3051,9 +3051,9 @@ void way_builder_t::build_river()
 
 
 
-void way_builder_t::build()
+void way_builder_t::build(bool allow_single_tile)
 {
-	if(get_count()<2  ||  get_count() > maximum) {
+	if(get_count() < (allow_single_tile ? 1u : 2u)  ||  get_count() > maximum) {
 DBG_MESSAGE("way_builder_t::build()","called, but no valid route.");
 		// no valid route here ...
 		return;

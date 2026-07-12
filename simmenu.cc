@@ -1442,8 +1442,12 @@ const char *two_click_tool_t::move(player_t *player, uint16 buttonstate, koord3d
 
 	if(  start == pos  ) {
 		if(tool_build_way_t* t = dynamic_cast<tool_build_way_t*>(this)) {
-			// This is tool_build_way_t. The mode selection window should not be called.
-			t->init( player, true );
+			// With ctrl held, dragging back onto the start tile is kept as a pending
+			// one-tile way build instead of being cancelled/restarted.
+			if(  !is_ctrl_pressed()  ) {
+				// This is tool_build_way_t. The mode selection window should not be called.
+				t->init( player, true );
+			}
 		} else if(tool_build_bridge_t* tb = dynamic_cast<tool_build_bridge_t*>(this)) {
 			// This is tool_build_bridge_t. The mode selection window should not be called.
 			tb->init( player, true );
