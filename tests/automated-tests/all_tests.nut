@@ -36,6 +36,7 @@ include("tests/test_terraform")
 include("tests/test_transport")
 include("tests/test_trees")
 include("tests/test_way_bridge")
+include("tests/test_way_elevated")
 include("tests/test_way_road")
 include("tests/test_way_runway")
 include("tests/test_way_tram")
@@ -48,6 +49,7 @@ include("tests/test_priority_signal")
 include("tests/test_otrp_signal_options")
 include("tests/test_reroute_reservation")
 include("tests/test_remove_house")
+include("tests/test_pillar")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -197,6 +199,9 @@ all_tests <- [
 	test_trees_plant_single_max_per_square,
 	test_way_bridge_build_ground,
 	test_way_bridge_planner,
+	test_way_elevated_build_over_other_player_halt_setting_off,
+	test_way_elevated_build_over_other_player_halt_setting_on,
+	test_way_elevated_build_over_other_player_non_halt_forbidden,
 	test_way_road_has_double_slopes,
 	test_way_road_build_single_tile,
 	test_way_road_build_straight,
@@ -294,6 +299,9 @@ all_tests <- [
 	test_rail_reroute_with_line_mid_travel,
 	test_remove_house_one_click,
 	test_remove_house_area,
+	test_remove_pillar_tool_basic,
+	test_remover_pillar_priority,
+	test_remove_pillar_tool_shift_area,
 ]
 
 

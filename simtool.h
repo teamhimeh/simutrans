@@ -61,12 +61,13 @@ public:
 
 // remove uppermost object from tile
 class tool_remover_t : public two_click_tool_t {
-private:
+protected:
 	bool tool_remover_intern(player_t *player, koord3d pos, sint8 type, const char *&msg);
 public:
 	tool_remover_t() : two_click_tool_t(TOOL_REMOVER | GENERAL_TOOL) { one_click = true; }
+	explicit tool_remover_t(uint16 id) : two_click_tool_t(id) { one_click = true; }
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Abriss"); }
-	char const* process(player_t*, koord3d);
+	virtual char const* process(player_t*, koord3d);
 	bool is_init_network_safe() const OVERRIDE { return true; }
 
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -75,6 +76,14 @@ public:
 	image_id get_icon(player_t *) const OVERRIDE { return tree_builder_t::has_trees() ? icon : IMG_EMPTY; }
 	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); one_click = true; return true; }
 	bool exit(player_t* player) OVERRIDE { one_click = true; return two_click_tool_t::exit(player); }
+};
+
+// removes only bridge pillars
+class tool_remove_pillar_t : public tool_remover_t {
+public:
+	tool_remove_pillar_t() : tool_remover_t(TOOL_REMOVE_PILLAR | GENERAL_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove bridge pillar"); }
+	char const* process(player_t*, koord3d) OVERRIDE;
 };
 
 // alter land height tools
@@ -1482,6 +1491,14 @@ public:
 class tool_change_halt_t : public tool_t {
 public:
 	tool_change_halt_t() : tool_t(TOOL_CHANGE_HALT | SIMPLE_TOOL) {}
+	bool init(player_t*) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return false; }
+};
+
+// set per-player stop permissions; default_param = "halt_id,perms"
+class tool_change_permission_t : public tool_t {
+public:
+	tool_change_permission_t() : tool_t(TOOL_HALT_PERMISSION | SIMPLE_TOOL) {}
 	bool init(player_t*) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return false; }
 };

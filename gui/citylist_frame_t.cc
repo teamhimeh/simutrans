@@ -167,6 +167,7 @@ citylist_frame_t::citylist_frame_t() :
 
 	year_month_tabs.add_tab(&container_year, translator::translate("Years"));
 	year_month_tabs.add_tab(&container_month, translator::translate("Months"));
+	year_month_tabs.add_tab(&container_decade, translator::translate("Decades"));
 	// .. put the same buttons in both containers
 	button_t* buttons[karte_t::MAX_WORLD_COST];
 
@@ -204,6 +205,22 @@ citylist_frame_t::citylist_frame_t() :
 		button_to_chart.append(buttons[i], &mchart, curve);
 	}
 	container_month.end_table();
+
+	container_decade.set_table_layout(1,0);
+	container_decade.add_component(&dchart);
+	dchart.set_dimension(12, karte_t::MAX_WORLD_COST*MAX_WORLD_HISTORY_DECADES);
+	dchart.set_background(SYSCOL_CHART_BACKGROUND);
+	dchart.set_min_size(scr_size(0, 8*LINESPACE));
+
+	container_decade.add_table(4,0);
+	for (int i = 0; i<karte_t::MAX_WORLD_COST; i++) {
+		sint16 curve = dchart.add_curve(color_idx_to_rgb(hist_type_color[i]), welt->get_finance_history_decade(), karte_t::MAX_WORLD_COST, i, MAX_WORLD_HISTORY_DECADES, hist_type_type[i], false, true, (i==1) ? 1 : 0 );
+
+		// add button
+		container_decade.add_component(buttons[i]);
+		button_to_chart.append(buttons[i], &dchart, curve);
+	}
+	container_decade.end_table();
 
 	update_label();
 

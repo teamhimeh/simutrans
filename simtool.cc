@@ -73,6 +73,7 @@
 #include "obj/baum.h"
 #include "obj/field.h"
 #include "obj/label.h"
+#include "obj/pillar.h"
 
 #include "dataobj/koord.h"
 #include "dataobj/settings.h"
@@ -556,6 +557,47 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 
 	koord k(pos.get_2d());
 
+	// check for pillar
+	pillar_t* pl = gr->find<pillar_t>();
+	if ((type == obj_t::undefined || type == obj_t::pillar) && pl!=NULL) {
+		msg = pl->is_deletable(player);
+		if(msg) {
+			dbg->message("tool_remover_intern", "pillar not deletable: %s", msg);
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing pillar at (%s)", pos.get_str());
+		pl->cleanup(player);
+		delete pl;
+		return true;
+	}
+
+	// check for signal
+	roadsign_t* rs = gr->find<signal_t>();
+	if (rs == NULL) rs = gr->find<roadsign_t>();
+	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
+		msg = rs->is_deletable(player);
+		if(msg) {
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
+		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
+		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
+			weg = gr->get_weg(track_wt);
+		}
+
+		rs->cleanup(player);
+		delete rs;
+
+		// no need to update way if there is none
+		// may happen when public player builds a signal on a company track,
+		// the company goes bankrupt and the public player tries to remove the signal
+		if (weg) {
+			weg->count_sign();
+		}
+
+		return true;
+	}
+
 	// check powerline (can cross ground of another player)
 	leitung_t* lt = gr->get_leitung();
 	// check whether powerline related stuff should be removed, and if there is any to remove
@@ -612,33 +654,6 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 			lt->cleanup(player);
 			delete lt;
 		}
-		return true;
-	}
-
-	// check for signal
-	roadsign_t* rs = gr->find<signal_t>();
-	if (rs == NULL) rs = gr->find<roadsign_t>();
-	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
-		msg = rs->is_deletable(player);
-		if(msg) {
-			return false;
-		}
-DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
-		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
-		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
-			weg = gr->get_weg(track_wt);
-		}
-
-		rs->cleanup(player);
-		delete rs;
-
-		// no need to update way if there is none
-		// may happen when public player builds a signal on a company track,
-		// the company goes bankrupt and the public player tries to remove the signal
-		if (weg) {
-			weg->count_sign();
-		}
-
 		return true;
 	}
 
@@ -1047,6 +1062,44 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 	}
 
 	return msg;
+}
+
+
+const char *tool_remove_pillar_t::process( player_t *player, koord3d pos )
+{
+	// When no pillar exists on the tile, tool_remover_intern (called with
+	// obj_t::pillar) falls through to "Requested object not found." and returns
+	// false.  In the shift/ctrl area-removal loop in do_work the return value
+	// of process() is used as the loop-exit sentinel: NULL means "keep going",
+	// non-NULL means "stop".  Returning an error string here would cause the
+	// whole operation to be reported as failed even though all pillars were
+	// successfully removed.  So we distinguish "no pillar on this tile" (normal
+	// end-of-iteration → "") from "pillar exists but cannot be deleted" (real
+	// error → propagate fail).
+	grund_t *gr = welt->lookup(pos);
+	if (gr == NULL  ||  gr->find<pillar_t>() == NULL) {
+		return "";
+	}
+
+	const char *fail = NULL;
+	if (!tool_remover_intern(player, pos, obj_t::pillar, fail)) {
+		return fail;
+	}
+
+	if (pos.x > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::west)->calc_image();
+	}
+	if (pos.y > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::north)->calc_image();
+	}
+	if (pos.x < welt->get_size().x-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::east)->calc_image();
+	}
+	if (pos.y < welt->get_size().y-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::south)->calc_image();
+	}
+
+	return NULL;
 }
 
 
@@ -5174,8 +5227,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// get valid ground
 	grund_t *bd = tool_intern_koord_to_weg_grund(player, welt, pos, wegtype);
 
-	if(  !bd  ||  bd->get_weg_hang()!=slope_t::flat  ) {
-		// only flat tiles, only one stop per map square
+	if(  !bd  ) {
 		return "No suitable way on the ground!";
 	}
 
@@ -5196,7 +5248,38 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// find out orientation ...
 	uint32 layout = 0;
 	ribi_t::ribi ribi=ribi_t::none;
-	if(  desc->get_all_layouts()==48  ) {
+	
+	if(  desc->get_all_layouts()==112  ) {
+		// through station supporting diagonal
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==80  ) {
+		// through station supporting diagonal
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==48  ) {
 		// through station supporting diagonal
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5325,6 +5408,12 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		layout &= (desc->get_all_layouts()-1);
 	}
 
+	// Slope tiles require a descriptor with slope images (all_layouts > 48).
+	// Check BEFORE removing the existing building to avoid corrupting the halt.
+	if(  bd->get_weg_hang() != slope_t::flat  &&  desc->get_all_layouts() <= 48  ) {
+		return "Stops on slope require a slope-capable descriptor!";
+	}
+
 	halthandle_t old_halt = bd->get_halt();
 	sint64 old_cost = 0;
 	bool recalc_schedule = false;
@@ -5371,7 +5460,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		halt = haltestelle_t::create(k, player);
 	}
-	if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
+	if(  bd->get_weg_hang() != slope_t::flat  ) {
+		hausbauer_t::build_station_on_slope_way(halt_player, bd->get_pos(), layout, desc, halt);
+	}
+	else if(  desc->get_all_layouts()>=48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
 	else {
@@ -7545,7 +7637,7 @@ uint8 tool_stop_mover_t::is_valid_pos(  player_t *player, const koord3d &pos, co
 	}
 	// check halt ownership
 	halthandle_t h = haltestelle_t::get_stoppable_halt(pos,player,waytype_t::any_wt);
-	if(  h.is_bound()  &&  !(  player_t::check_owner( player, h->get_owner() )  ||  h->is_other_player_connection_allowed()  )  ) {
+	if(  bd->is_halt()  &&  !h.is_bound()  ) {
 		error = "Das Feld gehoert\neinem anderen Spieler\n";
 		return 0;
 	}
@@ -9268,7 +9360,9 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'l' : apply new line [number]
  * 'L' : create new line
  * 'd' : go to nearest depot
- * 'y' : move to depoot immediately
+ * 'y' : move to depot immediately
+ * 'D' : go to the specified depot
+ * 'Y' : move to the specified depot immediately
  * 'r' : release the child convoy
  * 'a' : set convoy trading acceptance
  * 'o' : change convoy owner by trading
@@ -9280,6 +9374,7 @@ bool scenario_check_convoy(karte_t *welt, player_t *player, convoihandle_t cnv, 
  * 'b' : apply balance speed (limit power)
  * 'i' : set invalid convoy
  * 'u' : suspension
+ * 'k' : force get off
  */
 bool tool_change_convoi_t::init( player_t *player )
 {
@@ -9561,6 +9656,12 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'u':
 		{
 			cnv->set_suspension(atoi(p)!=0);
+		}
+		break;
+
+		case 'k':
+		{
+			cnv->set_unload_all(atoi(p)!=0);
 		}
 		break;
 	}
@@ -10720,6 +10821,23 @@ bool tool_change_halt_t::init(player_t *player) {
 }
 
 
+bool tool_change_permission_t::init(player_t *player)
+{
+	uint32 halt_id = 0;
+	uint32 perms = 0;
+	const char *p = default_param;
+	while(  *p  &&  *p <= ' '  ) { p++; }
+	sscanf( p, "%u,%u", &halt_id, &perms );
+
+	halthandle_t halt;
+	halt.set_id(halt_id);
+	if(  halt.is_bound()  &&  player_t::check_owner(halt->get_owner(), player)  ) {
+		halt->set_permissions((uint16)perms);
+	}
+	return false;
+}
+
+
 /* Handles renaming of ingame entities. Needs a default param:
  * [object='c|h|l|m|t|p|f'][id|pos],[name]
  * c=convoi, h=halt, l=line,  m=marker, t=town, p=player, f=factory
@@ -10973,6 +11091,11 @@ bool tool_merge_player_t::init( player_t *player )
 	FOR(vector_tpl<halthandle_t>, const halt, haltestelle_t::get_alle_haltestellen()) {
 		if(  halt->get_owner()==merged_player  ) {
 			halt->make_private_and_join(merger_player, false);
+		}
+		else if(  !halt->is_allow_other_player_connection()
+		          &&  (halt->get_permissions() & (1 << merged_player_num))  ) {
+			// Transfer merged player's stop permission to the merger player
+			halt->set_permissions( halt->get_permissions() | (1 << merger_player_num) );
 		}
 	}
 	

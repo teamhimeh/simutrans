@@ -116,6 +116,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_exec_script", TOOL_EXEC_SCRIPT | GENERAL_TOOL);
 	/// scripted tool (two-click)
 	enum_slot(vm, "tool_exec_two_click_script", TOOL_EXEC_TWO_CLICK_SCRIPT | GENERAL_TOOL);
+	/// remove bridge pillars only
+	enum_slot(vm, "tool_remove_pillar", TOOL_REMOVE_PILLAR | GENERAL_TOOL);
 
 	// simple tools
 	/// increase industry density
