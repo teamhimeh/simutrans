@@ -176,6 +176,8 @@ private:
 
 	static bool circle_halts;
 
+	static bool show_convoi;
+
 	bool is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_index);
 
 	/// nonstatic, if we have someday many maps ...
@@ -196,6 +198,14 @@ public:
 	static bool is_visible;
 
 	void set_circle_halts(bool val) { circle_halts = val; };
+
+	static bool get_show_convoi() { return show_convoi; }
+	void set_show_convoi(bool val) {
+		if(  show_convoi != val  ) {
+			show_convoi = val;
+			calc_map();
+		}
+	};
 	bool is_cnv_schedule_bound() { return current_cnv.is_bound() || current_schedule != nullptr; }
 
 	uint8 network_color_mode;
