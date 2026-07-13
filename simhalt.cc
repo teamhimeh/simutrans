@@ -2122,7 +2122,8 @@ void haltestelle_t::rebuild_linked_connections()
 			for(  auto const& my_tile : tiles  ) {
 				const koord my_pos = my_tile.grund->get_pos().get_2d();
 				for(  auto const& other_tile : other->get_tiles()  ) {
-					if(  koord_distance(my_pos, other_tile.grund->get_pos().get_2d()) <= cov  ) {
+					const koord other_pos = other_tile.grund->get_pos().get_2d();
+					if(  max( abs(my_pos.x - other_pos.x), abs(my_pos.y - other_pos.y) ) <= (sint16)cov  ) {
 						overlaps = true;
 						break;
 					}

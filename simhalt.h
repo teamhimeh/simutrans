@@ -255,11 +255,12 @@ public:
 		/// directly reachable halt
 		halthandle_t halt;
 		/// best connection weight to reach this destination
-		uint32 weight:30;
+		uint32 weight:31;
 		/// is halt a transfer halt
 		bool is_transfer:1;
 		/// true if this connection is a foot-path (transit by foot), not a vehicle service
-		bool is_foot_path:1;
+		/// (kept outside the weight/is_transfer bitfield so it does not steal a bit from weight)
+		bool is_foot_path;
 		/// the line or convoy which has the schedule to get to the halt with the best weight
 		traveler_t best_weight_traveler;
 

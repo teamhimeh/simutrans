@@ -378,12 +378,15 @@ void route_search_frame_t::search_route() {
     dest_koord = parse_koord(dest_koord_input.get_text());
 
     // Helper: collect all enabled halts covering a tile position.
+    // is_enabled(uint8) expects a category index, not a goods index, so translate
+    // search_ware_index (a goods index) via get_catg_index() before filtering.
+    const uint8 search_catg_index = goods_manager_t::get_info(search_ware_index)->get_catg_index();
     auto collect_halts = [&](koord pos, vector_tpl<halthandle_t>& out) {
         const planquadrat_t *plan = world()->access(pos);
         if(plan) {
             for(uint h = 0; h < plan->get_haltlist_count(); h++) {
                 halthandle_t h2 = plan->get_haltlist()[h];
-                if(h2.is_bound() && h2->is_enabled(search_ware_index)) {
+                if(h2.is_bound() && h2->is_enabled(search_catg_index)) {
                     out.append_unique(h2);
                 }
             }
