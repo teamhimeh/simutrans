@@ -1187,6 +1187,8 @@ void karte_t::init(settings_t* const sets, sint8 const* const h_field)
 {
 	humidity = NULL;
 
+	step_year_count=0;
+
 	clear_random_mode( 7 );
 	mute_sound(true);
 	if (env_t::networkmode) {
@@ -4039,7 +4041,7 @@ void karte_t::new_year()
 
 	// record decade snapshot at 0, 10, 20, ... years after map start
 	for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
-		if(  (last_year - settings.get_starting_year()) % 10 == 0  ) {
+		if(  (last_year - settings.get_starting_year() - step_year_count) % 10 == 0  ) {
 			// we record the old dates values once in 10 years.
 			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
 				finance_history_decade[d][hist] = finance_history_decade[d-1][hist];
@@ -4977,6 +4979,11 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
 			}
 		}
+	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
 	}
 
 	// finally a possible scenario
@@ -7042,6 +7049,8 @@ void karte_t::step_year()
 	DBG_MESSAGE("karte_t::step_year()","called");
 	current_month += 12;
 	last_year ++;
+	// we need to record how many times this tool called
+	step_year_count ++;
 	reset_timer();
 	recalc_average_speed();
 	koord::locality_factor = settings.get_locality_factor( last_year );

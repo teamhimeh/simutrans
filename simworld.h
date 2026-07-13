@@ -583,6 +583,11 @@ private:
 	sint32 last_year;
 
 	/**
+	 * How many times step year
+	 */
+	sint32 step_year_count;
+
+	/**
 	 * Current season.
 	 * @note 0=winter, 1=spring, 2=summer, 3=autumn
 	 */
