@@ -151,10 +151,16 @@ public:
 /* slope tool definitions */
 class tool_setslope_t : public two_click_tool_t {
 private:
-	bool is_dragging;
+	enum drag_mode_t {
+		drag_none,
+		drag_trajectory,
+		drag_area
+	};
+	drag_mode_t drag_mode;
+	koord3d last_drag_pos;
 	vector_tpl<koord> dragged_pos;
 public:
-	tool_setslope_t() : two_click_tool_t(TOOL_SETSLOPE | GENERAL_TOOL), is_dragging(false), old_slope_compatibility_mode(true) { one_click = true; }
+	tool_setslope_t() : two_click_tool_t(TOOL_SETSLOPE | GENERAL_TOOL), drag_mode(drag_none), last_drag_pos(koord3d::invalid), old_slope_compatibility_mode(true) { one_click = true; }
 	// if true then slope by default_param will be translated to new double-height system
 	// true by default, can be set to false (used for scripts)
 	bool old_slope_compatibility_mode;
@@ -170,7 +176,7 @@ public:
 	bool init(player_t*) OVERRIDE;
 	bool exit(player_t*) OVERRIDE;
 	char const* move(player_t*, uint16, koord3d) OVERRIDE;
-	bool is_work_network_safe() const OVERRIDE { return is_dragging; }
+	bool is_work_network_safe() const OVERRIDE { return drag_mode == drag_trajectory; }
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
