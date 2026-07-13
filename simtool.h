@@ -149,9 +149,9 @@ public:
 };
 
 /* slope tool definitions */
-class tool_setslope_t : public tool_t {
+class tool_setslope_t : public two_click_tool_t {
 public:
-	tool_setslope_t() : tool_t(TOOL_SETSLOPE | GENERAL_TOOL), old_slope_compatibility_mode(true) {}
+	tool_setslope_t() : two_click_tool_t(TOOL_SETSLOPE | GENERAL_TOOL), old_slope_compatibility_mode(true) { one_click = true; }
 	// if true then slope by default_param will be translated to new double-height system
 	// true by default, can be set to false (used for scripts)
 	bool old_slope_compatibility_mode;
@@ -165,7 +165,9 @@ public:
 	char const* get_tooltip(player_t const*) const OVERRIDE { return tooltip_with_price("Built artifical slopes", welt->get_settings().cst_set_slope); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
-	char const* work(player_t* const player, koord3d const k) OVERRIDE { return tool_set_slope_work(player, k, atoi(default_param), old_slope_compatibility_mode); }
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 3; }
 };
 
 class tool_restoreslope_t : public tool_t {

@@ -1432,6 +1432,62 @@ const char *tool_setslope_t::check_pos( player_t *, koord3d pos)
 	return NULL;
 }
 
+
+void tool_setslope_t::mark_tiles(player_t *, const koord3d &start, const koord3d &end)
+{
+	const koord min_pos(min(start.x, end.x), min(start.y, end.y));
+	const koord max_pos(max(start.x, end.x), max(start.y, end.y));
+
+	for (sint16 x = min_pos.x; x <= max_pos.x; x++) {
+		for (sint16 y = min_pos.y; y <= max_pos.y; y++) {
+			grund_t *gr = welt->lookup_kartenboden(koord(x, y));
+			if (gr == NULL) {
+				continue;
+			}
+
+			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL);
+			const uint8 grund_hang = gr->get_grund_hang();
+			const uint8 weg_hang = gr->get_weg_hang();
+			const uint8 hang = max(corner_sw(grund_hang), corner_sw(weg_hang)) +
+				3 * max(corner_se(grund_hang), corner_se(weg_hang)) +
+				9 * max(corner_ne(grund_hang), corner_ne(weg_hang)) +
+				27 * max(corner_nw(grund_hang), corner_nw(weg_hang));
+			const uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
+			marker->set_foreground_image(ground_desc_t::marker->get_image(grund_hang % 27));
+			marker->set_image(ground_desc_t::marker->get_image(back_hang));
+			marker->mark_image_dirty(marker->get_image(), 0);
+			gr->obj_add(marker);
+			marked.insert(marker);
+		}
+	}
+}
+
+
+const char *tool_setslope_t::do_work(player_t *player, const koord3d &start, const koord3d &end)
+{
+	const int new_slope = atoi(default_param);
+	if (end == koord3d::invalid) {
+		return tool_set_slope_work(player, start, new_slope, old_slope_compatibility_mode);
+	}
+
+	const int dx = start.x <= end.x ? 1 : -1;
+	const int dy = start.y <= end.y ? 1 : -1;
+	const char *message = NULL;
+	for (sint16 x = start.x; x != end.x + dx; x += dx) {
+		for (sint16 y = start.y; y != end.y + dy; y += dy) {
+			grund_t *gr = welt->lookup_kartenboden(koord(x, y));
+			if (gr == NULL) {
+				continue;
+			}
+			const char *error = tool_set_slope_work(player, gr->get_pos(), new_slope, old_slope_compatibility_mode);
+			if (message == NULL || *message == 0) {
+				message = error;
+			}
+		}
+	}
+	return message;
+}
+
 const char *tool_restoreslope_t::check_pos( player_t *, koord3d pos)
 {
 	grund_t *gr1 = welt->lookup(pos);
