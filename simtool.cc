@@ -1437,10 +1437,12 @@ void tool_setslope_t::mark_tiles(player_t *, const koord3d &start, const koord3d
 {
 	const koord min_pos(min(start.x, end.x), min(start.y, end.y));
 	const koord max_pos(max(start.x, end.x), max(start.y, end.y));
+	const grund_t *start_surface = welt->lookup_kartenboden(start.get_2d());
+	const bool lock_z_with_start = start_surface == NULL || start.z != start_surface->get_pos().z;
 
 	for (sint16 x = min_pos.x; x <= max_pos.x; x++) {
 		for (sint16 y = min_pos.y; y <= max_pos.y; y++) {
-			grund_t *gr = welt->lookup_kartenboden(koord(x, y));
+			grund_t *gr = lock_z_with_start ? welt->lookup(koord3d(x, y, start.z)) : welt->lookup_kartenboden(koord(x, y));
 			if (gr == NULL) {
 				continue;
 			}
@@ -1473,9 +1475,11 @@ const char *tool_setslope_t::do_work(player_t *player, const koord3d &start, con
 	const int dx = start.x <= end.x ? 1 : -1;
 	const int dy = start.y <= end.y ? 1 : -1;
 	const char *message = NULL;
+	const grund_t *start_surface = welt->lookup_kartenboden(start.get_2d());
+	const bool lock_z_with_start = start_surface == NULL || start.z != start_surface->get_pos().z;
 	for (sint16 x = start.x; x != end.x + dx; x += dx) {
 		for (sint16 y = start.y; y != end.y + dy; y += dy) {
-			grund_t *gr = welt->lookup_kartenboden(koord(x, y));
+			grund_t *gr = lock_z_with_start ? welt->lookup(koord3d(x, y, start.z)) : welt->lookup_kartenboden(koord(x, y));
 			if (gr == NULL) {
 				continue;
 			}
