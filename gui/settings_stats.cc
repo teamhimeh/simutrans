@@ -84,13 +84,13 @@ void settings_general_stats_t::init(settings_t const* const sets)
 	INIT_NUM( "fast_forward", env_t::max_acceleration, 1, 1000, gui_numberinput_t::AUTOLINEAR, false );
 	SEPERATOR
 	INIT_BOOL( "numbered_stations", sets->get_numbered_stations() );
-	INIT_NUM( "show_names", env_t::show_names, 0, 3, gui_numberinput_t::AUTOLINEAR, true );
+	INIT_NUM( "show_names", env_t::show_names, 0, 31, gui_numberinput_t::AUTOLINEAR, true );
 	SEPERATOR
 	INIT_NUM( "bits_per_month", sets->get_bits_per_month(), 16, 28, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "use_timeline", sets->get_use_timeline(), 0, 3, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM_NEW( "starting_year", sets->get_starting_year(), 0, 2999, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM_NEW( "starting_month", sets->get_starting_month(), 0, 11, gui_numberinput_t::AUTOLINEAR, false );
-	INIT_NUM( "show_month", env_t::show_month, 0, 7, gui_numberinput_t::AUTOLINEAR, true );
+	INIT_NUM( "show_month", env_t::show_month, 0, 8, gui_numberinput_t::AUTOLINEAR, true );
 	INIT_NUM( "spacing_shift_divisor", sets->spacing_shift_divisor, 1, 60000, gui_numberinput_t::AUTOLINEAR, false );
 	SEPERATOR
 	INIT_NUM( "random_grounds_probability", env_t::ground_object_probability, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
