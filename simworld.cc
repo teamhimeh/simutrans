@@ -5825,7 +5825,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 		// Update minimap for new world
 		minimap_t::get_instance()->init();
 
-		ls->set_max( get_size().y*2+256 );
+		ls->set_max( get_size().y*2+256+8*MAX_PLAYER_COUNT );
 		init_tiles();
 
 		// reinit pointer with new pointer object and old values
