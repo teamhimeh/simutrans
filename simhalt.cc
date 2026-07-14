@@ -2027,6 +2027,20 @@ sint32 haltestelle_t::rebuild_connections()
 			}
 		}
 
+		// Returns true if a (non-foot) connection is actually served by at least one convoy right
+		// now. A line with zero convoys (all sold/removed but the line itself kept) offers no real
+		// transport, so it must not keep blocking the walking fallback between two close halts.
+		auto real_connection_is_active = [](const connection_t &c) -> bool {
+			if(  std::holds_alternative<linehandle_t>(c.best_weight_traveler)  ) {
+				const linehandle_t line = std::get<linehandle_t>(c.best_weight_traveler);
+				return line.is_bound()  &&  line->count_convoys() > 0;
+			}
+			if(  std::holds_alternative<convoihandle_t>(c.best_weight_traveler)  ) {
+				return std::get<convoihandle_t>(c.best_weight_traveler).is_bound();
+			}
+			return false;
+		};
+
 		// Build connections for all candidates found in the coverage area.
 		const uint32 base_rc = welt->get_settings().get_foot_path_weight();
 		const uint32 base_jt = welt->get_settings().get_foot_path_time_ticks();
@@ -2039,9 +2053,17 @@ sint32 haltestelle_t::rebuild_connections()
 			foot_conn.is_foot_path = true;
 			connection_t *const existing = staged_all_links[goods_manager_t::INDEX_PAS].connections.insert_unique_ordered(
 				foot_conn, connection_t::compare);
-			if(  existing  &&  aggregate_weight < existing->weight  ) {
-				existing->weight       = aggregate_weight;
-				existing->is_foot_path = true;
+			if(  existing  &&  !existing->is_foot_path  &&  !real_connection_is_active(*existing)  ) {
+				// The existing "real" connection is actually served by no convoy right now
+				// (e.g. all convoys on that line were sold) - fall back to walking.
+				existing->weight              = aggregate_weight;
+				existing->is_foot_path         = true;
+				existing->best_weight_traveler = linehandle_t();
+			}
+			// Never let a walking leg overwrite an already-known, actively-served vehicle
+			// connection between this pair of halts, even if the walk cost looks cheaper.
+			else if(  existing  &&  existing->is_foot_path  &&  aggregate_weight < existing->weight  ) {
+				existing->weight = aggregate_weight;
 			}
 		}
 
@@ -2597,8 +2619,12 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 			// (if not, we were just under construction, and will be fine after 16 steps)
 			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
-			// No consecutive foot-path hops: after a walking leg passengers must board a vehicle.
-			if(  current_halt_data.arrived_by_foot  &&  current_conn.is_foot_path  ) {
+			// Prohibited foot-path patterns:
+			// - no two consecutive walking legs, a real vehicle must be boarded in between
+			// - the first hop out of the origin halt must be a real vehicle connection
+			// - the last hop into a destination halt must be a real vehicle connection
+			if(  current_conn.is_foot_path  &&
+			     (  current_halt_data.arrived_by_foot  ||  current_halt_data.depth == 0  ||  halt_data[ reachable_halt_id ].destination  )  ) {
 				continue;
 			}
 
@@ -2803,10 +2829,11 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		open_list.insert( route_node_t(self, 0) );
 
 		halt_data_t & start_data = halt_data[ self.get_id() ];
-		start_data.best_weight = 0;
-		start_data.destination = 0;
-		start_data.depth       = 0;
-		start_data.transfer    = halthandle_t();
+		start_data.best_weight    = 0;
+		start_data.destination    = 0;
+		start_data.depth          = 0;
+		start_data.transfer       = halthandle_t();
+		start_data.arrived_by_foot = false;
 
 		markers[ self.get_id() ] = current_marker;
 	}
@@ -2865,6 +2892,20 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		FOR(vector_tpl<connection_t>, const& current_conn, current_node.halt->all_links[ware_catg_idx].connections) {
 			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
+			// Prohibited foot-path patterns (mirrors search_route()):
+			// - no two consecutive walking legs, a real vehicle must be boarded in between
+			// - the last hop into a destination halt must be a real vehicle connection
+			// Note: unlike search_route(), there is no "first hop out of the origin must be
+			// real" rule here - this function is re-entered from whatever halt the ware is
+			// currently sitting at (every transfer stop when TBGR is off, via liefere_an()),
+			// so depth==0 means "resume from here", not "leave the true trip origin".
+			// Blocking foot legs at depth==0 would incorrectly forbid a legitimate mid-journey
+			// walk to the next transfer halt right after getting off a real vehicle.
+			if(  current_conn.is_foot_path  &&
+			     (  current_halt_data.arrived_by_foot  ||  halt_data[ reachable_halt_id ].destination  )  ) {
+				continue;
+			}
+
 			const uint32 total_weight = current_weight + current_conn.weight;
 
 			if(  !current_conn.halt.is_bound()  ) {
@@ -2883,6 +2924,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 				halt_data[ reachable_halt_id ].destination = false; // reset necessary if this was set by search_route
 				halt_data[ reachable_halt_id ].depth       = current_halt_data.depth + 1u;
 				halt_data[ reachable_halt_id ].transfer    = current_node.halt;
+				halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
 
 				if(  current_conn.is_transfer  &&  allocation_pointer<max_hops  ) {
 					// Case : transfer halt
@@ -2898,6 +2940,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 
 					halt_data[ reachable_halt_id ].best_weight = total_weight;
 					halt_data[ reachable_halt_id ].transfer    = current_node.halt;
+					halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
 
 					// for transfer/destination nodes create new node
 					if ( (halt_data[ reachable_halt_id ].destination  ||  current_conn.is_transfer )  &&  allocation_pointer<max_hops ) {

@@ -477,7 +477,10 @@ void route_search_frame_t::search_route() {
 
     const uint8 ware_catg_idx = dummy_ware.get_desc()->get_catg_index();
     const bool tbgr = world()->get_settings().get_time_based_routing_enabled(ware_catg_idx);
-    const bool add_walk = world()->get_settings().is_transit_by_foot()
+    // Walking to/from a raw coordinate only makes sense for passengers - goods and mail
+    // are never carried on foot, so never show/count a walking leg for those searches.
+    const bool add_walk = ware_catg_idx == goods_manager_t::INDEX_PAS
+                          && world()->get_settings().is_transit_by_foot()
                           && world()->get_settings().is_walk_cost_to_halt();
     const uint32 walk_factor = tbgr ? world()->get_settings().get_foot_path_time_ticks()
                                     : world()->get_settings().get_foot_path_weight();
