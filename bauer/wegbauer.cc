@@ -564,7 +564,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			}
 		}
 		else {
-			if(  to->hat_weg(air_wt)  ||  welt->lookup_hgt( to_pos ) < welt->get_water_hgt( to_pos )  ||  !check_powerline( zv, to )  ||  (!to->ist_karten_boden()  &&  to->get_typ() != grund_t::monorailboden)  ||  to->get_typ() == grund_t::brueckenboden  ||  to->get_typ() == grund_t::tunnelboden  ) {
+			if(  (to->hat_weg(air_wt) && to->get_weg(air_wt)->get_desc()->is_runway())  ||  welt->lookup_hgt( to_pos ) < welt->get_water_hgt( to_pos )  ||  !check_powerline( zv, to )  ||  (!to->ist_karten_boden()  &&  to->get_typ() != grund_t::monorailboden)  ||  to->get_typ() == grund_t::brueckenboden  ||  to->get_typ() == grund_t::tunnelboden  ) {
 				// no suitable ground below!
 				return false;
 			}
@@ -2196,7 +2196,7 @@ uint32 ms = dr_time();
 		route_reversed = false;
 		keep_existing_city_roads |= (bautyp&bot_flag)!=0;
 		sint32 cost2;
-		if(desc->get_styp() == type_elevated) {
+		if(desc->is_elevated()) {
 			cost2 = intern_calc_route_elevated(start[0], ziel[0]);
 			INT_CHECK("wegbauer 1165");
 			if(cost2 < 0) {
@@ -2222,7 +2222,7 @@ uint32 ms = dr_time();
 		swap(terraform_index, terraform_index2);
 		route_reversed = true;
 		sint32 cost;
-		if(desc->get_styp() == type_elevated) {
+		if(desc->is_elevated()) {
 			cost = intern_calc_route_elevated(start[0], ziel[0]);
 		}
 		else {
