@@ -196,21 +196,7 @@ bool ki_kontroll_t::action_triggered( gui_action_creator_t *comp,value_t p )
 
 		// Changed active player
 		if(  comp == (player_change_to+i)  ) {
-			// make active player
-			player_t *const prevplayer = welt->get_active_player();
 			welt->switch_active_player(i,false);
-
-			// unlocked public service player can change into any company in multiplayer games
-			player_t *const player = welt->get_active_player();
-			if(  env_t::networkmode  &&  prevplayer == welt->get_public_player()  &&  !prevplayer->is_locked()  &&  player->is_locked()  ) {
-				player->unlock(false, true);
-
-				// send unlock command
-				nwc_auth_player_t *nwc = new nwc_auth_player_t();
-				nwc->player_nr = player->get_player_nr();
-				network_send_server(nwc);
-			}
-
 			break;
 		}
 

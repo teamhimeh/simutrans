@@ -157,19 +157,46 @@ void copy_stations_to_clipboard(schedule_t* schedule, player_t* player, bool nam
   }
 }
 
-void copy_csv_format(schedule_t* schedule, player_t* player, vector_tpl<uint32*>& journey_times) {
+void copy_csv_format(schedule_t* schedule, player_t* player, vector_tpl<uint32*>& journey_times, vector_tpl<uint32*>& stopping_times) {
   // copy in csv format. separator is \t.
+  // The output mirrors the GUI table: each stop emits two rows so the copied
+  // numbers match what is shown on screen.
+  //   - "journey" row : running time from the previous stop, i.e. the raw
+  //                     arrival-to-arrival journey time with the previous stop's
+  //                     stopping time subtracted (departure -> arrival).
+  //   - "stopping" row: stopping time at this stop (raw arrival -> departure).
+  // The station name is repeated on both rows and a "Type" column tags each row,
+  // so a consumer can identify rows without relying on line order.
+  // The GUI's "Total" (cumulative) column is intentionally omitted here.
   cbuffer_t clipboard;
-  clipboard.append("Station Name\tAverage\t1st\t2nd\t3rd\t4th\t5th\n");
+  clipboard.append("Station Name\tType\tAverage\t1st\t2nd\t3rd\t4th\t5th\n");
   for(uint8 i=0; i<schedule->get_count(); i++) {
+    // previous entry wraps around to the last one for the starting stop, matching the GUI.
+    const uint8 prev_idx = i > 0 ? i - 1 : schedule->get_count() - 1;
     halthandle_t const halt = haltestelle_t::get_stoppable_halt(schedule->at(i).pos, player, schedule->get_waytype());
-    if(  halt.is_bound()  ) {
-      clipboard.append(halt->get_name());
-    } else {
-      clipboard.append("waypoint");
-    }
+    // keep the fixed "waypoint" string that existing TSV consumers depend on.
+    const char* const name = halt.is_bound() ? halt->get_name() : "waypoint";
+
+    // journey time row: previous stop departure -> this stop arrival.
+    clipboard.append(name);
+    clipboard.append("\tjourney");
     for(uint8 k=0; k<NUM_ARRIVAL_TIME_STORED+1; k++) {
-      clipboard.printf("\t%d", journey_times[i][k]);
+      // Subtract the previous stop's stopping time to match the GUI display.
+      // journey_times[i][k]==0 means "not registered"; the clamp also guards
+      // against underflow since journey/stopping ring buffers are pushed at
+      // different moments and the k-th samples need not be the same run.
+      const uint32 raw = journey_times[i][k];
+      const uint32 prev_stop = stopping_times[prev_idx][k];
+      const uint32 t_run = raw > prev_stop ? raw - prev_stop : 0;
+      clipboard.printf("\t%d", t_run);
+    }
+    clipboard.append("\n");
+
+    // stopping time row: this stop arrival -> departure (raw value).
+    clipboard.append(name);
+    clipboard.append("\tstopping");
+    for(uint8 k=0; k<NUM_STOPPING_TIME_STORED+1; k++) {
+      clipboard.printf("\t%d", stopping_times[i][k]);
     }
     clipboard.append("\n");
   }
@@ -255,7 +282,7 @@ bool gui_journey_time_info_t::action_triggered(gui_action_creator_t* comp, value
     copy_stations_to_clipboard(schedule, player, false);
   }
   else if(  comp==&bt_copy_csv  ) {
-    copy_csv_format(schedule, player,  journey_times);
+    copy_csv_format(schedule, player, journey_times, stopping_times);
   }
   else if(  comp==&bt_change_unit  ) {
     is_unit_hhmmss_time^=1;

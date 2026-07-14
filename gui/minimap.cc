@@ -28,6 +28,7 @@
 
 #include "../boden/wege/schiene.h"
 #include "../obj/leitung2.h"
+#include "../obj/label.h"
 #include "../utils/cbuffer_t.h"
 #include "../display/scr_coord.h"
 #include "../display/simgraph.h"
@@ -251,7 +252,7 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 		//cycle on stops
 		//try to read station's coordinates if there's a station at this schedule stop
 		halthandle_t station = haltestelle_t::get_stoppable_halt( cur.pos, cnv->get_owner(), schedule->get_waytype() );
-		if(  station.is_bound()  ) {
+		if(  station.is_bound()  &&  !cur.is_pass_stop()  ) {
 			stop_cache.append_unique( station );
 			temp_stop = station->get_basis_pos();
 			stops ++;
@@ -338,7 +339,7 @@ void minimap_t::add_to_schedule_cache_without_cnv( schedule_t* schedule, player_
 		//cycle on stops
 		//try to read station's coordinates if there's a station at this schedule stop
 		halthandle_t station = haltestelle_t::get_stoppable_halt( cur.pos, owner, schedule->get_waytype() );
-		if(  station.is_bound()  ) {
+		if(  station.is_bound()  &&  !cur.is_pass_stop()  ) {
 			if (  is_highlighted  ) route_search_highlighted_halts.append_unique(station);
 			stop_cache.append_unique( station );
 			temp_stop = station->get_basis_pos();
@@ -2066,6 +2067,26 @@ void minimap_t::draw(scr_coord pos)
 			}
 			const scr_coord_val name_x = p.x + 6 + (icon_img != IMG_EMPTY ? icon_xw + 2 : 0);
 			display_proportional_clip_rgb( name_x, p.y - LINESPACE / 2, d->get_name(), ALIGN_LEFT, color_idx_to_rgb(COL_WHITE), true );
+		}
+	}
+
+	// draw player-placed map markers (labels)
+	if(  mode & MAP_LABELS  ) {
+		FOR(  slist_tpl<koord>,  const k,  world->get_label_list()  ) {
+			grund_t *gr = world->lookup_kartenboden(k);
+			if(  !gr  ) continue;
+			label_t *lb = gr->find<label_t>();
+			if(  !lb  ) continue;
+			scr_coord p = map_to_screen_coord(k);
+			p += pos;
+			const PIXVAL pcol = color_idx_to_rgb(lb->get_owner()->get_player_color1() + 3);
+			// draw a small diamond as the pin marker
+			display_fillbox_wh_clip_rgb( p.x - 3, p.y - 1, 7, 3, pcol, true );
+			display_fillbox_wh_clip_rgb( p.x - 1, p.y - 3, 3, 7, pcol, true );
+			const char *text = gr->get_text();
+			if(  text  ) {
+				display_proportional_clip_rgb( p.x + 6, p.y - LINESPACE / 2, text, ALIGN_LEFT, pcol, true );
+			}
 		}
 	}
 }

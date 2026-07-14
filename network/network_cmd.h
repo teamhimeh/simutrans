@@ -147,8 +147,8 @@ public:
  */
 class nwc_auth_player_t : public network_command_t {
 public:
-	nwc_auth_player_t() : network_command_t(NWC_AUTH_PLAYER), hash(), player_unlocked(0), player_nr(255)  { }
-	nwc_auth_player_t(uint8 nr, const pwd_hash_t& hash_) : network_command_t(NWC_AUTH_PLAYER), hash(hash_), player_unlocked(0), player_nr(nr)  { }
+	nwc_auth_player_t() : network_command_t(NWC_AUTH_PLAYER), hash(), player_unlocked(0), player_has_password(0), player_nr(255), set_password(false)  { }
+	nwc_auth_player_t(uint8 nr, const pwd_hash_t& hash_, bool set_password_=false) : network_command_t(NWC_AUTH_PLAYER), hash(hash_), player_unlocked(0), player_has_password(0), player_nr(nr), set_password(set_password_)  { }
 
 #ifndef NETTOOL
 	bool execute(karte_t *) OVERRIDE;
@@ -157,12 +157,24 @@ public:
 
 	pwd_hash_t hash;
 	uint16 player_unlocked;
+	// server->client: bit i set = player i has a password stored on the server
+	uint16 player_has_password;
 	uint8  player_nr;
+	// client->server: true = request to set/clear the password (instead of an
+	// authentication attempt); only honored for unlocked senders or public player proxy
+	bool set_password;
 
 	/**
 	 * sets unlocked flags for playing at server
 	 */
 	static void init_player_lock_server(karte_t *);
+
+#ifndef NETTOOL
+	/**
+	 * computes the bitmask of players that have a password set (server side)
+	 */
+	static uint16 get_player_password_set_bits(karte_t *);
+#endif
 };
 
 #endif
