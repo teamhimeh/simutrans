@@ -1079,15 +1079,16 @@ void vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raster_wid
 	}
 	// Add offset when the vehicle is reversed.
 	sint32 steps_delta;
-	steps_delta = raster_width*(VEHICLE_STEPS_PER_TILE / 2 - get_desc()->get_length_in_steps() + env_t::reverse_base_offsets[dir][2]);
+	const sint8* rbo = welt->get_settings().get_reverse_base_offsets(dir);
+	steps_delta = raster_width*(VEHICLE_STEPS_PER_TILE / 2 - get_desc()->get_length_in_steps() + rbo[2]);
 	if(dx && dy) {
 		steps_delta &= 0xFFFFFC00;
 	}
 	else {
 		steps_delta = (steps_delta*diagonal_multiplier)>>10;
 	}
-	xoff += ((steps_delta*dx) >> 10) + tile_raster_scale_x(env_t::reverse_base_offsets[dir][0],raster_width);
-	yoff += ((steps_delta*dy) >> 10) + tile_raster_scale_y(env_t::reverse_base_offsets[dir][1],raster_width);
+	xoff += ((steps_delta*dx) >> 10) + tile_raster_scale_x(rbo[0],raster_width);
+	yoff += ((steps_delta*dy) >> 10) + tile_raster_scale_y(rbo[1],raster_width);
 }
 
 
@@ -1509,7 +1510,7 @@ sint64 vehicle_t::calc_revenue(const koord3d& start, const koord3d& end) const
 		sint64 price = freight_revenue * (sint64)dist * (sint64)ware.menge;
 		// calculate revenue for overcrowd
 		if ( welt->get_settings().is_overloading_revenue_reduced() && (get_total_cargo() > get_cargo_max()) && (get_cargo_max() > 0) ) {
-			price = price * (sint64)get_total_cargo() / (sint64)get_cargo_max();
+			price = price * (sint64)get_cargo_max() / (sint64)get_total_cargo();
 		}
 
 		// sum up new price
@@ -2166,13 +2167,27 @@ uint32 vehicle_t::get_total_weight() const {
 		return sum_weight;
 	}
 	// use full load weight
-	if(  uint32* val = full_load_weights.access(desc)  ) {
-		return *val*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+	uint8 const max_load = cnv->get_schedule()->get_count()>0? cnv->get_schedule()->at(cnv->get_schedule()->get_current_stop()>0?cnv->get_schedule()->get_current_stop()-1:cnv->get_schedule()->get_count()-1).maximum_loading:100; 
+	if(  welt->get_settings().is_overloaded_acceleration()  ) {
+		// even if not overcrowded, we always use the overcrowded weight
+		if(  uint32* val = full_load_weights.access(desc)  ) {
+			return *val*max(max_load,100)/100;
+		} else {
+			// full load is not calculated. calculate and register.
+			const uint32 w = calc_full_load_weight(desc);
+			full_load_weights.put(desc, w);
+			return w*max(max_load,100)/100;
+		}
 	} else {
-		// full load is not calculated. calculate and register.
-		const uint32 w = calc_full_load_weight(desc);
-		full_load_weights.put(desc, w);
-		return w*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+		// we use 100% weight, if not overcrowded
+		if(  uint32* val = full_load_weights.access(desc)  ) {
+			return *val*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+		} else {
+			// full load is not calculated. calculate and register.
+			const uint32 w = calc_full_load_weight(desc);
+			full_load_weights.put(desc, w);
+			return w*max(get_total_cargo(),max(get_cargo_max(),1))/max(1,get_cargo_max());
+		}
 	}
 }
 
@@ -3447,6 +3462,17 @@ void road_vehicle_t::unreserve_all_tiles() {
 		}
 	}
 	reserving_tiles.clear();
+}
+
+void road_vehicle_t::unreserve_target_halt()
+{
+	if(  leading  &&  previous_direction!=ribi_t::none  &&  cnv  &&  target_halt.is_bound()  ) {
+		const route_t *rt = cnv->get_route();
+		for(  uint32 length=0;  length<cnv->get_tile_length()  &&  length+1<rt->get_count();  length++  ) {
+			target_halt->unreserve_position( welt->lookup( rt->at( rt->get_count()-length-1 ) ), cnv->self );
+		}
+	}
+	target_halt = halthandle_t();
 }
 
 road_vehicle_t::~road_vehicle_t() {
@@ -4793,7 +4819,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			cnv->set_convoi_coupling_in_progress(coupling_target);
 			coupling_index = i;
 			// if the target vehicle overlaps another tile, fix index and steps
-			c_step -= ((coupling_target_ribi&dir)==0) ? env_t::reverse_base_offsets[ribi_t::get_dir(coupling_target_ribi)][2] + VEHICLE_STEPS_PER_TILE / 2 : 0;
+			c_step -= ((coupling_target_ribi&dir)==0) ? welt->get_settings().get_reverse_base_offsets(ribi_t::get_dir(coupling_target_ribi))[2] + VEHICLE_STEPS_PER_TILE / 2 : 0;
 			while(c_step<0&&coupling_index>0) {
 				coupling_index--;
 				grund_t* gr_coupling = welt->lookup(route->at(coupling_index));
@@ -5600,6 +5626,11 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 		else {
 			// we un-reserve also nonexistent tiles! (may happen during deletion)
 			if(reserve) {
+				// never reserve taxiway tiles — stop here without reserving
+				if(  sch1->get_desc()->get_styp() != type_runway  ) {
+					end = i;
+					break;
+				}
 				start_now = true;
 				sch1->add_convoi_reservation(cnv->self);
 				if(  !sch1->reserve(cnv->self,ribi_t::none)  ) {
@@ -5608,8 +5639,8 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 					end = i;
 					break;
 				}
-				// end of runway?
-				if(  i > start  &&  (ribi_t::is_single( sch1->get_ribi_unmasked() )  ||  sch1->get_desc()->get_styp() != type_runway)   ) {
+				// end of runway by single ribi?
+				if(  i > start  &&  ribi_t::is_single( sch1->get_ribi_unmasked() )  ) {
 					end = i;
 					break;
 				}
@@ -5623,7 +5654,9 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 
 	// un-reserve if not successful
 	if(  !success  &&  reserve  ) {
-		for(  uint32 i=start;  i<end;  i++  ) {
+		// Use i<=end so that tile 'end' (where reserve() failed) also gets its
+		// add_convoi_reservation() entry removed via runway_t::unreserve().
+		for(  uint32 i=start;  i<=end;  i++  ) {
 			grund_t *gr = welt->lookup(route->at(i));
 			if (gr) {
 				runway_t* sch1 = (runway_t *)gr->get_weg(air_wt);
@@ -5644,6 +5677,22 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 						break;
 					}
 					sch1->add_convoi_reservation( cnv->self );
+				}
+			}
+		}
+	}
+
+	// When unreserving the takeoff section (end < touchdown), the landing runway
+	// tiles were never visited by the main loop, so their load-balancing
+	// reservations added during the original takeoff must be removed here.
+	if(  !reserve  &&  end<touchdown  ) {
+		for(  uint32 i=touchdown;  i<route->get_count();  i++  ) {
+			if(  grund_t *gr = welt->lookup(route->at(i))  ) {
+				if(  runway_t* sch1 = (runway_t *)gr->get_weg(air_wt)  ) {
+					if(  sch1->get_desc()->get_styp()!=type_runway  ) {
+						break;
+					}
+					sch1->remove_convoi_reservation( cnv->self );
 				}
 			}
 		}
@@ -5879,10 +5928,10 @@ void air_vehicle_t::set_convoi(convoi_t *c)
 		}
 		if (!r.empty()) {
 			// free runway reservation
-			if(route_index>=takeoff  &&  route_index<touchdown-4  ) {
-				block_reserver( 0, touchdown-4, false );
+			if(  state==departing  ||  (state==taxiing  &&  route_index>=takeoff)  ) {
+				block_reserver( takeoff, takeoff+100, false );
 			}
-			else if(route_index>=touchdown-1  &&  state!=taxiing) {
+			else if(  state==landing  ) {
 				block_reserver( touchdown, search_for_stop+1, false );
 			}
 		}
@@ -5900,16 +5949,22 @@ void air_vehicle_t::set_convoi(convoi_t *c)
 					target_halt->reserve_position(target,cnv->self);
 				}
 			}
-			// restore reservation
-			if(  grund_t *gr = welt->lookup(get_pos())  ) {
-				if(  weg_t *weg = gr->get_weg(air_wt)  ) {
-					if(  weg->get_desc()->get_styp()==type_runway  ) {
-						// but only if we are on a runway ...
-						if(  route_index>=takeoff  &&  route_index<touchdown-21  &&  state!=flying  ) {
+			// restore runway reservation by state
+			if(  state==departing  ) {
+				block_reserver( takeoff, takeoff+100, true );
+			}
+			else if(  state==landing  ) {
+				block_reserver( touchdown, search_for_stop+1, true );
+			}
+			else if(  state==taxiing  &&  route_index>=takeoff  &&  route_index<touchdown  ) {
+				// brief window: state is still taxiing but route_index has advanced to
+				// takeoff because the vehicle hopped onto the runway-start tip tile
+				// (reservation was already acquired when entering that tile; state
+				// transitions to departing on the very next tick)
+				if(  grund_t *gr = welt->lookup(get_pos())  ) {
+					if(  weg_t *weg = gr->get_weg(air_wt)  ) {
+						if(  weg->get_desc()->get_styp()==type_runway  ) {
 							block_reserver( takeoff, takeoff+100, true );
-						}
-						else if(  route_index>=touchdown-1  &&  state!=taxiing  ) {
-							block_reserver( touchdown, search_for_stop+1, true );
 						}
 					}
 				}

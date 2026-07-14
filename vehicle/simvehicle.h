@@ -565,6 +565,7 @@ public:
 	void refresh();
 
 	void unreserve_all_tiles();
+	void unreserve_target_halt();
 };
 
 

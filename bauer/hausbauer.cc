@@ -610,56 +610,66 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 
 		int layout = built_layout & 9;
 
-		// detect if we are connected at far (north/west) end
-		sint8 offset = welt->lookup( pos )->get_weg_yoff()/TILE_HEIGHT_STEP;
-		koord3d checkpos = pos+koord3d( (layout & 1 ? koord::east : koord::south), offset);
-		grund_t * gr = welt->lookup( checkpos );
+		const grund_t* const this_gr = welt->lookup( pos );
 
-		if(!gr) {
-			// check whether bridge end tile
-			grund_t * gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::east : koord::south),offset - 1) );
-			if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1) {
-				gr = gr_tmp;
-			}
-			else {
-				gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::east : koord::south),offset - 2) );
-				if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 2) {
-					gr = gr_tmp;
+		// Determine the two axis directions for this stop orientation.
+		// NS (layout bit 0 == 0): far = south, near = north.
+		// EW (layout bit 0 == 1): far = east,  near = west.
+		const ribi_t::ribi dir_far  = (layout & 1) ? ribi_t::east  : ribi_t::south;
+		const ribi_t::ribi dir_near = (layout & 1) ? ribi_t::west  : ribi_t::north;
+
+		// Find a connected stop neighbour in direction dir.
+		// get_neighbour() handles all height transitions (single/double slope, bridge,
+		// tunnel) via get_vmove(), so no manual z-delta computation is needed.
+		// Falls back to the same-height tile that owns a halt (for adjacent extensions
+		// that are not directly way-connected).
+		auto find_nb = [&]( ribi_t::ribi dir ) -> grund_t* {
+			grund_t* nb = nullptr;
+			for(  int w = 0;  w < 2  &&  !nb;  w++  ) {
+				const weg_t* weg = this_gr->get_weg_nr( w );
+				if(  weg  ) {
+					this_gr->get_neighbour( nb, weg->get_waytype(), dir );
 				}
 			}
-		}
-
-		if(gr) {
-			gebaeude_t* gb = gr->find<gebaeude_t>();
-			if(gb==NULL) {
-				// no building on same level, check other levels
-				const planquadrat_t *pl = welt->access(checkpos.get_2d());
-				if (pl) {
-					for(  uint8 i=0;  i<pl->get_boden_count();  i++  ) {
-						gr = pl->get_boden_bei(i);
-						if(gr->is_halt() && gr->get_halt().is_bound() ) {
-							break;
-						}
+			if(  !nb  ) {
+				// Same-height tile with a halt (stop extension without direct way link).
+				const planquadrat_t* pl = welt->access( pos.get_2d() + koord(dir) );
+				if(  pl  ) {
+					grund_t* same_z = pl->get_boden_in_hoehe( pos.z );
+					if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+						nb = same_z;
 					}
 				}
-				gb = gr->find<gebaeude_t>();
 			}
+			return nb;
+		};
+
+		// detect if we are connected at far (south/east) end
+		if(  grund_t* gr = find_nb( dir_far )  ) {
+			gebaeude_t* gb = gr->find<gebaeude_t>();
 			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
 				corner_layout &= ~2; // clear near bit
 				const koord xy = gb->get_tile()->get_offset();
 				uint8 layoutbase = gb->get_tile()->get_layout();
-				if(  layoutbase>=16  ) {
+				if(  layoutbase>=48  &&  gb->get_tile()->get_desc()->get_all_layouts()>48  ) {
+					// slope stop neighbour - preserve slope offset bits
+					if(  (layoutbase & 1) == (layout & 1)  ) {
+						const uint8 slope_p = layoutbase & 0xF0;
+						layoutbase = slope_p | ((layoutbase & 0x0F) & 0x0b);
+					}
+				}
+				else if(  layoutbase>=16  ) {
 					if(  (layoutbase & 0x30) == 0x10  ) {
 						// vertical diagonal. 010->000, 011->001
 						layoutbase &= ~2;
-					} 
+					}
 					else if(  (layoutbase & 6) != 6  ) {
 						// horizontal diagonal. 011->001, 101->001
 						layoutbase &= ~6;
 					}
 				}
 				else if(  gb->get_tile()->get_desc()->get_all_layouts()>4  ) {
-					if((layoutbase & 1) == (layout & 1)) {
+					if(  (layoutbase & 1) == (layout & 1)  ) {
 						layoutbase &= 0xb; // clear near bit on neighbour
 					}
 				}
@@ -667,39 +677,32 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 			}
 		}
 
-		// detect if near (south/east) end
-		gr = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north), offset) );
-		if(!gr) {
-			// check whether bridge end tile
-			grund_t * gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north),offset - 1) );
-			if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1) {
-				gr = gr_tmp;
-			}
-			else {
-				gr_tmp = welt->lookup( pos+koord3d( (layout & 1 ? koord::west : koord::north),offset - 2) );
-				if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 2) {
-					gr = gr_tmp;
-				}
-			}
-		}
-		if(gr) {
+		// detect if we are connected at near (north/west) end
+		if(  grund_t* gr = find_nb( dir_near )  ) {
 			gebaeude_t* gb = gr->find<gebaeude_t>();
-			if(gb  &&  gb->get_tile()->get_desc()->is_transport_building()) {
+			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
 				corner_layout &= ~4; // clear far bit
 				const koord xy = gb->get_tile()->get_offset();
 				uint8 layoutbase = gb->get_tile()->get_layout();
-				if(  layoutbase>=16  ) {
+				if(  layoutbase>=48  &&  gb->get_tile()->get_desc()->get_all_layouts()>48  ) {
+					// slope stop neighbour - preserve slope offset bits
+					if(  (layoutbase & 1) == (layout & 1)  ) {
+						const uint8 slope_p = layoutbase & 0xF0;
+						layoutbase = slope_p | ((layoutbase & 0x0F) & 0x0d);
+					}
+				}
+				else if(  layoutbase>=16  ) {
 					if(  (layoutbase & 0x30) == 0x10  ) {
 						// vertical diagonal. 100->000, 101->001
 						layoutbase &= ~4;
-					} 
+					}
 					else if(  (layoutbase & 6) != 6  ) {
 						// horizontal diagonal. 010->000, 100->100
 						layoutbase &= ~6;
 					}
 				}
-				else if(gb->get_tile()->get_desc()->get_all_layouts()>4) {
-					if((layoutbase & 1) == (layout & 1)) {
+				else if(  gb->get_tile()->get_desc()->get_all_layouts()>4  ) {
+					if(  (layoutbase & 1) == (layout & 1)  ) {
 						layoutbase &= 0xd; // clear far bit on neighbour
 					}
 				}
@@ -734,22 +737,28 @@ gebaeude_t* hausbauer_t::build_station_on_diagonal_way(player_t* player, koord3d
 	const uint16 way_connection_dir_bits = way_connection & ribi_t::west ? 1 : 0;
 	
 	// calculate neighbour_diagonal_stops
-	const sint8 offset = bd->get_hoehe()+bd->get_weg_yoff()/TILE_HEIGHT_STEP;
+	// Use get_neighbour() so that slope/bridge height transitions are handled correctly.
 	grund_t *gr;
 	gebaeude_t* neighbour_diagonal_stops[] = {NULL, NULL, NULL, NULL};
 	const koord pos_2d = bd->get_pos().get_2d();
 	for(  unsigned i=0;  i<4;  i++  ) {
-		// oriented buildings here - get neighbouring layouts
-		gr = world()->lookup(koord3d(pos_2d+koord::nesw[i],offset));
-		if(  !gr  ) {
-			// check whether bridge end tile
-			grund_t * gr_off1 = world()->lookup(koord3d(pos_2d+koord::nesw[i],offset-1));
-			grund_t * gr_off2 = world()->lookup(koord3d(pos_2d+koord::nesw[i],offset-2));
-			if(gr_off1 && gr_off1->get_weg_yoff()/TILE_HEIGHT_STEP == 1) {
-				gr = gr_off1;
+		// Find connected neighbour via each way on this tile.
+		const ribi_t::ribi dir = ribi_t::nesw[i];
+		gr = nullptr;
+		for(  int w = 0;  w < 2  &&  !gr;  w++  ) {
+			const weg_t* weg = bd->get_weg_nr( w );
+			if(  weg  ) {
+				bd->get_neighbour( gr, weg->get_waytype(), dir );
 			}
-			else if(gr_off2 && gr_off2->get_weg_yoff()/TILE_HEIGHT_STEP == 2) {
-				gr = gr_off2;
+		}
+		if(  !gr  ) {
+			// Same-height tile with a halt (for extensions not directly way-connected).
+			const planquadrat_t* pl = world()->access( pos_2d + koord::nesw[i] );
+			if(  pl  ) {
+				grund_t* same_z = pl->get_boden_in_hoehe( bd->get_hoehe() );
+				if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+					gr = same_z;
+				}
 			}
 		}
 		if(  !gr  ||  !gr->get_halt().is_bound()  ) {
@@ -807,6 +816,144 @@ gebaeude_t* hausbauer_t::build_station_on_diagonal_way(player_t* player, koord3d
 	
 	const uint8 layout = diagonal_direction_bits | front_back_bit | (corner_bits << 1) | way_connection_dir_bits;
 	return build_station_extension_depot_with_complete_layout_bits(player, pos, layout, desc, &halt);
+}
+
+
+gebaeude_t* hausbauer_t::build_station_on_slope_way(player_t* player, koord3d pos, int built_layout, const building_desc_t* desc, halthandle_t halt)
+{
+	uint8 corner_layout = 6; // assume single building (for more than 4 layouts)
+
+	// Slope of the current tile: needed for both neighbor lookup and slope-image offset.
+	const slope_t::type slope = welt->lookup( pos )->get_weg_hang();
+
+	// adjust layout of neighbouring buildings (same logic as build_station_extension_depot)
+	if(  desc->is_transport_building()  &&  desc->get_all_layouts()>1  ) {
+
+		int layout = built_layout & 9;
+
+		const grund_t* const this_gr = welt->lookup( pos );
+
+		const ribi_t::ribi dir_far  = (layout & 1) ? ribi_t::east  : ribi_t::south;
+		const ribi_t::ribi dir_near = (layout & 1) ? ribi_t::west  : ribi_t::north;
+
+		// get_neighbour() resolves the correct height via get_vmove() for slopes and bridges.
+		auto find_nb = [&]( ribi_t::ribi dir ) -> grund_t* {
+			grund_t* nb = nullptr;
+			for(  int w = 0;  w < 2  &&  !nb;  w++  ) {
+				const weg_t* weg = this_gr->get_weg_nr( w );
+				if(  weg  ) {
+					this_gr->get_neighbour( nb, weg->get_waytype(), dir );
+				}
+			}
+			if(  !nb  ) {
+				const planquadrat_t* pl = welt->access( pos.get_2d() + koord(dir) );
+				if(  pl  ) {
+					grund_t* same_z = pl->get_boden_in_hoehe( pos.z );
+					if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+						nb = same_z;
+					}
+				}
+			}
+			return nb;
+		};
+
+		// detect far (south/east) end neighbor
+		if(  grund_t* gr = find_nb( dir_far )  ) {
+			gebaeude_t *gb = gr->find<gebaeude_t>();
+			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
+				corner_layout &= ~2; // clear near bit
+				const koord xy = gb->get_tile()->get_offset();
+				uint8 layoutbase = gb->get_tile()->get_layout();
+				if(  layoutbase>=48  &&  gb->get_tile()->get_desc()->get_all_layouts()>48  ) {
+					// slope stop neighbour - preserve slope offset bits
+					if(  (layoutbase & 1) == (layout & 1)  ) {
+						const uint8 slope_p = layoutbase & 0xF0;
+						layoutbase = slope_p | ((layoutbase & 0x0F) & 0x0b);
+					}
+				}
+				else if(  layoutbase>=16  ) {
+					if(  (layoutbase & 0x30) == 0x10  ) {
+						layoutbase &= ~2;
+					}
+					else if(  (layoutbase & 6) != 6  ) {
+						layoutbase &= ~6;
+					}
+				}
+				else if(  gb->get_tile()->get_desc()->get_all_layouts()>4  ) {
+					if(  (layoutbase & 1) == (layout & 1)  ) {
+						layoutbase &= 0x0b;
+					}
+				}
+				gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
+			}
+		}
+
+		// detect near (north/west) end neighbor
+		if(  grund_t* gr = find_nb( dir_near )  ) {
+			gebaeude_t *gb = gr->find<gebaeude_t>();
+			if(  gb  &&  gb->get_tile()->get_desc()->is_transport_building()  ) {
+				corner_layout &= ~4; // clear far bit
+				const koord xy = gb->get_tile()->get_offset();
+				uint8 layoutbase = gb->get_tile()->get_layout();
+				if(  layoutbase>=48  &&  gb->get_tile()->get_desc()->get_all_layouts()>48  ) {
+					// slope stop neighbour - preserve slope offset bits
+					if(  (layoutbase & 1) == (layout & 1)  ) {
+						const uint8 slope_p = layoutbase & 0xF0;
+						layoutbase = slope_p | ((layoutbase & 0x0F) & 0x0d);
+					}
+				}
+				else if(  layoutbase>=16  ) {
+					if(  (layoutbase & 0x30) == 0x10  ) {
+						layoutbase &= ~4;
+					}
+					else if(  (layoutbase & 6) != 6  ) {
+						layoutbase &= ~6;
+					}
+				}
+				else if(  gb->get_tile()->get_desc()->get_all_layouts()>4  ) {
+					if(  (layoutbase & 1) == (layout & 1)  ) {
+						layoutbase &= 0x0d;
+					}
+				}
+				gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
+			}
+		}
+	}
+
+	// apply corner bits to the flat part of the layout
+	// use min(48, all_layouts) so the modulo stays within the flat image range
+	const int flat_count = min( 48, (int)desc->get_all_layouts() );
+	if(  flat_count > 4  ) {
+		built_layout = (corner_layout | (built_layout & 9)) % flat_count;
+	}
+
+	// Determine slope image offset.
+	// Layout structure: 0-47 flat, 48-63 N/W single, 64-79 S/E single,
+	//                   80-95 N/W double, 96-111 S/E double.
+	// An 80-layout pakset has single-slope images only; double-slope tiles
+	// fall back to the same N/W or S/E single image group.
+	// A 132-layout pakset has dedicated double-slope images.
+	int slope_offset = 0;
+	if(  slope == slope_t::north  ||  slope == slope_t::west  ) {
+		slope_offset = 48;
+	}
+	else if(  slope == slope_t::south  ||  slope == slope_t::east  ) {
+		slope_offset = 64;
+	}
+	else if(  slope == (slope_t::type)(slope_t::north*2)  ||  slope == (slope_t::type)(slope_t::west*2)  ) {
+		// Use double-height images if present, otherwise fall back to single-height.
+		slope_offset = (built_layout + 80 < (int)desc->get_all_layouts()) ? 80 : 48;
+	}
+	else if(  slope == (slope_t::type)(slope_t::south*2)  ||  slope == (slope_t::type)(slope_t::east*2)  ) {
+		slope_offset = (built_layout + 96 < (int)desc->get_all_layouts()) ? 96 : 64;
+	}
+
+	// use slope image only when the descriptor defines one for this layout
+	if(  slope_offset > 0  &&  built_layout + slope_offset < (int)desc->get_all_layouts()  ) {
+		built_layout += slope_offset;
+	}
+
+	return build_station_extension_depot_with_complete_layout_bits( player, pos, built_layout, desc, &halt );
 }
 
 

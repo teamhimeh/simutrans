@@ -1682,19 +1682,16 @@ void grund_t::display_obj_fg(const sint16 xpos, const sint16 ypos, const bool is
 void display_text_label(sint16 xpos, sint16 ypos, const char* text, const player_t *player, bool dirty)
 {
 	sint16 pc = player ? player->get_player_color1()+4 : SYSCOL_TEXT_HIGHLIGHT;
-	switch( env_t::show_names >> 2 ) {
-		case 0:
-			display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
-			break;
-		case 1:
-			display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
-			break;
-		case 2: {
-			display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
-			display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
-			display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
-			break;
-		}
+	if(  env_t::show_names & env_t::SHOW_NAME_TYPE3  ) {
+		display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
+		display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
+		display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
+	}
+	else if(  env_t::show_names & env_t::SHOW_NAME_TYPE2  ) {
+		display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
+	}
+	else {
+		display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
 	}
 }
 
@@ -1707,7 +1704,7 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 #endif
 	// marker/station text
 	if(  get_flag(has_text)  &&  env_t::show_names  ) {
-		if(  env_t::show_names&1  ) {
+		if(  env_t::show_names & env_t::SHOW_NAME  ) {
 			const char *text = get_text();
 			const sint16 raster_tile_width = get_tile_raster_width();
 			const int width = proportional_string_width(text)+7;
@@ -1718,8 +1715,8 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 			display_text_label(new_xpos, ypos, text, owner, dirty);
 		}
 
-		// display station waiting information/status
-		if(env_t::show_names & 2) {
+		// display station waiting information/status and/or allowed player bars
+		if(  env_t::show_names & (env_t::SHOW_WAITING_BARS | env_t::SHOW_ALLOWED_PLAYERS)  ) {
 			const halthandle_t halt = get_halt();
 			if(halt.is_bound()  &&  halt->get_basis_pos3d()==pos) {
 				halt->display_status(xpos, ypos);
