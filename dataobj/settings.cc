@@ -859,9 +859,17 @@ void settings_t::rdwr(loadsave_t *file)
 
 		if(  file->is_version_atleast(110, 1)  ) {
 			file->rdwr_bool( default_player_color_random );
-			for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			const int old_player_count = 16;
+			const int player_count = file->get_OTRP_version()<58 ? old_player_count : MAX_PLAYER_COUNT;
+			for(  int i=0;  i<player_count;  i++  ) {
 				file->rdwr_byte( default_player_color[i][0] );
 				file->rdwr_byte( default_player_color[i][1] );
+			}
+			if(  file->is_loading()  &&  player_count<MAX_PLAYER_COUNT  ) {
+				for(  int i=player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+					default_player_color[i][0] = 255;
+					default_player_color[i][1] = 255;
+				}
 			}
 		}
 		else if(  file->is_loading()  ) {

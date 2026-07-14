@@ -14,6 +14,8 @@
 #include "../sys/simsys.h"
 #include "../simworld.h"
 #include "../simversion.h"
+#include "../simmenu.h"
+#include "../player/simplay.h"
 #include "../pathes.h"
 
 #include "../dataobj/loadsave.h"
@@ -110,6 +112,21 @@ bool loadsave_frame_t::item_action(const char *filename)
 			// older OTRP version: index 1 => v(OTRP_VERSION_MAJOR-1), index 2 => v(OTRP_VERSION_MAJOR-2), ...
 			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", OTRP_VERSION_MAJOR - sel );
 			env_t::savegame_version_str = otrp_ver_str;
+		}
+		if(  OTRP_VERSION_MAJOR - sel < 58  &&  !env_t::networkmode  ) {
+			// older save formats only support the first 16 players; merge the rest into player 0 first
+			player_t *const public_player = welt->get_public_player();
+			const uint8 old_player_count = 16;
+			for(  uint8 i=old_player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+				player_t *player = welt->get_player(i);
+				if(  player==NULL  ||  player->is_public_service()  ) {
+					continue;
+				}
+				static char merge_param[32];
+				sprintf( merge_param, "%hhi,%hhi", i, (uint8)0 );
+				tool_t::simple_tool[TOOL_MERGE_PLAYER]->set_default_param( merge_param );
+				welt->set_tool( tool_t::simple_tool[TOOL_MERGE_PLAYER], public_player );
+			}
 		}
 		long start_save = dr_time();
 		welt->save( filename, loadsave_t::save_mode, env_t::savegame_version_str, false );
