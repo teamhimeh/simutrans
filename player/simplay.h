@@ -219,6 +219,8 @@ public:
 	// some routine needs this for direct manipulation
 	pwd_hash_t& access_password_hash() { return pwd_hash; }
 
+	bool is_password_hash() const { return !pwd_hash.empty(); }
+
 	// this type of AIs identifier
 	virtual uint8 get_ai_id() const { return HUMAN; }
 

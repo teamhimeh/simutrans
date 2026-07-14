@@ -138,7 +138,8 @@ map_button_t button_init[MAP_MAX_BUTTONS] = {
 	{ COL_LIGHT_GREEN,  COL_DARK_GREEN,  "Depots", "Highlite depots", minimap_t::MAP_DEPOT },
 	{ COL_WHITE,        COL_GREY5,       "Powerlines", "Highlite electrical transmission lines", minimap_t::MAP_POWERLINES },
 	{ COL_WHITE,        COL_GREY5,       "Forest", "Highlite forests", minimap_t::MAP_FOREST },
-	{ COL_WHITE,        COL_GREY5,       "Ownership", "Show the owenership of infrastructure", minimap_t::MAP_OWNER }
+	{ COL_WHITE,        COL_GREY5,       "Ownership", "Show the owenership of infrastructure", minimap_t::MAP_OWNER },
+	{ COL_LIGHT_GREEN,  COL_DARK_GREEN,  "Markers", "Show player-placed map markers", minimap_t::MAP_LABELS }
 };
 
 #define scrolly (*p_scrolly)
