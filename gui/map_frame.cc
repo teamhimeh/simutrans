@@ -201,7 +201,7 @@ map_frame_t::map_frame_t() :
 
 
 	// second row of controls
-	zoom_row = add_table(7,0);
+	zoom_row = add_table(8,0);
 	{
 		// zoom levels label
 		new_component<gui_label_t>("map zoom");
@@ -229,6 +229,13 @@ map_frame_t::map_frame_t() :
 		b_rotate45.add_listener(this);
 		b_rotate45.pressed = karte->is_isometric();
 		add_component(&b_rotate45);
+
+		// show convoy positions
+		b_show_convoi.init( button_t::square_state, "Show convois");
+		b_show_convoi.set_tooltip("Show convoi positions on the map");
+		b_show_convoi.add_listener(this);
+		b_show_convoi.pressed = minimap_t::get_show_convoi();
+		add_component(&b_show_convoi);
 
 		// show contour
 		c_show_outlines.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate( "Show contour" ), SYSCOL_TEXT );
@@ -518,6 +525,10 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 		scrolly.set_size( scrolly.get_size() );
 		zoomed = true;
 		old_ij = koord::invalid;
+	}
+	else if(  comp == &b_show_convoi  ) {
+		b_show_convoi.pressed ^= 1;
+		minimap_t::get_instance()->set_show_convoi( b_show_convoi.pressed );
 	}
 	else if(  comp == &b_overlay_networks  ) {
 		b_overlay_networks.pressed ^= 1;

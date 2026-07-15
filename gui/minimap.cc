@@ -60,6 +60,7 @@ minimap_t::MAP_DISPLAY_MODE minimap_t::mode = MAP_TOWN;
 minimap_t::MAP_DISPLAY_MODE minimap_t::last_mode = MAP_TOWN;
 bool minimap_t::is_visible = false;
 bool minimap_t::circle_halts = false;
+bool minimap_t::show_convoi = true;
 
 #define MAX_MAP_TYPE_LAND 31
 #define MAX_MAP_TYPE_WATER 5
@@ -914,7 +915,7 @@ void minimap_t::calc_map_pixel(const koord k)
 	}
 	const grund_t *gr=plan->get_boden_bei(plan->get_boden_count()-1);
 
-	if(  mode!=MAP_PAX_DEST  &&  gr->get_convoi_vehicle()  ) {
+	if(  show_convoi  &&  mode!=MAP_PAX_DEST  &&  gr->get_convoi_vehicle()  ) {
 		set_map_color( k, COL_VEHICLE );
 		return;
 	}
@@ -1965,7 +1966,7 @@ void minimap_t::draw(scr_coord pos)
 	}
 
 	// draw convoy positions for the displayed line
-	if(  displayed_line.is_bound()  ) {
+	if(  show_convoi  &&  displayed_line.is_bound()  ) {
 		const skin_desc_t *waytype_icon = NULL;
 		switch(  displayed_line->get_schedule()->get_waytype()  ) {
 			case track_wt:        waytype_icon = skinverwaltung_t::zughaltsymbol;          break;
