@@ -1127,7 +1127,7 @@ grund_t* vehicle_t::hop_check()
 			const roadsign_t *rs_cur = bd->find<roadsign_t>();
 			if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
 				route_t const& r = *cnv->get_route();
-				if(  route_index >= 2 && route_index < cnv->get_route()->get_count()-1  ) {
+				if(  route_index >= 1 && route_index < cnv->get_route()->get_count()-1  ) {
 					const ribi_t::ribi entry_ribi = ribi_type(r.at(route_index - 1), r.at(route_index));
 					const ribi_t::ribi exit_ribi  = ribi_type(r.at(route_index), r.at(route_index + 1));
 					if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & exit_ribi)  ) {

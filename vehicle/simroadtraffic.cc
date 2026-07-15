@@ -1195,7 +1195,7 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 		pos_prev2 = route[idx_in_scope(target_index,-2)];
 	}
 	const ribi_t::ribi direction90 = ribi_type(pos_prev2, route[idx_in_scope(target_index,-1)]);
-	ribi_t::ribi ribi = ribi = weg->get_ribi() & (~ribi_t::backward(direction90));
+	ribi_t::ribi ribi = (weg->get_ribi() & (~ribi_t::backward(direction90)));
 	if(  direction90 != ribi_t::none  ) {
 		const roadsign_t *rs_sign = gr->find<roadsign_t>();
 		if(  rs_sign  &&  rs_sign->get_desc()->is_single_way()  &&  rs_sign->is_detailed_oneway()  ) {
