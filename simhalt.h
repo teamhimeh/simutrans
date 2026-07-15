@@ -133,7 +133,7 @@ private:
 
 	PIXVAL status_color, last_status_color;
 	sint16 last_bar_count;
-	uint16 last_permissions;
+	uint64 last_permissions;
 	uint16 last_player_count;
 	vector_tpl<scr_coord_val> last_bar_height; // caches the last height of the station bar for each good type drawn in display_status(). used for dirty tile management
 	uint32 capacity[3]; // passenger, mail, goods
@@ -375,7 +375,7 @@ private:
 
 	/// Bitfield: bit i set means player i is allowed to stop at this halt.
 	/// Owner and public service are always set. 0xFFFF for public halts.
-	uint16 permissions;
+	uint64 permissions;
 
 	/**
 	 * versucht die ware mit beriets wartender ware zusammenzufassen
@@ -691,9 +691,9 @@ public:
 	 * Public-service owner forces all bits on.
 	 * Also rebuilds registered lines/convoys if the set changed.
 	 */
-	void set_permissions(uint16 perms);
+	void set_permissions(uint64 perms);
 
-	uint16 get_permissions() const { return permissions; }
+	uint64 get_permissions() const { return permissions; }
 
 	bool is_allow_other_player_connection() const { return (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION) != 0; }
 

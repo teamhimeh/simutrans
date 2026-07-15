@@ -156,9 +156,9 @@ public:
 	void rdwr() OVERRIDE;
 
 	pwd_hash_t hash;
-	uint16 player_unlocked;
+	uint64 player_unlocked;
 	// server->client: bit i set = player i has a password stored on the server
-	uint16 player_has_password;
+	uint64 player_has_password;
 	uint8  player_nr;
 	// client->server: true = request to set/clear the password (instead of an
 	// authentication attempt); only honored for unlocked senders or public player proxy
@@ -173,7 +173,7 @@ public:
 	/**
 	 * computes the bitmask of players that have a password set (server side)
 	 */
-	static uint16 get_player_password_set_bits(karte_t *);
+	static uint64 get_player_password_set_bits(karte_t *);
 #endif
 };
 

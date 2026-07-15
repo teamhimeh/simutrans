@@ -279,10 +279,10 @@ void socket_list_t::unlock_player_all(uint8 player_nr, bool unlock, uint32 excep
 {
 // nettool does not know about nwc_auth_player_t
 #ifndef NETTOOL
-	const uint16 player_has_password = nwc_auth_player_t::get_player_password_set_bits(world());
+	const uint64 player_has_password = nwc_auth_player_t::get_player_password_set_bits(world());
 	for(uint32 i=0; i<list.get_count(); i++) {
 		if (i!=except_client  &&  (i==0  ||  list[i]->state == socket_info_t::playing) ) {
-			uint16 old_player_unlocked = list[i]->player_unlocked;
+			uint64 old_player_unlocked = list[i]->player_unlocked;
 			if (unlock) {
 				list[i]->unlock_player(player_nr);
 			}
@@ -290,7 +290,7 @@ void socket_list_t::unlock_player_all(uint8 player_nr, bool unlock, uint32 excep
 				list[i]->lock_player(player_nr);
 			}
 			if (old_player_unlocked != list[i]->player_unlocked) {
-				dbg->warning("socket_list_t::unlock_player_all", "old = %d  new = %d  id = %d", old_player_unlocked, list[i]->player_unlocked, i);
+				dbg->warning("socket_list_t::unlock_player_all", "old = %llu  new = %llu  id = %d", (unsigned long long)old_player_unlocked, (unsigned long long)list[i]->player_unlocked, i);
 			}
 			// always tell the player: even when the unlock bits did not change,
 			// the password-set state may have (e.g. password cleared while the

@@ -1637,13 +1637,13 @@ void haltestelle_t::reconnect_factories()
 }
 
 
-void haltestelle_t::set_permissions(uint16 perms)
+void haltestelle_t::set_permissions(uint64 perms)
 {
 	if(  !owner  ||  owner->is_public_service()  ) {
-		permissions = 0xFFFF;
+		permissions = ~(uint64)0;
 	}
 	else {
-		permissions = perms | (1 << owner->get_player_nr());
+		permissions = perms | ((uint64)1 << owner->get_player_nr());
 	}
 	if(  rebuilt_schedule_registration()  ) {
 		welt->set_schedule_counter();
@@ -3390,7 +3390,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 	// change owner of halt
 	player_t* const prev_owner = owner;
 	owner = player;
-	set_permissions(0xFFFF);
+	set_permissions(~(uint64)0);
 	rebuild_connections();
 	rebuild_linked_connections();
 	rebuild_connected_components();
@@ -3482,7 +3482,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 bool haltestelle_t::is_connection_allowed(const player_t* player) const {
 	return !player
 	       ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)
-	       ||  (permissions & (1 << player->get_player_nr())) != 0;
+	       ||  (permissions & ((uint64)1 << player->get_player_nr())) != 0;
 }
 
 // merge stop
@@ -3493,7 +3493,7 @@ void haltestelle_t::merge_halt( halthandle_t halt_merged )
 	}
 
 	// After merging, allow everyone who could stop at either halt to continue doing so
-	const uint16 merged_perms = halt_merged->get_permissions();
+	const uint64 merged_perms = halt_merged->get_permissions();
 
 	halt_merged->change_owner( owner, false );
 
@@ -3602,7 +3602,7 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 	// access based on the all-company flag rather than relying solely on per-slot bitmask bits that
 	// would be cleared by remove_player() when a company is removed.
 	flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
-	set_permissions(0xFFFF);
+	set_permissions(~(uint64)0);
 
 	// set name to name of first public stop
 	if(  !joining.empty()  ) {
@@ -4134,7 +4134,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	if(  file->get_OTRP_version()>=42  ) {
 		uint8 temp_flags=flags;
-		if(  file->is_saving() && (get_permissions()|~(1U<<(uint16)get_owner()->get_player_nr()))>0 && file->get_OTRP_version()<57  ) {
+		if(  file->is_saving() && (get_permissions() & ~((uint64)1<<get_owner()->get_player_nr())) && file->get_OTRP_version()<57  ) {
 			// for old version saving.
 			// we only has "all connection" flag.
 			temp_flags|=HS_ALLOW_OTHER_PLAYER_CONNECTION;
@@ -4146,30 +4146,39 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	}
 
-	if(  file->get_OTRP_version() >= 57  ||  file->is_version_atleast(124, 5)  ) {
-		file->rdwr_short(permissions);
+	if(  file->get_OTRP_version() >= 58  ) {
+		// full 64-bit permissions
+		file->rdwr_longlong((sint64&)permissions);
 		if(  file->is_loading()  ) {
 			set_permissions(permissions);
+		}
+	}
+	else if(  file->get_OTRP_version() >= 57  ||  file->is_version_atleast(124, 5)  ) {
+		// OTRP v57 / standard 124.5+ used uint16
+		uint16 short_perms = (uint16)(permissions & 0xFFFF);
+		file->rdwr_short(short_perms);
+		if(  file->is_loading()  ) {
+			set_permissions((uint64)short_perms);
 		}
 	}
 	else if(  file->is_loading()  ) {
 		// Migrate from the old HS_ALLOW_OTHER_PLAYER_CONNECTION flag:
 		// If it was set, all players were allowed; otherwise only the owner.
 		if(  !owner  ||  owner->is_public_service()  ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)  ) {
-			set_permissions(0xFFFF);
+			set_permissions(~(uint64)0);
 		}
 		else {
-			set_permissions(owner ? (1 << owner->get_player_nr()) : 0xFFFF);
+			set_permissions(owner ? ((uint64)1 << owner->get_player_nr()) : ~(uint64)0);
 		}
 	}
 	else if(  file->is_saving()  ) {
 		// Migrate from the old HS_ALLOW_OTHER_PLAYER_CONNECTION flag:
 		// If it was set, all players were allowed; otherwise only the owner.
 		if(  !owner  ||  owner->is_public_service()  ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)  ) {
-			set_permissions(0xFFFF);
+			set_permissions(~(uint64)0);
 		}
 		else {
-			set_permissions(owner ? (1 << owner->get_player_nr()) : 0xFFFF);
+			set_permissions(owner ? ((uint64)1 << owner->get_player_nr()) : ~(uint64)0);
 		}
 	}
 }
@@ -4352,7 +4361,7 @@ void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 	uint16 player_count = 0;
 	if(  show_allowed_players  ) {
 		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
-			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
+			if(  (permissions & ((uint64)1<<i))  &&  welt->get_player(i)  ) {
 				player_count++;
 			}
 		}
@@ -4375,7 +4384,7 @@ void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 	if(  show_allowed_players  &&  player_count > 1  ) {
 		sint16 x = xpos - (player_count * 17 - get_tile_raster_width()) / 2;
 		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
-			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
+			if(  (permissions & ((uint64)1<<i))  &&  welt->get_player(i)  ) {
 				const PIXVAL color = color_idx_to_rgb( welt->get_player(i)->get_player_color1() + 4 );
 				display_fillbox_wh_clip_rgb( x, ypos - D_WAITINGBAR_WIDTH, 16, D_WAITINGBAR_WIDTH, color, players_dirty );
 				x += 17;
@@ -5150,17 +5159,17 @@ void haltestelle_t::toggle_other_player_connection_allowed() {
 		// Switch to per-player mode; keep all currently permitted so the user
 		// can selectively restrict from this point.
 		flags &= ~HS_ALLOW_OTHER_PLAYER_CONNECTION;
-		uint16 allow_player_byte=0;
+		uint64 allow_player_byte=0;
 		for(uint8 i=0; i<MAX_PLAYER_COUNT; i++){
 			if(  welt->get_player(i)  ){
-				allow_player_byte|=(1<<i);
+				allow_player_byte|=(uint64)1<<i;
 			}
 		}
 		set_permissions(allow_player_byte);
 	}
 	else {
 		flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
-		set_permissions(0xFFFF);
+		set_permissions(~(uint64)0);
 	}
 }
 

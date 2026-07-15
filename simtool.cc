@@ -10824,15 +10824,15 @@ bool tool_change_halt_t::init(player_t *player) {
 bool tool_change_permission_t::init(player_t *player)
 {
 	uint32 halt_id = 0;
-	uint32 perms = 0;
+	unsigned long long perms_ull = 0;
 	const char *p = default_param;
 	while(  *p  &&  *p <= ' '  ) { p++; }
-	sscanf( p, "%u,%u", &halt_id, &perms );
+	sscanf( p, "%u,%llu", &halt_id, &perms_ull );
 
 	halthandle_t halt;
 	halt.set_id(halt_id);
 	if(  halt.is_bound()  &&  player_t::check_owner(halt->get_owner(), player)  ) {
-		halt->set_permissions((uint16)perms);
+		halt->set_permissions((uint64)perms_ull);
 	}
 	return false;
 }
@@ -11093,9 +11093,9 @@ bool tool_merge_player_t::init( player_t *player )
 			halt->make_private_and_join(merger_player, false);
 		}
 		else if(  !halt->is_allow_other_player_connection()
-		          &&  (halt->get_permissions() & (1 << merged_player_num))  ) {
+		          &&  (halt->get_permissions() & ((uint64)1 << merged_player_num))  ) {
 			// Transfer merged player's stop permission to the merger player
-			halt->set_permissions( halt->get_permissions() | (1 << merger_player_num) );
+			halt->set_permissions( halt->get_permissions() | ((uint64)1 << merger_player_num) );
 		}
 	}
 	

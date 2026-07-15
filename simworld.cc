@@ -4916,7 +4916,9 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "start");
 
 	rdwr_gamestate(file, ls);
 
-	for(int i=0; i<MAX_PLAYER_COUNT; i++) {
+	// old format (OTRP < 58) only supports player slots 0..14
+	const int save_player_count = (file->is_saving() && file->get_OTRP_version() < 58) ? 15 : MAX_PLAYER_COUNT;
+	for(int i=0; i<save_player_count; i++) {
 		// **** REMOVE IF SOON! *********
 		if(file->is_version_less(101, 0)) {
 			if(  i<8  ) {
@@ -7160,7 +7162,7 @@ void karte_t::remove_player(uint8 player_nr)
 		// Clear removed player's bit from all halt permissions
 		for(  halthandle_t const& h : haltestelle_t::get_alle_haltestellen()  ) {
 			if(  h.is_bound()  &&  !h->is_allow_other_player_connection()  ) {
-				h->set_permissions( h->get_permissions() & ~(1 << player_nr) );
+				h->set_permissions( h->get_permissions() & ~((uint64)1 << player_nr) );
 			}
 		}
 		nwc_chg_player_t::company_removed(player_nr);

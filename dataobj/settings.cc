@@ -671,7 +671,9 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_str(language_code_names, lengthof(language_code_names) );
 
 			// restore AI state
-			for(  int i=0;  i<15;  i++  ) {
+			const int old_player_type_count = 15;
+			const int player_type_count = file->get_OTRP_version() < 58 ? old_player_type_count : MAX_PLAYER_COUNT-1;
+			for(  int i=0;  i<player_type_count;  i++  ) {
 				if(file->is_version_less(122,1)) {
 					bool player_active = true;
 					file->rdwr_bool(player_active);
@@ -680,6 +682,11 @@ void settings_t::rdwr(loadsave_t *file)
 				if(  file->is_version_less(102, 3)  ) {
 					char dummy[2] = { 0, 0 };
 					file->rdwr_str(dummy, lengthof(dummy) );
+				}
+			}
+			if(  file->is_loading()  &&  player_type_count < MAX_PLAYER_COUNT-1  ) {
+				for(  int i=player_type_count;  i<MAX_PLAYER_COUNT-1;  i++  ) {
+					player_type[i] = player_t::EMPTY;
 				}
 			}
 
