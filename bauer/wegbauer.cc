@@ -1556,7 +1556,7 @@ void way_builder_t::intern_calc_straight_route(const koord3d start, const koord3
 
 	sint32 dummy_cost;
 	const grund_t *test_bd = welt->lookup(start);
-	if(  start==ziel  ) {
+	if(  start==ziel  &&  test_bd->ist_karten_boden()  ) {
 		// we need to check crossing
 		if(!check_crossing(koord(0,0), test_bd, desc, player_builder)) {
 			return;
