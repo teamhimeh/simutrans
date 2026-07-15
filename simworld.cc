@@ -4046,6 +4046,8 @@ static const bool decade_flow_field[karte_t::MAX_WORLD_COST] = {
 	true,  // WORLD_TRANSPORTED_GOODS
 	false  // WORLD_HALTS
 };
+static_assert(sizeof(decade_flow_field)/sizeof(bool) == karte_t::MAX_WORLD_COST,
+              "decade_flow_field must have one entry per MAX_WORLD_COST");
 
 void karte_t::new_year()
 {
