@@ -109,6 +109,11 @@ void gui_numberinput_t::set_value(sint32 new_value)
 void gui_numberinput_t::set_pad_digits(uint8 n)
 {
 	pad_digits = n;
+	// the layout sizes this component from get_min_size(), which is based on `digits`;
+	// make sure the padded representation always fits
+	if(  n > digits  ) {
+		digits = n;
+	}
 	// invalidate the buffer so set_value() always reformats, even if the numeric value is unchanged
 	textbuffer[0] = 0;
 	set_value(value);

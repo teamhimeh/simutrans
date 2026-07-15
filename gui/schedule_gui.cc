@@ -608,8 +608,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 			numimp_wait_load_divisor.disable();
 			add_component(&numimp_wait_load_divisor);
 
-			numimp_wait_load_hms.init(0, 0, 235959, 1, false, 1);
-			numimp_wait_load_hms.set_width(160);
+			numimp_wait_load_hms.init(0, 0, 235959, 1, false, 6);
 			numimp_wait_load_hms.set_show_arrows(false);
 			numimp_wait_load_hms.set_pad_digits(6);
 			numimp_wait_load_hms.add_listener(this);
@@ -828,8 +827,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 			numimp_spacing_shift.disable();
 			add_component(&numimp_spacing_shift);
 
-			numimp_spacing_shift_hms.init(0, 0, 235959, 1, false, 1);
-			numimp_spacing_shift_hms.set_width(160);
+			numimp_spacing_shift_hms.init(0, 0, 235959, 1, false, 6);
 			numimp_spacing_shift_hms.set_show_arrows(false);
 			numimp_spacing_shift_hms.set_pad_digits(6);
 			numimp_spacing_shift_hms.add_listener(this);
@@ -850,8 +848,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 			numimp_delay_tolerance.add_listener(this);
 			add_component(&numimp_delay_tolerance);
 
-			numimp_delay_tolerance_hms.init(0, 0, 235959, 1, false, 1);
-			numimp_delay_tolerance_hms.set_width(160);
+			numimp_delay_tolerance_hms.init(0, 0, 235959, 1, false, 6);
 			numimp_delay_tolerance_hms.set_show_arrows(false);
 			numimp_delay_tolerance_hms.set_pad_digits(6);
 			numimp_delay_tolerance_hms.add_listener(this);
