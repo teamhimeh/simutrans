@@ -10519,6 +10519,12 @@ bool tool_change_traffic_light_t::init( player_t *player )
 	else if(  ns == 3  ) {
 		rs->set_ticks_yellow_ow( (uint8)ticks );
 	}
+	else if(  ns == 5  ) {
+		sint32 mask_lo = 0, mask_hi = 0;
+		sscanf( default_param, "%hi,%hi,%hhi,%hi,%hi,%i,%i", &pos2d.x, &pos2d.y, &z, &ns, &ticks, &mask_lo, &mask_hi );
+		uint64 new_mask = ((uint64)(uint32)mask_hi << 32) | (uint32)mask_lo;
+		rs->set_player_mask( new_mask );
+	}
 	// update the window
 	if(  rs->get_desc()->is_traffic_light()  ) {
 		trafficlight_info_t* trafficlight_win = (trafficlight_info_t*)win_get_magic((ptrdiff_t)rs);

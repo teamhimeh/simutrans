@@ -8002,7 +8002,7 @@ bool karte_t::is_player_password_set(uint8 player_nr) const
 	}
 	if (env_t::networkmode  &&  !env_t::server) {
 		// client: local hashes are not authoritative, use the state reported by the server
-		return (player_password_set_bits & (1<<player_nr)) != 0;
+		return (player_password_set_bits & ((uint64)1<<player_nr)) != 0;
 	}
 	player_t *player = get_player(player_nr);
 	return player  &&  player->is_password_hash();

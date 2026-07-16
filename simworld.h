@@ -454,7 +454,7 @@ private:
 	 * Network client only: bitmask of players that have a password stored on the server
 	 * (bit i = player i). Updated by nwc_auth_player_t; not saved.
 	 */
-	uint16 player_password_set_bits;
+	uint64 player_password_set_bits;
 	/** @} */
 
 	/**
@@ -968,7 +968,7 @@ public:
 	bool is_player_password_set(uint8 player_nr) const;
 
 	/// network client only: store password-set state received from the server
-	void set_player_password_set_bits(uint16 bits) { player_password_set_bits = bits; }
+	void set_player_password_set_bits(uint64 bits) { player_password_set_bits = bits; }
 
 	/**
 	 * Network safe initiation of new and deletion of players, change freeplay.

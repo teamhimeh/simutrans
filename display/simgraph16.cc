@@ -329,7 +329,7 @@ struct imd {
 	sint16 h; // current (zoomed) height
 
 	uint8 recode_flags;
-	uint16 player_flags; // bit # is player number, ==1 cache image needs recoding
+	uint64 player_flags; // bit # is player number, ==1 cache image needs recoding
 
 	PIXVAL* data[MAX_PLAYER_COUNT]; // current data - zoomed and recolored (player + daynight)
 
@@ -1242,7 +1242,7 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 static void recode()
 {
 	for(  image_id n = 0;  n < anz_images;  n++  ) {
-		images[n].player_flags = 0xFFFF;  // recode all player colors
+		images[n].player_flags = ~(uint64)0;  // recode all player colors
 	}
 }
 
@@ -1344,7 +1344,7 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	// may this image be zoomed
 #ifdef MULTI_THREAD
 	pthread_mutex_lock( &recode_img_mutex );
-	if(  (images[n].player_flags & (1<<player_nr)) == 0  ) {
+	if(  (images[n].player_flags & ((uint64)1<<player_nr)) == 0  ) {
 		// other thread did already the re-code...
 		pthread_mutex_unlock( &recode_img_mutex );
 		return;
@@ -1358,7 +1358,7 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	// contains now the player color ...
 	activate_player_color( player_nr, true );
 	recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
-	images[n].player_flags &= ~(1<<player_nr);
+	images[n].player_flags &= ~((uint64)1<<player_nr);
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &recode_img_mutex );
 #endif
@@ -1437,7 +1437,7 @@ static void rezoom_img(const image_id n)
 		}
 #endif
 		// we may need night conversion afterwards
-		images[n].player_flags = 0xFFFF; // recode all player colors
+		images[n].player_flags = ~(uint64)0; // recode all player colors
 
 		//  we recalculate the len (since it may be larger than before)
 		// thus we have to free the old caches
@@ -2149,7 +2149,7 @@ void register_image(image_t *image_in)
 	if(  image_in->zoomable  ) {
 		image->recode_flags |= FLAG_ZOOMABLE;
 	}
-	image->player_flags = 0xFFFF; // recode all player colors
+	image->player_flags = ~(uint64)0; // recode all player colors
 
 	// find out if there are really player colors
 	for(  PIXVAL *src = image_in->data, y = 0;  y < image_in->h;  ++y  ) {
@@ -3163,7 +3163,7 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 
 		if(  daynight  ||  night_shift == 0  ) {
 			// ok, now we could use the same faster code as for the normal images
-			if(  (images[n].player_flags & (1<<player_nr))  ) {
+			if(  (images[n].player_flags & ((uint64)1<<player_nr))  ) {
 				recode_img( n, player_nr );
 			}
 			display_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR);
