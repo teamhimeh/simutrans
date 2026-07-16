@@ -3153,7 +3153,10 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
 		grund_t *gr=welt->lookup(my_end);
 		if(  gr->get_weg( desc->get_waytype() )  ) {
-			my_end.z -= welt->get_settings().get_way_height_clearance();
+			// find the base ground this elevated way was built above; this accounts for the
+			// extra height added on bridge ramp connection tiles (see grund_t::get_bridge_slope_extra_height)
+			grund_t *base_gr = bauigel.find_base_for_elevated(my_end);
+			my_end = base_gr ? base_gr->get_pos() : my_end - koord3d(0, 0, welt->get_settings().get_way_height_clearance());
 		}
 	}
 	// and continue as normal ...
