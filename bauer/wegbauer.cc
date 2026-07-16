@@ -658,8 +658,21 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 		// cannot build if conversion factor 2, we aren't powerline and way with maximum speed > 0 or powerline 1 tile below
 		// if height_offset=-1, we check 1 tile below.
 		grund_t *to2 = welt->lookup( to->get_pos() + koord3d(0, 0, -1+max(height_offset,0)) );
-		if(  to2 && (((bautyp&bautyp_mask)!=leitung  &&  to2->get_weg_nr(0)  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0) || to2->get_leitung())  ) {
+		if(  to2 && (((bautyp&bautyp_mask)!=leitung  &&  ((to2->get_weg_nr(0)  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  to2->get_weg_nr(1)  &&  (to2->get_weg_nr(1)->get_desc()->get_topspeed()>0))) || to2->get_leitung())  ) {
 			return false;
+		}
+		if(  height_offset==-1  ) {
+			// we need extra check for bridge tile!
+			to2 = welt->lookup( to->get_pos() + koord3d(0,0,-2) );
+			if(  to2  &&  (to2->get_bridge_slope_extra_height()==2 || ((to2->get_bridge_slope_extra_height()==1 && to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  (to2->get_weg_nr(1)  &&  to2->get_weg_nr(1)->get_desc()->get_topspeed()>0)))  ) {
+				// we fing bridge here! false
+				return false;
+			}
+			to2 = welt->lookup( to->get_pos() + koord3d(0,0,-3) );
+			if(  to2  &&  to2->get_bridge_slope_extra_height()>1  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0  ) {
+				// we fing bridge here! false
+				return false;
+			}
 		}
 		// tile above cannot have way unless we are a way (not powerline) with a maximum speed of 0, or be surface if we are underground
 		// if height_offset=-1, we check 1 tile above.
