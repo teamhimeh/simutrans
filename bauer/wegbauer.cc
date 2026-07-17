@@ -664,12 +664,12 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 		if(  height_offset==-1  ) {
 			// we need extra check for bridge tile!
 			to2 = welt->lookup( to->get_pos() + koord3d(0,0,-2) );
-			if(  to2  &&  (to2->get_bridge_slope_extra_height()==2 || (to2->get_bridge_slope_extra_height()==1 && ((to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  (to2->get_weg_nr(1)  &&  to2->get_weg_nr(1)->get_desc()->get_topspeed()>0))))  ) {
+			if(  to2  &&  (to2->get_bridge_slope_extra_height()==2 || (to2->get_bridge_slope_extra_height()==1 && ((to2->get_weg_nr(0)  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  (to2->get_weg_nr(1)  &&  to2->get_weg_nr(1)->get_desc()->get_topspeed()>0))))  ) {
 				// we find bridge here! false
 				return false;
 			}
 			to2 = welt->lookup( to->get_pos() + koord3d(0,0,-3) );
-			if(  to2  &&  to2->get_bridge_slope_extra_height()>1  &&  ((to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  (to2->get_weg_nr(1)  &&  to2->get_weg_nr(1)->get_desc()->get_topspeed()>0))  ) {
+			if(  to2  &&  to2->get_bridge_slope_extra_height()>1  &&  ((to2->get_weg_nr(0)  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  (to2->get_weg_nr(1)  &&  to2->get_weg_nr(1)->get_desc()->get_topspeed()>0))  ) {
 				// we find bridge here! false
 				return false;
 			}
