@@ -267,7 +267,12 @@ public:
 	bool check_terraforming( const grund_t *from, const grund_t *to, uint8* new_from_slope=NULL, uint8* new_to_slope=NULL) const;
 	void do_terraforming();
 
-	void build();
+	/**
+	 * @param allow_single_tile if true, a route consisting of just the start tile
+	 * (no end tile / no connections) may be built, instead of being rejected as invalid.
+	 * Used to build an isolated one-tile way.
+	 */
+	void build(bool allow_single_tile = false);
 };
 
 ENUM_BITSET(way_builder_t::bautyp_t);
