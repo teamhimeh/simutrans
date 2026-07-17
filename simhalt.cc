@@ -1582,6 +1582,13 @@ bool haltestelle_t::reroute_goods(sint16 &units_remaining)
 				fabrik_t::update_transit( &goods, false);
 				ware = warray->erase(ware);
 			}
+			else if(  try_foot_transit(goods)  ) {
+				// The (re-)routed next hop is a walking connection. No vehicle ever fetches
+				// ware bound for a foot-only leg, so it must be walked immediately here rather
+				// than left queued forever. try_foot_transit() has already forwarded it to the
+				// next halt's own waiting queue, so drop our (now stale) copy of it.
+				ware = warray->erase(ware);
+			}
 			else {
 				warray->update_index(ware);
 				ware++;
@@ -2534,6 +2541,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 	// Look up pre-computed destination walking cost for a given halt id (0 for non-end halts).
 	auto get_dest_walk_cost = [&](uint32 halt_id) -> uint32 {
+		if(!use_walk_cost) return 0;
 		for(uint32 i = 0; i < end_halts.get_count(); i++) {
 			if(end_halts[i].get_id() == halt_id) return end_halt_walk_costs[i];
 		}
@@ -2623,8 +2631,12 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 			// - no two consecutive walking legs, a real vehicle must be boarded in between
 			// - the first hop out of the origin halt must be a real vehicle connection
 			// - the last hop into a destination halt must be a real vehicle connection
+			// halt_data[] is a static array reused across searches: its .destination field is
+			// only valid for halts already touched (markers[]==current_marker) in THIS search -
+			// otherwise it is a stale leftover from a previous, unrelated search's destination set.
 			if(  current_conn.is_foot_path  &&
-			     (  current_halt_data.arrived_by_foot  ||  current_halt_data.depth == 0  ||  halt_data[ reachable_halt_id ].destination  )  ) {
+			     (  current_halt_data.arrived_by_foot  ||  current_halt_data.depth == 0  ||
+			        (  markers[ reachable_halt_id ]==current_marker  &&  halt_data[ reachable_halt_id ].destination  )  )  ) {
 				continue;
 			}
 
@@ -2901,8 +2913,12 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 			// so depth==0 means "resume from here", not "leave the true trip origin".
 			// Blocking foot legs at depth==0 would incorrectly forbid a legitimate mid-journey
 			// walk to the next transfer halt right after getting off a real vehicle.
+			// halt_data[] is a static array reused across searches: its .destination field is
+			// only valid for halts already touched (markers[]==current_marker) in THIS search -
+			// otherwise it is a stale leftover from a previous, unrelated search's destination set.
 			if(  current_conn.is_foot_path  &&
-			     (  current_halt_data.arrived_by_foot  ||  halt_data[ reachable_halt_id ].destination  )  ) {
+			     (  current_halt_data.arrived_by_foot  ||
+			        (  markers[ reachable_halt_id ]==current_marker  &&  halt_data[ reachable_halt_id ].destination  )  )  ) {
 				continue;
 			}
 
