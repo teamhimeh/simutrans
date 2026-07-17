@@ -9,6 +9,7 @@
 
 #include "weg.h"
 #include "../../convoihandle_t.h"
+#include "../../dataobj/ribi.h"
 
 class vehicle_t;
 
@@ -20,10 +21,15 @@ class vehicle_t;
 class schiene_t : public weg_t
 {
 protected:
-	/**
-	* Bound when this block was successfully reserved by the convoi
-	*/
 	convoihandle_t reserved;
+	ribi_t::ribi   reserved_dir  = ribi_t::none;
+	convoihandle_t reserved2;
+	ribi_t::ribi   reserved2_dir = ribi_t::none;
+
+	// Two bends that share no ribi bits don't cross visually (NW+SE or NE+SW).
+	static bool can_co_reserve_dirs(ribi_t::ribi d1, ribi_t::ribi d2) {
+		return ribi_t::is_bend(d1) && ribi_t::is_bend(d2) && (d1 & d2) == 0;
+	}
 
 public:
 	static const way_desc_t *default_schiene;
@@ -47,7 +53,7 @@ public:
 	/**
 	* true, if this rail can be reserved
 	*/
-	bool can_reserve(convoihandle_t c) const { return !reserved.is_bound()  ||  c==reserved; }
+	bool can_reserve(convoihandle_t c) const { return !reserved.is_bound()  ||  c==reserved  ||  c==reserved2; }
 
 	/**
 	* true, if this rail can be reserved
@@ -65,9 +71,10 @@ public:
 	virtual bool unreserve( convoihandle_t c);
 
 	/**
-	* releases previous reservation
+	* releases previous reservation — derives convoy handle from the vehicle
+	* so that co-reserved convoys are correctly identified.
 	*/
-	bool unreserve( vehicle_t *) { return unreserve(reserved); }
+	bool unreserve( vehicle_t *v);
 
 	/* called before deletion;
 	 * last chance to unreserve tiles ...
@@ -75,9 +82,44 @@ public:
 	void cleanup(player_t *player) OVERRIDE;
 
 	/**
-	* gets the related convoi
+	* gets the related convoi (primary slot)
 	*/
 	convoihandle_t get_reserved_convoi() const {return reserved;}
+
+	/**
+	* gets the direction corner_set of the primary reservation
+	*/
+	ribi_t::ribi get_reserved_dir() const { return reserved_dir; }
+
+	/**
+	 * True if a convoy transiting this tile with corner_set @p dir can
+	 * co-reserve alongside the existing primary reservation.
+	 */
+	bool can_co_reserve_with(ribi_t::ribi dir) const {
+		return !reserved2.is_bound() && can_co_reserve_dirs(reserved_dir, dir);
+	}
+
+	/**
+	 * Weak entry-only gate used by check_next_tile during choose-area routing.
+	 * Returns true when a convoy approaching via border @p entry *might* be
+	 * able to co-reserve this tile via a non-conflicting opposite bend.
+	 * check_transit_tile validates the exact exit direction afterwards.
+	 */
+	bool can_co_reserve_approach(ribi_t::ribi entry) const {
+		if (!reserved.is_bound() || reserved2.is_bound()) return false;
+		if (!ribi_t::is_bend(reserved_dir)) return false;
+		return (ribi_t::backward(reserved_dir) & entry) != 0;
+	}
+
+	/**
+	* true if convoy c holds either the primary or the secondary reservation.
+	* Use this instead of get_reserved_convoi()==c when the convoy may be
+	* co-reserved (e.g. in is_next_tile_already_reserved).
+	*/
+	bool is_reserved_by(convoihandle_t c) const {
+		return (reserved.is_bound()  &&  reserved  == c)
+		    || (reserved2.is_bound() &&  reserved2 == c);
+	}
 
 	void rdwr(loadsave_t *file) OVERRIDE;
 

@@ -3302,7 +3302,10 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
 		grund_t *gr=welt->lookup(my_end);
 		if(  gr->get_weg( desc->get_waytype() )  ) {
-			my_end.z -= welt->get_settings().get_way_height_clearance();
+			// find the base ground this elevated way was built above; this accounts for the
+			// extra height added on bridge ramp connection tiles (see grund_t::get_bridge_slope_extra_height)
+			grund_t *base_gr = bauigel.find_base_for_elevated(my_end);
+			my_end = base_gr ? base_gr->get_pos() : my_end - koord3d(0, 0, welt->get_settings().get_way_height_clearance());
 		}
 	}
 	// and continue as normal ...
@@ -3369,7 +3372,8 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 		hf = toolbar_tool->get_height_offset();
 	}
 
-	uint8 offset = (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt) ? welt->get_settings().get_way_height_clearance() + hf : 0;
+	bool is_elevated = desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt;
+	uint8 offset = is_elevated ? welt->get_settings().get_way_height_clearance() + hf : 0;
 
 	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_count() == 1;
 	if(  bauigel.get_count()>1  ||  single_tile_way  ) {
@@ -3378,12 +3382,15 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 
 		// make dummy route from bauigel
 		for(  uint32 j=0;  j<bauigel.get_count();  j++   ) {
-			koord3d pos = bauigel.get_route()[j] + koord3d(0,0,offset);
+			koord3d base_pos = bauigel.get_route()[j];
+			grund_t *base_gr = welt->lookup( base_pos );
+			sint8 extra_h = (is_elevated  &&  base_gr) ? base_gr->get_bridge_slope_extra_height() : 0;
+			koord3d pos = base_pos + koord3d(0,0,offset+extra_h);
 			grund_t *gr = welt->lookup( pos );
 			if( !gr ) {
 				gr = new monorailboden_t(pos, 0);
 				// should only be here when elevated/monorail, therefore will be at height offset above ground
-				gr->set_grund_hang( welt->lookup( pos - koord3d( 0, 0, offset ) )->get_grund_hang() );
+				gr->set_grund_hang( base_gr->get_weg_hang() );
 				welt->access(pos.get_2d())->boden_hinzufuegen(gr);
 			}
 			if (gr->is_water()) {
@@ -6351,8 +6358,12 @@ const char* tool_build_roadsign_t::check_pos_intern(player_t *player, koord3d po
 		}
 
 		const bool two_way = desc->is_single_way()  ||  desc->is_signal_type();
+		// single_way signs are allowed on 2-, 3-, and 4-way junctions; signals stay 2-way only
+		const bool valid_dir_check = !two_way
+		    || (desc->is_signal_type() && ribi_t::is_twoway(dir))
+		    || (desc->is_single_way() && !ribi_t::is_single(dir) && dir != ribi_t::none);
 
-		if(  !two_way  ||  (two_way  &&  ribi_t::is_twoway(dir))  ) {
+		if(  valid_dir_check  ) {
 			roadsign_t* rs;
 			if(  desc->is_signal_type()  ) {
 				// if there is already a signal, we might need to inverse the direction
@@ -6637,8 +6648,12 @@ const char *tool_build_roadsign_t::place_sign_intern( player_t *player, grund_t*
 		ribi_t::ribi dir = weg->get_ribi_unmasked();
 
 		const bool two_way = desc->is_single_way() || desc->is_signal_type();
+		// single_way signs are allowed on 2-, 3-, and 4-way junctions; signals stay 2-way only
+		const bool valid_dir = !two_way
+		    || (desc->is_signal_type() && ribi_t::is_twoway(dir))
+		    || (desc->is_single_way() && !ribi_t::is_single(dir) && dir != ribi_t::none);
 
-		if(  !two_way  ||  (two_way  &&  ribi_t::is_twoway(dir))  ) {
+		if(  valid_dir  ) {
 			roadsign_t* rs;
 			if (desc->is_signal_type()) {
 				// if there is already a signal, we might need to inverse the direction
@@ -10711,7 +10726,11 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * t:set stop before check(for choose/longblock signs)
  * d:set use default route for choose signal
  * p:set start signal(do not start from stops if this flag is true)
- * 
+ * l:set length-based choose (choose shortest halt that fits convoy)
+ * D:toggle detailed_oneway flag on single_way sign; initialises defaults when enabling
+ * n:set packed from-N/from-S allowed exit ribis on detailed_oneway sign (ticks_ns)
+ * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
+ * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
@@ -10751,7 +10770,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 'o':
-		// set guide signal state for signal
+		// set choose signal
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_choose_signal(inst);
@@ -10817,7 +10836,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 't':
-		// set advance to end state for signal
+		// set stop before check for signal
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_stop_before_check(inst);
@@ -10870,6 +10889,64 @@ bool tool_change_roadsign_t::init( player_t *player )
 				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
 				if(  sign_info_win  ) {
 					sign_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'D':
+		// toggle detailed_oneway flag on a single_way sign; initialises defaults when enabling
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  ) {
+					bool enable = (inst != 0);
+					if(  enable  &&  !rs->is_detailed_oneway()  ) {
+						// initialise from way ribi before enabling
+						weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp()!=tram_wt ? rs->get_desc()->get_wtyp() : track_wt);
+						if(  weg  ) {
+							rs->init_detailed_oneway_defaults(weg->get_ribi_unmasked());
+						}
+					}
+					rs->set_detailed_oneway(enable);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'n':
+		// set ticks_ns (packed from-N / from-S allowed exit ribis) on a detailed_oneway sign
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					rs->set_detailed_oneway_out_ribi(ribi_t::north, inst & 0xF);
+					rs->set_detailed_oneway_out_ribi(ribi_t::south, (inst >> 4) & 0xF);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'e':
+		// set ticks_ow (packed from-E / from-W allowed exit ribis) on a detailed_oneway sign
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					rs->set_detailed_oneway_out_ribi(ribi_t::east, inst & 0xF);
+					rs->set_detailed_oneway_out_ribi(ribi_t::west, (inst >> 4) & 0xF);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
 				}
 			}
 		}

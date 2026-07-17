@@ -50,6 +50,7 @@ include("tests/test_otrp_signal_options")
 include("tests/test_reroute_reservation")
 include("tests/test_remove_house")
 include("tests/test_pillar")
+include("tests/test_crossing_reservation")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -302,6 +303,18 @@ all_tests <- [
 	test_remove_pillar_tool_basic,
 	test_remover_pillar_priority,
 	test_remove_pillar_tool_shift_area,
+	// 4-way crossing PBS co-reservation
+	test_crossing_straight_single_convoy,
+	test_crossing_straight_two_convoys_sequential,
+	test_crossing_straight_opposite_directions,
+	test_crossing_three_way_single_convoy,
+	test_crossing_four_way_ne_sw_permitted_a_first,
+	test_crossing_four_way_ne_sw_permitted_b_first,
+	test_crossing_four_way_se_nw_permitted_a_first,
+	test_crossing_four_way_se_nw_permitted_b_first,
+	test_crossing_four_way_ns_sequential_prohibited,
+	test_crossing_four_way_ne_ne_sequential_prohibited,
+	test_crossing_four_way_ne_se_sequential_prohibited,
 ]
 
 
