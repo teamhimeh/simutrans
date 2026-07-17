@@ -617,6 +617,16 @@ pak dependence
 アドオンの設定を使用
 allow_elevated_way_over_others_halt
 他社駅直上に高架線を建設可(allow_elevated_way_over_others_halt)
+Detailed oneway
+通行可能な方向の詳細設定
+transit_by_foot
+徒歩乗り換え許可(transit_by_foot)
+foot_path_weight
+徒歩乗り換えの1マスあたりのコスト(foot_path_weight)
+foot_path_time_ticks
+徒歩乗り換え1マスに掛かる時間(foot_path_time_ticks)
+walk_cost_to_halt
+最寄り駅までの距離をルート計算に使用(walk_cost_to_halt)
 #------通知設定------
 New Year
 新年
@@ -803,3 +813,11 @@ Halts
 駅数
 TBD
 時刻未定
+\nis co-reserved by:
+\nこの編成も通過:
+Show convois
+編成を表示
+Show convoi positions on the map
+編成の位置を地図上に表示
+(walk)
+(徒歩)
