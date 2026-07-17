@@ -230,6 +230,9 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
 			    && !marker.is_marked(to) // not already tested
 			    && tdriver->check_next_tile(to, need_electric, true, coupling, gr->get_pos()) // can be driven on
+			    // With entry (backward ribi_from) and exit (nesw[r]) both known, verify that
+			    // a reserved junction tile gr can be co-reserved for this specific transit.
+			    && tdriver->check_transit_tile(gr, tmp->ribi_from, ribi_t::nesw[r])
 			) {
 				// Skip tiles where detailed_oneway forbids entry from this direction.
 				{

@@ -29,6 +29,16 @@ public:
 	virtual bool check_next_tile(const grund_t* bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const { return check_next_tile(bd,need_electric,find_route,coupling); }
 
 	/**
+	 * Called during choose-area route-finding when both the entry and exit
+	 * directions through tile @p gr are known.  Returns false if the tile is
+	 * reserved by a different convoy and the specific transit (entry+exit) would
+	 * conflict with that reservation.  @p ribi_from is the A* node's ribi_from
+	 * (direction traveled to reach @p gr); @p exit is the direction leaving @p gr.
+	 * Default: always passable (non-rail vehicles ignore reservations).
+	 */
+	virtual bool check_transit_tile(const grund_t* /*gr*/, ribi_t::ribi /*ribi_from*/, ribi_t::ribi /*exit*/) const { return true; }
+
+	/**
 	 * Determine the direction bits (ribi) for the applicable vehicle,
 	 * Depends of the ground type.
 	 */
