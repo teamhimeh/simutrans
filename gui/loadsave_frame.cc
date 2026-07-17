@@ -114,7 +114,7 @@ bool loadsave_frame_t::item_action(const char *filename)
 			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", OTRP_VERSION_MAJOR - sel );
 			env_t::savegame_version_str = otrp_ver_str;
 		}
-		if(  OTRP_VERSION_MAJOR - sel < 58  ) {
+		if(  OTRP_VERSION_MAJOR - sel < 59  ) {
 			// older save formats only support player slots 0..14
 			const uint8 old_player_count = 15;
 			bool has_extra_players = false;

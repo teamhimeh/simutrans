@@ -663,7 +663,7 @@ void roadsign_t::rdwr(loadsave_t *file)
 			ticks_ns = ticks_ow = 16;
 		}
 	}
-	else if(  file->is_saving()  &&  desc  &&  desc->is_private_way()  &&  file->get_OTRP_version() < 58  ) {
+	else if(  file->is_saving()  &&  desc  &&  desc->is_private_way()  &&  file->get_OTRP_version() < 59  ) {
 		// truncate 64-bit mask to legacy 16-bit layout for old saves
 		uint8 ns_byte = (uint8)(private_way_mask & 0xFF);
 		uint8 ow_byte = (uint8)((private_way_mask >> 8) & 0xFF);
@@ -772,7 +772,7 @@ void roadsign_t::rdwr(loadsave_t *file)
 		}
 	}
 
-	if(  file->get_OTRP_version() >= 58  ) {
+	if(  file->get_OTRP_version() >= 59  ) {
 		if(  desc  &&  desc->is_private_way()  ) {
 			file->rdwr_longlong((sint64&)private_way_mask);
 		}

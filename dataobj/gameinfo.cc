@@ -194,7 +194,7 @@ void gameinfo_t::rdwr(loadsave_t *file)
 	}
 	file->rdwr_long( game_engine_revision );
 
-	if(  file->get_OTRP_version()<58  ) {
+	if(  file->get_OTRP_version()<59  ) {
 		// old savegames only stored the first 16 players
 		for(  int i=0;  i<16;  i++  ) {
 			file->rdwr_byte( player_type[i] );

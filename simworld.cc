@@ -4962,8 +4962,8 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "start");
 
 	rdwr_gamestate(file, ls);
 
-	// old format (OTRP < 58) only supports player slots 0..14
-	const int save_player_count = (file->is_saving() && file->get_OTRP_version() < 58) ? 15 : MAX_PLAYER_COUNT;
+	// old format (OTRP < 59) only supports player slots 0..14
+	const int save_player_count = (file->is_saving() && file->get_OTRP_version() < 59) ? 15 : MAX_PLAYER_COUNT;
 	for(int i=0; i<save_player_count; i++) {
 		// **** REMOVE IF SOON! *********
 		if(file->is_version_less(101, 0)) {

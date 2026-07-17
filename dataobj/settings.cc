@@ -672,7 +672,7 @@ void settings_t::rdwr(loadsave_t *file)
 
 			// restore AI state
 			const int old_player_type_count = 15;
-			const int player_type_count = file->get_OTRP_version() < 58 ? old_player_type_count : MAX_PLAYER_COUNT-1;
+			const int player_type_count = file->get_OTRP_version() < 59 ? old_player_type_count : MAX_PLAYER_COUNT-1;
 			for(  int i=0;  i<player_type_count;  i++  ) {
 				if(file->is_version_less(122,1)) {
 					bool player_active = true;
@@ -867,7 +867,7 @@ void settings_t::rdwr(loadsave_t *file)
 		if(  file->is_version_atleast(110, 1)  ) {
 			file->rdwr_bool( default_player_color_random );
 			const int old_player_count = 16;
-			const int player_count = file->get_OTRP_version()<58 ? old_player_count : MAX_PLAYER_COUNT;
+			const int player_count = file->get_OTRP_version()<59 ? old_player_count : MAX_PLAYER_COUNT;
 			for(  int i=0;  i<player_count;  i++  ) {
 				file->rdwr_byte( default_player_color[i][0] );
 				file->rdwr_byte( default_player_color[i][1] );

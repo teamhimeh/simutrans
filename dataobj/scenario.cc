@@ -782,7 +782,7 @@ void scenario_t::rdwr(loadsave_t *file)
 	}
 
 	script_api::coordinate_transform_t::rdwr(file);
-	if(  file->get_OTRP_version() >= 58  ) {
+	if(  file->get_OTRP_version() >= 59  ) {
 		file->rdwr_longlong((sint64&)won);
 		file->rdwr_longlong((sint64&)lost);
 	}

@@ -4146,7 +4146,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	}
 
-	if(  file->get_OTRP_version() >= 58  ) {
+	if(  file->get_OTRP_version() >= 59  ) {
 		// full 64-bit permissions
 		file->rdwr_longlong((sint64&)permissions);
 		if(  file->is_loading()  ) {
