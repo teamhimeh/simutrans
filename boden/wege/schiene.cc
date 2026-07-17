@@ -119,6 +119,11 @@ bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
 		}
 		return true;
 	}
+	// for safety
+	if(!reserved.is_bound()&&reserved2.is_bound()) {
+		reserved = reserved2;
+		reserved2 = convoihandle_t();
+	}
 	if(!reserved.is_bound()) {
 		// fresh reservation
 		reserved     = c;
