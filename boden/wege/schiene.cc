@@ -146,7 +146,7 @@ bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
 		return true;
 	}
 	// tile is reserved by a different convoy — try co-reservation for non-crossing bends
-	if(!reserved2.is_bound()  &&  can_co_reserve_dirs(reserved_dir, dir)) {
+	if(!reserved2.is_bound()  &&  get_ribi_unmasked()==ribi_t::all  &&  can_co_reserve_dirs(reserved_dir, dir)) {
 		reserved2     = c;
 		reserved2_dir = dir;
 		if(schiene_t::show_reservations) {
