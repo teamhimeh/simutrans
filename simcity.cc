@@ -1959,7 +1959,7 @@ void stadt_t::step_passagiere()
 			ware_t return_pax(wtyp);
 
 			// now, finally search a route; this consumes most of the time
-			int const route_result = haltestelle_t::search_route( &start_halts[0], start_halts.get_count(), welt->get_settings().is_no_routing_over_overcrowding(), pax, &return_pax);
+			int const route_result = haltestelle_t::search_route( &start_halts[0], start_halts.get_count(), welt->get_settings().is_no_routing_over_overcrowding(), pax, &return_pax, origin_pos);
 			halthandle_t start_halt = return_pax.get_ziel();
 			if(  route_result==haltestelle_t::ROUTE_OK  ) {
 				// so we have happy traveling passengers
