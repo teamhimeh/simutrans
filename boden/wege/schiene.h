@@ -28,7 +28,7 @@ protected:
 
 	// Two bends that share no ribi bits don't cross visually (NW+SE or NE+SW).
 	static bool can_co_reserve_dirs(ribi_t::ribi d1, ribi_t::ribi d2) {
-		return ribi_t::is_bend(d1) && ribi_t::is_bend(d2) && (d1 & d2) == 0;
+		return  ribi_t::is_bend(d1) && ribi_t::is_bend(d2) && (d1 & d2) == 0;
 	}
 
 public:
