@@ -764,6 +764,28 @@ private:
 	stadt_t* get_highlighted_city() const;
 };
 
+class tool_change_city_of_building_to_nearest_t : public two_click_kartenboden_tool_t {
+public:
+	tool_change_city_of_building_to_nearest_t() : two_click_kartenboden_tool_t(TOOL_CHANGE_CITY_OF_BUILDING_TO_NEAREST | GENERAL_TOOL) { one_click = true; }
+	char const *get_tooltip(player_t const *) const OVERRIDE { return translator::translate("change city of citybuilding to nearest city"); }
+	bool is_init_network_safe() const OVERRIDE { return true; }
+private:
+	char const *do_work(player_t*, koord3d const &, koord3d const &) OVERRIDE;
+	const char* work_on_ground(player_t*, koord);
+	void mark_tiles(player_t*, koord3d const &, koord3d const &) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const &pos, char const *&error, koord3d const &start) OVERRIDE {
+		grund_t *bd = welt->lookup(pos);
+		if (bd==NULL) {
+			error = "";
+			return 0;
+		}
+		error = NULL;
+
+		return 2;
+	};
+	image_id get_marker_image() const OVERRIDE { return cursor; }
+};
+
 /* make all tiles of this player a public stop
  * if this player is public, make all connected tiles a public stop */
 class tool_make_stop_public_t : public tool_t {
