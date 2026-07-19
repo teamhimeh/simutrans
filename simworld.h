@@ -317,6 +317,12 @@ private:
 	sint64 finance_history_decade[MAX_WORLD_HISTORY_DECADES][MAX_WORLD_COST];
 
 	/**
+	 * Accumulator of completed years' flow-type values within the current decade.
+	 * Used to compute decade[0] = decade_acc + year[0] in update_history().
+	 */
+	sint64 finance_history_decade_acc[MAX_WORLD_COST];
+
+	/**
 	 * World record speed manager.
 	 * Keeps track of the fastest vehicles in game.
 	 */
@@ -581,6 +587,11 @@ private:
 	 * Last year.
 	 */
 	sint32 last_year;
+
+	/**
+	 * How many times step year
+	 */
+	sint32 step_year_count;
 
 	/**
 	 * Current season.

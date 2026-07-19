@@ -84,13 +84,12 @@ void settings_general_stats_t::init(settings_t const* const sets)
 	INIT_NUM( "fast_forward", env_t::max_acceleration, 1, 1000, gui_numberinput_t::AUTOLINEAR, false );
 	SEPERATOR
 	INIT_BOOL( "numbered_stations", sets->get_numbered_stations() );
-	INIT_NUM( "show_names", env_t::show_names, 0, 3, gui_numberinput_t::AUTOLINEAR, true );
 	SEPERATOR
 	INIT_NUM( "bits_per_month", sets->get_bits_per_month(), 16, 28, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "use_timeline", sets->get_use_timeline(), 0, 3, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM_NEW( "starting_year", sets->get_starting_year(), 0, 2999, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM_NEW( "starting_month", sets->get_starting_month(), 0, 11, gui_numberinput_t::AUTOLINEAR, false );
-	INIT_NUM( "show_month", env_t::show_month, 0, 7, gui_numberinput_t::AUTOLINEAR, true );
+	INIT_NUM( "show_month", env_t::show_month, 0, 8, gui_numberinput_t::AUTOLINEAR, true );
 	INIT_NUM( "spacing_shift_divisor", sets->spacing_shift_divisor, 1, 60000, gui_numberinput_t::AUTOLINEAR, false );
 	SEPERATOR
 	INIT_NUM( "random_grounds_probability", env_t::ground_object_probability, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
@@ -131,7 +130,6 @@ void settings_general_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( env_t::max_acceleration );
 
 	READ_BOOL_VALUE( sets->numbered_stations );
-	READ_NUM_VALUE( env_t::show_names );
 
 	READ_NUM_VALUE( sets->bits_per_month );
 	READ_NUM_VALUE( sets->use_timeline );
@@ -268,6 +266,12 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "allow_higher_flight", sets->allow_higher_flight );
 	INIT_BOOL( "use_route_cache", sets->use_route_cache );
 	INIT_BOOL( "allow_elevated_way_over_others_halt", sets->allow_elevated_way_over_others_halt );
+	SEPERATOR
+	INIT_BOOL( "transit_by_foot", sets->transit_by_foot );
+	INIT_NUM( "foot_path_weight", sets->foot_path_weight, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
+	INIT_NUM( "foot_path_time_ticks", sets->foot_path_time_ticks, 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
+	INIT_BOOL( "walk_cost_to_halt", sets->walk_cost_to_halt );
+
 	INIT_END
 }
 
@@ -321,6 +325,10 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_BOOL_VALUE( sets->allow_higher_flight );
 	READ_BOOL_VALUE( sets->use_route_cache );
 	READ_BOOL_VALUE( sets->allow_elevated_way_over_others_halt );
+	READ_BOOL_VALUE( sets->transit_by_foot );
+	READ_NUM_VALUE( sets->foot_path_weight );
+	READ_NUM_VALUE( sets->foot_path_time_ticks );
+	READ_BOOL_VALUE( sets->walk_cost_to_halt );
 }
 
 
