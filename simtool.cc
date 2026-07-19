@@ -7941,6 +7941,14 @@ void tool_change_city_of_building_t::mark_tiles(player_t*, koord3d const &start,
 	}
 }
 
+bool tool_change_city_of_building_to_nearest_t::init(player_t *player) {
+	if (!player->is_public_service()) {
+		open_error_msg_win("This tool must be executed by the public player.");
+		return false;
+	}
+	return two_click_kartenboden_tool_t::init(player);
+}
+
 const char* tool_change_city_of_building_to_nearest_t::work_on_ground( player_t* player, koord k ) {
 	grund_t* gr = welt->lookup_kartenboden( k );
 

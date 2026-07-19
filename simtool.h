@@ -769,6 +769,7 @@ public:
 	tool_change_city_of_building_to_nearest_t() : two_click_kartenboden_tool_t(TOOL_CHANGE_CITY_OF_BUILDING_TO_NEAREST | GENERAL_TOOL) { one_click = true; }
 	char const *get_tooltip(player_t const *) const OVERRIDE { return translator::translate("change city of citybuilding to nearest city"); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
 private:
 	char const *do_work(player_t*, koord3d const &, koord3d const &) OVERRIDE;
 	const char* work_on_ground(player_t*, koord);

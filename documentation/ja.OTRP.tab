@@ -803,3 +803,9 @@ Halts
 駅数
 TBD
 時刻未定
+change city of citybuilding to nearest city
+建物の所属都市を最寄りの都市に変更
+This tool must be executed by the public player.
+このツールは公共事業のみ実行できます。
+No city found!
+都市が見つかりません！
