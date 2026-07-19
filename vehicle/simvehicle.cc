@@ -4899,6 +4899,7 @@ void rail_vehicle_t::leave_tile()
 			if(sch0) {
 				// first, we check other vehicles on the same tile (e.g. uncoupling here)
 				convoihandle_t other_convoy;
+				ribi_t::ribi other_convoy_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
 					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
@@ -4907,16 +4908,20 @@ void rail_vehicle_t::leave_tile()
 					}
 					// other convoy exist!
 					other_convoy = v->get_convoi()->self;
+					const uint16 current_stop = v->get_route_index();
+					other_convoy_dir =
+					ribi_t::backward(ribi_type(other_convoy->get_route()->at(max(2u,current_stop)-2u), get_pos()))
+					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count(),current_stop)));
 				}
 				// Use convoy handle so co-reserved convoys are correctly identified:
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
 				// unreserve(vehicle_t*) always cleared the primary slot regardless of which
 				// convoy this vehicle belongs to — causing spurious promotion/clearing bugs.
-				const convoihandle_t self_cnv = cnv ? cnv->self : convoihandle_t();
+				const convoihandle_t self_cnv = cnv ? cnv->get_most_parent_convoi() : convoihandle_t();
 				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
-					sch0->reserve(other_convoy,ribi_t::none);
+					sch0->reserve(other_convoy,other_convoy_dir);
 				}
 				// tell next signal?
 				// and switch to red
