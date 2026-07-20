@@ -4911,7 +4911,7 @@ void rail_vehicle_t::leave_tile()
 					const uint16 current_stop = v->get_route_index();
 					other_convoy_dir =
 					ribi_t::backward(ribi_type(other_convoy->get_route()->at(max(2u,current_stop)-2u), get_pos()))
-					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count(),current_stop)));
+					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count()-1u,current_stop)));
 				}
 				// Use convoy handle so co-reserved convoys are correctly identified:
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
