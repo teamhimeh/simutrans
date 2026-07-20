@@ -8034,10 +8034,26 @@ const char* tool_change_city_of_building_t::work_on_ground( player_t* player, ko
 	}
 
 	stadt_t* old_city = gb->get_stadt();
+	if (!old_city) {
+		return "Building doesn't have city!";
+	}
 
-	if (!(old_city && new_city)) {
-		return "Building doesn't have city or no city highlighted";
-	} else if (old_city == new_city) {
+	if (!new_city) {
+		// no city highlighted: fall back to the city whose townhall is closest by simple distance
+		uint32 min_dist = 0xFFFFFFFFu;
+		FOR(  weighted_vector_tpl<stadt_t*>,  const city,  welt->get_cities()  ) {
+			const uint32 dist = koord_distance( k, city->get_pos() );
+			if (  dist < min_dist  ) {
+				min_dist = dist;
+				new_city = city;
+			}
+		}
+		if (!new_city) {
+			return "No city found!";
+		}
+	}
+
+	if (old_city == new_city) {
 		return "";
 	}
 
@@ -8045,8 +8061,16 @@ const char* tool_change_city_of_building_t::work_on_ground( player_t* player, ko
 	new_city->add_gebaeude_to_stadt(gb);
 
 	welt->set_dirty();
-	
+
 	return NULL;
+}
+
+bool tool_change_city_of_building_t::init(player_t *player) {
+	if (!player->is_public_service()) {
+		open_error_msg_win("This tool must be executed by the public player.");
+		return false;
+	}
+	return two_click_kartenboden_tool_t::init(player);
 }
 
 const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d const &start, koord3d const &end) {
@@ -8059,9 +8083,6 @@ const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d co
 	one_click = true;
 
 	stadt_t* const new_city = get_highlighted_city();
-	if(  !new_city  ) {
-		return "No new city found!";
-	}
 	koord k;
 
 	if ( end == koord3d::invalid) {
@@ -8091,124 +8112,6 @@ const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d co
 
 
 void tool_change_city_of_building_t::mark_tiles(player_t*, koord3d const &start, koord3d const &end) {
-	koord k1, k2;
-	k1.x = start.x < end.x ? start.x : end.x;
-	k1.y = start.y < end.y ? start.y : end.y;
-	k2.x = start.x + end.x - k1.x;
-	k2.y = start.y + end.y - k1.y;
-	koord k;
-	for(  k.x = k1.x;  k.x <= k2.x;  k.x++  ) {
-		for(  k.y = k1.y;  k.y <= k2.y;  k.y++  ) {
-			grund_t *gr = welt->lookup_kartenboden( k );
-
-			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL );
-
-			const uint8 grund_hang = gr->get_grund_hang();
-			const uint8 weg_hang = gr->get_weg_hang();
-			const uint8 hang = max( corner_sw(grund_hang), corner_sw(weg_hang)) +
-					3 * max( corner_se(grund_hang), corner_se(weg_hang)) +
-					9 * max( corner_ne(grund_hang), corner_ne(weg_hang)) +
-					27 * max( corner_nw(grund_hang), corner_nw(weg_hang));
-			uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
-			marker->set_foreground_image( ground_desc_t::marker->get_image( grund_hang % 27 ) );
-			marker->set_image( ground_desc_t::marker->get_image( back_hang ) );
-
-			marker->mark_image_dirty( marker->get_image(), 0 );
-			gr->obj_add( marker );
-			marked.insert( marker );
-		}
-	}
-}
-
-bool tool_change_city_of_building_to_nearest_t::init(player_t *player) {
-	if (!player->is_public_service()) {
-		open_error_msg_win("This tool must be executed by the public player.");
-		return false;
-	}
-	return two_click_kartenboden_tool_t::init(player);
-}
-
-const char* tool_change_city_of_building_to_nearest_t::work_on_ground( player_t* player, koord k ) {
-	grund_t* gr = welt->lookup_kartenboden( k );
-
-	if (!gr) {
-		return "";
-	} else if (gr->hat_wege() || gr->ist_natur() || gr->is_water() || gr->ist_bruecke()) {
-		return "";
-	}
-
-	gebaeude_t* gb = gr->find<gebaeude_t>();
-
-	if (!gb || !gb->is_building_of_city()) {
-		return "";
-	}
-
-	stadt_t* old_city = gb->get_stadt();
-
-	stadt_t* new_city = NULL;
-	uint32 min_dist = 0xFFFFFFFFu;
-	FOR(  weighted_vector_tpl<stadt_t*>,  const city,  welt->get_cities()  ) {
-		const uint32 dist = koord_distance( k, city->get_pos() );
-		if (  dist < min_dist  ) {
-			min_dist = dist;
-			new_city = city;
-		}
-	}
-
-	if (!new_city) {
-		return "No city found!";
-	} else if (old_city == new_city) {
-		return "";
-	}
-
-	if (old_city) {
-		old_city->remove_gebaeude_from_stadt(gb);
-	}
-	new_city->add_gebaeude_to_stadt(gb);
-
-	welt->set_dirty();
-
-	return NULL;
-}
-
-const char* tool_change_city_of_building_to_nearest_t::do_work(player_t* player, koord3d const &start, koord3d const &end) {
-	if ( is_first_click() ) {
-		one_click = false;
-		koord3d newstart = start;
-		start_at( newstart );
-		return NULL;
-	}
-	one_click = true;
-
-	koord k;
-
-	if ( end == koord3d::invalid) {
-		k.x = start.x;
-		k.y = start.y;
-		return work_on_ground(player, k);
-	} else {
-		koord k1, k2;
-		k1.x = start.x < end.x ? start.x : end.x;
-		k1.y = start.y < end.y ? start.y : end.y;
-		k2.x = start.x + end.x - k1.x;
-		k2.y = start.y + end.y - k1.y;
-		const char* msg = NULL;
-
-		for(  k.x = k1.x;  k.x <= k2.x;  k.x++  ) {
-			for(  k.y = k1.y;  k.y <= k2.y;  k.y++  ) {
-				const char* err = work_on_ground(player, k);
-				if (  msg == NULL || strcmp(msg,"") == 0) {
-					msg = err;
-				}
-			}
-		}
-		return msg;
-	}
-	return NULL;
-}
-
-
-void tool_change_city_of_building_to_nearest_t::mark_tiles(player_t*, koord3d const &start, koord3d const &end) {
 	koord k1, k2;
 	k1.x = start.x < end.x ? start.x : end.x;
 	k1.y = start.y < end.y ? start.y : end.y;

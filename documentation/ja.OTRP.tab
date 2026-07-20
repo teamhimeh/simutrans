@@ -825,5 +825,7 @@ change city of citybuilding to nearest city
 建物の所属都市を最寄りの都市に変更
 This tool must be executed by the public player.
 このツールは公共事業のみ実行できます。
+Building doesn't have city!
+この建物はどの都市にも所属していません！
 No city found!
 都市が見つかりません！
