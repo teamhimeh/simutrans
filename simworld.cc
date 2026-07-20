@@ -5661,16 +5661,19 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 			}
 		}
 	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
+	}
 	// Reconstruct the decade flow accumulator from year history.
 	// decade_acc = sum of year[1..k] where k = completed years in current decade.
-	{
-		const int years_in_decade = (last_year - settings.get_starting_year() - step_year_count) % 10;
-		for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
-			finance_history_decade_acc[cost_type] = 0;
-			if(  decade_flow_field[cost_type]  ) {
-				for (int y = 1; y <= years_in_decade && y < MAX_WORLD_HISTORY_YEARS; y++) {
-					finance_history_decade_acc[cost_type] += finance_history_year[y][cost_type];
-				}
+	const int years_in_decade = (last_year - settings.get_starting_year() - step_year_count) % 10;
+	for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+		finance_history_decade_acc[cost_type] = 0;
+		if(  decade_flow_field[cost_type]  ) {
+			for (int y = 1; y <= years_in_decade && y < MAX_WORLD_HISTORY_YEARS; y++) {
+				finance_history_decade_acc[cost_type] += finance_history_year[y][cost_type];
 			}
 		}
 	}
