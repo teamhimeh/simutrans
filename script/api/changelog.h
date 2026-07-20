@@ -16,6 +16,9 @@
  * - Added @ref tile_x::is_crossing
  * - Added @ref world_x::generate_goods to generate passengers, mail or freight (scenario only)
  * - Added @ref change_climate_at
+ * - Extended halt_x::get_connections entries with raw_weight and is_foot_path
+ * - Added Squirrel accessors for transit_by_foot, foot_path_weight, foot_path_time_ticks, and walk_cost_to_halt
+ * - Changed world::generate_goods to include origin and destination walking costs in route selection
  * - Added @ref convoy_x::change_schedule
  * - Added tool_ids::tool_build_groundobj
  * - Changed building_desc_x::get_available_stations to accept wt_all
