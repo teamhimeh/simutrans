@@ -8029,14 +8029,12 @@ const char* tool_change_city_of_building_t::work_on_ground( player_t* player, ko
 
 	gebaeude_t* gb = gr->find<gebaeude_t>();
 
+	// target: city buildings, headquarters, or monuments
 	if (!gb || !gb->is_building_of_city()) {
 		return "";
 	}
 
 	stadt_t* old_city = gb->get_stadt();
-	if (!old_city) {
-		return "Building doesn't have city!";
-	}
 
 	if (!new_city) {
 		// no city highlighted: fall back to the city whose townhall is closest by simple distance
@@ -8057,7 +8055,9 @@ const char* tool_change_city_of_building_t::work_on_ground( player_t* player, ko
 		return "";
 	}
 
-	old_city->remove_gebaeude_from_stadt(gb);
+	if (old_city) {
+		old_city->remove_gebaeude_from_stadt(gb);
+	}
 	new_city->add_gebaeude_to_stadt(gb);
 
 	welt->set_dirty();
