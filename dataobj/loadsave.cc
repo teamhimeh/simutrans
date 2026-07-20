@@ -1053,10 +1053,12 @@ void loadsave_t::rdwr_str( char* result_buffer, size_t const size)
 			read(&len, sizeof(uint16));
 			len = endian(len);
 			if(  len >= size) {
+				dbg->warning( "loadsave_t::rdwr_str()","string longer (%i) than allowed size (%i)", len, size );
 				fatal( "loadsave_t::rdwr_str()","string longer (%i) than allowed size (%i)", len, size );
 			}
 			read(result_buffer, len);
 			result_buffer[len] = '\0';
+			dbg->message("loadsave_t::rdwr_str()","load %s, %i", result_buffer, size);
 		}
 	}
 	else {
