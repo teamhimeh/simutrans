@@ -33,31 +33,33 @@ void gui_journey_time_stat_t::update(linehandle_t line, vector_tpl<uint32*>& jou
 
     // journey time between the previous halt
     gui_label_buf_t *lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::left); // empty
+    const uint32 baseline = journey_times[idx][0] - stopping_times[prev_idx][0];
     for(uint8 i=0; i<NUM_ARRIVAL_TIME_STORED+2; i++) {
       lb = new_component<gui_label_buf_t>(SYSCOL_TEXT, gui_label_t::right);
       uint32 t = journey_times[idx][max(i-1,0)];
       if(  t==0  ) {
         lb->buf().printf("-");
       } else {
+        t -= stopping_times[prev_idx][max(i-1,0)];
         if(i == 0){
           journey_time_sum += t;
+          t = journey_time_sum;
         }
-        uint32 t_run = (i==0? journey_time_sum : t) - stopping_times[prev_idx][max(i-1,0)];
         if( is_use_hhmmss ) {
-          uint32 second = t_run*month_ratio_second;
+          uint32 second = t*month_ratio_second;
           uint8 day = second/86400;
           uint8 hour = (second/3600)%24;
           uint8 minute = (second/60)%60;
-          second = second % 60;         
+          second = second % 60;
           lb->buf().printf("+%d %02d:%02d:%02d", day,hour,minute,second);
         } else {
-          lb->buf().printf("%d", t_run);
+          lb->buf().printf("%d", t);
         }
       }
       lb->update();
-      if(  t>0  &&  (sint32)t-(sint32)journey_times[idx][0]>4  ) {
+      if(  t>0  &&  (sint32)t-(sint32)baseline>4  ) {
         lb->set_color(color_idx_to_rgb(COL_RED));
-      } else if(  t>0  &&  (sint32)journey_times[idx][0]-(sint32)t>4  ) {
+      } else if(  t>0  &&  (sint32)baseline-(sint32)t>4  ) {
         lb->set_color(color_idx_to_rgb(COL_BLUE));
       } else {
         lb->set_color(SYSCOL_TEXT);
