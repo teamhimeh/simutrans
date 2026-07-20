@@ -258,11 +258,14 @@ public:
 		uint32 weight:31;
 		/// is halt a transfer halt
 		bool is_transfer:1;
+		/// true if this connection is a foot-path (transit by foot), not a vehicle service
+		/// (kept outside the weight/is_transfer bitfield so it does not steal a bit from weight)
+		bool is_foot_path;
 		/// the line or convoy which has the schedule to get to the halt with the best weight
 		traveler_t best_weight_traveler;
 
-		connection_t() : weight(0), is_transfer(false), best_weight_traveler(linehandle_t()) { }
-		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), best_weight_traveler(_best_weight_traveler) { }
+		connection_t() : weight(0), is_transfer(false), is_foot_path(false), best_weight_traveler(linehandle_t()) { }
+		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), is_foot_path(false), best_weight_traveler(_best_weight_traveler) { }
 
 		bool operator == (const connection_t &other) const { return halt == other.halt; }
 		bool operator != (const connection_t &other) const { return halt != other.halt; }
@@ -493,6 +496,13 @@ public:
 	// returns the matching warenziele (goods objectives/destinations)
 	vector_tpl<connection_t> const& get_connections(uint8 const catg_index) const { return all_links[catg_index].connections; }
 
+	// returns true if the connection to dest (for the given category) is a foot-path
+	bool is_foot_path_connection(halthandle_t dest, uint8 catg_index) const;
+
+	// If the ware's next hop is a foot-path, move it immediately to the next halt.
+	// Returns true if the ware was teleported (caller must not add it to cargo queue).
+	bool try_foot_transit(ware_t &ware, uint8 foot_steps = 0);
+
 	/**
 	 * Checks if there is connection for certain freight to the other halt.
 	 * @param halt the other halt
@@ -515,7 +525,8 @@ public:
 	 */
 	void new_month();
 
-	uint8 get_connection_update_counter() const { return connection_update_counter;}
+	uint8 get_connection_update_counter() const { return connection_update_counter; }
+	static uint8 get_connection_update_counter_static() { return connection_update_counter; }
 
 private:
 	/* Node used during route search */
@@ -545,6 +556,10 @@ private:
 		uint16 depth:14;
 		bool destination:1;
 		bool overcrowded:1;
+		// true when this halt was reached via a foot-path connection in the current search.
+		// Used to block a second consecutive foot-path hop (passengers must board a vehicle
+		// between any two walking legs).
+		bool arrived_by_foot;
 	};
 
 	// store the best weight so far for a halt, and indicate whether it is a destination
@@ -619,7 +634,15 @@ public:
 	 *
 	 * if avoid_overcrowding is set, a valid route in only found when there is no overflowing stop in between
 	 */
-	static int search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL );
+
+	/**
+	 * @param start_pos  2D origin position (building tile). When valid and transit_by_foot is
+	 *                   enabled, the Manhattan distance to each start halt is added to the initial
+	 *                   route weight so that nearby stops are preferred over distant ones.
+	 *                   The destination walking cost is derived from ware.get_zielpos() internally.
+	 */
+	static int search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL, const koord start_pos=koord::invalid );
+
 
 	/**
 	 * A separate version of route searching code for re-calculating routes
@@ -832,7 +855,7 @@ public:
 	 * This is used for inital passenger, since they already know a route
 	 * @returns amount of goods
 	 */
-	uint32 starte_mit_route(ware_t ware);
+	uint32 starte_mit_route(ware_t ware, uint8 foot_steps = 0);
 
 	const grund_t *find_matching_position(waytype_t wt) const;
 

@@ -910,11 +910,18 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 	for (uint i=0; i<goods_manager_t::get_max_catg_index(); i++){
 		vector_tpl<haltestelle_t::connection_t> const& connections = halt->get_connections(i);
 		if(  !connections.empty()  ) {
+			// Only show vehicle connections here; foot-paths are listed separately below.
+			vector_tpl<haltestelle_t::connection_t> sorted;
+			FOR(vector_tpl<haltestelle_t::connection_t>, const& conn, connections) {
+				if(  conn.halt.is_bound()  &&  !conn.is_foot_path  ) {
+					sorted.insert_unique_ordered(conn, gui_halt_detail_t::compare_connection);
+				}
+			}
+			if(  sorted.empty()  ) { continue; }
 
 			gui_label_buf_t *lb = new_component_span<gui_label_buf_t>(2);
 			lb->buf().append(" \xC2\xB7");
 			const goods_desc_t* info = goods_manager_t::get_info_catg_index(i);
-			// If it is a special freight, we display the name of the good, otherwise the name of the category.
 			lb->buf().append(translator::translate(info->get_catg()==0 ? info->get_name() : info->get_catg_name() ) );
 #if MSG_LEVEL>=4
 			if(  halt->is_transfer(i)  ) {
@@ -924,15 +931,8 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 			lb->buf().append(":\n");
 			lb->update();
 
-			vector_tpl<haltestelle_t::connection_t> sorted;
-			FOR(vector_tpl<haltestelle_t::connection_t>, const& conn, connections) {
-				if(  conn.halt.is_bound()  ) {
-					sorted.insert_unique_ordered(conn, gui_halt_detail_t::compare_connection);
-				}
-			}
 			const bool is_tgbr_enabled = world()->get_settings().get_time_based_routing_enabled(i);
 			FOR(vector_tpl<haltestelle_t::connection_t>, const& conn, sorted) {
-
 				has_stops = true;
 
 				button_t *pb = new_component<button_t>();
@@ -941,10 +941,9 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 
 				gui_label_buf_t *lb = new_component<gui_label_buf_t>();
 				if(  is_tgbr_enabled  ) {
-					// Show the estimated journey time in the divided time units
-    				const uint16 weight = world()->tick_to_divided_time(conn.weight);
+					const uint16 weight = world()->tick_to_divided_time(conn.weight);
 					std::visit([&](const auto& t) {
-						lb->buf().printf("%s <%u> - %s", conn.halt->get_name(), weight, t.is_bound() ? t->get_name() : "Unavailable");
+						lb->buf().printf("%s <%u> - %s", conn.halt->get_name(), weight, t.is_bound() ? t->get_name() : "?");
 					}, conn.best_weight_traveler);
 				} else {
 					lb->buf().printf("%s <%u>", conn.halt->get_name(), conn.weight);
@@ -956,6 +955,42 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 
 	if (!has_stops) {
 		insert_show_nothing();
+	}
+
+	// Foot-path connections (transit by foot) — only shown when feature is enabled
+	if(  world()->get_settings().is_transit_by_foot()  ) {
+		vector_tpl<haltestelle_t::connection_t> const& pax_conns = halt->get_connections(goods_manager_t::INDEX_PAS);
+		vector_tpl<haltestelle_t::connection_t> foot_sorted;
+		FOR(vector_tpl<haltestelle_t::connection_t>, const& conn, pax_conns) {
+			if(  conn.halt.is_bound()  &&  conn.is_foot_path  ) {
+				foot_sorted.insert_unique_ordered(conn, gui_halt_detail_t::compare_connection);
+			}
+		}
+		insert_empty_row();
+		new_component_span<gui_label_t>("Reachable on foot", 2);
+		if(  !foot_sorted.empty()  ) {
+			const bool is_tgbr_enabled = world()->get_settings().get_time_based_routing_enabled(goods_manager_t::INDEX_PAS);
+			const uint32 base_rc = world()->get_settings().get_foot_path_weight();
+			const uint32 base_jt = world()->get_settings().get_foot_path_time_ticks();
+			FOR(vector_tpl<haltestelle_t::connection_t>, const& conn, foot_sorted) {
+				button_t *pb = new_component<button_t>();
+				pb->init( button_t::posbutton_automatic, NULL);
+				pb->set_targetpos3d( conn.halt->get_basis_pos3d() );
+
+				gui_label_buf_t *lb = new_component<gui_label_buf_t>();
+				// Reverse-calculate tile distance from weight (weight = base * dist).
+				const uint32 base = is_tgbr_enabled ? base_jt : base_rc;
+				const uint32 dist = (base > 0) ? (conn.weight / base) : 0;
+				if(  is_tgbr_enabled  ) {
+					lb->buf().printf("%s (%u tiles) <%u>", conn.halt->get_name(), dist, world()->tick_to_divided_time(conn.weight));
+				} else {
+					lb->buf().printf("%s (%u tiles) <%u>", conn.halt->get_name(), dist, conn.weight);
+				}
+				lb->update();
+			}
+		} else {
+			insert_show_nothing();
+		}
 	}
 
 	// ok, we have now this counter for pending updates
