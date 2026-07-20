@@ -34,6 +34,7 @@ include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
+include("tests/test_transit_by_foot")
 include("tests/test_trees")
 include("tests/test_way_bridge")
 include("tests/test_way_elevated")
@@ -244,6 +245,15 @@ all_tests <- [
 	test_transport_route_cache_invalidation,
 	test_transport_route_cache_need_electric,
 	test_transport_two_convoys_on_same_line,
+	test_transit_by_foot_connection_range_weight_and_goods,
+	test_transit_by_foot_time_based_weight,
+	test_transit_by_foot_height_difference,
+	test_transit_by_foot_vehicle_connection_precedes_walking,
+	test_transit_by_foot_between_two_vehicle_legs,
+	test_transit_by_foot_not_used_as_first_leg,
+	test_transit_by_foot_not_used_as_last_leg,
+	test_transit_by_foot_not_used_twice_consecutively,
+	test_transit_by_foot_walk_cost_to_halt_prefers_nearer_halts,
 	test_start_signal_default_false,
 	test_start_signal_convoy_stays_at_station,
 	test_start_signal_false_convoy_advances_to_signal,
