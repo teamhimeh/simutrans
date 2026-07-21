@@ -317,7 +317,10 @@ void convoi_t::reserve_route()
 					const koord3d prev = reserved_tiles[max(1u,idx)-1u];
 					const koord3d curr = reserved_tiles[idx];
 					const koord3d next = reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)];
-					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
+					if (!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+						// reservation invalid! do not continue reservation more!
+						break;
+					}
 				}
 			}
 		}
@@ -352,7 +355,12 @@ void convoi_t::reserve_route()
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
 					const koord3d curr = route.at(idx);
 					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
+					if(!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+						next_stop_index = idx + 1;
+						next_reservation_index = idx + 1;
+						// reservation invalid! do not continue reservation more!
+						break;
+					}
 				}
 			}
 		}
