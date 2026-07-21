@@ -345,7 +345,7 @@ void convoi_t::reserve_route()
 			}
 		}
 	}
-	else if(  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
+	else if(  !is_coupled()  &&  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
@@ -356,8 +356,8 @@ void convoi_t::reserve_route()
 					const koord3d curr = route.at(idx);
 					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
 					if(!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
-						next_stop_index = idx + 1;
-						next_reservation_index = idx + 1;
+						next_stop_index = idx;
+						next_reservation_index = idx;
 						// reservation invalid! do not continue reservation more!
 						break;
 					}
