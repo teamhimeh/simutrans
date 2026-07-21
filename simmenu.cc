@@ -124,6 +124,7 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_CHANGE_WAY_SETTINGS);
 		CASE_TO_STRING(TOOL_CHANGE_WAY_OFFSET);
 		CASE_TO_STRING(TOOL_REMOVE_HOUSE);
+		CASE_TO_STRING(TOOL_REMOVE_PILLAR);
 		}
 	}
 	else if (id & SIMPLE_TOOL) {
@@ -291,6 +292,7 @@ tool_t *create_general_tool(int toolnr)
 		case TOOL_CHANGE_WAY_SETTINGS:         tool = new tool_change_way_settings_t(); break;
 		case TOOL_CHANGE_WAY_OFFSET:           tool = new tool_change_way_offset_t();  break;
 		case TOOL_REMOVE_HOUSE:                tool = new tool_remove_house_t();       break;
+		case TOOL_REMOVE_PILLAR:               tool = new tool_remove_pillar_t();      break;
 		default:
 			dbg->error("create_general_tool()","cannot satisfy request for general_tool[%i]!",toolnr);
 			return NULL;
@@ -1440,8 +1442,12 @@ const char *two_click_tool_t::move(player_t *player, uint16 buttonstate, koord3d
 
 	if(  start == pos  ) {
 		if(tool_build_way_t* t = dynamic_cast<tool_build_way_t*>(this)) {
-			// This is tool_build_way_t. The mode selection window should not be called.
-			t->init( player, true );
+			// With ctrl held, dragging back onto the start tile is kept as a pending
+			// one-tile way build instead of being cancelled/restarted.
+			if(  !is_ctrl_pressed()  ) {
+				// This is tool_build_way_t. The mode selection window should not be called.
+				t->init( player, true );
+			}
 		} else if(tool_build_bridge_t* tb = dynamic_cast<tool_build_bridge_t*>(this)) {
 			// This is tool_build_bridge_t. The mode selection window should not be called.
 			tb->init( player, true );

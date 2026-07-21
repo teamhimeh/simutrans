@@ -44,7 +44,84 @@ bool get_time_based_routing_enabled(settings_t* settings, const goods_desc_t* go
 bool set_time_based_routing_enabled(settings_t* settings, const goods_desc_t* goods, bool enabled)
 {
 	if(  settings  &&  goods  ) {
-		settings->set_time_based_routing_enabled(goods->get_catg_index(), enabled);
+		const uint8 catg_index = goods->get_catg_index();
+		if(  settings->get_time_based_routing_enabled(catg_index) != enabled  ) {
+			settings->set_time_based_routing_enabled(catg_index, enabled);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+bool get_transit_by_foot(settings_t* settings)
+{
+	return settings  &&  settings->is_transit_by_foot();
+}
+
+
+bool set_transit_by_foot(settings_t* settings, bool enabled)
+{
+	if(  settings  ) {
+		if(  settings->is_transit_by_foot() != enabled  ) {
+			settings->set_transit_by_foot(enabled);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+uint32 get_foot_path_weight(settings_t* settings)
+{
+	return settings ? settings->get_foot_path_weight() : 0;
+}
+
+
+bool set_foot_path_weight(settings_t* settings, uint32 weight)
+{
+	if(  settings  ) {
+		if(  settings->get_foot_path_weight() != weight  ) {
+			settings->set_foot_path_weight(weight);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+uint32 get_foot_path_time_ticks(settings_t* settings)
+{
+	return settings ? settings->get_foot_path_time_ticks() : 0;
+}
+
+
+bool set_foot_path_time_ticks(settings_t* settings, uint32 ticks)
+{
+	if(  settings  ) {
+		if(  settings->get_foot_path_time_ticks() != ticks  ) {
+			settings->set_foot_path_time_ticks(ticks);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+bool get_walk_cost_to_halt(settings_t* settings)
+{
+	return settings  &&  settings->is_walk_cost_to_halt();
+}
+
+
+bool set_walk_cost_to_halt(settings_t* settings, bool enabled)
+{
+	if(  settings  ) {
+		settings->set_walk_cost_to_halt(enabled);
 		return true;
 	}
 	return false;
@@ -158,6 +235,39 @@ void export_settings(HSQUIRRELVM vm)
 	 * @param enabled true if the category should use time based routing
 	 */
 	register_method(vm, &set_time_based_routing_enabled, "set_time_based_routing_enabled", true);
+
+	/// @returns true if passengers may transfer between nearby halts on foot
+	register_method(vm, &get_transit_by_foot, "get_transit_by_foot", true);
+
+	/**
+	 * Enables or disables passenger transfers on foot between nearby halts.
+	 * Rebuilds halt connections when the value changes.
+	 */
+	register_method(vm, &set_transit_by_foot, "set_transit_by_foot", true);
+
+	/// @returns route cost per tile for a foot-path connection
+	register_method(vm, &get_foot_path_weight, "get_foot_path_weight", true);
+
+	/**
+	 * Sets the route cost per tile for a foot-path connection.
+	 * Rebuilds halt connections when the value changes.
+	 */
+	register_method(vm, &set_foot_path_weight, "set_foot_path_weight", true);
+
+	/// @returns journey time in ticks per tile for a foot-path connection
+	register_method(vm, &get_foot_path_time_ticks, "get_foot_path_time_ticks", true);
+
+	/**
+	 * Sets the journey time in ticks per tile for a foot-path connection.
+	 * Rebuilds halt connections when the value changes.
+	 */
+	register_method(vm, &set_foot_path_time_ticks, "set_foot_path_time_ticks", true);
+
+	/// @returns true if walking to the first and from the last halt affects routing
+	register_method(vm, &get_walk_cost_to_halt, "get_walk_cost_to_halt", true);
+
+	/// Enables or disables walking costs between origins/destinations and their halts.
+	register_method(vm, &set_walk_cost_to_halt, "set_walk_cost_to_halt", true);
 
 	/// @returns true if route cache is enabled
 	register_method(vm, &settings_t::is_using_route_cache, "is_using_route_cache");

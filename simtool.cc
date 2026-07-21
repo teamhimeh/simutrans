@@ -73,6 +73,7 @@
 #include "obj/baum.h"
 #include "obj/field.h"
 #include "obj/label.h"
+#include "obj/pillar.h"
 
 #include "dataobj/koord.h"
 #include "dataobj/settings.h"
@@ -556,6 +557,47 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 
 	koord k(pos.get_2d());
 
+	// check for pillar
+	pillar_t* pl = gr->find<pillar_t>();
+	if ((type == obj_t::undefined || type == obj_t::pillar) && pl!=NULL) {
+		msg = pl->is_deletable(player);
+		if(msg) {
+			dbg->message("tool_remover_intern", "pillar not deletable: %s", msg);
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing pillar at (%s)", pos.get_str());
+		pl->cleanup(player);
+		delete pl;
+		return true;
+	}
+
+	// check for signal
+	roadsign_t* rs = gr->find<signal_t>();
+	if (rs == NULL) rs = gr->find<roadsign_t>();
+	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
+		msg = rs->is_deletable(player);
+		if(msg) {
+			return false;
+		}
+DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
+		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
+		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
+			weg = gr->get_weg(track_wt);
+		}
+
+		rs->cleanup(player);
+		delete rs;
+
+		// no need to update way if there is none
+		// may happen when public player builds a signal on a company track,
+		// the company goes bankrupt and the public player tries to remove the signal
+		if (weg) {
+			weg->count_sign();
+		}
+
+		return true;
+	}
+
 	// check powerline (can cross ground of another player)
 	leitung_t* lt = gr->get_leitung();
 	// check whether powerline related stuff should be removed, and if there is any to remove
@@ -612,33 +654,6 @@ DBG_MESSAGE("tool_remover_intern()","at (%s)", pos.get_str());
 			lt->cleanup(player);
 			delete lt;
 		}
-		return true;
-	}
-
-	// check for signal
-	roadsign_t* rs = gr->find<signal_t>();
-	if (rs == NULL) rs = gr->find<roadsign_t>();
-	if ( (type == obj_t::signal  ||  type == obj_t::roadsign  ||  type == obj_t::undefined)  &&  rs!=NULL) {
-		msg = rs->is_deletable(player);
-		if(msg) {
-			return false;
-		}
-DBG_MESSAGE("tool_remover()",  "removing roadsign at (%s)", pos.get_str());
-		weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp());
-		if(  weg==NULL  &&  rs->get_desc()->get_wtyp()==tram_wt  ) {
-			weg = gr->get_weg(track_wt);
-		}
-
-		rs->cleanup(player);
-		delete rs;
-
-		// no need to update way if there is none
-		// may happen when public player builds a signal on a company track,
-		// the company goes bankrupt and the public player tries to remove the signal
-		if (weg) {
-			weg->count_sign();
-		}
-
 		return true;
 	}
 
@@ -1050,6 +1065,44 @@ const char *tool_remover_t::do_work( player_t *player, const koord3d &start, con
 }
 
 
+const char *tool_remove_pillar_t::process( player_t *player, koord3d pos )
+{
+	// When no pillar exists on the tile, tool_remover_intern (called with
+	// obj_t::pillar) falls through to "Requested object not found." and returns
+	// false.  In the shift/ctrl area-removal loop in do_work the return value
+	// of process() is used as the loop-exit sentinel: NULL means "keep going",
+	// non-NULL means "stop".  Returning an error string here would cause the
+	// whole operation to be reported as failed even though all pillars were
+	// successfully removed.  So we distinguish "no pillar on this tile" (normal
+	// end-of-iteration → "") from "pillar exists but cannot be deleted" (real
+	// error → propagate fail).
+	grund_t *gr = welt->lookup(pos);
+	if (gr == NULL  ||  gr->find<pillar_t>() == NULL) {
+		return "";
+	}
+
+	const char *fail = NULL;
+	if (!tool_remover_intern(player, pos, obj_t::pillar, fail)) {
+		return fail;
+	}
+
+	if (pos.x > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::west)->calc_image();
+	}
+	if (pos.y > 1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::north)->calc_image();
+	}
+	if (pos.x < welt->get_size().x-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::east)->calc_image();
+	}
+	if (pos.y < welt->get_size().y-1) {
+		welt->lookup_kartenboden(pos.get_2d()+koord::south)->calc_image();
+	}
+
+	return NULL;
+}
+
+
 const char *tool_raise_lower_base_t::move( player_t *player, uint16 buttonstate, koord3d pos )
 {
 	CHECK_FUNDS();
@@ -1364,19 +1417,168 @@ const char *tool_lower_t::process( player_t *player, koord3d pos )
 }
 
 
-const char *tool_setslope_t::check_pos( player_t *, koord3d pos)
+const char *tool_setslope_t::check_pos( player_t *player, koord3d pos)
 {
+	const bool release_check = drag_mode != drag_none && !is_local_execution();
+	if (release_check && pos != last_drag_pos) {
+		// The preceding drag was released outside the map, so this is a new click.
+		init(player);
+	}
+
 	grund_t *gr1 = welt->lookup(pos);
 	if(gr1) {
 		// check for underground mode
 		if(  grund_t::underground_mode == grund_t::ugm_all  &&  !gr1->ist_tunnel()  ) {
+			if (release_check) {
+				init(player);
+			}
 			return "Terraforming not possible\nhere in underground view";
 		}
 	}
 	else {
+		if (release_check) {
+			init(player);
+		}
 		return "";
 	}
 	return NULL;
+}
+
+
+bool tool_setslope_t::init(player_t *player)
+{
+	two_click_tool_t::init(player);
+	drag_mode = drag_none;
+	last_drag_pos = koord3d::invalid;
+	dragged_pos.clear();
+	one_click = true;
+	return true;
+}
+
+
+bool tool_setslope_t::exit(player_t *player)
+{
+	drag_mode = drag_none;
+	last_drag_pos = koord3d::invalid;
+	dragged_pos.clear();
+	one_click = true;
+	return two_click_tool_t::exit(player);
+}
+
+
+const char *tool_setslope_t::move(player_t *player, uint16 buttonstate, koord3d pos)
+{
+	if (buttonstate != 1) {
+		return NULL;
+	}
+
+	if (drag_mode == drag_none) {
+		const bool start_area_drag = is_ctrl_pressed();
+		if (!start_area_drag && !is_first_click()) {
+			// A trajectory drag starts a new operation and cancels a pending area selection.
+			init(player);
+		}
+		drag_mode = start_area_drag ? drag_area : drag_trajectory;
+		dragged_pos.clear();
+	}
+	last_drag_pos = pos;
+	if (drag_mode == drag_area) {
+		return two_click_tool_t::move(player, buttonstate, pos);
+	}
+
+	if (dragged_pos.is_contained(pos.get_2d())) {
+		return NULL;
+	}
+
+	// Record attempted tiles before executing, matching network mode semantics.
+	dragged_pos.append(pos.get_2d());
+	if (env_t::networkmode) {
+		// Queue each tile on the drag trajectory separately, as the raise/lower tools do.
+		nwc_tool_t *nwc = new nwc_tool_t(player, this, pos, welt->get_steps(), welt->get_map_counter(), false);
+		network_send_server(nwc);
+		return NULL;
+	}
+
+	return tool_set_slope_work(player, pos, atoi(default_param), old_slope_compatibility_mode);
+}
+
+
+void tool_setslope_t::mark_tiles(player_t *, const koord3d &start, const koord3d &end)
+{
+	if (drag_mode != drag_area) {
+		return;
+	}
+
+	const koord min_pos(min(start.x, end.x), min(start.y, end.y));
+	const koord max_pos(max(start.x, end.x), max(start.y, end.y));
+	const grund_t *start_surface = welt->lookup_kartenboden(start.get_2d());
+	const bool lock_z_with_start = start_surface == NULL || start.z != start_surface->get_pos().z;
+
+	for (sint16 x = min_pos.x; x <= max_pos.x; x++) {
+		for (sint16 y = min_pos.y; y <= max_pos.y; y++) {
+			grund_t *gr = lock_z_with_start ? welt->lookup(koord3d(x, y, start.z)) : welt->lookup_kartenboden(koord(x, y));
+			if (gr == NULL) {
+				continue;
+			}
+
+			zeiger_t *marker = new zeiger_t(gr->get_pos(), NULL);
+			const uint8 grund_hang = gr->get_grund_hang();
+			const uint8 weg_hang = gr->get_weg_hang();
+			const uint8 hang = max(corner_sw(grund_hang), corner_sw(weg_hang)) +
+				3 * max(corner_se(grund_hang), corner_se(weg_hang)) +
+				9 * max(corner_ne(grund_hang), corner_ne(weg_hang)) +
+				27 * max(corner_nw(grund_hang), corner_nw(weg_hang));
+			const uint8 back_hang = (hang % 3) + 3 * ((uint8)(hang / 9)) + 27;
+			marker->set_foreground_image(ground_desc_t::marker->get_image(grund_hang % 27));
+			marker->set_image(ground_desc_t::marker->get_image(back_hang));
+			marker->mark_image_dirty(marker->get_image(), 0);
+			gr->obj_add(marker);
+			marked.insert(marker);
+		}
+	}
+}
+
+
+const char *tool_setslope_t::do_work(player_t *player, const koord3d &start, const koord3d &end)
+{
+	if (drag_mode == drag_none && is_first_click() && is_ctrl_pressed()) {
+		init(player);
+		one_click = false;
+		koord3d new_start = start;
+		start_at(new_start);
+		return NULL;
+	}
+	one_click = true;
+
+	const int new_slope = atoi(default_param);
+	if (end == koord3d::invalid) {
+		// The drag trajectory has already been processed by move().  Suppress the
+		// ordinary one-click action generated by releasing the mouse button.
+		if (drag_mode == drag_trajectory) {
+			drag_mode = drag_none;
+			return NULL;
+		}
+		return tool_set_slope_work(player, start, new_slope, old_slope_compatibility_mode);
+	}
+
+	const int dx = start.x <= end.x ? 1 : -1;
+	const int dy = start.y <= end.y ? 1 : -1;
+	const char *message = NULL;
+	const grund_t *start_surface = welt->lookup_kartenboden(start.get_2d());
+	const bool lock_z_with_start = start_surface == NULL || start.z != start_surface->get_pos().z;
+	for (sint16 x = start.x; x != end.x + dx; x += dx) {
+		for (sint16 y = start.y; y != end.y + dy; y += dy) {
+			grund_t *gr = lock_z_with_start ? welt->lookup(koord3d(x, y, start.z)) : welt->lookup_kartenboden(koord(x, y));
+			if (gr == NULL) {
+				continue;
+			}
+			const char *error = tool_set_slope_work(player, gr->get_pos(), new_slope, old_slope_compatibility_mode);
+			if (message == NULL || *message == 0) {
+				message = error;
+			}
+		}
+	}
+	return message;
 }
 
 const char *tool_restoreslope_t::check_pos( player_t *, koord3d pos)
@@ -3100,7 +3302,10 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
 		grund_t *gr=welt->lookup(my_end);
 		if(  gr->get_weg( desc->get_waytype() )  ) {
-			my_end.z -= welt->get_settings().get_way_height_clearance();
+			// find the base ground this elevated way was built above; this accounts for the
+			// extra height added on bridge ramp connection tiles (see grund_t::get_bridge_slope_extra_height)
+			grund_t *base_gr = bauigel.find_base_for_elevated(my_end);
+			my_end = base_gr ? base_gr->get_pos() : my_end - koord3d(0, 0, welt->get_settings().get_way_height_clearance());
 		}
 	}
 	// and continue as normal ...
@@ -3130,9 +3335,11 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	bauigel.set_overtaking_mode(mode);
 	bauigel.set_street_flag(flag);
 	bauigel.set_vehicle_offset(vehicle_offset);
-	if(  bauigel.get_route().get_count()>1  ) {
+	// allow building an isolated one-tile way: ctrl held and start/end coincide
+	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_route().get_count() == 1;
+	if(  bauigel.get_route().get_count()>1  ||  single_tile_way  ) {
 		welt->mute_sound(true);
-		bauigel.build();
+		bauigel.build(single_tile_way);
 		welt->mute_sound(false);
 
 		// set default newly constructed type
@@ -3165,20 +3372,25 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 		hf = toolbar_tool->get_height_offset();
 	}
 
-	uint8 offset = (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt) ? welt->get_settings().get_way_height_clearance() + hf : 0;
+	bool is_elevated = desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt;
+	uint8 offset = is_elevated ? welt->get_settings().get_way_height_clearance() + hf : 0;
 
-	if(  bauigel.get_count()>1  ) {
+	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_count() == 1;
+	if(  bauigel.get_count()>1  ||  single_tile_way  ) {
 		// Set tooltip first (no dummygrounds, if bauigel.calc_casts() is called).
 		win_set_static_tooltip( tooltip_with_price_length("Building costs estimates", bauigel.calc_costs(), bauigel.get_count() ) );
 
 		// make dummy route from bauigel
 		for(  uint32 j=0;  j<bauigel.get_count();  j++   ) {
-			koord3d pos = bauigel.get_route()[j] + koord3d(0,0,offset);
+			koord3d base_pos = bauigel.get_route()[j];
+			grund_t *base_gr = welt->lookup( base_pos );
+			sint8 extra_h = (is_elevated  &&  base_gr) ? base_gr->get_bridge_slope_extra_height() : 0;
+			koord3d pos = base_pos + koord3d(0,0,offset+extra_h);
 			grund_t *gr = welt->lookup( pos );
 			if( !gr ) {
 				gr = new monorailboden_t(pos, 0);
 				// should only be here when elevated/monorail, therefore will be at height offset above ground
-				gr->set_grund_hang( welt->lookup( pos - koord3d( 0, 0, offset ) )->get_grund_hang() );
+				gr->set_grund_hang( base_gr->get_weg_hang() );
 				welt->access(pos.get_2d())->boden_hinzufuegen(gr);
 			}
 			if (gr->is_water()) {
@@ -5174,8 +5386,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// get valid ground
 	grund_t *bd = tool_intern_koord_to_weg_grund(player, welt, pos, wegtype);
 
-	if(  !bd  ||  bd->get_weg_hang()!=slope_t::flat  ) {
-		// only flat tiles, only one stop per map square
+	if(  !bd  ) {
 		return "No suitable way on the ground!";
 	}
 
@@ -5196,7 +5407,8 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// find out orientation ...
 	uint32 layout = 0;
 	ribi_t::ribi ribi=ribi_t::none;
-	if(  desc->get_all_layouts()==48  ) {
+	
+	if(  desc->get_all_layouts()==112  ) {
 		// through station supporting diagonal
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5204,6 +5416,48 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		// On a slope tile the direction is determined by the slope, even at a track end.
+		if(  bd->get_weg_hang() != slope_t::flat  &&  !ribi_t::is_straight(ribi)  ) {
+			ribi = ribi_t::doubles( ribi_type( bd->get_weg_hang() ) );
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==80  ) {
+		// through station supporting diagonal
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		// On a slope tile the direction is determined by the slope, even at a track end.
+		if(  bd->get_weg_hang() != slope_t::flat  &&  !ribi_t::is_straight(ribi)  ) {
+			ribi = ribi_t::doubles( ribi_type( bd->get_weg_hang() ) );
+		}
+		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
+			// cannot build here ...
+			return p_error;
+		}
+		layout = (ribi & ribi_t::northsouth)? 0 : 1; // discarded when the way is diagonal
+	}
+	else if(  desc->get_all_layouts()==48  ) {
+		// through station supporting diagonal
+		if(  bd->has_two_ways()  ) {
+			// a crossing or maybe just a tram track on a road ...
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(  bd->hat_wege()  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		// On a slope tile the direction is determined by the slope, even at a track end.
+		if(  bd->get_weg_hang() != slope_t::flat  &&  !ribi_t::is_straight(ribi)  ) {
+			ribi = ribi_t::doubles( ribi_type( bd->get_weg_hang() ) );
 		}
 		if(  !ribi_t::is_straight(ribi)  &&  !ribi_t::is_twoway(ribi)  ) {
 			// cannot build here ...
@@ -5325,6 +5579,12 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		layout &= (desc->get_all_layouts()-1);
 	}
 
+	// Slope tiles require a descriptor with slope images (all_layouts > 48).
+	// Check BEFORE removing the existing building to avoid corrupting the halt.
+	if(  bd->get_weg_hang() != slope_t::flat  &&  desc->get_all_layouts() <= 48  ) {
+		return "Stops on slope require a slope-capable descriptor!";
+	}
+
 	halthandle_t old_halt = bd->get_halt();
 	sint64 old_cost = 0;
 	bool recalc_schedule = false;
@@ -5371,7 +5631,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		halt = haltestelle_t::create(k, player);
 	}
-	if(  desc->get_all_layouts()==48  &&  !ribi_t::is_straight(ribi)  ) {
+	if(  bd->get_weg_hang() != slope_t::flat  ) {
+		hausbauer_t::build_station_on_slope_way(halt_player, bd->get_pos(), layout, desc, halt);
+	}
+	else if(  desc->get_all_layouts()>=48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
 	else {
@@ -6095,8 +6358,12 @@ const char* tool_build_roadsign_t::check_pos_intern(player_t *player, koord3d po
 		}
 
 		const bool two_way = desc->is_single_way()  ||  desc->is_signal_type();
+		// single_way signs are allowed on 2-, 3-, and 4-way junctions; signals stay 2-way only
+		const bool valid_dir_check = !two_way
+		    || (desc->is_signal_type() && ribi_t::is_twoway(dir))
+		    || (desc->is_single_way() && !ribi_t::is_single(dir) && dir != ribi_t::none);
 
-		if(  !two_way  ||  (two_way  &&  ribi_t::is_twoway(dir))  ) {
+		if(  valid_dir_check  ) {
 			roadsign_t* rs;
 			if(  desc->is_signal_type()  ) {
 				// if there is already a signal, we might need to inverse the direction
@@ -6381,8 +6648,12 @@ const char *tool_build_roadsign_t::place_sign_intern( player_t *player, grund_t*
 		ribi_t::ribi dir = weg->get_ribi_unmasked();
 
 		const bool two_way = desc->is_single_way() || desc->is_signal_type();
+		// single_way signs are allowed on 2-, 3-, and 4-way junctions; signals stay 2-way only
+		const bool valid_dir = !two_way
+		    || (desc->is_signal_type() && ribi_t::is_twoway(dir))
+		    || (desc->is_single_way() && !ribi_t::is_single(dir) && dir != ribi_t::none);
 
-		if(  !two_way  ||  (two_way  &&  ribi_t::is_twoway(dir))  ) {
+		if(  valid_dir  ) {
 			roadsign_t* rs;
 			if (desc->is_signal_type()) {
 				// if there is already a signal, we might need to inverse the direction
@@ -10455,7 +10726,11 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * t:set stop before check(for choose/longblock signs)
  * d:set use default route for choose signal
  * p:set start signal(do not start from stops if this flag is true)
- * 
+ * l:set length-based choose (choose shortest halt that fits convoy)
+ * D:toggle detailed_oneway flag on single_way sign; initialises defaults when enabling
+ * n:set packed from-N/from-S allowed exit ribis on detailed_oneway sign (ticks_ns)
+ * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
+ * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
@@ -10495,7 +10770,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 'o':
-		// set guide signal state for signal
+		// set choose signal
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_choose_signal(inst);
@@ -10561,7 +10836,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 't':
-		// set advance to end state for signal
+		// set stop before check for signal
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_stop_before_check(inst);
@@ -10614,6 +10889,64 @@ bool tool_change_roadsign_t::init( player_t *player )
 				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
 				if(  sign_info_win  ) {
 					sign_info_win->update_data();
+				}
+			}
+		}
+		break;
+
+		case 'D':
+		// toggle detailed_oneway flag on a single_way sign; initialises defaults when enabling
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  ) {
+					bool enable = (inst != 0);
+					if(  enable  &&  !rs->is_detailed_oneway()  ) {
+						// initialise from way ribi before enabling
+						weg_t *weg = gr->get_weg(rs->get_desc()->get_wtyp()!=tram_wt ? rs->get_desc()->get_wtyp() : track_wt);
+						if(  weg  ) {
+							rs->init_detailed_oneway_defaults(weg->get_ribi_unmasked());
+						}
+					}
+					rs->set_detailed_oneway(enable);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'n':
+		// set ticks_ns (packed from-N / from-S allowed exit ribis) on a detailed_oneway sign
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					rs->set_detailed_oneway_out_ribi(ribi_t::north, inst & 0xF);
+					rs->set_detailed_oneway_out_ribi(ribi_t::south, (inst >> 4) & 0xF);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'e':
+		// set ticks_ow (packed from-E / from-W allowed exit ribis) on a detailed_oneway sign
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					rs->set_detailed_oneway_out_ribi(ribi_t::east, inst & 0xF);
+					rs->set_detailed_oneway_out_ribi(ribi_t::west, (inst >> 4) & 0xF);
+					rs->update_ribi_maske();
+					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  win  ) {
+						win->update_data();
+					}
 				}
 			}
 		}

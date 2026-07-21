@@ -303,6 +303,8 @@ private:
 	bool overloading_revenue_reduced;
 	/* if set, overcrowded car's running cost is increase*/
 	bool overloading_runningcost_increase;
+	/* if set, acceleration is set as overcrowded when is_full_load_acceleration*/
+	bool overloaded_acceleration;
 
 	// lowest possible income with speedbonus (1000=1) default 125
 	sint32 bonus_basefactor;
@@ -393,6 +395,15 @@ private:
 
 	// public player can unlock any player without entering their password
 	bool allow_unlock_by_public;
+
+	// transit by foot between overlapping pax stops
+	bool transit_by_foot;
+	uint32 foot_path_weight;      // added to route cost for walking connection
+	uint32 foot_path_time_ticks;  // added to journey time for time-based routing
+	// When true, the walking distance from a passenger's origin/destination tile to each
+	// candidate halt is included in the route cost so that nearer halts are preferred.
+	// When false, all halts within station coverage are treated as equidistant (old behaviour).
+	bool walk_cost_to_halt;
 
 public:
 	/* the big cost section */
@@ -624,6 +635,7 @@ public:
 	bool is_allow_overloading() const {return allow_overloading;}
 	bool is_overloading_revenue_reduced() const {return overloading_revenue_reduced;}
 	bool is_overloading_runningcost_increase() const {return overloading_runningcost_increase;}
+	bool is_overloaded_acceleration() const {return overloaded_acceleration;}
 
 	sint16 get_river_number() const { return river_number; }
 	sint16 get_min_river_length() const { return min_river_length; }
@@ -793,6 +805,16 @@ public:
 	void set_allow_unlock_by_public(bool y) { allow_unlock_by_public = y; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
+
+	bool is_transit_by_foot() const { return transit_by_foot; }
+	void set_transit_by_foot(bool v) { transit_by_foot = v; }
+	uint32 get_foot_path_weight() const { return foot_path_weight; }
+	void set_foot_path_weight(uint32 v) { foot_path_weight = v; }
+	uint32 get_foot_path_time_ticks() const { return foot_path_time_ticks; }
+	void set_foot_path_time_ticks(uint32 v) { foot_path_time_ticks = v; }
+	bool is_walk_cost_to_halt() const { return walk_cost_to_halt; }
+	void set_walk_cost_to_halt(bool v) { walk_cost_to_halt = v; }
+
 	void set_use_route_cache(bool b) { use_route_cache = b; }
 };
 

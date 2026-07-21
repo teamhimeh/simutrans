@@ -305,6 +305,7 @@ settings_t::settings_t() :
 	avoid_overcrowding = false;
 	overloading_revenue_reduced = false;
 	overloading_runningcost_increase = true;
+	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
 
@@ -348,6 +349,11 @@ settings_t::settings_t() :
 	allow_elevated_way_over_others_halt = false;
 
 	use_route_cache = false;
+
+	transit_by_foot = false;
+	foot_path_weight = 24;
+	foot_path_time_ticks = 1800;
+	walk_cost_to_halt = false;
 }
 
 
@@ -1100,9 +1106,22 @@ void settings_t::rdwr(loadsave_t *file)
 		if(  file->get_OTRP_version() >= 57  ) {
 			file->rdwr_bool(allow_unlock_by_public);
 			file->rdwr_bool(allow_elevated_way_over_others_halt);
+			file->rdwr_bool(overloaded_acceleration);
 		} else {
 			allow_unlock_by_public = true;
 			allow_elevated_way_over_others_halt = false;
+			overloaded_acceleration = false;
+		}
+		if(  file->get_OTRP_version() >= 58  ) {
+			file->rdwr_bool(transit_by_foot);
+			file->rdwr_long(foot_path_weight);
+			file->rdwr_long(foot_path_time_ticks);
+			file->rdwr_bool(walk_cost_to_halt);
+		} else {
+			transit_by_foot = false;
+			foot_path_weight = 24;
+			foot_path_time_ticks = 1800;
+			walk_cost_to_halt = false;			
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1263,7 +1282,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// display stuff
 	env_t::night_shift                 = contents.get_int( "day_night_shift",                        env_t::night_shift ) != 0;
 	env_t::daynight_level              = contents.get_int_clamped( "daynight_level",                 env_t::daynight_level,            0, 9 );
-	env_t::show_names                  = contents.get_int_clamped( "show_names",                     env_t::show_names,                0, 7 );
+	env_t::show_names                  = contents.get_int_clamped( "show_names",                     env_t::show_names,                0, 31 );
 	env_t::show_month                  = contents.get_int_clamped( "show_month",                     env_t::show_month,                0, 8 );
 	env_t::show_vehicle_states         = contents.get_int_clamped( "show_vehicle_states",            env_t::show_vehicle_states,       0, env_t::MAX_SHOW_VEHICLE_STATES );
 	env_t::show_only_own_vehicle_states= contents.get_int( "show_only_own_vehicle_states",			 env_t::show_only_own_vehicle_states ) != 0;
@@ -1598,6 +1617,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	allow_overloading					 = contents.get_int( "allow_overloading", allow_overloading) != 0;
 	overloading_revenue_reduced 		 = contents.get_int( "overloading_revenue_reduced", overloading_revenue_reduced) != 0;
 	overloading_runningcost_increase	 = contents.get_int( "overloading_runningcost_increase", overloading_runningcost_increase) != 0;
+	overloaded_acceleration				 = contents.get_int( "overloaded_acceleration", overloaded_acceleration ) != 0;
 
 	// city stuff
 	passenger_multiplier   = contents.get_int_clamped( "passenger_multiplier",   passenger_multiplier,   0, 100 );
@@ -1969,6 +1989,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	base_waiting_ticks_for_road_convoi = contents.get_int("base_waiting_ticks_for_road_convoi", base_waiting_ticks_for_road_convoi);
 	base_waiting_ticks_for_ship_convoi = contents.get_int("base_waiting_ticks_for_ship_convoi", base_waiting_ticks_for_ship_convoi);
 	base_waiting_ticks_for_air_convoi = contents.get_int("base_waiting_ticks_for_air_convoi", base_waiting_ticks_for_air_convoi);
+
+	transit_by_foot       = contents.get_int("transit_by_foot",       transit_by_foot) != 0;
+	foot_path_weight      = contents.get_int("foot_path_weight",      foot_path_weight);
+	foot_path_time_ticks  = contents.get_int("foot_path_time_ticks",  foot_path_time_ticks);
+	walk_cost_to_halt     = contents.get_int("walk_cost_to_halt",     walk_cost_to_halt) != 0;
 
 	// Default pak file path
 	objfilename = ltrim(contents.get_string("pak_file_path", objfilename.c_str() ) );

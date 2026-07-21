@@ -61,12 +61,13 @@ public:
 
 // remove uppermost object from tile
 class tool_remover_t : public two_click_tool_t {
-private:
+protected:
 	bool tool_remover_intern(player_t *player, koord3d pos, sint8 type, const char *&msg);
 public:
 	tool_remover_t() : two_click_tool_t(TOOL_REMOVER | GENERAL_TOOL) { one_click = true; }
+	explicit tool_remover_t(uint16 id) : two_click_tool_t(id) { one_click = true; }
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Abriss"); }
-	char const* process(player_t*, koord3d);
+	virtual char const* process(player_t*, koord3d);
 	bool is_init_network_safe() const OVERRIDE { return true; }
 
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -75,6 +76,14 @@ public:
 	image_id get_icon(player_t *) const OVERRIDE { return tree_builder_t::has_trees() ? icon : IMG_EMPTY; }
 	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); one_click = true; return true; }
 	bool exit(player_t* player) OVERRIDE { one_click = true; return two_click_tool_t::exit(player); }
+};
+
+// removes only bridge pillars
+class tool_remove_pillar_t : public tool_remover_t {
+public:
+	tool_remove_pillar_t() : tool_remover_t(TOOL_REMOVE_PILLAR | GENERAL_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove bridge pillar"); }
+	char const* process(player_t*, koord3d) OVERRIDE;
 };
 
 // alter land height tools
@@ -92,7 +101,7 @@ protected:
 public:
 	tool_raise_lower_base_t(uint16 id) : two_click_tool_t(id | GENERAL_TOOL), is_dragging(false), drag_height(0), is_area_process(false) { offset = Z_GRID; one_click = true; }
 	image_id get_icon(player_t*) const OVERRIDE { return grund_t::underground_mode==grund_t::ugm_all ? IMG_EMPTY : icon; }
-	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); is_dragging = false; return true; }
+	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); is_dragging = false; one_click = true; return true; }
 	bool exit(player_t*) OVERRIDE { is_dragging = false; one_click = true; return true; }
 	/**
 	 * technically move is not network safe, however its implementation is:
@@ -140,9 +149,18 @@ public:
 };
 
 /* slope tool definitions */
-class tool_setslope_t : public tool_t {
+class tool_setslope_t : public two_click_tool_t {
+private:
+	enum drag_mode_t {
+		drag_none,
+		drag_trajectory,
+		drag_area
+	};
+	drag_mode_t drag_mode;
+	koord3d last_drag_pos;
+	vector_tpl<koord> dragged_pos;
 public:
-	tool_setslope_t() : tool_t(TOOL_SETSLOPE | GENERAL_TOOL), old_slope_compatibility_mode(true) {}
+	tool_setslope_t() : two_click_tool_t(TOOL_SETSLOPE | GENERAL_TOOL), drag_mode(drag_none), last_drag_pos(koord3d::invalid), old_slope_compatibility_mode(true) { one_click = true; }
 	// if true then slope by default_param will be translated to new double-height system
 	// true by default, can be set to false (used for scripts)
 	bool old_slope_compatibility_mode;
@@ -155,8 +173,14 @@ public:
 	static const char *tool_set_slope_work( player_t *player, koord3d pos, int slope, bool old_slope_compatibility, bool just_check = false);
 	char const* get_tooltip(player_t const*) const OVERRIDE { return tooltip_with_price("Built artifical slopes", welt->get_settings().cst_set_slope); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
+	char const* move(player_t*, uint16, koord3d) OVERRIDE;
+	bool is_work_network_safe() const OVERRIDE { return drag_mode == drag_trajectory; }
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
-	char const* work(player_t* const player, koord3d const k) OVERRIDE { return tool_set_slope_work(player, k, atoi(default_param), old_slope_compatibility_mode); }
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 3; }
 };
 
 class tool_restoreslope_t : public tool_t {
