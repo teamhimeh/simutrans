@@ -4308,7 +4308,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		// The total amount of goods which are loaded and unloaded
 		uint16 amount;
 		if(  !schedule->get_current_entry().is_no_unload() ) {
-			amount = v->unload_cargo(halt, next_depot  ||  ((schedule->get_current_entry().is_unload_all()  ||  get_unload_all())  &&  !unloading_done)  );
+			amount = v->unload_cargo(halt, next_depot  ||  (schedule->get_current_entry().is_unload_all()  &&  !unloading_done)  ||  get_unload_all()  );
 		} else {
 			amount = 0;
 		}
