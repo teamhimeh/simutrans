@@ -319,7 +319,7 @@ void convoi_t::reserve_route()
 					const koord3d next = reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)];
 					if (!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
 						// reservation invalid! do not continue reservation more!
-						dbg->error("convoi_t::reserve_route()","%s cannot reserve %s",get_name(),curr.get_str());
+						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
 						break;
 					}
 				}
@@ -360,7 +360,7 @@ void convoi_t::reserve_route()
 						next_stop_index = idx;
 						next_reservation_index = idx;
 						// reservation invalid! do not continue reservation more!
-						dbg->error("convoi_t::reserve_route()","%s cannot reserve %s",get_name(),curr.get_str());
+						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
 						break;
 					}
 				}
