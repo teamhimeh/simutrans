@@ -307,6 +307,7 @@ void socket_list_t::unlock_player_all(uint8 player_nr, bool unlock, uint32 excep
 			}
 		}
 	}
+	nwc_clientlist_t::broadcast(world());
 #else
 	(void) player_nr;
 	(void) unlock;
