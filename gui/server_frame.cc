@@ -525,23 +525,7 @@ void server_frame_t::update_clientlist()
 		const nwc_clientlist_t::entry_t& e = entries[i];
 
 		cbuffer_t line;
-		line.printf( "%s: ", e.nickname.c_str() );
-
-		bool first = true;
-		for (  uint8 p = 0;  p < PLAYER_UNOWNED;  p++  ) {
-			if (  (e.player_unlocked & (1<<p)) != 0  ) {
-				if (  player_t *player = welt->get_player(p)  ) {
-					if (  !first  ) {
-						line.append( ", " );
-					}
-					line.append( player->get_name() );
-					first = false;
-				}
-			}
-		}
-		if (  first  ) {
-			line.append( translator::translate("(no player)") );
-		}
+		line.printf( "%s", e.nickname.c_str() );
 
 		clientlist.new_component<client_scrollitem_t>( line, SYSCOL_TEXT );
 	}
