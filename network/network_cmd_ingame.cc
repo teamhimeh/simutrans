@@ -1513,7 +1513,6 @@ void nwc_clientlist_t::entry_t::rdwr(packet_t *p)
 {
 	p->rdwr_long(client_id);
 	p->rdwr_str(nickname);
-	p->rdwr_short(player_unlocked);
 }
 
 
@@ -1569,7 +1568,7 @@ void nwc_clientlist_t::broadcast(karte_t *welt)
 	for (uint32 i = 0; i < socket_list_t::get_count(); i++) {
 		socket_info_t const& info = socket_list_t::get_client(i);
 		if (i == 0  ||  info.state == socket_info_t::playing) {
-			client_list.append(entry_t(i, info.nickname.c_str(), info.player_unlocked));
+			client_list.append(entry_t(i, info.nickname.c_str()));
 		}
 	}
 	client_list_generation++;

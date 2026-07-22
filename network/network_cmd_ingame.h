@@ -397,10 +397,9 @@ public:
 	public:
 		uint32 client_id;
 		plainstring nickname;
-		uint16 player_unlocked;
 
-		entry_t() : client_id(0), nickname(), player_unlocked(0) {}
-		entry_t(uint32 client_id_, const char* nickname_, uint16 player_unlocked_) : client_id(client_id_), nickname(nickname_), player_unlocked(player_unlocked_) {}
+		entry_t() : client_id(0), nickname() {}
+		entry_t(uint32 client_id_, const char* nickname_) : client_id(client_id_) {}
 
 		void rdwr(packet_t *p);
 	};
