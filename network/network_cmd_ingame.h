@@ -399,7 +399,7 @@ public:
 		plainstring nickname;
 
 		entry_t() : client_id(0), nickname() {}
-		entry_t(uint32 client_id_, const char* nickname_) : client_id(client_id_) {}
+		entry_t(uint32 client_id_, const char* nickname_) : client_id(client_id_), nickname(nickname_) {}
 
 		void rdwr(packet_t *p);
 	};
