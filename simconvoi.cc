@@ -2976,10 +2976,10 @@ void convoi_t::clear_reserved_tile_if_not_matching_route()
 	if(  get_reserved_tiles().get_count()==0 || route.get_count()==0  ) {
 		return;
 	}
-	// dbg->message("convoi_t::clear_reserved_tile_if_not_matching_route()","reserved tile from %i,%i,%i, route from %i,%i,%i, count: %i vs %i",
-	// 	reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
-	// 	route.at(0).x, route.at(0).y, (int)route.at(0).z,
-	// 	reserved_tiles.get_count(), route.get_count());
+	dbg->message("convoi_t::clear_reserved_tile_if_not_matching_route()","reserved tile from %i,%i,%i, route from %i,%i,%i, count: %i vs %i",
+		reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
+		route.at(0).x, route.at(0).y, (int)route.at(0).z,
+		reserved_tiles.get_count(), route.get_count());
 	// reserved_tiles[i] corresponds to route[i+1]:
 	// route[0] (the departure stop) is never added to reserved_tiles by block_reserver
 	// because it starts from next_block+1 and target_rt from index 1, both skipping route[0].
