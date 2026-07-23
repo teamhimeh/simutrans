@@ -6070,7 +6070,7 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	return true;
 }
 
-convoihandle_t convoi_t::uncouple_convoi() {
+convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	if(  !coupling_convoi.is_bound()  ) {
 		return convoihandle_t();
 	}
@@ -6093,6 +6093,24 @@ convoihandle_t convoi_t::uncouple_convoi() {
 	get_most_parent_convoi()->must_recalc_min_top_speed();
 	get_most_parent_convoi()->check_electrification();
 	get_most_parent_convoi()->must_recalc_friction_weight();
+	
+	// finally, we need to change reservation!
+	route_t const *r = get_route();
+	if(  need_reservation_update  &&  r  &&  r->get_count()>0  ) {
+		for(  uint16 i = max(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),max(back()->get_route_index(),1u)-1),r->get_count()); i++  ) {
+			koord3d const pos = r->at(i);
+			grund_t const *gr = welt->lookup(pos);
+			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
+			if(  sch1  ) {
+				sch1->unreserve(get_most_parent_convoi());
+				get_most_parent_convoi()->unreserve_pos(pos);
+				const ribi_t::ribi corner_set =
+				ribi_t::backward(ribi_type(r->at(max(1u,i)-1u), pos))
+					| ribi_type(pos, r->at(min(r->get_count()-1u,i+1u)));
+				sch1->reserve(ret,corner_set);
+			}
+		}
+	}
 	return ret;
 }
 
@@ -6396,7 +6414,8 @@ void convoi_t::reverse_convoy_coupling()
 	if (  !new_parent_convoy.is_bound()  ) {
 		return;	
 	}
-	uncouple_convoi();
+	// here, we do NOT need to change reservation tiles.
+	uncouple_convoi(false);
 	if (new_parent_convoy->get_coupling_convoi().is_bound()) {
 		new_parent_convoy->reverse_convoy_coupling();
 	}
