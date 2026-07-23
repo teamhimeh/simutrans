@@ -2976,10 +2976,10 @@ void convoi_t::clear_reserved_tile_if_not_matching_route()
 	if(  get_reserved_tiles().get_count()==0 || route.get_count()==0  ) {
 		return;
 	}
-	dbg->message("convoi_t::clear_reserved_tile_if_not_matching_route()","reserved tile from %i,%i,%i, route from %i,%i,%i, count: %i vs %i",
-		reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
-		route.at(0).x, route.at(0).y, (int)route.at(0).z,
-		reserved_tiles.get_count(), route.get_count());
+	// dbg->message("convoi_t::clear_reserved_tile_if_not_matching_route()","reserved tile from %i,%i,%i, route from %i,%i,%i, count: %i vs %i",
+	// 	reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
+	// 	route.at(0).x, route.at(0).y, (int)route.at(0).z,
+	// 	reserved_tiles.get_count(), route.get_count());
 	// reserved_tiles[i] corresponds to route[i+1]:
 	// route[0] (the departure stop) is never added to reserved_tiles by block_reserver
 	// because it starts from next_block+1 and target_rt from index 1, both skipping route[0].
@@ -6070,7 +6070,7 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	return true;
 }
 
-convoihandle_t convoi_t::uncouple_convoi() {
+convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	if(  !coupling_convoi.is_bound()  ) {
 		return convoihandle_t();
 	}
@@ -6093,6 +6093,24 @@ convoihandle_t convoi_t::uncouple_convoi() {
 	get_most_parent_convoi()->must_recalc_min_top_speed();
 	get_most_parent_convoi()->check_electrification();
 	get_most_parent_convoi()->must_recalc_friction_weight();
+	
+	// finally, we need to change reservation!
+	route_t const *r = get_route();
+	if(  need_reservation_update  &&  r  &&  r->get_count()>0  ) {
+		for(  uint16 i = ret->find_most_child_convoi()->back()->get_route_index()-1; i < min(min(ret->front()->get_route_index(),back()->get_route_index()-1),r->get_count()); i++  ) {
+			koord3d const pos = r->at(i);
+			grund_t const *gr = welt->lookup(pos);
+			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
+			if(  sch1  ) {
+				sch1->unreserve(get_most_parent_convoi());
+				get_most_parent_convoi()->unreserve_pos(pos);
+				const ribi_t::ribi corner_set =
+				ribi_t::backward(ribi_type(r->at(max(1u,i)-1u), pos))
+					| ribi_type(pos, r->at(min(r->get_count()-1u,i+1u)));
+				sch1->reserve(ret,corner_set);
+			}
+		}
+	}
 	return ret;
 }
 
@@ -6396,7 +6414,7 @@ void convoi_t::reverse_convoy_coupling()
 	if (  !new_parent_convoy.is_bound()  ) {
 		return;	
 	}
-	uncouple_convoi();
+	uncouple_convoi(false);
 	if (new_parent_convoy->get_coupling_convoi().is_bound()) {
 		new_parent_convoy->reverse_convoy_coupling();
 	}

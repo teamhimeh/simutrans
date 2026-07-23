@@ -1152,7 +1152,7 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
-	convoihandle_t uncouple_convoi();
+	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;

@@ -94,30 +94,37 @@ void schiene_t::info(cbuffer_t & buf) const
 /**
  * true, if this rail can be reserved
  */
-bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
+bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir)
 {
-	if(c == reserved) {
-		// Allow direction restoration when reserved_dir is still none (e.g. after
-		// save/load before reserve_route() has run).  Do NOT overwrite a valid
-		// corner_set: enter_tile passes get_direction() which may be a wrong diagonal
-		// (e.g. SW=12 for a N→W turn) that would corrupt the PBS corner_set.
-		if(reserved_dir == ribi_t::none  &&  dir != ribi_t::none) {
-			reserved_dir = dir;
-		}
-		if(schiene_t::show_reservations) {
-			set_flag( obj_t::dirty );
-		}
-		return true;
+	if(!cnv.is_bound()) {
+		return false;
 	}
-	if(c == reserved2) {
-		// Same: restore direction only when not yet set.
-		if(reserved2_dir == ribi_t::none  &&  dir != ribi_t::none) {
-			reserved2_dir = dir;
+	convoihandle_t c = cnv->get_most_parent_convoi();
+	while(  c.is_bound()  ) {
+		if(c == reserved) {
+			// Allow direction restoration when reserved_dir is still none (e.g. after
+			// save/load before reserve_route() has run).  Do NOT overwrite a valid
+			// corner_set: enter_tile passes get_direction() which may be a wrong diagonal
+			// (e.g. SW=12 for a N→W turn) that would corrupt the PBS corner_set.
+			if(reserved_dir == ribi_t::none  &&  dir != ribi_t::none) {
+				reserved_dir = dir;
+			}
+			if(schiene_t::show_reservations) {
+				set_flag( obj_t::dirty );
+			}
+			return true;
 		}
-		if(schiene_t::show_reservations) {
-			set_flag( obj_t::dirty );
+		if(c == reserved2) {
+			// Same: restore direction only when not yet set.
+			if(reserved2_dir == ribi_t::none  &&  dir != ribi_t::none) {
+				reserved2_dir = dir;
+			}
+			if(schiene_t::show_reservations) {
+				set_flag( obj_t::dirty );
+			}
+			return true;
 		}
-		return true;
+		c = c->get_coupling_convoi();
 	}
 	// for safety
 	if(!reserved.is_bound()&&reserved2.is_bound()) {
@@ -128,7 +135,7 @@ bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
 	}
 	if(!reserved.is_bound()) {
 		// fresh reservation
-		reserved     = c;
+		reserved     = cnv;
 		reserved_dir = dir;
 		/* for threeway and fourway switches we may need to alter graphic, if
 		 * direction is a diagonal (i.e. on the switching part)
@@ -149,7 +156,7 @@ bool schiene_t::reserve(convoihandle_t c, ribi_t::ribi dir)
 	}
 	// tile is reserved by a different convoy — try co-reservation for non-crossing bends
 	if(!reserved2.is_bound()  &&  get_ribi_unmasked()==ribi_t::all  &&  can_co_reserve_dirs(reserved_dir, dir)) {
-		reserved2     = c;
+		reserved2     = cnv;
 		reserved2_dir = dir;
 		if(schiene_t::show_reservations) {
 			set_flag( obj_t::dirty );
@@ -177,24 +184,32 @@ bool schiene_t::unreserve(vehicle_t* v)
 
 bool schiene_t::unreserve(convoihandle_t c)
 {
-	if(reserved.is_bound()  &&  reserved == c) {
-		// promote co-reservation to primary slot (if any)
-		reserved      = reserved2;
-		reserved_dir  = reserved2_dir;
-		reserved2     = convoihandle_t();
-		reserved2_dir = ribi_t::none;
-		if(schiene_t::show_reservations) {
-			set_flag( obj_t::dirty );
-		}
-		return true;
+	if(  !c.is_bound()  ) {
+		return false;
 	}
-	if(reserved2.is_bound()  &&  reserved2 == c) {
-		reserved2     = convoihandle_t();
-		reserved2_dir = ribi_t::none;
-		if(schiene_t::show_reservations) {
-			set_flag( obj_t::dirty );
+	c = c->get_most_parent_convoi();
+	while(  c.is_bound()  )
+	{
+		if(reserved.is_bound()  &&  reserved == c) {
+			// promote co-reservation to primary slot (if any)
+			reserved      = reserved2;
+			reserved_dir  = reserved2_dir;
+			reserved2     = convoihandle_t();
+			reserved2_dir = ribi_t::none;
+			if(schiene_t::show_reservations) {
+				set_flag( obj_t::dirty );
+			}
+			return true;
 		}
-		return true;
+		if(reserved2.is_bound()  &&  reserved2 == c) {
+			reserved2     = convoihandle_t();
+			reserved2_dir = ribi_t::none;
+			if(schiene_t::show_reservations) {
+				set_flag( obj_t::dirty );
+			}
+			return true;
+		}
+		c = c->get_coupling_convoi();
 	}
 	return false;
 }
