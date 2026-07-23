@@ -6097,7 +6097,7 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	// finally, we need to change reservation!
 	route_t const *r = get_route();
 	if(  need_reservation_update  &&  r  &&  r->get_count()>0  ) {
-		for(  uint16 i = ret->find_most_child_convoi()->back()->get_route_index()-1; i < min(min(ret->front()->get_route_index(),back()->get_route_index()-1),r->get_count()); i++  ) {
+		for(  uint16 i = min(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),back()->get_route_index()-1),r->get_count()); i++  ) {
 			koord3d const pos = r->at(i);
 			grund_t const *gr = welt->lookup(pos);
 			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
@@ -6414,7 +6414,7 @@ void convoi_t::reverse_convoy_coupling()
 	if (  !new_parent_convoy.is_bound()  ) {
 		return;	
 	}
-	// here, we do need to change reservation tiles.
+	// here, we do NOT need to change reservation tiles.
 	uncouple_convoi(false);
 	if (new_parent_convoy->get_coupling_convoi().is_bound()) {
 		new_parent_convoy->reverse_convoy_coupling();
