@@ -9841,6 +9841,9 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'k':
 		{
 			cnv->set_unload_all(atoi(p)!=0);
+			if(  atoi(p)!=0  ) {
+				cnv->set_no_load(true);
+			}
 		}
 		break;
 	}
