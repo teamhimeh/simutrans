@@ -6097,7 +6097,7 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	// finally, we need to change reservation!
 	route_t const *r = get_route();
 	if(  need_reservation_update  &&  r  &&  r->get_count()>0  ) {
-		for(  uint16 i = min(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),back()->get_route_index()-1),r->get_count()); i++  ) {
+		for(  uint16 i = max(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),max(back()->get_route_index(),1u)-1),r->get_count()); i++  ) {
 			koord3d const pos = r->at(i);
 			grund_t const *gr = welt->lookup(pos);
 			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
