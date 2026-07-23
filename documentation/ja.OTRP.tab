@@ -821,3 +821,9 @@ Show convoi positions on the map
 編成の位置を地図上に表示
 (walk)
 (徒歩)
+change city of citybuilding to nearest city
+建物の所属都市を最寄りの都市に変更
+This tool must be executed by the public player.
+このツールは公共事業のみ実行できます。
+No city found!
+都市が見つかりません！

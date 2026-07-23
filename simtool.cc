@@ -8029,24 +8029,48 @@ const char* tool_change_city_of_building_t::work_on_ground( player_t* player, ko
 
 	gebaeude_t* gb = gr->find<gebaeude_t>();
 
+	// target: city buildings, headquarters, or monuments
 	if (!gb || !gb->is_building_of_city()) {
 		return "";
 	}
 
 	stadt_t* old_city = gb->get_stadt();
 
-	if (!(old_city && new_city)) {
-		return "Building doesn't have city or no city highlighted";
-	} else if (old_city == new_city) {
+	if (!new_city) {
+		// no city highlighted: fall back to the city whose townhall is closest by simple distance
+		uint32 min_dist = 0xFFFFFFFFu;
+		FOR(  weighted_vector_tpl<stadt_t*>,  const city,  welt->get_cities()  ) {
+			const uint32 dist = koord_distance( k, city->get_pos() );
+			if (  dist < min_dist  ) {
+				min_dist = dist;
+				new_city = city;
+			}
+		}
+		if (!new_city) {
+			return "No city found!";
+		}
+	}
+
+	if (old_city == new_city) {
 		return "";
 	}
 
-	old_city->remove_gebaeude_from_stadt(gb);
+	if (old_city) {
+		old_city->remove_gebaeude_from_stadt(gb);
+	}
 	new_city->add_gebaeude_to_stadt(gb);
 
 	welt->set_dirty();
-	
+
 	return NULL;
+}
+
+bool tool_change_city_of_building_t::init(player_t *player) {
+	if (!player->is_public_service()) {
+		open_error_msg_win("This tool must be executed by the public player.");
+		return false;
+	}
+	return two_click_kartenboden_tool_t::init(player);
 }
 
 const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d const &start, koord3d const &end) {
@@ -8059,9 +8083,6 @@ const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d co
 	one_click = true;
 
 	stadt_t* const new_city = get_highlighted_city();
-	if(  !new_city  ) {
-		return "No new city found!";
-	}
 	koord k;
 
 	if ( end == koord3d::invalid) {
