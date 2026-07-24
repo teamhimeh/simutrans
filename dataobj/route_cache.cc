@@ -68,3 +68,23 @@ void route_cache_t::remove_line(linehandle_t line)
 {
 	map.erase(line);
 }
+
+
+void route_cache_t::get_route_tiles_for_line(linehandle_t line, vector_tpl<koord3d> &tiles) const
+{
+	line_map_t::const_iterator line_it = map.find(line);
+	if (line_it == map.end()) return;
+	karte_ptr_t welt;
+	for (entry_map_t::const_iterator entry_it = line_it->second.begin(); entry_it != line_it->second.end(); ++entry_it) {
+		for (route_map_t::const_iterator it = entry_it->second.begin(); it != entry_it->second.end(); ++it) {
+			if (welt->get_ticks() - it->second.added_ticks > welt->ticks_per_world_month) {
+				// expired; skip (do not erase here, this is a read-only query)
+				continue;
+			}
+			const route_t &r = it->second.route;
+			for (uint32 i = 0; i < r.get_count(); i++) {
+				tiles.append_unique(r.at(i));
+			}
+		}
+	}
+}
