@@ -5,6 +5,16 @@
 
 #include "route_cache.h"
 #include "../simworld.h"
+#include <unordered_set>
+
+
+namespace {
+	struct koord3d_hash_t {
+		size_t operator()(const koord3d &k) const {
+			return (size_t)(uint16)k.x ^ ((size_t)(uint16)k.y << 16) ^ ((size_t)(uint8)k.z << 24);
+		}
+	};
+}
 
 
 route_t* route_cache_t::find(linehandle_t line, uint8 schedule_entry, koord3d start, koord3d ziel,
@@ -75,6 +85,7 @@ void route_cache_t::get_route_tiles_for_line(linehandle_t line, vector_tpl<koord
 	line_map_t::const_iterator line_it = map.find(line);
 	if (line_it == map.end()) return;
 	karte_ptr_t welt;
+	std::unordered_set<koord3d, koord3d_hash_t> seen;
 	for (entry_map_t::const_iterator entry_it = line_it->second.begin(); entry_it != line_it->second.end(); ++entry_it) {
 		for (route_map_t::const_iterator it = entry_it->second.begin(); it != entry_it->second.end(); ++it) {
 			if (welt->get_ticks() - it->second.added_ticks > welt->ticks_per_world_month) {
@@ -83,7 +94,9 @@ void route_cache_t::get_route_tiles_for_line(linehandle_t line, vector_tpl<koord
 			}
 			const route_t &r = it->second.route;
 			for (uint32 i = 0; i < r.get_count(); i++) {
-				tiles.append_unique(r.at(i));
+				if (seen.insert(r.at(i)).second) {
+					tiles.append(r.at(i));
+				}
 			}
 		}
 	}

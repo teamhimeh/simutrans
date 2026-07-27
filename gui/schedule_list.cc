@@ -13,6 +13,7 @@
 #include "simwin.h"
 #include "journey_time_info.h"
 #include "goods_waiting_time.h"
+#include "route_display.h"
 
 #include "../simcolor.h"
 #include "../simdepot.h"
@@ -980,8 +981,45 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 }
 
 
+void schedule_list_gui_t::hide_route_display(void *owner)
+{
+	schedule_list_gui_t *win = static_cast<schedule_list_gui_t*>(owner);
+	win->is_route_cache_show = false;
+	win->show_route_cache(false);
+}
+
+
 void schedule_list_gui_t::show_route_cache(bool const yesno)
 {
+	if(  !yesno  ||  !line.is_bound()  ||  !welt->get_settings().is_using_route_cache()  ) {
+		if(  !route_cache_route.empty()  ) {
+			for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
+				if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
+					for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+						obj_t *obj = gr->obj_bei(idx);
+						obj->clear_flag( obj_t::convoy_way );
+					}
+					gr->set_flag( grund_t::dirty );
+				}
+			}
+			route_cache_route.clear();
+		}
+		route_display_t::deactivate(this);
+		return;
+	}
+
+	// collect all currently cached route tiles for this line
+	vector_tpl<koord3d> tiles;
+	welt->get_route_cache().get_route_tiles_for_line(line, tiles);
+
+	route_display_t::activate(this, &schedule_list_gui_t::hide_route_display);
+
+	// tile count unchanged => assume the cached route is the same and skip the redraw
+	if(  tiles.get_count() == route_cache_route.get_count()  ) {
+		return;
+	}
+
+	// clear previously marked tiles before marking the new set
 	if(  !route_cache_route.empty()  ) {
 		for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
 			if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
@@ -994,12 +1032,7 @@ void schedule_list_gui_t::show_route_cache(bool const yesno)
 		}
 		route_cache_route.clear();
 	}
-	if(  !yesno  ||  !line.is_bound()  ||  !welt->get_settings().is_using_route_cache()  ) {
-		return;
-	}
-	// collect all currently cached route tiles for this line and mark them
-	vector_tpl<koord3d> tiles;
-	welt->get_route_cache().get_route_tiles_for_line(line, tiles);
+
 	FOR(vector_tpl<koord3d>, const& k, tiles) {
 		route_cache_route.append(k);
 	}

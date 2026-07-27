@@ -46,6 +46,7 @@ private:
 	bool is_route_cache_show;
 	route_t route_cache_route;
 	void show_route_cache(bool yesno);
+	static void hide_route_display(void *owner);
 	gui_scrolled_list_t scl, scrolly_convois, scrolly_haltestellen;
 	gui_speedbar_t filled_bar;
 	button_t bt_colour_line;
