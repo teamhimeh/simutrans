@@ -3333,6 +3333,9 @@ DBG_MESSAGE( "karte_t::rotate90()", "called" );
 	// assume we can save this rotation
 	nosave_warning = nosave = false;
 
+	// cached routes reference koord3d positions that become invalid after rotation
+	route_cache.clear();
+
 	//announce current target rotation
 	settings.rotate90();
 
