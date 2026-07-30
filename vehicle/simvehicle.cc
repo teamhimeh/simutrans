@@ -4166,6 +4166,8 @@ skip_choose:
 			while(  c.is_bound()  ) {
 				c->access_route()->remove_koord_from(start_block);
 				c->access_route()->append( &target_rt );
+				// route indices behind start_block changed => cleared crossings are no longer valid
+				c->set_cleared_crossing_index( 0 );
 				c = c->get_coupling_convoi();
 			}
 			// try to alloc the whole route
@@ -4232,6 +4234,43 @@ bool rail_vehicle_t::is_pre_signal_clear(signal_t *sig, uint16 next_block, sint3
 
 
 
+// cleared_crossing_index is a high-water mark, so this treats *every* crossing at or below it as
+// cleared, not only the one can_enter_tile() granted last. That is still correct because
+// can_enter_tile() only ever grants a crossing at next_block <= route_index+3 and block_reserver()
+// reports the *first* crossing en route: a crossing at or below the mark is therefore always one we
+// have already passed or have just been granted, never one still waiting further ahead.
+bool rail_vehicle_t::needs_stop_before_crossing(uint16 crossing_index)
+{
+	if(  crossing_index > cnv->get_cleared_crossing_index()  ||  crossing_index >= cnv->get_route()->get_count()  ) {
+		// not (yet) cleared for us by can_enter_tile(), or not a valid route index at all
+		// => we must be able to stop in front of it
+		return true;
+	}
+	// We were already granted this crossing and next_stop_index was advanced beyond it.
+	// A priority signal is re-checked on every tile while the convoy is next to it (see
+	// can_enter_tile()), so re-applying the crossing would undo that advance on every re-check
+	// and brake the convoy down to the crossing over and over. It stays safe for us only while
+	// the crossing is actually closed to road traffic: another convoy that requested it later
+	// may have released it in the meantime, and then we have to be able to stop in front of it
+	// again. (Only read the state here. request_crossing() would re-trigger the closing sound
+	// on every call, because crossing_logic_t::set_state() plays it before comparing states.)
+	//
+	// Note that crossing_logic_t keeps only a single request_close pointer: a second convoy
+	// requesting the same crossing overwrites it, and when *that* convoy releases the crossing it
+	// opens again even though we were cleared. We then return true here, but we are running at
+	// full speed by that point, so the recovery is the hard stop in can_enter_tile()
+	// (restart_speed = 0 when request_crossing() fails), not a smooth brake. The crossing
+	// pre-request via convoi_t::crossing_reservation_index has the same property.
+	grund_t *gr_crossing = welt->lookup( cnv->get_route()->at(crossing_index) );
+	crossing_t *cr = gr_crossing ? gr_crossing->get_crossing() : NULL;
+	// a crossing whose way is gone keeps a NULL logic, and get_state() would deref it
+	if(  cr==NULL  ||  cr->get_logic()==NULL  ) {
+		return true;
+	}
+	return cr->get_state()!=crossing_logic_t::CROSSING_CLOSED;
+}
+
+
 bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, sint32 &restart_speed, bool const call_by_step)
 {
 	// parse to next signal; if needed recurse, since we allow cascading
@@ -4250,7 +4289,7 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			// ok, the next signal is clear
 			sig->set_state( roadsign_t::STATE_GREEN );
 			// Only shorten next_stop_index when a crossing requires an earlier stop.
-			if(  next_crossing < cnv->get_next_stop_index() - 1  ) {
+			if(  next_crossing < cnv->get_next_stop_index() - 1  &&  needs_stop_before_crossing( next_crossing )  ) {
 				cnv->set_next_stop_index( next_crossing );
 			}
 			return true;
@@ -4523,7 +4562,12 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				restart_speed = 0;
 				return cnv->get_next_stop_index()>route_index+1;
 			}
-			else if(  !sch1->has_signal()  ) {
+			// we may pass this crossing: remember it, so that a signal re-check does not
+			// pull next_stop_index back in front of it again (would brake us needlessly)
+			if(  next_block > cnv->get_cleared_crossing_index()  ) {
+				cnv->set_cleared_crossing_index( next_block );
+			}
+			if(  !sch1->has_signal()  ) {
 				// can reserve: find next place to do something and drive on
 				if(  block_pos == cnv->get_route()->back()  ) {
 					// is also last tile => go on ...

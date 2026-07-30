@@ -523,6 +523,21 @@ private:
 	vector_tpl<std::pair< uint16, uint16> > crossing_reservation_index;
 
 	/**
+	 * Route index of the last crossing can_enter_tile() granted us passage through.
+	 * This is a high-water mark, not a single crossing: readers treat every crossing at or
+	 * below this index as cleared. That holds because can_enter_tile() only grants a crossing
+	 * at next_block <= route_index+3, so anything at or below the mark has been passed or has
+	 * just been granted -- see rail_vehicle_t::needs_stop_before_crossing().
+	 * 0 means "none yet": index 0 is the tile the convoy starts on, so it is never a
+	 * crossing we would still have to stop in front of.
+	 * Not saved, but rebuilt after loading by rebuild_cleared_crossing_index().
+	 */
+	uint16 cleared_crossing_index;
+
+	// restores cleared_crossing_index from the saved route, next_stop_index and crossing states
+	void rebuild_cleared_crossing_index();
+
+	/**
 	 * the route index of the point to quit yielding lane
 	 * == -1 means this convoi isn't yielding.
 	 * @author teamhimeH
@@ -1149,6 +1164,9 @@ public:
 	void calc_crossing_reservation();
 	vector_tpl<std::pair< uint16, uint16> > get_crossing_reservation_index() const { return crossing_reservation_index; }
 	void remove_crossing_reservation_at(uint16 idx) { crossing_reservation_index.remove_at(idx); }
+
+	uint16 get_cleared_crossing_index() const { return cleared_crossing_index; }
+	void set_cleared_crossing_index(uint16 idx) { cleared_crossing_index = idx; }
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);

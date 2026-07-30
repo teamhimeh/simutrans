@@ -592,6 +592,9 @@ protected:
 private:
 	bool is_next_tile_already_reserved(uint16 index);
 
+	// true when next_stop_index still has to be shortened to the crossing at this route index
+	bool needs_stop_before_crossing(uint16 crossing_index);
+
 public:
 	waytype_t get_waytype() const OVERRIDE { return track_wt; }
 

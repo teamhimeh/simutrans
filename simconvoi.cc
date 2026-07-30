@@ -187,6 +187,7 @@ void convoi_t::init(player_t *player)
 
 	signal_check_in_step_request = false;
 	crossing_reservation_index.clear();
+	cleared_crossing_index = 0;
 	recalc_min_top_speed = true;
 	recalc_friction_weight = true;
 
@@ -685,6 +686,8 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 		}
 		reserve_route();
 	}
+
+	rebuild_cleared_crossing_index();
 }
 
 
@@ -6026,6 +6029,8 @@ void convoi_t::clear_reserved_tiles(){
 // this function should be called from rail vehicles
 void convoi_t::calc_crossing_reservation() {
 	crossing_reservation_index.clear();
+	// the route changed, so nothing is cleared for us any more
+	cleared_crossing_index = 0;
 	for(  uint32 i=route.get_count()-1;  i>0;  i--  ) {
 		const grund_t *gr = welt->lookup(route.at(i));
 		const schiene_t *sch1 = dynamic_cast<schiene_t*>(gr ? gr->get_weg(front()->get_waytype()) : NULL);
@@ -6048,6 +6053,37 @@ void convoi_t::calc_crossing_reservation() {
 		const uint8 distance = max_speed_2>0 ? cr->get_length()*max_speed_1/max_speed_2 : 1;
 		const uint16 res_start_idx = max(i-distance,1);
 		crossing_reservation_index.append(std::pair<uint16, uint16>(res_start_idx,i));
+	}
+}
+
+
+// cleared_crossing_index is not saved -- that would need an OTRP_VERSION_MAJOR bump (see
+// simversion.h) and break savegame compatibility. Rebuild it from data that is saved:
+// everything below next_stop_index is what can_enter_tile() had already granted us when the
+// game was saved, and crossing_t saves its own state, so a crossing that is still closed for
+// us can be told apart from one that has meanwhile opened. Without this the convoy would
+// brake once more for a crossing it was already cleared for, right after loading.
+// Marking one crossing too many stays safe: as during normal operation it is
+// needs_stop_before_crossing() that re-checks the state at the moment it matters.
+void convoi_t::rebuild_cleared_crossing_index()
+{
+	cleared_crossing_index = 0;
+	if(  anz_vehikel==0  ||  front()->get_waytype()!=track_wt  ||  route.empty()  ) {
+		return;
+	}
+	// can_enter_tile() only ever grants a crossing at next_block <= route_index+3, so nothing
+	// beyond that can have been cleared for us. Bounding the scan by next_stop_index alone is not
+	// enough: on a route that is reserved to its end next_stop_index reaches the end too, and we
+	// would then mark a crossing far ahead that is merely closed for *another* convoy -- and not
+	// brake for it at all.
+	const uint32 end = min( min( next_stop_index, front()->get_route_index() + 4 ), route.get_count() );
+	for(  uint32 i = max( 1, front()->get_route_index() ) - 1;  i < end;  i++  ) {
+		const grund_t *gr = welt->lookup( route.at(i) );
+		crossing_t *cr = gr ? gr->get_crossing() : NULL;
+		// a crossing whose way is gone keeps a NULL logic, and get_state() would deref it
+		if(  cr  &&  cr->get_logic()  &&  cr->get_state()==crossing_logic_t::CROSSING_CLOSED  ) {
+			cleared_crossing_index = i;
+		}
 	}
 }
 
