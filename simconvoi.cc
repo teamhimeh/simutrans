@@ -2694,6 +2694,14 @@ koord3d const convoi_t::find_tiles_convoy_on(convoihandle_t const inspecting, co
 // put the convoi on its way
 void convoi_t::vorfahren()
 {
+	// The route was just replaced, so no crossing is cleared for us any more. This has to happen
+	// here and not in calc_crossing_reservation() at the end: the can_enter_tile() call further
+	// down may already grant us the next crossing again, and resetting afterwards would throw
+	// that away. It also must not share the track_wt condition of calc_crossing_reservation(),
+	// because monorail, maglev and narrowgauge convoys drive on rail_vehicle_t too and would
+	// otherwise carry a stale index across the route change.
+	cleared_crossing_index = 0;
+
 	// init speed settings
 	sp_soll = 0;
 	if(  get_tiles_overtaking()<=0  ) {
@@ -6029,8 +6037,6 @@ void convoi_t::clear_reserved_tiles(){
 // this function should be called from rail vehicles
 void convoi_t::calc_crossing_reservation() {
 	crossing_reservation_index.clear();
-	// the route changed, so nothing is cleared for us any more
-	cleared_crossing_index = 0;
 	for(  uint32 i=route.get_count()-1;  i>0;  i--  ) {
 		const grund_t *gr = welt->lookup(route.at(i));
 		const schiene_t *sch1 = dynamic_cast<schiene_t*>(gr ? gr->get_weg(front()->get_waytype()) : NULL);
@@ -6068,7 +6074,9 @@ void convoi_t::calc_crossing_reservation() {
 void convoi_t::rebuild_cleared_crossing_index()
 {
 	cleared_crossing_index = 0;
-	if(  anz_vehikel==0  ||  front()->get_waytype()!=track_wt  ||  route.empty()  ) {
+	// rail_vehicle_t is the only writer of this index, and it drives not just track_wt but tram,
+	// monorail, maglev and narrowgauge as well -- ask for the class, not for a single waytype
+	if(  anz_vehikel==0  ||  route.empty()  ||  dynamic_cast<rail_vehicle_t*>(front())==NULL  ) {
 		return;
 	}
 	// can_enter_tile() only ever grants a crossing at next_block <= route_index+3, so nothing
