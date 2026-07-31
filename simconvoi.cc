@@ -2700,7 +2700,15 @@ void convoi_t::vorfahren()
 	// that away. It also must not share the track_wt condition of calc_crossing_reservation(),
 	// because monorail, maglev and narrowgauge convoys drive on rail_vehicle_t too and would
 	// otherwise carry a stale index across the route change.
-	cleared_crossing_index = 0;
+	// The coupled convoys receive the new route as well (insert_route_convoy_on() and the
+	// broadcast further down), so clear the whole chain -- as is_choose_signal_clear() does.
+	// Their own index is dead data while they are coupled, but uncouple_convoi() turns them
+	// into leading convoys again while that route is still in place.
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		c->cleared_crossing_index = 0;
+		c = c->get_coupling_convoi();
+	}
 
 	// init speed settings
 	sp_soll = 0;
@@ -2711,7 +2719,7 @@ void convoi_t::vorfahren()
 	recalc_data = true;
 	recalc_speed_limit = true;
 	// this reversing flag is for recalculating reversing convoy's vehicle positions.
-	convoihandle_t c = self;
+	c = self;
 	bool reversing_convoy_exists = false;
 	while ( c.is_bound() ) {
 		reversing_convoy_exists |= c->reversing_needed;
