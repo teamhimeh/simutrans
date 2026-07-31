@@ -6074,7 +6074,7 @@ void convoi_t::calc_crossing_reservation() {
 void convoi_t::rebuild_cleared_crossing_index()
 {
 	cleared_crossing_index = 0;
-	// rail_vehicle_t is the only writer of this index, and it drives not just track_wt but tram,
+	// rail_vehicle_t is the only writer of this index, and it drives not just track_wt but 
 	// monorail, maglev and narrowgauge as well -- ask for the class, not for a single waytype
 	if(  anz_vehikel==0  ||  route.empty()  ||  dynamic_cast<rail_vehicle_t*>(front())==NULL  ) {
 		return;
