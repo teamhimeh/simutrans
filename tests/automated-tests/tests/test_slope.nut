@@ -204,7 +204,11 @@ function test_slope_restore_on_foundation()
 	// clean up
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(1), coord3d(4, 2, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(1), coord3d(8, 8, 0)), null); // remove city
+<<<<<<< HEAD
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(1), coord3d(7, 9, 0)), null)
+=======
+	ASSERT_EQUAL(command_x(tool_remover).work(player_x(1), coord3d(8, 9, 0)), null)
+>>>>>>> OTRP-KUTAv6
 	RESET_ALL_PLAYER_FUNDS()
 }
 

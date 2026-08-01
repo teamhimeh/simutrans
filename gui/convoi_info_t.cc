@@ -357,7 +357,7 @@ void convoi_info_t::update_labels()
 		scroll_freight.set_size( scroll_freight.get_size() );
 	}
 
-	scroll_stops_list.set_size(  scr_size( scroll_stops_list.get_size().w,get_client_windowsize().h - scroll_stops_list.get_pos().y - D_MARGIN_BOTTOM )  );
+	scroll_stops_list.set_size(  scr_size( scroll_stops_list.get_size().w, switch_mode.get_size().h - scroll_stops_list.get_pos().y )  );
 
 	// realign container - necessary if strings changed length
 	container_top->set_size( container_top->get_size() );
@@ -380,7 +380,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	next_reservation_index = cnv->get_next_reservation_index();
 
 	// make titlebar dirty to display the correct coordinates
-	if(cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()) {
+	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
 		if (line_bound != cnv->get_line().is_bound()  ) {
 			line_bound = cnv->get_line().is_bound();
@@ -428,8 +428,15 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		if(  grund_t* gr=welt->lookup(cnv->get_schedule()->get_current_entry().pos)  ) {
 			go_home_button.pressed = gr->get_depot() != NULL;
 		}
-		no_load_button.pressed = cnv->get_no_load();
-		no_load_button.enable();
+		no_load_button.pressed = cnv->get_no_load()||cnv->is_invalid_convoy();
+		if(  cnv->is_invalid_convoy()  ){
+			// this convoy is invalid convoy->out of service
+			no_load_button.set_text("Out of service");
+			no_load_button.disable();
+		}	
+		else {
+			no_load_button.enable();
+		}
 		set_recovery_button.pressed = cnv->is_in_delay_recovery();
 		set_recovery_button.enable();
 		if(  cnv->is_coupled() ){
@@ -455,7 +462,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		}
 		bt_promote_to_line.disable();
 		button.set_text(cnv->get_owner()->get_name());
-		if(  !cnv->get_owner()->is_locked()  ) {
+		if(  welt->player_can_act_unrestricted(cnv->get_owner())  ) {
 			button.set_tooltip("move to the owner");
 			button.enable();
 		} else {
@@ -488,9 +495,10 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_show_button.pressed = is_route_show;
 	route_show_button.enable();
 
+	// update layout before rendering so upper section width matches current window size
+	set_windowsize(size);
 	// all gui stuff set => display it
 	gui_frame_t::draw(pos, size);
-	set_windowsize(size);
 }
 
 
@@ -595,7 +603,7 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	}
 
 	// some actions only allowed, when I am the player
-	if(cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()) {
+	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
 		if(  comp == &button  ) {
 			if(  cnv->get_coupling_convoi().is_bound()  ) {
@@ -612,7 +620,7 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 			}
 		}
 
-		if(  comp == &no_load_button    &&    !route_search_in_progress  ) {
+		if(  comp == &no_load_button    &&    !route_search_in_progress  &&  !cnv->is_invalid_convoy()  ) {
 			cnv->call_convoi_tool( 'n', NULL );
 			return true;
 		}

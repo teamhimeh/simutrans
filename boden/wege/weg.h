@@ -209,7 +209,7 @@ public:
 	/**
 	* Die Bezeichnung des Wegs
 	*/
-	const char *get_name() const OVERRIDE { return desc->get_name(); }
+	const char *get_name() const OVERRIDE { return "weg"; }
 
 	/**
 	* Add direction bits (ribi) for a way.
@@ -323,6 +323,8 @@ public:
 
 	// correct maintenance
 	void finish_rd() OVERRIDE;
+
+	virtual bool is_clipping_below_needed() const OVERRIDE;
 } GCC_PACKED;
 
 #endif

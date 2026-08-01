@@ -10,6 +10,7 @@
 
 #ifndef NETTOOL
 #include "../dataobj/environment.h"
+#include "../simworld.h"
 #endif
 
 
@@ -278,6 +279,7 @@ void socket_list_t::unlock_player_all(uint8 player_nr, bool unlock, uint32 excep
 {
 // nettool does not know about nwc_auth_player_t
 #ifndef NETTOOL
+	const uint16 player_has_password = nwc_auth_player_t::get_player_password_set_bits(world());
 	for(uint32 i=0; i<list.get_count(); i++) {
 		if (i!=except_client  &&  (i==0  ||  list[i]->state == socket_info_t::playing) ) {
 			uint16 old_player_unlocked = list[i]->player_unlocked;
@@ -289,19 +291,23 @@ void socket_list_t::unlock_player_all(uint8 player_nr, bool unlock, uint32 excep
 			}
 			if (old_player_unlocked != list[i]->player_unlocked) {
 				dbg->warning("socket_list_t::unlock_player_all", "old = %d  new = %d  id = %d", old_player_unlocked, list[i]->player_unlocked, i);
-				// tell the player
-				nwc_auth_player_t *nwc = new nwc_auth_player_t();
-				nwc->player_unlocked = list[i]->player_unlocked;
-				if (i==0) {
-					network_send_server(nwc);
-				}
-				else {
-					nwc->send(list[i]->socket);
-					delete nwc;
-				}
+			}
+			// always tell the player: even when the unlock bits did not change,
+			// the password-set state may have (e.g. password cleared while the
+			// client already had this player unlocked)
+			nwc_auth_player_t *nwc = new nwc_auth_player_t();
+			nwc->player_unlocked = list[i]->player_unlocked;
+			nwc->player_has_password = player_has_password;
+			if (i==0) {
+				network_send_server(nwc);
+			}
+			else {
+				nwc->send(list[i]->socket);
+				delete nwc;
 			}
 		}
 	}
+	nwc_clientlist_t::broadcast(world());
 #else
 	(void) player_nr;
 	(void) unlock;

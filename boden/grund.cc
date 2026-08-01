@@ -1682,19 +1682,16 @@ void grund_t::display_obj_fg(const sint16 xpos, const sint16 ypos, const bool is
 void display_text_label(sint16 xpos, sint16 ypos, const char* text, const player_t *player, bool dirty)
 {
 	sint16 pc = player ? player->get_player_color1()+4 : SYSCOL_TEXT_HIGHLIGHT;
-	switch( env_t::show_names >> 2 ) {
-		case 0:
-			display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
-			break;
-		case 1:
-			display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
-			break;
-		case 2: {
-			display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
-			display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
-			display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
-			break;
-		}
+	if(  env_t::show_names & env_t::SHOW_NAME_TYPE3  ) {
+		display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
+		display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
+		display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
+	}
+	else if(  env_t::show_names & env_t::SHOW_NAME_TYPE2  ) {
+		display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
+	}
+	else {
+		display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
 	}
 }
 
@@ -1707,7 +1704,7 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 #endif
 	// marker/station text
 	if(  get_flag(has_text)  &&  env_t::show_names  ) {
-		if(  env_t::show_names&1  ) {
+		if(  env_t::show_names & env_t::SHOW_NAME  ) {
 			const char *text = get_text();
 			const sint16 raster_tile_width = get_tile_raster_width();
 			const int width = proportional_string_width(text)+7;
@@ -1718,8 +1715,8 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 			display_text_label(new_xpos, ypos, text, owner, dirty);
 		}
 
-		// display station waiting information/status
-		if(env_t::show_names & 2) {
+		// display station waiting information/status and/or allowed player bars
+		if(  env_t::show_names & (env_t::SHOW_WAITING_BARS | env_t::SHOW_ALLOWED_PLAYERS)  ) {
 			const halthandle_t halt = get_halt();
 			if(halt.is_bound()  &&  halt->get_basis_pos3d()==pos) {
 				halt->display_status(xpos, ypos);
@@ -1785,8 +1782,13 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 	}
 
 	if( schiene_t::show_reservations &&  hat_wege()  ) {
+		weg_t* w2 = get_weg_nr(1);
+		signal_t* sig = NULL;
 		if( weg_t* w = get_weg_nr( 0 ) ) {
 			if( w->has_signal() ) {
+				sig = find<signal_t>();
+			}
+			if( sig ) {
 				// display arrow here
 				PIXVAL c1 = color_idx_to_rgb( COL_GREEN+2 );
 				PIXVAL c2 = color_idx_to_rgb( COL_GREEN );
@@ -1796,11 +1798,17 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 					mask = w->get_ribi_unmasked();
 				}
 
-				if( signal_t* sig = find<signal_t>() ) {
-					if( sig->get_state()==roadsign_t::signalstate::STATE_RED ) {
-						c1 = color_idx_to_rgb( COL_ORANGE+2 );
-						c2 = color_idx_to_rgb( COL_ORANGE );
-					}
+				if( sig->get_two_ways() ) {
+					// display second (reverse) arrow always green
+					ribi_t::ribi mask2 = sig->get_dir();
+					display_signal_direction_rgb( xpos, ypos + tile_raster_scale_y( w->get_yoff(), get_current_tile_raster_width() ),
+						w->get_ribi_unmasked(), mask & ~mask2, c1, c2, w->is_diagonal(), get_weg_hang() );
+					mask = mask2;
+				}
+
+				if( sig->get_state()==roadsign_t::signalstate::STATE_RED ) {
+					c1 = color_idx_to_rgb( COL_ORANGE+2 );
+					c2 = color_idx_to_rgb( COL_ORANGE );
 				}
 				display_signal_direction_rgb( xpos, ypos + tile_raster_scale_y( w->get_yoff(), get_current_tile_raster_width() ),
 					w->get_ribi_unmasked(), mask, c1, c2, w->is_diagonal(), get_weg_hang() );
@@ -1813,8 +1821,11 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 			}
 		}
 		if( weg_t* w = get_weg_nr( 1 ) ) {
-			// signal can be on the weg_nr(1) (e.g. tram rail)
 			if( w->has_signal() ) {
+				sig = find<signal_t>();
+			}
+			// signal can be on weg_nr(1) (e.g. tram rail) when not already handled above
+			if( sig ) {
 				// display arrow here
 				PIXVAL c1 = color_idx_to_rgb( COL_GREEN+2 );
 				PIXVAL c2 = color_idx_to_rgb( COL_GREEN );
@@ -1824,20 +1835,19 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 					mask = w->get_ribi_unmasked();
 				}
 
-				if( signal_t* sig = find<signal_t>() ) {
-					if( sig->get_state()==roadsign_t::signalstate::STATE_RED ) {
-						c1 = color_idx_to_rgb( COL_ORANGE+2 );
-						c2 = color_idx_to_rgb( COL_ORANGE );
-					}
+				if( sig->get_two_ways() ) {
+					// display second (reverse) arrow always green
+					ribi_t::ribi mask2 = sig->get_dir();
+					display_signal_direction_rgb( xpos, ypos + tile_raster_scale_y( w->get_yoff(), get_current_tile_raster_width() ),
+						w->get_ribi_unmasked(), mask & ~mask2, c1, c2, w->is_diagonal(), get_weg_hang() );
+					mask = mask2;
+				}
+				if( sig->get_state()==roadsign_t::signalstate::STATE_RED ) {
+					c1 = color_idx_to_rgb( COL_ORANGE+2 );
+					c2 = color_idx_to_rgb( COL_ORANGE );
 				}
 				display_signal_direction_rgb( xpos, ypos + tile_raster_scale_y( w->get_yoff(), get_current_tile_raster_width() ),
 					w->get_ribi_unmasked(), mask, c1, c2, w->is_diagonal(), get_weg_hang() );
-			}
-			else if( w->get_ribi_maske() ) {
-				PIXVAL c1 = color_idx_to_rgb( COL_BLUE+2 );
-				PIXVAL c2 = color_idx_to_rgb( COL_BLUE );
-				display_signal_direction_rgb( xpos, ypos + tile_raster_scale_y( w->get_yoff(), get_current_tile_raster_width() ),
-					w->get_ribi_unmasked(), w->get_ribi_maske(), c1, c2, w->is_diagonal(), get_weg_hang() );
 			}
 		}
 	}

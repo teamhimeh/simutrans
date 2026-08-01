@@ -19,6 +19,7 @@
 #include "route.h"
 #include "environment.h"
 #include "../vehicle/simvehicle.h"
+#include "../obj/roadsign.h"
 
 // define USE_VALGRIND_MEMCHECK to make
 // valgrind aware of the memory pool for A* nodes
@@ -115,7 +116,7 @@ bool route_t::node_in_use=false;
 /**
  * find the route to an unknown location
  */
-bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, bool coupling, const uint8 choose_margin )
+bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin )
 {
 	bool ok = false;
 
@@ -140,7 +141,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	route.clear();
 
 	// first tile is not valid?!?
-	if(  !tdriver->check_next_tile(g, need_electric, true, coupling)  ) {
+	if(  !tdriver->check_next_tile(g, need_electric, true, coupling, koord3d::invalid)  ) {
 		return false;
 	}
 
@@ -160,6 +161,9 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	tmp->f = 0;
 	tmp->g = 0;
 	tmp->dir = 0;
+
+	uint32 platform_length = UINT_MAX;
+	ANode* found_node = NULL;
 
 	assert(start_dir == ribi_t::all  ||  ribi_t::is_single(start_dir) );
 	// start_dir is direction to start with, adjust ribi_from such that bit mask boiles down to start_dir
@@ -203,11 +207,21 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		if(  already_there  ) {
 			// we added a target to the closed list: check for length
 			target_reached = true;
-			break;
+			if(  !length_based  ) {
+				break;
+			}
+			// length based: compare to other.
+			const uint32 found_platform_length = tdriver->get_available_halt_length_in_vehicle_steps(tmp->gr,tmp->ribi_from);
+			if(  platform_length > found_platform_length && found_platform_length > 0  ) {
+				// we found good one:
+				platform_length = found_platform_length;
+				found_node = tmp;
+			}
+			continue;
 		}
 
 		// testing all four possible directions
-		const ribi_t::ribi ribi =  tdriver->get_ribi(gr)  &  ( ~ribi_t::reverse_single(tmp->ribi_from) );
+		const ribi_t::ribi ribi =  tdriver->get_ribi(gr, tmp->ribi_from)  &  ( ~ribi_t::reverse_single(tmp->ribi_from) );
 		for(  int r=0;  r<4;  r++  ) {
 			// a way goes here, and it is not marked (i.e. in the closed list)
 			grund_t* to = NULL;
@@ -215,8 +229,24 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			    && koord_distance(start, gr->get_pos() + koord::nesw[r])<max_depth // not too far away
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
 			    && !marker.is_marked(to) // not already tested
-			    && tdriver->check_next_tile(to, need_electric, true, coupling) // can be driven on
+			    && tdriver->check_next_tile(to, need_electric, true, coupling, gr->get_pos()) // can be driven on
+			    // With entry (backward ribi_from) and exit (nesw[r]) both known, verify that
+			    // a reserved junction tile gr can be co-reserved for this specific transit.
+			    && tdriver->check_transit_tile(gr, tmp->ribi_from, ribi_t::nesw[r])
 			) {
+				// Skip tiles where detailed_oneway forbids entry from this direction.
+				{
+					weg_t *w_to = to->get_weg(wegtyp);
+					if(  w_to  &&  w_to->has_sign()  ) {
+						const roadsign_t *rs = to->find<roadsign_t>();
+						if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+							const ribi_t::ribi entry = ribi_t::nesw[r];
+							if(  !(rs->get_detailed_oneway_out_ribi(entry) & w_to->get_ribi_unmasked() & ~ribi_t::backward(entry))  ) {
+								continue;
+							}
+						}
+					}
+				}
 				// not in there or taken out => add new
 				ANode* k = &nodes[step++];
 
@@ -254,6 +284,16 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 	INT_CHECK("route 194");
 
 	// target reached?
+	if( length_based && target_reached ) {
+		if( found_node != NULL ) {
+			tmp = found_node;
+			step = MAX_STEP-1;
+		} else {
+			// Platforms were found by is_target(), but get_available_halt_length_in_vehicle_steps()
+			// returned 0 for all of them. Treat as no route found.
+			target_reached = false;
+		}
+	}
 	if(!target_reached  ||  step >= MAX_STEP) {
 		if(  step >= MAX_STEP  ) {
 			dbg->warning("route_t::find_route()","Too many steps (%i>=max %i) in route (too long/complex)",step,MAX_STEP);
@@ -399,7 +439,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 		uint32 topnode_f = !queue.empty() ? queue.front()->f : max_cost;
 
-		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr);
+		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr, tmp->ribi_from);
 		// testing all four possible directions
 		// mask direction we came from
 		const ribi_t::ribi ribi =  way_ribi  &  ( ~ribi_t::reverse_single(tmp->ribi_from) )  &  tmp->jps_ribi;
@@ -427,6 +467,16 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 					// there is a signal, and the only direction leaving the next tile
 					// is back to our position
 					continue;
+				}
+				// Do not enter a tile where detailed_oneway forbids entry from this direction.
+				if(  w  &&  w->has_sign()  ) {
+					const roadsign_t *rs = to->find<roadsign_t>();
+					if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+						const ribi_t::ribi entry = next_ribi[r];
+						if(  !(rs->get_detailed_oneway_out_ribi(entry) & w->get_ribi_unmasked() & ~ribi_t::backward(entry))  ) {
+							continue;
+						}
+					}
 				}
 
 				// new values for cost g (without way it is either in the air or in water => no costs)
@@ -781,6 +831,13 @@ bool route_t::is_passable(karte_t *welt, test_driver_t *tdriver, bool need_elect
 		const grund_t *gr = welt->lookup(route[i]);
 		if (!gr || !tdriver->check_next_tile(gr, need_electric)) {
 			return false;
+		}
+		// Since test_driver_t::check_next_tile cannot do the direction check, we need to do that.
+		if( i<route.get_count()-1 ) {
+			const ribi_t::ribi dir = ribi_type(route[i], route[i+1]);
+			if( (gr->get_weg_ribi(tdriver->get_waytype())&dir) == 0 ) {
+				return false;
+			}
 		}
 	}
 	return true;

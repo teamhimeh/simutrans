@@ -14,6 +14,7 @@
 #include "../simdebug.h"
 #include "../simworld.h"
 #include "../bauer/wegbauer.h"
+#include "../bauer/goods_manager.h"
 #include "../descriptor/way_desc.h"
 #include "../utils/simrandom.h"
 #include "../utils/simstring.h"
@@ -79,6 +80,8 @@ settings_t::settings_t() :
 	// since the turning rules are different, driving must now be saved here
 	drive_on_left = false;
 	signals_on_left = false;
+	signal_reverse_front_back = false;
+	roadsign_reverse_front_back = false;
 
 	// forest setting ...
 	forest_base_size = 36;                 // Base forest size - minimal size of forest - map independent
@@ -151,7 +154,8 @@ settings_t::settings_t() :
 
 	electric_promille = 330;
 
-	credit_per_MWs = 2;
+	cst_kw_per_credit = 512;
+
 
 #ifdef OTTD_LIKE
 	// crossconnect all factories (like OTTD and similar games)
@@ -244,6 +248,8 @@ settings_t::settings_t() :
 	// off
 	unprotect_abandoned_player_months = 0;
 
+	allow_unlock_by_public = true;
+
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
 	way_toll_waycost_percentage = 0;
@@ -299,6 +305,7 @@ settings_t::settings_t() :
 	avoid_overcrowding = false;
 	overloading_revenue_reduced = false;
 	overloading_runningcost_increase = true;
+	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
 
@@ -335,9 +342,18 @@ settings_t::settings_t() :
 	base_waiting_ticks_for_ship_convoi = 60000;
 	base_waiting_ticks_for_air_convoi = 200000;
 
+	MEMZERON(reverse_base_offsets, 8);
 	default_reverse=false;
 	allow_unload_longer_convoy=false;
 	allow_higher_flight = true;
+	allow_elevated_way_over_others_halt = false;
+
+	use_route_cache = false;
+
+	transit_by_foot = false;
+	foot_path_weight = 24;
+	foot_path_time_ticks = 1800;
+	walk_cost_to_halt = false;
 }
 
 
@@ -1001,7 +1017,44 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_long(base_waiting_ticks_for_ship_convoi);
 			file->rdwr_long(base_waiting_ticks_for_air_convoi);
 		}
-		if(  file->get_OTRP_version() >= 43  ) {
+		if(  file->get_OTRP_version() >= 56  ) {
+			if(  file->is_saving()  ) {
+				// count enabled entries that have a valid goods desc
+				uint16 count = 0;
+				for(uint16 i = 0; i < 256; i++) {
+					if(  is_time_based_routing_enabled[i]  ) {
+						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
+						if(  desc  ) { count++; }
+					}
+				}
+				file->rdwr_short(count);
+				for(uint16 i = 0; i < 256; i++) {
+					if(  is_time_based_routing_enabled[i]  ) {
+						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
+						if(  desc  ) {
+							const char *name = desc->get_name();
+							file->rdwr_str(name);
+						}
+					}
+				}
+			}
+			else {
+				// loading: reset all flags first, then restore by name
+				MEMZERON(is_time_based_routing_enabled, 256);
+				uint16 count = 0;
+				file->rdwr_short(count);
+				for(uint16 j = 0; j < count; j++) {
+					char name[256];
+					file->rdwr_str(name, lengthof(name));
+					const goods_desc_t *desc = goods_manager_t::get_info(name);
+					// get_info() falls back to 'none' when unknown — skip that case
+					if(  desc  &&  desc != goods_manager_t::none  ) {
+						is_time_based_routing_enabled[desc->get_catg_index()] = true;
+					}
+				}
+			}
+		}
+		else if(  file->get_OTRP_version() >= 43  ) {
 			for(uint16 i=0; i<256; i++) {
 				file->rdwr_bool(is_time_based_routing_enabled[i]);
 			}
@@ -1023,7 +1076,12 @@ void settings_t::rdwr(loadsave_t *file)
 		}
 		if(  file->get_OTRP_version() >= 51  ) {
 			file->rdwr_bool(env_t::use_old_friction);
-			file->rdwr_long( credit_per_MWs );
+			if(  file->get_OTRP_version() < 54  ) {
+				uint32 credit_per_MWs = cst_kw_per_credit>0? 1024/cst_kw_per_credit: 2;
+				// in standard 124.4, this value is set as cst_kw_per_credit
+				file->rdwr_long( credit_per_MWs );
+				cst_kw_per_credit = (credit_per_MWs>0)&&(credit_per_MWs<1025) ? 1024/credit_per_MWs : 512;
+			}
 			file->rdwr_bool(allow_unload_longer_convoy);
 			file->rdwr_bool(allow_higher_flight);
 			file->rdwr_long(growthfactor_small_limit);
@@ -1032,6 +1090,38 @@ void settings_t::rdwr(loadsave_t *file)
 			env_t::use_old_friction = false;
 			allow_unload_longer_convoy = false;
 			allow_higher_flight=true;
+		}
+		if(  file->get_OTRP_version() >= 54  ) {
+			file->rdwr_bool(use_route_cache);
+		} else {
+			use_route_cache = false;
+		}
+		if(  file->get_OTRP_version() >= 55  ) {
+			file->rdwr_bool(signal_reverse_front_back);
+			file->rdwr_bool(roadsign_reverse_front_back);
+		} else {
+			signal_reverse_front_back = false;
+			roadsign_reverse_front_back = false;
+		}
+		if(  file->get_OTRP_version() >= 57  ) {
+			file->rdwr_bool(allow_unlock_by_public);
+			file->rdwr_bool(allow_elevated_way_over_others_halt);
+			file->rdwr_bool(overloaded_acceleration);
+		} else {
+			allow_unlock_by_public = true;
+			allow_elevated_way_over_others_halt = false;
+			overloaded_acceleration = false;
+		}
+		if(  file->get_OTRP_version() >= 58  ) {
+			file->rdwr_bool(transit_by_foot);
+			file->rdwr_long(foot_path_weight);
+			file->rdwr_long(foot_path_time_ticks);
+			file->rdwr_bool(walk_cost_to_halt);
+		} else {
+			transit_by_foot = false;
+			foot_path_weight = 24;
+			foot_path_time_ticks = 1800;
+			walk_cost_to_halt = false;			
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1076,6 +1166,41 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_long(way_count_avoid_crossings);
 			file->rdwr_long(way_count_maximum);
 		}
+
+		if (file->is_version_atleast(124, 4)||file->get_OTRP_version()>=54) {
+			file->rdwr_long(cst_kw_per_credit);
+		}
+		if(  file->get_OTRP_version() >= 56  ) {
+			// network clients must use the server's values; others always use simuconf.tab
+			// (parse_simuconf has already set the field, so non-clients just skip reading)
+			const bool use_local = !env_t::networkmode  ||  env_t::server;
+			if(  use_local  ) {
+				// write local simuconf.tab values so the server can sync them to clients
+				// on load, skip reading so the parse_simuconf values remain
+				if(  file->is_saving()  ) {
+					for(uint8 d = 0; d < 8; d++) {
+						for(uint8 i = 0; i < 3; i++) {
+							file->rdwr_byte(reverse_base_offsets[d][i]);
+						}
+					}
+				} else {
+					// skip the 24 bytes in the stream
+					for(uint8 d = 0; d < 8; d++) {
+						for(uint8 i = 0; i < 3; i++) {
+							sint8 dummy;
+							file->rdwr_byte(dummy);
+						}
+					}
+				}
+			} else {
+				for(uint8 d = 0; d < 8; d++) {
+					for(uint8 i = 0; i < 3; i++) {
+						file->rdwr_byte(reverse_base_offsets[d][i]);
+					}
+				}
+			}
+		}
+		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
 	// sometimes broken savegames could have no legal direction for take off ...
@@ -1155,7 +1280,9 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	env_t::draw_outside_tile = contents.get_int( "draw_outside_tile", env_t::draw_outside_tile ) != 0;
 
 	// display stuff
-	env_t::show_names                  = contents.get_int_clamped( "show_names",                     env_t::show_names,                0, 7 );
+	env_t::night_shift                 = contents.get_int( "day_night_shift",                        env_t::night_shift ) != 0;
+	env_t::daynight_level              = contents.get_int_clamped( "daynight_level",                 env_t::daynight_level,            0, 9 );
+	env_t::show_names                  = contents.get_int_clamped( "show_names",                     env_t::show_names,                0, 31 );
 	env_t::show_month                  = contents.get_int_clamped( "show_month",                     env_t::show_month,                0, 8 );
 	env_t::show_vehicle_states         = contents.get_int_clamped( "show_vehicle_states",            env_t::show_vehicle_states,       0, env_t::MAX_SHOW_VEHICLE_STATES );
 	env_t::show_only_own_vehicle_states= contents.get_int( "show_only_own_vehicle_states",			 env_t::show_only_own_vehicle_states ) != 0;
@@ -1186,12 +1313,12 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 		vector_tpl<int> temp_offset = contents.get_ints(buf);
 		if (temp_offset.get_count()>=3) {
 			for(uint8 i=0; i<3; i++) {
-				env_t::reverse_base_offsets[d_idx][i] = temp_offset[i];
+				reverse_base_offsets[d_idx][i] = temp_offset[i];
 			}
 		} else {
 			for(uint8 i=0; i<3; i++) {
-				env_t::reverse_base_offsets[d_idx][i] = 0;
-			}			
+				reverse_base_offsets[d_idx][i] = 0;
+			}
 		}
 	}
 	// setting default reverse or not when next direction is opposite
@@ -1329,6 +1456,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	drive_on_left                  = contents.get_int( "drive_left",                     drive_on_left ) != 0;
 	signals_on_left                = contents.get_int( "signals_on_left",                signals_on_left ) != 0;
+	signal_reverse_front_back      = contents.get_int( "signal_reverse_front_back",      signal_reverse_front_back ) != 0;
+	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
 
@@ -1488,6 +1617,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	allow_overloading					 = contents.get_int( "allow_overloading", allow_overloading) != 0;
 	overloading_revenue_reduced 		 = contents.get_int( "overloading_revenue_reduced", overloading_revenue_reduced) != 0;
 	overloading_runningcost_increase	 = contents.get_int( "overloading_runningcost_increase", overloading_runningcost_increase) != 0;
+	overloaded_acceleration				 = contents.get_int( "overloaded_acceleration", overloaded_acceleration ) != 0;
 
 	// city stuff
 	passenger_multiplier   = contents.get_int_clamped( "passenger_multiplier",   passenger_multiplier,   0, 100 );
@@ -1628,6 +1758,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// .. read twice: old and correct spelling
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abondoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
 	unprotect_abandoned_player_months = contents.get_int_clamped( "unprotect_abandoned_player_months", unprotect_abandoned_player_months, 0, MAX_PLAYER_HISTORY_YEARS*12 );
+	allow_unlock_by_public = contents.get_int( "allow_unlock_by_public", allow_unlock_by_public ) != 0;
 	default_player_color_random       = contents.get_int( "random_player_colors", default_player_color_random ) != 0;
 
 	for( int i = 0; i < MAX_PLAYER_COUNT; i++ ) {
@@ -1704,7 +1835,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	close_old_factory			   = contents.get_int("close_old_factory", close_old_factory) != 0;
 	factory_max_years_obsolete = contents.get_int("max_years_obsolete", factory_max_years_obsolete);
 
-	credit_per_MWs		   = contents.get_int_clamped( "credit_per_MWs", credit_per_MWs, 1, 10000);
+	cst_kw_per_credit		   = contents.get_int_clamped( "cst_kw_per_credit", cst_kw_per_credit, 1, 10000);
 
 	env_t::just_in_time = contents.get_int_clamped("just_in_time", env_t::just_in_time, 0, 2);
 	just_in_time = env_t::just_in_time;
@@ -1846,6 +1977,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 		= contents.get_int("waiting_limit_for_first_come_first_serve", waiting_limit_for_first_come_first_serve);
 	
 	allow_higher_flight = contents.get_int("allow_higher_flight", allow_higher_flight);
+	use_route_cache = contents.get_int("use_route_cache", use_route_cache);
+	allow_elevated_way_over_others_halt = contents.get_int("allow_elevated_way_over_others_halt", allow_elevated_way_over_others_halt) != 0;
 
 	routecost_wait = contents.get_int("routecost_wait", routecost_wait);
 	routecost_halt = contents.get_int("routecost_halt", routecost_halt);
@@ -1856,6 +1989,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	base_waiting_ticks_for_road_convoi = contents.get_int("base_waiting_ticks_for_road_convoi", base_waiting_ticks_for_road_convoi);
 	base_waiting_ticks_for_ship_convoi = contents.get_int("base_waiting_ticks_for_ship_convoi", base_waiting_ticks_for_ship_convoi);
 	base_waiting_ticks_for_air_convoi = contents.get_int("base_waiting_ticks_for_air_convoi", base_waiting_ticks_for_air_convoi);
+
+	transit_by_foot       = contents.get_int("transit_by_foot",       transit_by_foot) != 0;
+	foot_path_weight      = contents.get_int("foot_path_weight",      foot_path_weight);
+	foot_path_time_ticks  = contents.get_int("foot_path_time_ticks",  foot_path_time_ticks);
+	walk_cost_to_halt     = contents.get_int("walk_cost_to_halt",     walk_cost_to_halt) != 0;
 
 	// Default pak file path
 	objfilename = ltrim(contents.get_string("pak_file_path", objfilename.c_str() ) );

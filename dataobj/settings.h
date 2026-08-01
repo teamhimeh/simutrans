@@ -64,7 +64,7 @@ private:
 	sint32 electric_promille;
 	sint32 tourist_attractions;
 
-	uint32 credit_per_MWs;
+	uint32 cst_kw_per_credit=512;
 
 	sint32 city_count;
 	sint32 mean_citizen_count;
@@ -303,6 +303,8 @@ private:
 	bool overloading_revenue_reduced;
 	/* if set, overcrowded car's running cost is increase*/
 	bool overloading_runningcost_increase;
+	/* if set, acceleration is set as overcrowded when is_full_load_acceleration*/
+	bool overloaded_acceleration;
 
 	// lowest possible income with speedbonus (1000=1) default 125
 	sint32 bonus_basefactor;
@@ -325,6 +327,8 @@ private:
 
 	bool drive_on_left;
 	bool signals_on_left;
+	bool signal_reverse_front_back;
+	bool roadsign_reverse_front_back;
 
 	// fraction of running costs charged for going on other players way
 	sint32 way_toll_runningcost_percentage;
@@ -349,6 +353,9 @@ private:
 
 	// flying height calculation method
 	bool allow_higher_flight;
+
+	// use route cache
+	bool use_route_cache;
 
 	// The flag whether the time based goods routing is enabled for the goods.
 	// The array index is the goods category index.
@@ -378,6 +385,25 @@ private:
 
 	// can unload cargo even if stop length is too short
 	bool allow_unload_longer_convoy;
+	
+	// Graphical and step offsets for reversing vehicles
+	// [direction][offset]: direction order matches ribi_t::dir, offsets are {x, y, length_steps}
+	sint8 reverse_base_offsets[8][3];
+	
+	// can build elevated way over other player's halt
+	bool allow_elevated_way_over_others_halt;
+
+	// public player can unlock any player without entering their password
+	bool allow_unlock_by_public;
+
+	// transit by foot between overlapping pax stops
+	bool transit_by_foot;
+	uint32 foot_path_weight;      // added to route cost for walking connection
+	uint32 foot_path_time_ticks;  // added to journey time for time-based routing
+	// When true, the walking distance from a passenger's origin/destination tile to each
+	// candidate halt is included in the route cost so that nearer halts are preferred.
+	// When false, all halts within station coverage are treated as equidistant (old behaviour).
+	bool walk_cost_to_halt;
 
 public:
 	/* the big cost section */
@@ -477,7 +503,7 @@ public:
 
 	sint32 get_electric_promille() const {return electric_promille;}
 
-	sint32 get_credit_per_MWs() const {return credit_per_MWs;}
+	sint32 get_cst_kw_per_credit() const {return cst_kw_per_credit;}
 
 	void set_tourist_attractions( sint32 n ) { tourist_attractions = n; }
 	sint32 get_tourist_attractions() const {return tourist_attractions;}
@@ -609,6 +635,7 @@ public:
 	bool is_allow_overloading() const {return allow_overloading;}
 	bool is_overloading_revenue_reduced() const {return overloading_revenue_reduced;}
 	bool is_overloading_runningcost_increase() const {return overloading_runningcost_increase;}
+	bool is_overloaded_acceleration() const {return overloaded_acceleration;}
 
 	sint16 get_river_number() const { return river_number; }
 	sint16 get_min_river_length() const { return min_river_length; }
@@ -716,6 +743,8 @@ public:
 
 	bool is_drive_left() const { return drive_on_left; }
 	bool is_signals_left() const { return signals_on_left; }
+	bool get_signal_reverse_front_back() const { return signal_reverse_front_back; }
+	bool get_roadsign_reverse_front_back() const { return roadsign_reverse_front_back; }
 
 	sint32 get_way_toll_runningcost_percentage() const { return way_toll_runningcost_percentage; }
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
@@ -743,6 +772,9 @@ public:
 	void set_advance_to_end(bool b) { advance_to_end = b; }
 
 	bool get_first_come_first_serve() const { return first_come_first_serve; }
+	void set_first_come_first_serve(bool b) { first_come_first_serve = b; }
+	bool get_first_come_first_serve(uint8 goods_catg_index) const
+		{ return first_come_first_serve || get_time_based_routing_enabled(goods_catg_index); }
 	uint32 get_waiting_limit_for_first_come_first_serve() const 
 		{ return waiting_limit_for_first_come_first_serve; }
 
@@ -763,6 +795,27 @@ public:
 	bool is_default_reverse() const {return default_reverse;}
 	// allow unload longer convoy
 	bool is_allow_unload_longer_convoy() const { return allow_unload_longer_convoy; }
+	// get reverse base offsets for a given direction
+	const sint8* get_reverse_base_offsets(uint8 dir) const { return reverse_base_offsets[dir]; }
+
+	bool get_allow_elevated_way_over_others_halt() const { return allow_elevated_way_over_others_halt; }
+	void set_allow_elevated_way_over_others_halt(bool b) { allow_elevated_way_over_others_halt = b; }
+
+	bool get_allow_unlock_by_public() const { return allow_unlock_by_public; }
+	void set_allow_unlock_by_public(bool y) { allow_unlock_by_public = y; }
+
+	bool is_using_route_cache() const { return use_route_cache; }
+
+	bool is_transit_by_foot() const { return transit_by_foot; }
+	void set_transit_by_foot(bool v) { transit_by_foot = v; }
+	uint32 get_foot_path_weight() const { return foot_path_weight; }
+	void set_foot_path_weight(uint32 v) { foot_path_weight = v; }
+	uint32 get_foot_path_time_ticks() const { return foot_path_time_ticks; }
+	void set_foot_path_time_ticks(uint32 v) { foot_path_time_ticks = v; }
+	bool is_walk_cost_to_halt() const { return walk_cost_to_halt; }
+	void set_walk_cost_to_halt(bool v) { walk_cost_to_halt = v; }
+
+	void set_use_route_cache(bool b) { use_route_cache = b; }
 };
 
 #endif

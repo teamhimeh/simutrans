@@ -21,6 +21,8 @@
 #include "components/action_listener.h"
 #include "components/gui_scrollpane.h"
 #include "components/gui_speedbar.h"
+#include "components/gui_scrolled_list.h"
+#include "components/gui_container.h"
 #include "../simtypes.h"
 #include "../utils/cbuffer_t.h"
 #include "../linehandle_t.h"
@@ -28,6 +30,7 @@
 
 class depot_t;
 class vehicle_desc_t;
+class gui_template_panel_t;
 
 
 /*
@@ -108,6 +111,7 @@ private:
 	button_t bt_reverse;
 	button_t bt_uncouple;
 	button_t bt_remove_all_vehicles;
+	button_t bt_allow_invalid_convoy;
 	const char* no_child_text;
 	gui_label_t lb_child_convoy;
 	// coupling convoy selector
@@ -119,6 +123,8 @@ private:
 	bool is_shown_convoy_coupled;
 	// When this flag is true, this convoy will be teleported to another depot set in schedule.
 	bool is_teleport_to_another_depot;
+	// cached value of (active_player == depot_owner) from the previous draw() call; used to detect player switches
+	bool last_action_allowed;
 
 	button_t bt_obsolete;
 	button_t bt_show_all;
@@ -189,6 +195,11 @@ private:
 	gui_scrollpane_t scrolly_tram_electrics;
 	gui_scrollpane_t scrolly_tram_loks;
 	gui_scrollpane_t scrolly_tram_waggons;
+
+	/// Convoy template tab
+	gui_template_panel_t *template_panel;
+	gui_scrollpane_t scrolly_template;
+	gui_container_t cont_template_tab;
 
 	/// contains the current translation of "<no schedule set>"
 	const char* no_schedule_text;

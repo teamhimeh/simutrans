@@ -78,6 +78,7 @@
 #include "dataobj/repositioning.h"
 #include "network/pakset_info.h"
 #include "network/otrp_log_sender.h"
+#include "network/mcp_server.h"
 
 #include "descriptor/reader/obj_reader.h"
 #include "descriptor/sound_desc.h"
@@ -396,6 +397,7 @@ void print_help()
 		"                      1=640x480, 2=800x600, 3=1024x768, 4=1280x1024\n"
 		" -scenario NAME      Load scenario NAME\n"
 		" -screensize WxH     set screensize to width W and height H\n"
+		" -mcp-port PORT      start MCP (Model Context Protocol) server on PORT\n"
 		" -server [PORT]      starts program as server (for network game)\n"
 		"                     without port specified uses 13353\n"
 		" -announce           Enable server announcements\n"
@@ -662,7 +664,7 @@ int simu_main(int argc, char** argv)
 		if(  settings_file.rd_open("settings.xml") == loadsave_t::FILE_STATUS_OK  )  {
 			loadsave_t::combined_version v = loadsave_t::int_version(SAVEGAME_VER_NR, NULL );
 			if(  settings_file.get_version_int()>v.version  ||  settings_file.get_OTRP_version()>v.OTRP_version  ) {
-				// too new => remove it
+				// too new => skip it, run with default values
 				settings_file.close();
 			}
 			else if(  settings_file.is_version_atleast(120, 6)  &&  settings_file.get_OTRP_version()==0  ) {
@@ -820,6 +822,14 @@ int simu_main(int argc, char** argv)
 			// no announce for clients ...
 			env_t::server_announce = 0;
 		}
+	}
+
+	// start MCP server if requested
+	if (args.has_arg("-mcp-port")) {
+		const char *p = args.gimme_arg("-mcp-port", 1);
+		uint16 mcp_port = p ? (uint16)atoi(p) : 13354;
+		if (mcp_port == 0) { mcp_port = 13354; }
+		mcp_server_t::init(mcp_port);
 	}
 
 	DBG_MESSAGE("simu_main()", "Version:    " VERSION_NUMBER "  Date: " VERSION_DATE);
@@ -1154,11 +1164,11 @@ int simu_main(int argc, char** argv)
 	}
 #endif
 
-	// just check before loading objects
-	if(  args.has_arg("-sound")  &&  dr_init_sound()  ) {
+	// Always init sound unless -mute; muted by default if -sound not given
+	if(  !args.has_arg("-mute")  &&  dr_init_sound()  ) {
 		dbg->message("simu_main()","Reading compatibility sound data ...");
 		sound_desc_t::init();
-		sound_set_mute(false);
+		sound_set_mute( !args.has_arg("-sound") );
 	}
 	else {
 		sound_set_mute(true);
@@ -1426,12 +1436,12 @@ int simu_main(int argc, char** argv)
 	// now always writing in user dir (which points to the data dir in multiuser mode)
 	dr_chdir( env_t::user_dir );
 
-	bool is_before_midi = 1;
-	// init midi before loading sounds
-	if(  args.has_arg("-midi")  &&  dr_init_midi() ) {
+	// Always init and load midi unless -mute; muted by default if -midi not given
+	bool is_before_midi = true;
+	if(  !args.has_arg("-mute")  &&  dr_init_midi()  ) {
 		dbg->message("simu_main()","Reading midi data ...");
-		if(  midi_get_mute()  ){
-			is_before_midi = 0;
+		if(  midi_get_mute()  ) {
+			is_before_midi = false;
 		}
 		char pak_dir[PATH_MAX];
 		sprintf( pak_dir, "%s%s", env_t::data_dir, env_t::objfilename.c_str() );
@@ -1439,7 +1449,10 @@ int simu_main(int argc, char** argv)
 			midi_set_mute(true);
 			dbg->message("simu_main()","Midi disabled ...");
 		}
-		midi_set_mute(false);
+		else {
+			// loaded ok; unmute only if -midi was given, otherwise stay muted (user can enable in settings)
+			midi_set_mute( !args.has_arg("-midi") );
+		}
 #ifdef USE_FLUIDSYNTH_MIDI
 		// Audio is ok, but we failed to find a soundfont
 		if(  strcmp( env_t::soundfont_filename.c_str(), "Error" ) == 0  ) {
@@ -1452,11 +1465,6 @@ int simu_main(int argc, char** argv)
 		midi_set_mute(true);
 	}
 
-	if(  args.has_arg("-mute")  ) {
-		sound_set_mute(true);
-		midi_set_mute(true);
-	}
-
 	// restore previous sound settings ...
 	sound_set_mute(  env_t::global_mute_sound  ||  sound_get_mute() );
 	midi_set_mute(  env_t::mute_midi  ||  midi_get_mute() );
@@ -1464,19 +1472,18 @@ int simu_main(int argc, char** argv)
 	sound_set_global_volume( env_t::global_volume );
 	sound_set_midi_volume( env_t::midi_volume );
 	if(  !midi_get_mute()  &&  is_before_midi  ) {
-		// not muted => play random song
-		midi_play( env_t::shuffle_midi ? -1 : 0 );
+		// not muted => play first song (always song 0, regardless of shuffle_midi)
+		midi_play( 0 );
 		// reset volume after first play call else no/low sound or music with win32 and sdl
 		sound_set_midi_volume( env_t::midi_volume );
 	}
-	else if(  !midi_get_mute()  ){
-		// not muted => play random song
-		midi_play( env_t::shuffle_midi ? -1 : 0 );
+	else if(  !midi_get_mute()  ) {
+		// not muted => play first song (always song 0, regardless of shuffle_midi)
+		midi_play( 0 );
 		midi_set_mute(true);
 		midi_set_mute(false);
 		// reset volume after first play call else no/low sound or music with win32 and sdl
 		sound_set_midi_volume( env_t::midi_volume );
-
 	}
 
 	karte_t *welt = new karte_t();
@@ -1777,6 +1784,7 @@ int simu_main(int argc, char** argv)
 	delete eventmanager;
 	eventmanager = NULL;
 
+	mcp_server_t::shutdown();
 	remove_port_forwarding( env_t::server );
 	network_core_shutdown();
 

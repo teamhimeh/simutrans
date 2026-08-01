@@ -9,6 +9,7 @@
 #include "simworld.h"
 
 #include "utils/simstring.h"
+#include "dataobj/environment.h"
 #include "dataobj/schedule.h"
 #include "dataobj/translator.h"
 #include "dataobj/loadsave.h"
@@ -45,7 +46,7 @@ simline_t::simline_t(player_t* player, linetype type)
 	sprintf(printname, "(%i) %s", self.get_id(), translator::translate("Line", welt->get_settings().get_name_language_id()));
 	name = printname;
 	memo = "";
-	colour = player->get_player_color1();
+	colour = player->get_player_color1() + env_t::gui_player_color_bright;
 
 	init_financial_history();
 	this->type = type;
@@ -235,9 +236,21 @@ void simline_t::remove_convoy(convoihandle_t cnv)
 
 void simline_t::rdwr_linehandle_t(loadsave_t *file, linehandle_t &line)
 {
+	if(  file->get_OTRP_version() >= 55  ) {
+		uint32 id = 0;
+		if(  file->is_saving()  ) {
+			id = line.is_bound() ? line.get_id() : 0;
+		}
+		file->rdwr_long(id);
+		if(  file->is_loading()  ) {
+			line.set_id(id);
+		}
+		return;
+	}
+
 	uint16 id;
 	if (file->is_saving()) {
-		id = line.is_bound() ? line.get_id() :
+		id = line.is_bound() ? (uint16)line.get_id() :
 			 (file->is_version_less(110, 0)  ? INVALID_LINE_ID_OLD : INVALID_LINE_ID);
 	}
 	else {
@@ -380,7 +393,7 @@ void simline_t::register_stops(schedule_t * schedule)
 DBG_DEBUG("simline_t::register_stops()", "%d schedule entries in schedule %p", schedule->get_count(),schedule);
 	FOR(minivec_tpl<schedule_entry_t>, const& i, schedule->get_entries()) {
 		halthandle_t const halt = haltestelle_t::get_stoppable_halt(i.pos, player, schedule->get_waytype());
-		if(halt.is_bound()) {
+		if(halt.is_bound()&&!i.is_pass_stop()) {
 //DBG_DEBUG("simline_t::register_stops()", "halt not null");
 			halt->add_line(self);
 		}

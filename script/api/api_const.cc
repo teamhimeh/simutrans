@@ -4,6 +4,7 @@
  */
 
 #include "api.h"
+#include "../../boden/wege/strasse.h"
 
 /** @file api_const.cc exports constants */
 
@@ -66,6 +67,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_build_station", TOOL_BUILD_STATION | GENERAL_TOOL);
 	/// build signals and road signs
 	enum_slot(vm, "tool_build_roadsign", TOOL_BUILD_ROADSIGN | GENERAL_TOOL);
+	/// remove signals
+	enum_slot(vm, "tool_remove_signal", TOOL_REMOVE_SIGNAL | GENERAL_TOOL);
 	/// build depot
 	enum_slot(vm, "tool_build_depot", TOOL_BUILD_DEPOT | GENERAL_TOOL);
 	/// build city houses
@@ -92,6 +95,8 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_make_stop_public", TOOL_MAKE_STOP_PUBLIC | GENERAL_TOOL);
 	/// remove way objects like overheadwires
 	enum_slot(vm, "tool_remove_wayobj", TOOL_REMOVE_WAYOBJ | GENERAL_TOOL);
+	/// remove city buildings (not factories, attractions, halts, or cityhalls)
+	enum_slot(vm, "tool_remove_house", TOOL_REMOVE_HOUSE | GENERAL_TOOL);
 	// not needed? enum__slot(vm, "tool_sliced_and_underground_view", TOOL_SLICED_AND_UNDERGROUND_VIEW | GENERAL_TOOL);
 	/// buy a house
 	enum_slot(vm, "tool_buy_house", TOOL_BUY_HOUSE | GENERAL_TOOL);
@@ -103,12 +108,16 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "tool_set_climate", TOOL_SET_CLIMATE | GENERAL_TOOL);
 	/// rotate a building
 	enum_slot(vm, "tool_rotate_building", TOOL_ROTATE_BUILDING | GENERAL_TOOL);
+	/// remove halt (two-click: ctrl=area, no ctrl/shift=route, drag=route)
+	enum_slot(vm, "tool_remove_halt", TOOL_REMOVE_HALT | GENERAL_TOOL);
 	/// merge two stops
 	enum_slot(vm, "tool_merge_stop", TOOL_MERGE_STOP | GENERAL_TOOL);
 	/// scripted tool (one-click)
 	enum_slot(vm, "tool_exec_script", TOOL_EXEC_SCRIPT | GENERAL_TOOL);
 	/// scripted tool (two-click)
 	enum_slot(vm, "tool_exec_two_click_script", TOOL_EXEC_TWO_CLICK_SCRIPT | GENERAL_TOOL);
+	/// remove bridge pillars only
+	enum_slot(vm, "tool_remove_pillar", TOOL_REMOVE_PILLAR | GENERAL_TOOL);
 
 	// simple tools
 	/// increase industry density
@@ -185,6 +194,40 @@ void export_global_constants(HSQUIRRELVM vm)
 	enum_slot(vm, "st_runway", type_runway);
 	/// tram tracks (here way type has to be wt_tram)
 	enum_slot(vm, "st_tram", type_tram);
+	end_enum();
+
+	/**
+	 * Conditions for overtaking on roads.
+	 */
+	begin_enum("overtaking_modes");
+	/// vehicles can stop on passing lane
+	enum_slot(vm, "halt_mode", halt_mode);
+	/// condition for one-way road
+	enum_slot(vm, "oneway_mode", oneway_mode);
+	/// condition for two-way road
+	enum_slot(vm, "twoway_mode", twoway_mode);
+	/// overtake a loading convoy only
+	enum_slot(vm, "loading_only_mode", loading_only_mode);
+	/// overtaking is completely forbidden
+	enum_slot(vm, "prohibited_mode", prohibited_mode);
+	/// vehicles can go only on passing lane
+	enum_slot(vm, "inverted_mode", inverted_mode);
+	end_enum();
+
+	/**
+	 * Flags for roads.
+	 */
+	begin_enum("street_flags");
+	/// this street avoid becoming cityroad.
+	enum_slot(vm, "road_avoid_cityroad", strasse_t::AVOID_CITYROAD);
+	/// citycar cannot enter this road.
+	enum_slot(vm, "road_citycar_no_entry", strasse_t::CITYCAR_NO_ENTRY);
+	/// no building can be built adjacent to this road
+	enum_slot(vm, "road_no_building", strasse_t::NO_BUILDING);
+	/// allow branch cityroad from avoid-cityroad
+	enum_slot(vm, "road_allow_branch_cityroad", strasse_t::ALLOW_BRANCH_CITYROAD);
+	/// pedestrian cannot enter this road.
+	enum_slot(vm, "road_pedestrian_no_entry", strasse_t::PEDESTRIAN_NO_ENTRY);
 	end_enum();
 
 	// players

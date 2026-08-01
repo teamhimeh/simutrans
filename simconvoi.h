@@ -91,6 +91,8 @@ public:
 		COUPLED,
 		COUPLED_LOADING,
 		WAITING_FOR_LEAVING_DEPOT,
+		SUSPENSION,
+		SUSPENSION_LOADING,
 		MAX_STATES
 	};
 
@@ -132,6 +134,11 @@ private:
 	 */
 	sint32 sum_gear_and_power;
 	sint32 sum_gear_and_power_electric;
+
+	/*
+	* use electric or not
+	* YOU MUST UPDATE THIS FLAG WHEN CALCULATE ROUTE!!!!!
+	*/
 	bool use_electric;
 
 	// 40 bytes
@@ -269,6 +276,12 @@ private:
 	bool no_load;
 
 	/**
+	* get off all goods at the next stop
+	* this flag should be reset when get off all goods.
+	*/
+	bool unload_all;
+
+	/**
 	* uncouple at this stop
 	*/
 	bool uncouple_done;
@@ -316,6 +329,7 @@ private:
 	 * This holds coordinates reserved by this convoy.
 	 * Used when reservation is triggered by longblocksignal.
 	 * @author THLeaderH
+	 * from v55_5, we add/remove tiles by front vehicle!
 	 */
 	vector_tpl<koord3d> reserved_tiles;
 
@@ -415,6 +429,13 @@ private:
 	uint16 max_balance_speed_convoi;
 
 	/**
+	 * invalid convoy: invalid coupling condition, etc..
+	 * if set "allow invalid convoy" in depot, it can be.
+	 * no load/ no engine.
+	 */
+	bool invalid_convoy;
+
+	/**
 	* Initialize all variables with default values.
 	* Each constructor must call this method first!
 	*/
@@ -432,6 +453,7 @@ private:
 	*/
 	bool insert_route_convoy_on();
 	koord3d const find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir);
+	koord3d const search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n);
 	bool insert_route_to_draw_diagonal();
 	// alte_richtung of coupled convoy is set by the head convoy.
 	void set_alte_richtung(ribi_t::ribi r) { alte_richtung = r; }
@@ -551,6 +573,9 @@ private:
 	// a helper function for convoi_t::vorfahren(), check reserved_tiles
 	void clear_reserved_tile_if_not_matching_route();
 
+	// a helper function for convoi_t::vorfahren(), check the convoy run same direction, CALL BEFORE RESET THE POSITION.
+	bool go_same_direction_check_for_middle_convoys(const route_t* const &r) const;
+
 	// total length is enough than this length->coupling cancel
 	bool cease_coupling_due_to_length_over;
 
@@ -624,6 +649,12 @@ public:
 	* reset state to no error message
 	*/
 	void reset_waiting() { state=WAITING_FOR_CLEARANCE; }
+
+	/**
+	* suspension
+	*/
+	bool is_suspended() const { return state==SUSPENSION || state==SUSPENSION_LOADING; }
+	void set_suspension( bool y );
 
 	/**
 	* The handle for ourselves. In Anlehnung an 'this' aber mit
@@ -726,7 +757,7 @@ public:
 	 * @return total power of this convoi
 	 */
 	const uint32 & get_sum_power() const {return sum_power;}
-	const sint32 get_sum_gear_and_power() const {return use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric;}
+	const sint32 get_sum_gear_and_power() const {return invalid_convoy?0:(use_electric? sum_gear_and_power: sum_gear_and_power-sum_gear_and_power_electric);}
 	const sint32 & get_min_top_speed() const {return min_top_speed;}
 	const sint32 & get_speed_limit() const {return speed_limit;}
 
@@ -913,6 +944,12 @@ public:
 	bool in_depot() const { return state == INITIAL; }
 
 	/**
+	 * invalid convoy: invalid coupling condition
+	 */
+	bool is_invalid_convoy() const { return invalid_convoy; }
+	void set_invalid_convoy(bool y) { invalid_convoy = y; }
+
+	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
 	* vehicles.
 	*/
@@ -930,7 +967,7 @@ public:
 	*/
 	const uint32 &get_loading_waiting_time() const { return loading_waiting_time; }
 
-	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING; }
+	bool is_loading() const { return state==LOADING  ||  state==COUPLED_LOADING  ||  state==SUSPENSION_LOADING; }
 
 	/**
 	* Schedule convois for self destruction. Will be executed
@@ -982,6 +1019,8 @@ public:
 	void set_home_depot(koord3d hd) { home_depot = hd; }
 
 	koord3d get_home_depot() { return home_depot; }
+
+	const char* get_home_depot_name();
 
 	/**
 	 * Sends convoi to nearest depot.
@@ -1054,6 +1093,10 @@ public:
 
 	void set_no_load(bool new_no_load) { no_load = new_no_load; }
 
+	bool get_unload_all() const { return unload_all; }
+
+	void set_unload_all(bool new_unload_all) { unload_all = new_unload_all; }
+
 	void must_recalc_data() { recalc_data = true; }
 	void must_recalc_data_front() { recalc_data_front = true; }
 	void must_recalc_speed_limit() { recalc_speed_limit = true; }
@@ -1109,7 +1152,7 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
-	convoihandle_t uncouple_convoi();
+	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;

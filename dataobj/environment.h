@@ -298,6 +298,15 @@ public:
 	static bool show_line_colors;
 	static bool show_convoy_loadinglevel;
 
+	/// Controls clipping of objects below elevated ways/bridges
+	/// 0 = never clip (no cut), 1 = always clip (all cut), 2 = use pak descriptor (pak dependence)
+	enum clip_below_mode {
+		CLIP_BELOW_NEVER  = 0,
+		CLIP_BELOW_ALWAYS = 1,
+		CLIP_BELOW_PAK    = 2
+	};
+	static sint8 clip_below;
+
 	/// show station coverage indicators
 	static uint8 station_coverage_show;
 
@@ -351,11 +360,26 @@ public:
 	static bool draw_outside_tile;
 
 	/**
+	 * Bit flags for show_names.
+	 * @see grund_t::display_overlay
+	 * @see haltestelle_t::display_status
+	 */
+	enum show_names_flags_t {
+		SHOW_NAME             = 1 << 0, ///< show city/station name label
+		SHOW_WAITING_BARS     = 1 << 1, ///< show station waiting bars
+		SHOW_NAME_TYPE2       = 1 << 2, ///< name label style 2 (outline)
+		SHOW_NAME_TYPE3       = 1 << 3, ///< name label style 3 (boxed)
+		SHOW_ALLOWED_PLAYERS  = 1 << 4  ///< show per-player stop permission bars
+	};
+
+	/**
 	 * Show labels (city and station names, ...)
-	 * and waiting indicator bar for stations
+	 * and waiting indicator bar / allowed player bars for stations
 	 * @see grund_t::display_overlay
 	 */
 	static sint32 show_names;
+
+	static sint32 const bars_settings = env_t::SHOW_WAITING_BARS|env_t::SHOW_ALLOWED_PLAYERS;
 
 	/// Show factory storage bar
 	static uint8 show_factory_storage_bar;
@@ -562,17 +586,6 @@ public:
 	// overtaking offset
 	static sint8 overtaking_base_offsets[8][2];
 
-	// Graphical offsets for reverseing vehicles
-	// [directions][offsets]
-	// directions:{"south", "west", "southwest", "southeast", "north", "east", "northeast", "northwest"}
-	// offsets   :{x_offset,y_offset,length_offset}
-	// these parameters are written in simuconf.tab, such as:
-	// 	reverse_base_offset_east = 0, 0, 18
-	// 	reverse_base_offset_west = 0, 2, 14 
-	//
-	// Write the 8 directions in characters and the amount of offset in numbers with 3 components.
-	// the reading method is in setting_t, and these parameters are used in vehicle_t.
-	static sint8 reverse_base_offsets[8][3];
 	// define reversible waytype
 	static bool reversible_waytype(waytype_t w) {
 		return	w!=waytype_t::invalid_wt&&

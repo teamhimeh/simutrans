@@ -5,6 +5,7 @@
 
 #include "../simmenu.h"
 #include "../simworld.h"
+#include "../dataobj/ribi.h"
 
 signal_info_t::signal_info_t(signal_t* s) :
 obj_infowin_t(s),
@@ -52,22 +53,36 @@ signal(s)
 		add_component(&bt_skip_default_route);
 	}
 
-	add_table(2,0);
-	{
-		lb_tiles_margin.set_text("Margin");
-		lb_tiles_margin.set_tooltip(translator::translate("tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)"));
-		numinp_tiles_margin.set_width(50);
-		numinp_tiles_margin.set_height(5);
-		numinp_tiles_margin.set_limits(0,200);
-		numinp_tiles_margin.set_increment_mode(1);
-		numinp_tiles_margin.disable();
-		numinp_tiles_margin.add_listener(this);
-		if(signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end()) {
+	bt_length_based.init( button_t::square_state, translator::translate("Length based choose") );
+	bt_length_based.add_listener(this);
+	bt_length_based.pressed = signal->is_length_based();
+	if(  signal->get_desc()->is_choose_sign()  ) {
+		add_component(&bt_length_based);
+	}
+
+	lb_tiles_margin.set_text("Margin");
+	lb_tiles_margin.set_tooltip(translator::translate("tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)"));
+	numinp_tiles_margin.set_width(50);
+	numinp_tiles_margin.set_height(5);
+	numinp_tiles_margin.set_limits(0,200);
+	numinp_tiles_margin.set_increment_mode(1);
+	numinp_tiles_margin.disable();
+	numinp_tiles_margin.add_listener(this);
+	if(signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end()) {
+		add_table(2,0);
+		{
 			add_component(&lb_tiles_margin);
 			add_component(&numinp_tiles_margin);
 		}
+		end_table();
 	}
-	end_table();
+
+	bt_two_ways.init( button_t::square_state, translator::translate("allow reverse passage") );
+	bt_two_ways.set_tooltip(translator::translate("Allow reverse passage for convoys"));
+	bt_two_ways.add_listener(this);
+	bt_two_ways.pressed = signal->get_two_ways();
+	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );
+	add_component(&bt_two_ways);
 
 	bt_remove_signal.init( button_t::roundbox, translator::translate("remove signal"));
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
@@ -147,6 +162,22 @@ bool signal_info_t::action_triggered( gui_action_creator_t* comp, value_t p)
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+	if(  comp==&bt_length_based  ) {
+		char param[256];
+		bool v = signal->is_length_based();
+		sprintf( param, "%s,%i,l", signal->get_pos().get_str(), !v );
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param( param );
+		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
+		return true;
+	}
+	if(  comp==&bt_two_ways  ) {
+		char param[256];
+		bool v = signal->get_two_ways();
+		sprintf( param, "%s,%i,w", signal->get_pos().get_str(), !v );
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param( param );
+		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
+		return true;
+	}
 	return false;
 }
 
@@ -160,17 +191,22 @@ void signal_info_t::update_data()
 	bt_stop_before_check.pressed = signal->is_stop_before_check();
 	bt_skip_default_route.pressed = signal->is_skip_default_route();
 	bt_start_signal.pressed = signal->is_start_signal();
+	bt_length_based.pressed = signal->is_length_based();
 	if(  signal->is_choose_signal()  ) {
 		bt_advance_to_end.enable();
 		numinp_tiles_margin.enable();
 		numinp_tiles_margin.set_value(signal->get_margin_length());
+		bt_length_based.enable();
 	} else {
 		bt_advance_to_end.disable();
 		numinp_tiles_margin.disable();
 		bt_stop_before_check.enable(signal->get_desc()->is_longblock_signal());
+		bt_length_based.disable();
 	}
 	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->get_desc()->is_choose_sign()  ) {
 		bt_stop_before_check.enable();
 	}
+	bt_two_ways.pressed = signal->get_two_ways();
+	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
 }
