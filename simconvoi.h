@@ -1171,6 +1171,8 @@ public:
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;
+	// true if self or any coupling child is currently blocked waiting for departure allowance by another convoy.
+	bool is_waiting_for_departure_allowance() const;
 	void set_convoi_coupling_in_progress(convoihandle_t);
 	convoihandle_t get_convoi_coupling_in_progress() const { return convoi_coupling_in_progress; }
 	void unset_convoi_coupling_in_progress();

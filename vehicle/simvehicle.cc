@@ -2042,6 +2042,10 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 						snprintf( states_text, states_text_size, translator::translate("Waiting for schedule. %i left!"), time_remain);
 					}
 				}
+				else if(  cnv->is_waiting_for_departure_allowance()  ) {
+					// the convoy is waiting for departure allowance granted by another convoy.
+					tstrncpy( states_text, translator::translate("Waiting for departure allowance!"), lengthof(states_text) );
+				}
 				else if(  cnv->is_waiting_for_coupling()  ) {
 					// the convoy is waiting for coupling.
 					convoihandle_t c = cnv->self;

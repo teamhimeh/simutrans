@@ -6218,6 +6218,16 @@ bool convoi_t::is_waiting_for_coupling() const {
 	return waiting_for_coupling;
 }
 
+bool convoi_t::is_waiting_for_departure_allowance() const {
+	convoihandle_t c = self;
+	bool waiting_for_allowance = false;
+	while(  c.is_bound()  ) {
+		waiting_for_allowance |= (  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy());
+		c = c->get_coupling_convoi();
+	}
+	return waiting_for_allowance;
+}
+
 void convoi_t::allow_other_convoy_to_depart(halthandle_t halt) const {
 	const linehandle_t target_line = get_schedule()->get_current_entry().get_allow_depart_line();
 	if(  !halt.is_bound()  ||  !target_line.is_bound()  ) {
