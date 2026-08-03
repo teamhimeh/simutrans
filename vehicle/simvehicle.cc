@@ -2507,6 +2507,23 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 
 	// eventually shift position to take care of overtaking
 	if(cnv) {
+		// first we set reversing images
+		if(  cnv->is_reversed()  ) {
+			if(  cnv->get_schedule()->is_same_lane_back()  ) {
+				if(  welt->get_settings().is_drive_left()  ) {
+					xoff -= 2*tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
+					yoff -= 2*tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
+				} else {
+					xoff -= tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
+					yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );	
+				}
+			}
+			else if(  welt->get_settings().is_drive_left()  ) {
+				xoff -= tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
+				yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );	
+			}
+		}
+
 		if(  welt->lookup(get_pos()) && welt->lookup(get_pos())->get_weg(get_waytype())  ) {
 		xoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),true,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
 		yoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),false,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
