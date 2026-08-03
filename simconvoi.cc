@@ -6224,7 +6224,7 @@ void convoi_t::allow_other_convoy_to_depart(halthandle_t halt) const {
 		return;
 	}
 	FOR(  vector_tpl<convoihandle_t>,  cnv,  halt->get_loading_convois()  ) {
-		if(  !cnv.is_bound()  ||  cnv->get_line() != target_line  ) {
+		if(  !cnv.is_bound()  ||  cnv->get_line() != target_line  ||  cnv==self  ) {
 			continue;
 		}
 		// only one convoy is granted departure allowance per arrival; check leading and child convoys.
