@@ -16,6 +16,7 @@ include("tests/test_dir")
 include("tests/test_factory")
 include("tests/test_convoy_cargo")
 include("tests/test_good")
+include("tests/test_gui_accessibility")
 include("tests/test_groundobj")
 include("tests/test_halt")
 include("tests/test_headquarters")
@@ -33,8 +34,10 @@ include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
+include("tests/test_transit_by_foot")
 include("tests/test_trees")
 include("tests/test_way_bridge")
+include("tests/test_way_elevated")
 include("tests/test_way_road")
 include("tests/test_way_runway")
 include("tests/test_way_tram")
@@ -44,7 +47,12 @@ include("tests/test_schedule")
 include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
+include("tests/test_priority_signal_crossing")
 include("tests/test_otrp_signal_options")
+include("tests/test_reroute_reservation")
+include("tests/test_remove_house")
+include("tests/test_pillar")
+include("tests/test_crossing_reservation")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -101,6 +109,7 @@ all_tests <- [
 	test_convoy_cargo_loaded,
 	test_good_is_interchangeable,
 	test_good_speed_bonus,
+	test_gui_accessibility_windows_and_components,
 	test_groundobj_build_invalid_param,
 	test_groundobj_build_invalid_pos,
 	test_groundobj_build_random,
@@ -133,10 +142,17 @@ all_tests <- [
 	test_halt_make_public_multi_tile,
 	test_halt_make_public_underground,
 	test_halt_move_stop_invalid_param,
+	test_remove_halt_area_same_height,
+	test_remove_halt_area_different_height,
+	test_remove_halt_route_valid,
+	test_remove_halt_route_invalid,
+	test_remove_halt_other_player,
 	test_headquarters_build_flat,
 	test_label,
 	test_player_cash,
 	test_player_isactive,
+	test_player_create,
+	test_gui_open_dialog_tool_invalid,
 	test_player_headquarters,
 	test_player_name,
 	test_player_lines,
@@ -161,6 +177,9 @@ all_tests <- [
 	test_sign_build_private_way,
 	test_sign_build_signal,
 	test_sign_build_signal_multiple,
+	test_sign_remove_signal_route,
+	test_sign_remove_signal_area_ctrl,
+	test_sign_remove_signal_keeps_other_player_signal,
 	test_sign_signal_turns_red_on_leading_vehicle,
 	test_sign_signal_when_player_removed,
 	test_slope_to_dir,
@@ -183,6 +202,9 @@ all_tests <- [
 	test_trees_plant_single_max_per_square,
 	test_way_bridge_build_ground,
 	test_way_bridge_planner,
+	test_way_elevated_build_over_other_player_halt_setting_off,
+	test_way_elevated_build_over_other_player_halt_setting_on,
+	test_way_elevated_build_over_other_player_non_halt_forbidden,
 	test_way_road_has_double_slopes,
 	test_way_road_build_single_tile,
 	test_way_road_build_straight,
@@ -224,6 +246,15 @@ all_tests <- [
 	test_transport_route_cache_invalidation,
 	test_transport_route_cache_need_electric,
 	test_transport_two_convoys_on_same_line,
+	test_transit_by_foot_connection_range_weight_and_goods,
+	test_transit_by_foot_time_based_weight,
+	test_transit_by_foot_height_difference,
+	test_transit_by_foot_vehicle_connection_precedes_walking,
+	test_transit_by_foot_between_two_vehicle_legs,
+	test_transit_by_foot_not_used_as_first_leg,
+	test_transit_by_foot_not_used_as_last_leg,
+	test_transit_by_foot_not_used_twice_consecutively,
+	test_transit_by_foot_walk_cost_to_halt_prefers_nearer_halts,
 	test_start_signal_default_false,
 	test_start_signal_convoy_stays_at_station,
 	test_start_signal_false_convoy_advances_to_signal,
@@ -235,6 +266,7 @@ all_tests <- [
 	test_stop_before_check_choose_signal_convoy_stops,
 	test_stop_before_check_false_convoy_does_not_stop,
 	test_priority_signal_reserve,
+	test_priority_signal_before_crossing_no_slowdown,
 	test_longblock_open_no_prefix_signal,
 	test_longblock_blocked_no_prefix_signal,
 	test_longblock_open_pre_signal,
@@ -274,7 +306,27 @@ all_tests <- [
 	test_road_choose_stop_behind_twoway_mode,
 	test_road_choose_stop_behind_loading_only_mode,
 	test_road_choose_stop_behind_inverted_mode,
-	test_road_choose_no_stop_behind_prohibited_mode
+	test_road_choose_no_stop_behind_prohibited_mode,
+	test_rail_reroute_no_line,
+	test_rail_reroute_with_line_stale_cache,
+	test_rail_reroute_with_line_mid_travel,
+	test_remove_house_one_click,
+	test_remove_house_area,
+	test_remove_pillar_tool_basic,
+	test_remover_pillar_priority,
+	test_remove_pillar_tool_shift_area,
+	// 4-way crossing PBS co-reservation
+	test_crossing_straight_single_convoy,
+	test_crossing_straight_two_convoys_sequential,
+	test_crossing_straight_opposite_directions,
+	test_crossing_three_way_single_convoy,
+	test_crossing_four_way_ne_sw_permitted_a_first,
+	test_crossing_four_way_ne_sw_permitted_b_first,
+	test_crossing_four_way_se_nw_permitted_a_first,
+	test_crossing_four_way_se_nw_permitted_b_first,
+	test_crossing_four_way_ns_sequential_prohibited,
+	test_crossing_four_way_ne_ne_sequential_prohibited,
+	test_crossing_four_way_ne_se_sequential_prohibited,
 ]
 
 

@@ -23,6 +23,7 @@
 #include "halt_list_frame.h"
 #include "../simline.h"
 #include "../descriptor/goods_desc.h"
+#include "../dataobj/route.h"
 
 class player_t;
 
@@ -31,19 +32,29 @@ class player_t;
  */
 class schedule_list_gui_t : public gui_frame_t, public action_listener_t
 {
+public:
+	// not recorded in financial_history; index is outside the MAX_LINE_COST saved range
+	static const int MAX_LINE_COST_GUI = MAX_LINE_COST + 1;
+
 private:
 	player_t *player, *old_player;
 
 	button_t bt_new_line, bt_edit_line, bt_delete_line, bt_withdraw_line, bt_teleport_line_to_depot;
 	button_t bt_copy_line, bt_show_journey_time, bt_goods_waiting_time;
 	button_t bt_copy_data;
+	button_t bt_show_route_cache;
+	bool is_route_cache_show;
+	route_t route_cache_route;
+	void show_route_cache(bool yesno);
+	static void hide_route_display(void *owner);
 	gui_scrolled_list_t scl, scrolly_convois, scrolly_haltestellen;
 	gui_speedbar_t filled_bar;
 	button_t bt_colour_line;
 	gui_textinput_t inp_name, inp_filter, inp_memo;
 	gui_label_t lbl_filter, lbl_memo, lbl_name, lbl_colour;
 	gui_chart_t chart;
-	button_t filterButtons[MAX_LINE_COST];
+	button_t filterButtons[MAX_LINE_COST_GUI];
+	sint64 transport_density_history[MAX_MONTHS];
 	gui_tab_panel_t tabs;
 
 	gui_combobox_t freight_type_c, sort_type_c;
