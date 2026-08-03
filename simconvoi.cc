@@ -4369,6 +4369,16 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		else if( halt.is_bound() && schedule->is_full_load_time() ){
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
+		if(  !unloading_done  ) {
+			// Grant departure allowance to a waiting convoy of another line, if configured.
+			// This runs after unloading (self and all coupling children) so that goods just
+			// unloaded here are already available at the halt for the released convoy to load.
+			c = self;
+			while(  c.is_bound()  ) {
+				c->allow_other_convoy_to_depart(halt);
+				c = c->get_coupling_convoi();
+			}
+		}
 	}
 	if(  !schedule->get_current_entry().is_no_unload()  ) 
 	{
@@ -4444,15 +4454,6 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if(  coupling_convoi.is_bound()  ) {
 		// load/unload cargo of coupling convoy.
 		coupling_convoi->hat_gehalten(halt, coupling_convoi->calc_available_halt_length_in_vehicle_steps(coupling_convoi->front()->get_pos(), coupling_convoi->front()->get_direction()));
-	}
-
-	// Grant departure allowance to a waiting convoy of another line, if configured.
-	// This runs after unloading (self and all coupling children) so that goods just
-	// unloaded here are already available at the halt for the released convoy to load.
-	c = self;
-	while(  c.is_bound()  ) {
-		c->allow_other_convoy_to_depart(halt);
-		c = c->get_coupling_convoi();
 	}
 
 	bool coupling_cond = (self->get_schedule()->get_current_entry().is_wait_for_coupling()  &&  !self->is_coupling_done()  &&  !(self->get_coupling_convoi().is_bound()  &&  self->is_coupled()));
