@@ -4237,6 +4237,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 	// parse to next signal; if needed recurse, since we allow cascading
 	uint16 next_signal, next_crossing;
 
+	// Where we were told to stop before this check began. can_enter_tile() re-checks a priority
+	// signal on every tile while the convoy is next to it, so we get here again after
+	// can_enter_tile() has already requested the crossing behind the signal and moved the stop
+	// point past it -- and the recursive is_signal_clear() below overwrites next_stop_index, so
+	// afterwards there is no way to tell that apart. Remember it now.
+	const uint16 stop_index_before = cnv->get_next_stop_index();
+
 	if(  block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false )  ) {
 		if(  next_signal == route_t::INVALID_INDEX  ||  cnv->get_route()->at(next_signal) == cnv->get_route()->back()  ) {
 			// ok, end of route => we can go
@@ -4250,7 +4257,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			// ok, the next signal is clear
 			sig->set_state( roadsign_t::STATE_GREEN );
 			// Only shorten next_stop_index when a crossing requires an earlier stop.
-			if(  next_crossing < cnv->get_next_stop_index() - 1  ) {
+			// A crossing that already lay behind stop_index_before-1 is one can_enter_tile()
+			// has requested and moved us past; braking for it again would undo that advance on
+			// every re-check and hold the convoy inside the brake countdown all the way over
+			// the crossing. Reached from can_enter_tile()'s block_reserver path this changes
+			// nothing: there stop_index_before-1 is next_block, and block_reserver() starts at
+			// next_block+1, so next_crossing is always beyond it.
+			if(  next_crossing+1 >= stop_index_before  &&  next_crossing < cnv->get_next_stop_index() - 1  ) {
 				cnv->set_next_stop_index( next_crossing );
 			}
 			return true;
