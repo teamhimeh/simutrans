@@ -19,6 +19,7 @@
 #include "route.h"
 #include "environment.h"
 #include "../vehicle/simvehicle.h"
+#include "../obj/roadsign.h"
 
 // define USE_VALGRIND_MEMCHECK to make
 // valgrind aware of the memory pool for A* nodes
@@ -220,7 +221,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		}
 
 		// testing all four possible directions
-		const ribi_t::ribi ribi =  tdriver->get_ribi(gr)  &  ( ~ribi_t::reverse_single(tmp->ribi_from) );
+		const ribi_t::ribi ribi =  tdriver->get_ribi(gr, tmp->ribi_from)  &  ( ~ribi_t::reverse_single(tmp->ribi_from) );
 		for(  int r=0;  r<4;  r++  ) {
 			// a way goes here, and it is not marked (i.e. in the closed list)
 			grund_t* to = NULL;
@@ -229,7 +230,23 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
 			    && !marker.is_marked(to) // not already tested
 			    && tdriver->check_next_tile(to, need_electric, true, coupling, gr->get_pos()) // can be driven on
+			    // With entry (backward ribi_from) and exit (nesw[r]) both known, verify that
+			    // a reserved junction tile gr can be co-reserved for this specific transit.
+			    && tdriver->check_transit_tile(gr, tmp->ribi_from, ribi_t::nesw[r])
 			) {
+				// Skip tiles where detailed_oneway forbids entry from this direction.
+				{
+					weg_t *w_to = to->get_weg(wegtyp);
+					if(  w_to  &&  w_to->has_sign()  ) {
+						const roadsign_t *rs = to->find<roadsign_t>();
+						if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+							const ribi_t::ribi entry = ribi_t::nesw[r];
+							if(  !(rs->get_detailed_oneway_out_ribi(entry) & w_to->get_ribi_unmasked() & ~ribi_t::backward(entry))  ) {
+								continue;
+							}
+						}
+					}
+				}
 				// not in there or taken out => add new
 				ANode* k = &nodes[step++];
 
@@ -422,7 +439,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 		uint32 topnode_f = !queue.empty() ? queue.front()->f : max_cost;
 
-		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr);
+		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr, tmp->ribi_from);
 		// testing all four possible directions
 		// mask direction we came from
 		const ribi_t::ribi ribi =  way_ribi  &  ( ~ribi_t::reverse_single(tmp->ribi_from) )  &  tmp->jps_ribi;
@@ -450,6 +467,16 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 					// there is a signal, and the only direction leaving the next tile
 					// is back to our position
 					continue;
+				}
+				// Do not enter a tile where detailed_oneway forbids entry from this direction.
+				if(  w  &&  w->has_sign()  ) {
+					const roadsign_t *rs = to->find<roadsign_t>();
+					if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+						const ribi_t::ribi entry = next_ribi[r];
+						if(  !(rs->get_detailed_oneway_out_ribi(entry) & w->get_ribi_unmasked() & ~ribi_t::backward(entry))  ) {
+							continue;
+						}
+					}
 				}
 
 				// new values for cost g (without way it is either in the air or in water => no costs)
@@ -804,6 +831,13 @@ bool route_t::is_passable(karte_t *welt, test_driver_t *tdriver, bool need_elect
 		const grund_t *gr = welt->lookup(route[i]);
 		if (!gr || !tdriver->check_next_tile(gr, need_electric)) {
 			return false;
+		}
+		// Since test_driver_t::check_next_tile cannot do the direction check, we need to do that.
+		if( i<route.get_count()-1 ) {
+			const ribi_t::ribi dir = ribi_type(route[i], route[i+1]);
+			if( (gr->get_weg_ribi(tdriver->get_waytype())&dir) == 0 ) {
+				return false;
+			}
 		}
 	}
 	return true;

@@ -13,6 +13,7 @@
 #include "simwin.h"
 #include "journey_time_info.h"
 #include "goods_waiting_time.h"
+#include "route_display.h"
 
 #include "../simcolor.h"
 #include "../simdepot.h"
@@ -52,7 +53,7 @@
 #include "depot_picker.h"
 
 
-static const char *cost_type[MAX_LINE_COST] =
+static const char *cost_type[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 {
 	"Free Capacity",
 	"Transported",
@@ -63,10 +64,11 @@ static const char *cost_type[MAX_LINE_COST] =
 	"Distance",
 	"Maxspeed",
 	"Road toll",
-	"Freight ton-kilo"
+	"Freight ton-kilo",
+	"Avg. density" // not recorded in financial_history
 };
 
-const uint8 cost_type_color[MAX_LINE_COST] =
+const uint8 cost_type_color[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 {
 	COL_FREE_CAPACITY,
 	COL_TRANSPORTED,
@@ -77,7 +79,8 @@ const uint8 cost_type_color[MAX_LINE_COST] =
 	COL_DISTANCE,
 	COL_MAXSPEED,
 	COL_TOLL,
-	COL_TONKILO
+	COL_TONKILO,
+	COL_TRANSPORT_DENSITY // not recorded in financial_history
 };
 
 static uint8 tabs_to_lineindex[9];
@@ -384,6 +387,16 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 	bt_goods_waiting_time.disable();
 	add_component(&bt_goods_waiting_time);
 
+	bt_show_route_cache.init(button_t::roundbox_state, "Show Route Cache",
+		scr_coord(RIGHT_COLUMN_OFFSET+D_BUTTON_WIDTH+D_H_SPACE, bt_y+D_BUTTON_HEIGHT+D_V_SPACE),
+		scr_size(D_BUTTON_WIDTH, D_BUTTON_HEIGHT));
+	bt_show_route_cache.set_tooltip("Show tiles of this line's cached route.");
+	bt_show_route_cache.set_visible(false);
+	bt_show_route_cache.add_listener(this);
+	bt_show_route_cache.disable();
+	is_route_cache_show = false;
+	add_component(&bt_show_route_cache);
+
 	//CHART
 	chart.set_dimension(12, 1000);
 	chart.set_pos( scr_coord(RIGHT_COLUMN_OFFSET, D_MARGIN_TOP) );
@@ -392,7 +405,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 	add_component(&chart);
 
 	// add filter buttons
-	for(  int i=0;  i<MAX_LINE_COST;  i++  ) {
+	for(  int i=0;  i<MAX_LINE_COST_GUI;  i++  ) {
 		filterButtons[i].init(button_t::box_state,cost_type[i],scr_coord(0,0), scr_size(D_BUTTON_WIDTH, D_BUTTON_HEIGHT));
 		filterButtons[i].add_listener(this);
 		filterButtons[i].background_color = color_idx_to_rgb(cost_type_color[i]);
@@ -436,6 +449,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 
 schedule_list_gui_t::~schedule_list_gui_t()
 {
+	show_route_cache(false);
 	delete last_schedule;
 	// change line name if necessary
 	rename_line();
@@ -542,6 +556,9 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 			create_win( new gui_goods_waiting_time_t(line, player), w_info, (ptrdiff_t)line.get_rep() );
 		}
 	}
+	else if(  comp == &bt_show_route_cache  ) {
+		is_route_cache_show = !is_route_cache_show;
+	}
 	else if(  comp == &tabs  ) {
 		int const tab = tabs.get_active_tab_index();
 		uint8 old_selected_tab = selected_tab[player->get_player_nr()];
@@ -605,7 +622,7 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 	}
 	else {
 		if(  line.is_bound()  ) {
-			for(  int i=0;  i<MAX_LINE_COST;  i++  ) {
+			for(  int i=0;  i<MAX_LINE_COST_GUI;  i++  ) {
 				if(  comp == &filterButtons[i]  ) {
 					filterButtons[i].pressed ^= 1;
 					if(  filterButtons[i].pressed  ) {
@@ -693,6 +710,11 @@ void schedule_list_gui_t::draw(scr_coord pos, scr_size size)
 		display(pos);
 		POP_CLIP();
 	}
+
+	// show route cache update
+	show_route_cache(is_route_cache_show);
+	bt_show_route_cache.pressed = is_route_cache_show;
+	bt_show_route_cache.enable( line.is_bound()  &&  welt->get_settings().is_using_route_cache() );
 }
 
 
@@ -766,7 +788,7 @@ void schedule_list_gui_t::set_windowsize(scr_size size)
 
 	int rest_width = get_windowsize().w-RIGHT_COLUMN_OFFSET-D_MARGIN_RIGHT;
 	int button_per_row = max(1, (rest_width+D_H_SPACE)/(D_BUTTON_WIDTH+D_H_SPACE));
-	int button_rows = MAX_LINE_COST/button_per_row + ((MAX_LINE_COST%button_per_row)!=0);
+	int button_rows = MAX_LINE_COST_GUI/button_per_row + ((MAX_LINE_COST_GUI%button_per_row)!=0);
 
 	scrolly_convois.set_size( scr_size(rest_width+D_MARGIN_RIGHT, get_client_windowsize().h-scrolly_convois.get_pos().y) );
 	scrolly_haltestellen.set_size( scr_size(RIGHT_COLUMN_OFFSET, get_client_windowsize().h-scrolly_haltestellen.get_pos().y) );
@@ -778,7 +800,7 @@ void schedule_list_gui_t::set_windowsize(scr_size size)
 	bt_colour_line.set_size(scr_size(rest_width-D_BUTTON_WIDTH - D_H_SPACE, D_EDIT_HEIGHT));
 
 	int y = D_MARGIN_TOP + SCL_HEIGHT-D_V_SPACE-(button_rows*(D_BUTTON_HEIGHT+D_V_SPACE));
-	for(  int i=0;  i<MAX_LINE_COST;  i++  ) {
+	for(  int i=0;  i<MAX_LINE_COST_GUI;  i++  ) {
 		filterButtons[i].set_pos( scr_coord(RIGHT_COLUMN_OFFSET+(i%button_per_row)*(D_BUTTON_WIDTH+D_H_SPACE), y+(i/button_per_row)*(D_BUTTON_HEIGHT+D_V_SPACE))  );
 	}
 }
@@ -863,6 +885,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		}
 		bt_show_journey_time.enable();
 		bt_goods_waiting_time.enable();
+		bt_show_route_cache.enable( welt->get_settings().is_using_route_cache() );
 
 		bt_withdraw_line.pressed = new_line->get_withdraw();
 
@@ -883,6 +906,19 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 			if(  filterButtons[i].pressed  ) {
 				chart.show_curve(i);
 			}
+		}
+		// transport density (ton-kilo / distance): computed dynamically, not recorded in financial_history; curve index is MAX_LINE_COST, outside the saved range
+		{
+			const sint64 *history = new_line->get_finance_history();
+			for(  int month=0; month<MAX_MONTHS; month++  ) {
+				sint64 distance = history[month * MAX_LINE_COST + LINE_DISTANCE];
+				sint64 tonkilo  = history[month * MAX_LINE_COST + LINE_TONKILO];
+				transport_density_history[month] = (distance > 0) ? tonkilo / distance : 0;
+			}
+		}
+		chart.add_curve(color_idx_to_rgb(COL_TRANSPORT_DENSITY), transport_density_history, 1, 0, MAX_MONTHS, STANDARD, filterButtons[MAX_LINE_COST].pressed, true, 0);
+		if(  filterButtons[MAX_LINE_COST].pressed  ) {
+			chart.show_curve(MAX_LINE_COST);
 		}
 		chart.set_visible(true);
 
@@ -920,7 +956,8 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		bt_copy_data.disable();
 		bt_show_journey_time.disable();
 		bt_goods_waiting_time.disable();
-		for(  int i=0; i<MAX_LINE_COST; i++  )  {
+		bt_show_route_cache.disable();
+		for(  int i=0; i<MAX_LINE_COST_GUI; i++  )  {
 			chart.hide_curve(i);
 		}
 		chart.set_visible(true);
@@ -938,8 +975,80 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 	bt_teleport_line_to_depot.set_visible( line.is_bound() );
 	bt_show_journey_time.set_visible( line.is_bound() );
 	bt_goods_waiting_time.set_visible(  line.is_bound() );
+	bt_show_route_cache.set_visible( line.is_bound() );
 
 	reset_line_name();
+}
+
+
+void schedule_list_gui_t::hide_route_display(void *owner)
+{
+	schedule_list_gui_t *win = static_cast<schedule_list_gui_t*>(owner);
+	win->is_route_cache_show = false;
+	win->show_route_cache(false);
+}
+
+
+void schedule_list_gui_t::show_route_cache(bool const yesno)
+{
+	if(  !yesno  ||  !line.is_bound()  ||  !welt->get_settings().is_using_route_cache()  ) {
+		if(  !route_cache_route.empty()  ) {
+			for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
+				if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
+					for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+						obj_t *obj = gr->obj_bei(idx);
+						obj->clear_flag( obj_t::convoy_way );
+					}
+					gr->set_flag( grund_t::dirty );
+				}
+			}
+			route_cache_route.clear();
+		}
+		route_display_t::deactivate(this);
+		return;
+	}
+
+	// collect all currently cached route tiles for this line
+	vector_tpl<koord3d> tiles;
+	welt->get_route_cache().get_route_tiles_for_line(line, tiles);
+
+	route_display_t::activate(this, &schedule_list_gui_t::hide_route_display);
+
+	// tile count unchanged => assume the cached route is the same and skip the redraw
+	if(  tiles.get_count() == route_cache_route.get_count()  ) {
+		return;
+	}
+
+	// clear previously marked tiles before marking the new set
+	if(  !route_cache_route.empty()  ) {
+		for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
+			if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
+				for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+					obj_t *obj = gr->obj_bei(idx);
+					obj->clear_flag( obj_t::convoy_way );
+				}
+				gr->set_flag( grund_t::dirty );
+			}
+		}
+		route_cache_route.clear();
+	}
+
+	FOR(vector_tpl<koord3d>, const& k, tiles) {
+		route_cache_route.append(k);
+	}
+	if(  !route_cache_route.empty()  ) {
+		for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
+			if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
+				for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+					obj_t *obj = gr->obj_bei(idx);
+					if(  !obj->is_moving()  ) {
+						obj->set_flag( obj_t::convoy_way );
+					}
+				}
+				gr->set_flag( grund_t::dirty );
+			}
+		}
+	}
 }
 
 

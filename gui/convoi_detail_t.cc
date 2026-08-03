@@ -160,19 +160,14 @@ void convoi_detail_t::init(convoihandle_t cnv)
 	set_table_layout(1,0);
 
 
-	add_table(4,1);
+	add_table(3,1);
 	{
 		add_component(&label_power);
 
 		new_component<gui_fill_t>();
 
-		add_table(4,1)->set_force_equal_columns(true);
+		add_table(3,1)->set_force_equal_columns(true);
 		{
-			suspension_button.init(button_t::roundbox| button_t::flexible, "Suspension");
-			suspension_button.set_tooltip(translator::translate("Suspend this convoy"));
-			suspension_button.add_listener(this);
-			add_component(&suspension_button);
-
 			move_to_depot_button.init(button_t::roundbox| button_t::flexible, "Teleport to Depot");
 			move_to_depot_button.set_tooltip(translator::translate("Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)"));
 			move_to_depot_button.add_listener(this);
@@ -192,7 +187,27 @@ void convoi_detail_t::init(convoihandle_t cnv)
 	}
 	end_table();
 
-	add_component(&label_odometer);
+	add_table(3,1);
+	{
+		add_component(&label_odometer);
+
+		new_component<gui_fill_t>();
+
+		add_table(2,1)->set_force_equal_columns(true);
+		{
+			suspension_button.init(button_t::roundbox| button_t::flexible, "Suspension");
+			suspension_button.set_tooltip(translator::translate("Suspend this convoy"));
+			suspension_button.add_listener(this);
+			add_component(&suspension_button);
+			unload_all_button.init(button_t::roundbox| button_t::flexible, "Unload all");
+			unload_all_button.set_tooltip(translator::translate("Unload all at next stop"));
+			unload_all_button.add_listener(this);
+			add_component(&unload_all_button);
+		}
+		end_table();
+
+	}
+	end_table();
 
 	add_component(&label_length);
 
@@ -357,7 +372,7 @@ void convoi_detail_t::update_labels()
 
 void convoi_detail_t::draw(scr_coord offset)
 {
-	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()  ;
+	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())  ;
 	sale_button.enable(selling_allowed && !cnv->get_coupling_convoi().is_bound());
 	withdraw_button.enable(selling_allowed  &&  !cnv->get_coupling_convoi().is_bound()  &&  !cnv->is_coupled());
 	bool show_move_to_depot_button = selling_allowed;
@@ -397,6 +412,12 @@ void convoi_detail_t::draw(scr_coord offset)
 		suspension_button.disable();
 	}
 	suspension_button.pressed = cnv->is_suspended();
+	if (is_owner) {
+		unload_all_button.enable();
+	} else {
+		unload_all_button.disable();
+	}
+	unload_all_button.pressed = cnv->get_unload_all();
 
 	update_labels();
 
@@ -479,6 +500,12 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			cnv->call_convoi_tool( 'u', buf );
 			return true;
 		}
+		else if(comp==&unload_all_button) {
+			cbuffer_t buf;
+			buf.printf( "%d", !cnv->get_unload_all() );
+			cnv->call_convoi_tool( 'k', buf);
+			return true;
+		} 
 	}
 	return false;
 }

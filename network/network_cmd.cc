@@ -100,6 +100,8 @@ void nwc_auth_player_t::rdwr()
 	}
 	packet->rdwr_byte( player_nr );
 	packet->rdwr_short(player_unlocked);
+	packet->rdwr_short(player_has_password);
+	packet->rdwr_bool(set_password);
 }
 
 
@@ -174,6 +176,7 @@ const char *network_command_t::id_to_string(uint16 id)
 	CASE_TO_STRING(NWC_SCENARIO);
 	CASE_TO_STRING(NWC_SCENARIO_RULES);
 	CASE_TO_STRING(NWC_STEP);
+	CASE_TO_STRING(NWC_CLIENT_LIST);
 	}
 
 	return "<unknown network command>";
