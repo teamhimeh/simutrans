@@ -510,7 +510,8 @@ bool schedule_t::matches(karte_t *welt, const schedule_t *schedule)
 		&&  schedule->entries[(uint8)f2].maximum_loading == entries[(uint8)f1].maximum_loading
 		&&  schedule->entries[(uint8)f2].length_coupling_done == entries[(uint8)f1].length_coupling_done
 		&&  schedule->entries[(uint8)f2].max_speed_kmh_of_convoi == entries[(uint8)f1].max_speed_kmh_of_convoi
-		&&  schedule->entries[(uint8)f2].balance_speed_kmh_of_convoi == entries[(uint8)f1].balance_speed_kmh_of_convoi) {
+		&&  schedule->entries[(uint8)f2].balance_speed_kmh_of_convoi == entries[(uint8)f1].balance_speed_kmh_of_convoi
+		&&	schedule->entries[(uint8)f2].allow_depart_line == entries[(uint8)f1].allow_depart_line) {
 			f1++;
 			f2++;
 		}
