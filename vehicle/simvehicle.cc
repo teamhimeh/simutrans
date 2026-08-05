@@ -5667,6 +5667,32 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 		return false;
 	}
 
+	if(  reserve  &&  route_index<takeoff  ) {
+		// Make sure the taxiway between our current position and the runway is
+		// clear of other convois' aircraft before granting the reservation.
+		// Without this, reservations re-acquired after loading a savegame (or
+		// granted purely by call order) could let a convoi further from the
+		// runway "overtake" one that is still on the taxiway ahead of it.
+		uint32 from = min( route_index, start );
+		uint32 to = max( route_index, start );
+		for(  uint32 i=from;  i<=to  &&  i<route->get_count();  i++  ) {
+			grund_t *gr = welt->lookup(route->at(i));
+			if(  !gr  ) {
+				continue;
+			}
+			for(  uint8 j=1;  j<gr->get_top();  j++  ) {
+				obj_t *obj = gr->obj_bei(j);
+				if(  obj  &&  obj->get_typ()==obj_t::air_vehicle  ) {
+					air_vehicle_t *other = (air_vehicle_t *)obj;
+					if(  other!=this  &&  other->get_convoi()!=cnv  &&  other->is_on_ground()  ) {
+						// taxiway not clear yet - do not grab the runway ahead of them
+						return false;
+					}
+				}
+			}
+		}
+	}
+
 	for(  uint32 i=start;  success  &&  i<end  &&  i<route->get_count();  i++) {
 
 		grund_t *gr = welt->lookup(route->at(i));
