@@ -720,7 +720,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		// if this stop is still at the same position in the schedule (stops/order unchanged,
 		// only flags or other attributes may have changed), keep its recorded times
 		const uint8 index = entries.get_count();
-		if(  index < old_entries.get_count()  &&  old_entries[index].pos == entry.pos  ) {
+		if(  index < old_entries.get_count()  &&  old_entries[index].pos == entry.pos  &&  (  index==0  ||  old_entries[index-1].pos == entries[index-1].pos)  ) {
 			entry.copy_time_records_from( old_entries[index] );
 		}
 		entries.append(entry);
