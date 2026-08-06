@@ -725,7 +725,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		if(  j>=entries.get_count()  ) {
 			break;
 		}
-		if(  (entries[j==0?entries.get_count()-1:j-1].pos == old_entries[i==0?entries.get_count()-1:i-1].pos)  &&  (entries[j].pos == old_entries[i].pos)  ) {
+		if(  (entries[j==0?entries.get_count()-1:j-1].pos == old_entries[i==0?old_entries.get_count()-1:i-1].pos)  &&  (entries[j].pos == old_entries[i].pos)  ) {
 			entries[j].copy_time_records_from(old_entries[i]);
 			j++;
 		}
