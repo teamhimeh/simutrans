@@ -10395,13 +10395,15 @@ bool tool_change_depot_t::init( player_t *player )
 						while(nr<cnv->get_vehicle_count()) {
 							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
 							nr ++;
-							if(info->get_trailer_count()!=1) {
+							if(info->get_trailer_count()==1) {
 								vehicle_desc_t const* const veh = info->get_trailer(0);
 								// the leading is any, we should keep it.
 								if(  veh!=vehicle_desc_t::any_vehicle  )
 								{
 									break;
 								}
+							} else {
+								break;
 							}
 						}
 					}
