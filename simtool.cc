@@ -3219,7 +3219,7 @@ uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, cons
 		}
 		// elevated ways have to check tile above
 		if(  elevated  ) {
-			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance() ) );
+			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance()+height_offset ) );
 			if(  gr == NULL  ) {
 				return 2;
 			}
@@ -10395,7 +10395,7 @@ bool tool_change_depot_t::init( player_t *player )
 						while(nr<cnv->get_vehicle_count()) {
 							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
 							nr ++;
-							if(info->get_trailer_count()!=1) {
+							if(info->get_trailer_count()!=1 || info->get_trailer(0)==vehicle_desc_t::any_vehicle) {
 								break;
 							}
 						}
