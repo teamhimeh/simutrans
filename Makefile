@@ -465,6 +465,7 @@ SOURCES += gui/password_frame.cc
 SOURCES += gui/player_frame_t.cc
 SOURCES += gui/player_merge_frame.cc
 SOURCES += gui/privatesign_info.cc
+SOURCES += gui/route_display.cc
 SOURCES += gui/route_search_frame.cc
 SOURCES += gui/savegame_frame.cc
 SOURCES += gui/scenario_frame.cc
