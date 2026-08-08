@@ -4351,8 +4351,8 @@ void haltestelle_t::rdwr(loadsave_t *file)
 				file->rdwr_longlong(financial_history[k][j]);
 			}
 		}
-		// HALT_REVENUE added in OTRP version 56
-		if(  file->get_OTRP_version() >= 56  ) {
+		// HALT_REVENUE added in OTRP version 59
+		if(  file->get_OTRP_version() >= 59  ) {
 			for (size_t k = MAX_MONTHS; k-- != 0;) {
 				file->rdwr_longlong(financial_history[k][HALT_REVENUE]);
 			}
