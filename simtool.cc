@@ -3219,7 +3219,7 @@ uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, cons
 		}
 		// elevated ways have to check tile above
 		if(  elevated  ) {
-			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance() ) );
+			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance()+height_offset ) );
 			if(  gr == NULL  ) {
 				return 2;
 			}

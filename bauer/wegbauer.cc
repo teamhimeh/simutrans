@@ -611,8 +611,11 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			}
 			// absolutely nothing allowed here for set which want double clearance
 			// we only check clearance at the top -> check above when height_offset = -1
-			if(  welt->get_settings().get_way_height_clearance()==2  &&  welt->lookup( to->get_pos()+koord3d(0,0,1+max(height_offset,0)) )  ) {
-				return false;
+			if(  welt->get_settings().get_way_height_clearance()==2  ) {
+				grund_t *to_just_below = welt->lookup( to->get_pos()+koord3d(0,0,1+height_offset) );
+				if(  to_just_below  &&  (((bautyp&bautyp_mask)!=leitung  &&  ((to_just_below->get_weg_nr(0)  &&  to_just_below->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  to_just_below->get_weg_nr(1)  &&  (to_just_below->get_weg_nr(1)->get_desc()->get_topspeed()>0))) || to_just_below->get_leitung()  )  ) {
+					return false;
+				}
 			}
 			// up to now 'to' and 'from' referred to the ground one height step below the elevated way
 			// now get the grounds at the right height
@@ -657,7 +660,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 	if(  welt->get_settings().get_way_height_clearance()==2  ) {
 		// cannot build if conversion factor 2, we aren't powerline and way with maximum speed > 0 or powerline 1 tile below
 		// if height_offset=-1, we check 1 tile below.
-		grund_t *to2 = welt->lookup( to->get_pos() + koord3d(0, 0, -1+max(height_offset,0)) );
+		grund_t *to2 = welt->lookup( to->get_pos() + koord3d(0, 0, -1) );
 		if(  to2 && (((bautyp&bautyp_mask)!=leitung  &&  ((to2->get_weg_nr(0)  &&  to2->get_weg_nr(0)->get_desc()->get_topspeed()>0)  ||  to2->get_weg_nr(1)  &&  (to2->get_weg_nr(1)->get_desc()->get_topspeed()>0))) || to2->get_leitung())  ) {
 			return false;
 		}
@@ -676,7 +679,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 		}
 		// tile above cannot have way unless we are a way (not powerline) with a maximum speed of 0, or be surface if we are underground
 		// if height_offset=-1, we check 1 tile above.
-		to2 = welt->lookup( to->get_pos() + koord3d(0, 0, 1+max(height_offset,0)) );
+		to2 = welt->lookup( to->get_pos() + koord3d(0, 0, 1) );
 		if(  to2  &&  ((to2->get_weg_nr(0)  &&  (desc->get_topspeed()>0  ||  (bautyp&bautyp_mask)==leitung))  ||  (bautyp & tunnel_flag) != 0)  ) {
 			return false;
 		}
