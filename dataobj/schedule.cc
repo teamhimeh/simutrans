@@ -623,6 +623,12 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 bool schedule_t::sscanf_schedule( const char *ptr )
 {
 	const char *p = ptr;
+	// keep a copy of the old entries so we can preserve their recorded journey/waiting/stopping
+	// times for stops whose position did not move (i.e. only flags/orders were edited)
+	minivec_tpl<schedule_entry_t> old_entries(entries.get_count());
+	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
+		old_entries.append(i);
+	}
 	// first: clear current schedule
 	while (!entries.empty()) {
 		remove();
@@ -712,6 +718,17 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		schedule_entry_t entry = schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4], values[5], values[6], values[10], values[11], values[12]);
 		entry.set_spacing(values[7], values[8], values[9]);
 		entries.append(entry);
+	}
+	// check entry changes and set old journey time record if stop does not changed
+	uint8 j=0;
+	for(  uint8 i=0; i<old_entries.get_count(); i++  ) {
+		if(  j>=entries.get_count()  ) {
+			break;
+		}
+		if(  (entries[j==0?entries.get_count()-1:j-1].pos == old_entries[i==0?old_entries.get_count()-1:i-1].pos)  &&  (entries[j].pos == old_entries[i].pos)  ) {
+			entries[j].copy_time_records_from(old_entries[i]);
+			j++;
+		}
 	}
 	return true;
 }

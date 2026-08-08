@@ -4913,7 +4913,7 @@ bool haltestelle_t::rem_grund(grund_t *gr)
 	// first tile => remove name from this tile ...
 	char buf[256];
 	const char* station_name_to_transfer = NULL;
-	if (i == tiles.begin() && i->grund->get_name()) {
+	if (i == tiles.begin()) {
 		tstrncpy(buf, get_name(), lengthof(buf));
 		station_name_to_transfer = buf;
 		set_name(NULL);
