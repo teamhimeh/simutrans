@@ -365,6 +365,12 @@ Not use electricity
 電気を使用しない
 Not use electricity in this schedule
 このスケジュールでは電気を使用しません(電車の出力が0となります)
+Always use maximum boarding and alighting time, regardless of boardings and alightings.
+常に最長の待機時間を使用する．
+Waiting for departure allowance!
+発車許可待ち
+Wait for other convoy
+他編成の到着を待機
 #------円表記------
 $
  円
@@ -627,6 +633,10 @@ foot_path_time_ticks
 徒歩乗り換え1マスに掛かる時間(foot_path_time_ticks)
 walk_cost_to_halt
 最寄り駅までの距離をルート計算に使用(walk_cost_to_halt)
+penalty_wait_for_two_month
+停滞中に課税する(penalty_wait_for_two_month)
+base_revenue_from_halt
+駅からの収入を得る(base_revenue_from_halt)
 #------通知設定------
 New Year
 新年
@@ -827,3 +837,13 @@ This tool must be executed by the public player.
 このツールは公共事業のみ実行できます。
 No city found!
 都市が見つかりません！
+Players 16+ exist but cannot be merged in network mode.\nThey will be absent from the saved file.\nServer state is unaffected.
+プレイヤーは16社以上あるため、\n古いバージョンで保存するため\nネットワークから落ちます。
+This convoy waits here until another convoy grants it departure allowance
+他編成が本路線の出発許可を与えるまで，発車を待機します．
+Show Route Cache
+キャッシュ中のルートを表示
+Show tiles of this line's cached route.
+本路線のキャッシュ中のルートを表示します
+Revenue
+収入
