@@ -331,7 +331,7 @@ struct imd {
 	uint8 recode_flags;
 	uint64 player_flags; // bit # is player number, ==1 cache image needs recoding
 
-	PIXVAL* data[MAX_PLAYER_COUNT]; // current data - zoomed and recolored (player + daynight)
+	PIXVAL** data; // current data - zoomed and recolored (player + daynight); lazily allocated (MAX_PLAYER_COUNT entries) on first use, since most images never need player recoloring
 
 	PIXVAL* zoom_data; // zoomed original data
 	uint32 len;    // current zoom image data size (or base if not zoomed) (used for allocation purposes only)
@@ -1352,6 +1352,10 @@ static void recode_img(const image_id n, const sint8 player_nr)
 #endif
 	PIXVAL *src = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
+	if(  images[n].data == NULL  ) {
+		images[n].data = MALLOCN( PIXVAL*, MAX_PLAYER_COUNT );
+		MEMZERON( images[n].data, MAX_PLAYER_COUNT );
+	}
 	if(  images[n].data[player_nr] == NULL  ) {
 		images[n].data[player_nr] = MALLOCN( PIXVAL, images[n].len );
 	}
@@ -1445,10 +1449,12 @@ static void rezoom_img(const image_id n)
 			free( images[n].zoom_data );
 			images[n].zoom_data = NULL;
 		}
-		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-			if(  images[n].data[i] != NULL  ) {
-				free( images[n].data[i] );
-				images[n].data[i] = NULL;
+		if(  images[n].data != NULL  ) {
+			for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+				if(  images[n].data[i] != NULL  ) {
+					free( images[n].data[i] );
+					images[n].data[i] = NULL;
+				}
 			}
 		}
 
@@ -2176,9 +2182,7 @@ void register_image(image_t *image_in)
 		} while(  runlen!=0  ); // end of row: runlen == 0
 	}
 
-	for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-		image->data[i] = NULL;
-	}
+	image->data = NULL;
 
 	image->zoom_data = NULL;
 	image->len = image_in->len;
@@ -2205,10 +2209,14 @@ void display_free_all_images_above( image_id above )
 		if(  images[anz_images].zoom_data != NULL  ) {
 			free( images[anz_images].zoom_data );
 		}
-		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-			if(  images[anz_images].data[i] != NULL  ) {
-				free( images[anz_images].data[i] );
+		if(  images[anz_images].data != NULL  ) {
+			for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+				if(  images[anz_images].data[i] != NULL  ) {
+					free( images[anz_images].data[i] );
+				}
 			}
+			free( images[anz_images].data );
+			images[anz_images].data = NULL;
 		}
 	}
 }
@@ -2773,7 +2781,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 
 		if(  use_player > 0  ) {
 			// player colour images are rezoomed/recoloured in display_color_img
-			sp = images[n].data[use_player];
+			sp = images[n].data != NULL ? images[n].data[use_player] : NULL;
 			if(  sp == NULL  ) {
 				dbg->warning("display_img_aux", "CImg[%i] %u failed!", use_player, n);
 				return;
