@@ -14,8 +14,11 @@
 
 privatesign_info_t::privatesign_info_t(roadsign_t* s) :
 	obj_infowin_t(s),
-	sign(s)
+	sign(s),
+	scrolly(&player_cont)
 {
+	player_cont.set_table_layout(1,0);
+
 	for(  int i=0;  i<PLAYER_UNOWNED;  i++  ) {
 		if(  welt->get_player(i)  ) {
 			players[i].init( button_t::square_state, welt->get_player(i)->get_name());
@@ -26,8 +29,10 @@ privatesign_info_t::privatesign_info_t(roadsign_t* s) :
 			players[i].disable();
 		}
 		players[i].pressed = (sign->get_player_mask() & ((uint64)1 << i)) != 0;
-		add_component( &players[i] );
+		player_cont.add_component( &players[i] );
 	}
+
+	add_component( &scrolly );
 
 	// show author below the settings
 	if (char const* const maker = sign->get_desc()->get_copyright()) {

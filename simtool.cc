@@ -11385,6 +11385,15 @@ bool tool_merge_player_t::init( player_t *player )
 						continue;
 					}
 					obj->set_owner(merger_player);
+					if(  roadsign_t* const sign = obj_cast<roadsign_t>(obj)  ) {
+						// migrate the merged player's private-way permission bit, otherwise it is
+						// orphaned on the old owner's slot and lost entirely when saved in a legacy
+						// format that truncates it, locking out the new owner as well
+						const uint64 mask = sign->get_player_mask();
+						if(  mask & ((uint64)1 << merged_player_num)  ) {
+							sign->set_player_mask( (mask & ~((uint64)1 << merged_player_num)) | ((uint64)1 << merger_player_num) );
+						}
+					}
 				}
 			}
 			pos_2d.x += 1;

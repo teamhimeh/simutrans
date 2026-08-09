@@ -21,6 +21,7 @@
 #include "../network/network_cmd.h"
 #include "../network/network_packet.h"
 #include "../network/network_socket_list.h"
+#include "../simconst.h"
 #include "../simmem.h"
 #include "../simtypes.h"
 #include "../simversion.h"
@@ -332,7 +333,7 @@ int lock_company(SOCKET socket, uint32, int argc, char **argv)
 {
 	// player number
 	int _n = atoi(argv[0]);
-	if (_n < 0  ||  _n >= 15 /*PLAYER_UNOWNED*/ ) {
+	if (_n < 0  ||  _n >= PLAYER_UNOWNED ) {
 		return 3;
 	}
 	uint8 player_nr = _n;

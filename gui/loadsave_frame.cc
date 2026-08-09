@@ -29,6 +29,7 @@
 #include "../network/network_socket_list.h"
 
 #include "../utils/simstring.h"
+#include "../simevent.h"
 
 
 stringhashtable_tpl<sve_info_t *> loadsave_frame_t::cached_info;
@@ -128,8 +129,22 @@ bool loadsave_frame_t::item_action(const char *filename)
 			if(  has_extra_players  ) {
 				if(  env_t::networkmode  ) {
 					// In network mode merging companies would sync to the server and destroy them for all players.
-					// Instead, save locally with players 15+ silently omitted (safe due to version gate in rdwr).
-					create_win( new news_img(translator::translate("Players 16+ exist but cannot be merged in network mode.\nThey will be absent from the saved file.\nServer state is unaffected.")), w_info, magic_none );
+					// obj_t::rdwr only remaps the PLAYER_UNOWNED sentinel, not real owner ids >=15, so silently
+					// saving in the old format would corrupt ownership on reload. Forbid the old format here and
+					// fall back to the current, fully player-64-aware format instead.
+					create_win( new news_img(translator::translate("Players 16+ exist; this save cannot use the selected older format.\nSaving in the current format instead.\nServer state is unaffected.")), w_info, magic_none );
+					env_t::savegame_version_str = original_version_str;
+				}
+				else if(  (event_get_last_control_shift() & 1) == 0  ) {
+					// Merging is immediate and irreversible (welt->set_tool runs synchronously), so a failed
+					// save afterwards cannot restore the original companies. Require an explicit SHIFT+click
+					// to confirm, matching the SHIFT+delete convention used elsewhere in this dialog, and
+					// abort this save attempt otherwise.
+					create_win( new news_img(translator::translate("Players 16+ exist and must be merged into company 0 to use this older format.\nThis cannot be undone. Hold SHIFT and click Save again to confirm.")), w_info, magic_none );
+					if(  version_overridden  ) {
+						env_t::savegame_version_str = original_version_str;
+					}
+					return false;
 				}
 				else {
 					// single-player: merge extra companies into company 0 before saving
