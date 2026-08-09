@@ -99,7 +99,7 @@ public:
 	};
 
 	enum station_flag {
-		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station
+		HS_ALLOW_OTHER_PLAYER_CONNECTION = 1 << 0,// Allows other players to stop and connect to this station. (>=v57, we use uint16 permissions, but IT MUST BE KEPT TO READ/WRITE OLD SAVEDATA!)
 		HS_NO_HANDLE_PAX				 = 1 << 1,// do not handle goods type passenger
 		HS_NO_HANDLE_POST				 = 1 << 2,// do not handle goods type post
 		HS_NO_HANDLE_WARE				 = 1 << 3,// do not handle goods type ware
@@ -133,6 +133,8 @@ private:
 
 	PIXVAL status_color, last_status_color;
 	sint16 last_bar_count;
+	uint16 last_permissions;
+	uint16 last_player_count;
 	vector_tpl<scr_coord_val> last_bar_height; // caches the last height of the station bar for each good type drawn in display_status(). used for dirty tile management
 	uint32 capacity[3]; // passenger, mail, goods
 	uint8 overcrowded[256/8]; ///< bit field for each goods type (max 256)
@@ -256,11 +258,14 @@ public:
 		uint32 weight:31;
 		/// is halt a transfer halt
 		bool is_transfer:1;
+		/// true if this connection is a foot-path (transit by foot), not a vehicle service
+		/// (kept outside the weight/is_transfer bitfield so it does not steal a bit from weight)
+		bool is_foot_path;
 		/// the line or convoy which has the schedule to get to the halt with the best weight
 		traveler_t best_weight_traveler;
 
-		connection_t() : weight(0), is_transfer(false), best_weight_traveler(linehandle_t()) { }
-		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), best_weight_traveler(_best_weight_traveler) { }
+		connection_t() : weight(0), is_transfer(false), is_foot_path(false), best_weight_traveler(linehandle_t()) { }
+		connection_t(halthandle_t _halt, uint32 _weight, traveler_t _best_weight_traveler) : halt(_halt), weight(_weight), is_transfer(false), is_foot_path(false), best_weight_traveler(_best_weight_traveler) { }
 
 		bool operator == (const connection_t &other) const { return halt == other.halt; }
 		bool operator != (const connection_t &other) const { return halt != other.halt; }
@@ -342,11 +347,6 @@ private:
 	// Array with different categories that contains all waiting goods at this stop
 	cargo_queue_t** cargo;
 
-	// Array with different categories that contains the reference of
-	// waiting goods which haven't had a chance to be loaded yet.
-	// Valid only when TBGR is enabled.
-	std::vector<std::list<std::weak_ptr<halt_waiting_goods_t>>> fresh_cargo;
-
 	/**
 	 * Liste der angeschlossenen Fabriken
 	 */
@@ -375,6 +375,10 @@ private:
 
 	/* station flags. See station_flag enum for the definition. */
 	uint8 flags;
+
+	/// Bitfield: bit i set means player i is allowed to stop at this halt.
+	/// Owner and public service are always set. 0xFFFF for public halts.
+	uint16 permissions;
 
 	/**
 	 * versucht die ware mit beriets wartender ware zusammenzufassen
@@ -438,7 +442,7 @@ public:
 	 * sucht umliegende, erreichbare fabriken und baut daraus die
 	 * Fabrikliste auf.
 	 */
-	void verbinde_fabriken();
+	void reconnect_factories();
 
 	/**
 	 * Connects factory to this halt if not already connected and
@@ -449,6 +453,13 @@ public:
 	bool connect_factory(fabrik_t *fab);
 
 	void remove_fabriken(fabrik_t *fab);
+
+	/**
+	 * Re-registers lines and lineless convoys according to current permissions.
+	 * Removes entries for players who lost permission; adds entries for newly permitted players.
+	 * @return true if registered_lines or registered_convoys changed
+	 */
+	bool rebuilt_schedule_registration();
 
 	/**
 	 * Rebuilds the list of connections to reachable halts
@@ -485,6 +496,13 @@ public:
 	// returns the matching warenziele (goods objectives/destinations)
 	vector_tpl<connection_t> const& get_connections(uint8 const catg_index) const { return all_links[catg_index].connections; }
 
+	// returns true if the connection to dest (for the given category) is a foot-path
+	bool is_foot_path_connection(halthandle_t dest, uint8 catg_index) const;
+
+	// If the ware's next hop is a foot-path, move it immediately to the next halt.
+	// Returns true if the ware was teleported (caller must not add it to cargo queue).
+	bool try_foot_transit(ware_t &ware, uint8 foot_steps = 0);
+
 	/**
 	 * Checks if there is connection for certain freight to the other halt.
 	 * @param halt the other halt
@@ -507,7 +525,8 @@ public:
 	 */
 	void new_month();
 
-	uint8 get_connection_update_counter() const { return connection_update_counter;}
+	uint8 get_connection_update_counter() const { return connection_update_counter; }
+	static uint8 get_connection_update_counter_static() { return connection_update_counter; }
 
 private:
 	/* Node used during route search */
@@ -537,6 +556,10 @@ private:
 		uint16 depth:14;
 		bool destination:1;
 		bool overcrowded:1;
+		// true when this halt was reached via a foot-path connection in the current search.
+		// Used to block a second consecutive foot-path hop (passengers must board a vehicle
+		// between any two walking legs).
+		bool arrived_by_foot;
 	};
 
 	// store the best weight so far for a halt, and indicate whether it is a destination
@@ -611,7 +634,15 @@ public:
 	 *
 	 * if avoid_overcrowding is set, a valid route in only found when there is no overflowing stop in between
 	 */
-	static int search_route( const halthandle_t *const start_halts, const uint16 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL );
+
+	/**
+	 * @param start_pos  2D origin position (building tile). When valid and transit_by_foot is
+	 *                   enabled, the Manhattan distance to each start halt is added to the initial
+	 *                   route weight so that nearby stops are preferred over distant ones.
+	 *                   The destination walking cost is derived from ware.get_zielpos() internally.
+	 */
+	static int search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware=NULL, const koord start_pos=koord::invalid );
+
 
 	/**
 	 * A separate version of route searching code for re-calculating routes
@@ -671,7 +702,24 @@ public:
 		return get_ware_enabled();
 	}
 
-	bool is_other_player_connection_allowed() const { return flags & HS_ALLOW_OTHER_PLAYER_CONNECTION; }
+	/**
+	 * @return true if the given player is allowed to stop at this halt.
+	 * NULL player (unowned) is always allowed.
+	 */
+	bool is_connection_allowed(const player_t *player) const;
+
+	/**
+	 * Sets per-player stop permissions.
+	 * Owner's bit and public-service bit are always forced on.
+	 * Public-service owner forces all bits on.
+	 * Also rebuilds registered lines/convoys if the set changed.
+	 */
+	void set_permissions(uint16 perms);
+
+	uint16 get_permissions() const { return permissions; }
+
+	bool is_allow_other_player_connection() const { return (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION) != 0; }
+
 	void toggle_other_player_connection_allowed();
 
 	/**
@@ -701,7 +749,7 @@ public:
 
 	/**
 	 * Add tile to list of station tiles.
-	 * @param relink_factories if true call verbinde_fabriken, if not true take care of factory connections yourself
+	 * @param relink_factories if true call reconnect_factories, if not true take care of factory connections yourself
 	 */
 	bool add_grund(grund_t *gb, bool relink_factories = true);
 	bool rem_grund(grund_t *gb);
@@ -807,7 +855,7 @@ public:
 	 * This is used for inital passenger, since they already know a route
 	 * @returns amount of goods
 	 */
-	uint32 starte_mit_route(ware_t ware);
+	uint32 starte_mit_route(ware_t ware, uint8 foot_steps = 0);
 
 	const grund_t *find_matching_position(waytype_t wt) const;
 

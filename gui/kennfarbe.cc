@@ -49,7 +49,7 @@ line_colour_gui_t::line_colour_gui_t(linehandle_t line_, player_t *player_) :
 	for(unsigned i=0;  i<28;  i++) {
 		line_colour[i] = new_component<choose_color_button_t>();
 		line_colour[i]->init( button_t::box_state, (" "));
-		line_colour[i]->background_color = color_idx_to_rgb(i*8+4);
+		line_colour[i]->background_color = color_idx_to_rgb(i*8+env_t::gui_player_color_bright);
 		line_colour[i]->add_listener(this);
 	}
 	//add some colours
@@ -59,7 +59,7 @@ line_colour_gui_t::line_colour_gui_t(linehandle_t line_, player_t *player_) :
 		line_colour[i+28]->background_color = color_idx_to_rgb(i*8);
 		line_colour[i+28]->add_listener(this);
 	}
-	line_colour[line->get_colour()%8==4?line->get_colour()/8:line->get_colour()/8+28]->pressed = true;
+	line_colour[line->get_colour()%8==env_t::gui_player_color_bright?line->get_colour()/8:line->get_colour()/8+28]->pressed = true;
 	end_table();
 	reset_min_windowsize();
 
@@ -77,7 +77,7 @@ bool line_colour_gui_t::action_triggered( gui_action_creator_t *comp, value_t /*
 			if (line.is_bound()) {
 				// re-colour the line
 				cbuffer_t buf;
-				buf.printf( "o,%i,%i", line.get_id(), i<28? i*8+4: (i-28)*8 );
+				buf.printf( "o,%i,%i", line.get_id(), i<28? i*8+env_t::gui_player_color_bright: (i-28)*8 );
 				tool_t* w = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
 				w->set_default_param(buf);
 				world()->set_tool( w, player );
@@ -129,7 +129,7 @@ farbengui_t::farbengui_t(player_t *player_) :
 	for(unsigned i=0;  i<28;  i++) {
 		player_color_1[i] = new_component<choose_color_button_t>();
 		player_color_1[i]->init( button_t::box_state, (used_colors1 & (1<<i) ? "X" : " "));
-		player_color_1[i]->background_color = color_idx_to_rgb(i*8+4);
+		player_color_1[i]->background_color = color_idx_to_rgb(i*8+env_t::gui_player_color_bright);
 		player_color_1[i]->add_listener(this);
 	}
 	player_color_1[player->get_player_color1()/8]->pressed = true;
@@ -143,11 +143,15 @@ farbengui_t::farbengui_t(player_t *player_) :
 	for(unsigned i=0;  i<28;  i++) {
 		player_color_2[i] = new_component<choose_color_button_t>();
 		player_color_2[i]->init( button_t::box_state, (used_colors2 & (1<<i) ? "X" : " "));
-		player_color_2[i]->background_color = color_idx_to_rgb(i*8+4);
+		player_color_2[i]->background_color = color_idx_to_rgb(i*8+env_t::gui_player_color_bright);
 		player_color_2[i]->add_listener(this);
 	}
 	player_color_2[player->get_player_color2()/8]->pressed = true;
 	end_table();
+
+	bt_all_line_color_change.init(button_t::roundbox, "Change line color as current player color");
+	bt_all_line_color_change.add_listener(this);
+	add_component(&bt_all_line_color_change);
 
 	reset_min_windowsize();
 }
@@ -196,6 +200,20 @@ bool farbengui_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 			// since init always returns false, it is save to delete immediately
 			delete w;
 			return true;
+		}
+
+		if(comp==&bt_all_line_color_change) {
+			if(  player==welt->get_active_player() && welt->player_can_act_unrestricted(player)  ) {
+				cbuffer_t buf;
+				buf.printf( "O,%i,%i", 0, player->get_player_nr());
+				tool_t* w = create_tool( TOOL_CHANGE_LINE | SIMPLE_TOOL );
+				w->set_default_param(buf);
+				world()->set_tool( w, player );
+
+				delete w;
+
+				return true;
+			}
 		}
 
 	}

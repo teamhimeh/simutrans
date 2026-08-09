@@ -56,6 +56,7 @@ network_command_t* network_command_t::read_from_packet(packet_t *p)
 		case NWC_SCENARIO_RULES:
 		                      nwc = new nwc_scenario_rules_t(); break;
 		case NWC_STEP:        nwc = new nwc_step_t(); break;
+		case NWC_CLIENT_LIST: nwc = new nwc_clientlist_t(); break;
 		default:
 			dbg->warning("network_command_t::read_from_socket", "received unknown packet id %d", p->get_id());
 	}
@@ -273,6 +274,9 @@ void nwc_nick_t::server_tools(karte_t *welt, uint32 client_id, uint8 what, const
 	network_send_server(nwc);
 	// since init always returns false, it is safe to delete immediately
 	delete tmp_tool;
+
+	// client joined, left, or changed nickname: refresh the client list
+	nwc_clientlist_t::broadcast(welt);
 }
 
 
@@ -340,8 +344,9 @@ bool nwc_chat_t::execute (karte_t* welt)
 
 		dbg->warning("nwc_chat_t::execute", "server, client id: %d", client_id);
 
-		// Clients can only send messages as companies they have unlocked
-		if (  player_nr < PLAYER_UNOWNED  &&  !socket_list_t::get_client( client_id ).is_player_unlocked( player_nr )  ) {
+		// Clients can only send messages as companies they have unlocked, or via public player proxy
+		if (  player_nr < PLAYER_UNOWNED  &&  !socket_list_t::get_client( client_id ).is_player_unlocked( player_nr )
+		      &&  !socket_list_t::get_client( client_id ).is_player_unlocked( PUBLIC_PLAYER_NR )  ) {
 			dbg->warning("nwc_chat_t::execute", "attempt to send message as locked company by client %d, redirecting to PLAYER_UNOWNED", client_id);
 			player_nr = PLAYER_UNOWNED;
 		}
@@ -578,8 +583,17 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 				}
 			}
 			else if (player_nr < PLAYER_UNOWNED) {
-				// players with public service player access always pass password checks
-				if(  info.is_player_unlocked(1)  ) {
+				// public service player access: may set / clear the password of any company
+				// without knowing the old one (proxy administration)
+				if(  set_password  &&  info.is_player_unlocked(1)  &&  welt->get_settings().get_allow_unlock_by_public()  ) {
+					dbg->message("nwc_auth_player_t::execute","set pwd for plnr = %d via public access", player_nr);
+
+					if (welt->get_player(player_nr)->access_password_hash() != hash) {
+						welt->get_player(player_nr)->access_password_hash() = hash;
+						// unlock all clients if new password is empty
+						// otherwise lock all
+						socket_list_t::unlock_player_all(player_nr, hash.empty(), our_client_id);
+					}
 					info.unlock_player(player_nr);
 				}
 				// check password
@@ -600,8 +614,12 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 				// send unlock-info to player on the client (to clear unlock_pending flag)
 				nwc_auth_player_t nwc;
 				nwc.player_unlocked = info.player_unlocked;
+				nwc.player_has_password = get_player_password_set_bits(welt);
 				nwc.send( get_sender());
 			}
+
+			// which company this client may act as has (potentially) changed
+			nwc_clientlist_t::broadcast(welt);
 		}
 	}
 	else {
@@ -610,6 +628,9 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 				player->unlock( player_unlocked & (1<<i), false);
 			}
 		}
+		// remember which players have a password stored on the server,
+		// so the GUI can tell "no password" apart from "unlocked for us"
+		welt->set_player_password_set_bits(player_has_password);
 	}
 	// update the player window
 	ki_kontroll_t* playerwin = (ki_kontroll_t*)win_get_magic(magic_ki_kontroll_t);
@@ -617,6 +638,19 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 		playerwin->update_data();
 	}
 	return true;
+}
+
+
+uint16 nwc_auth_player_t::get_player_password_set_bits(karte_t *welt)
+{
+	uint16 bits = 0;
+	for(uint8 i=0; i<PLAYER_UNOWNED; i++) {
+		player_t *player = welt->get_player(i);
+		if (player  &&  player->is_password_hash()) {
+			bits |= 1<<i;
+		}
+	}
+	return bits;
 }
 
 
@@ -637,6 +671,8 @@ void nwc_auth_player_t::init_player_lock_server(karte_t *welt)
 	socket_info_t &info = socket_list_t::get_client(0);
 	info.player_unlocked = player_unlocked;
 	dbg->message("nwc_auth_player_t::init_player_lock_server", "new = %d", player_unlocked);
+
+	nwc_clientlist_t::broadcast(welt);
 }
 
 
@@ -795,6 +831,7 @@ void nwc_sync_t::do_command(karte_t *welt)
 					// send information about locked state
 					nwc_auth_player_t nwc;
 					nwc.player_unlocked = unlocked_players;
+					nwc.player_has_password = nwc_auth_player_t::get_player_password_set_bits(welt);
 					nwc.send(sock);
 
 					// welcome message
@@ -1119,7 +1156,7 @@ network_broadcast_world_command_t* nwc_tool_t::clone(karte_t *welt)
 
 		// check whether player is authorized do this
 		socket_info_t const& info = socket_list_t::get_client(our_client_id);
-		if ( player_nr < PLAYER_UNOWNED  &&  !info.is_player_unlocked(player_nr) ) {
+		if ( player_nr < PLAYER_UNOWNED  &&  !info.is_player_unlocked(player_nr)  &&  !info.is_player_unlocked(PUBLIC_PLAYER_NR) ) {
 			if (tool_id == (TOOL_ADD_MESSAGE | GENERAL_TOOL)) {
 				player_nr = PLAYER_UNOWNED;
 			}
@@ -1465,4 +1502,80 @@ bool nwc_service_t::execute(karte_t *welt)
 		default: ;
 	}
 	return true; // to delete
+}
+
+
+vector_tpl<nwc_clientlist_t::entry_t> nwc_clientlist_t::client_list;
+uint32 nwc_clientlist_t::client_list_generation = 0;
+
+
+void nwc_clientlist_t::entry_t::rdwr(packet_t *p)
+{
+	p->rdwr_long(client_id);
+	p->rdwr_str(nickname);
+}
+
+
+void nwc_clientlist_t::rdwr()
+{
+	network_command_t::rdwr();
+
+	if (packet->is_loading()  &&  env_t::server) {
+		// only sent by the server
+		packet->failed();
+		return;
+	}
+
+	uint32 count = entries.get_count();
+	packet->rdwr_long(count);
+	if (packet->is_loading()) {
+		entries.clear();
+		for (uint32 i = 0; i < count; i++) {
+			entry_t e;
+			e.rdwr(packet);
+			entries.append(e);
+		}
+	}
+	else {
+		for (uint32 i = 0; i < entries.get_count(); i++) {
+			entries[i].rdwr(packet);
+		}
+	}
+}
+
+
+bool nwc_clientlist_t::execute(karte_t *)
+{
+	if (!env_t::server) {
+		client_list.clear();
+		for (uint32 i = 0; i < entries.get_count(); i++) {
+			client_list.append(entries[i]);
+		}
+		client_list_generation++;
+	}
+	return true;
+}
+
+
+void nwc_clientlist_t::broadcast(karte_t *welt)
+{
+	(void)welt;
+	if (!env_t::server) {
+		return;
+	}
+
+	client_list.clear();
+	for (uint32 i = 0; i < socket_list_t::get_count(); i++) {
+		socket_info_t const& info = socket_list_t::get_client(i);
+		if (i == 0  ||  info.state == socket_info_t::playing) {
+			client_list.append(entry_t(i, info.nickname.c_str()));
+		}
+	}
+	client_list_generation++;
+
+	nwc_clientlist_t *nwc = new nwc_clientlist_t();
+	for (uint32 i = 0; i < client_list.get_count(); i++) {
+		nwc->entries.append(client_list[i]);
+	}
+	network_send_all(nwc, true);
 }

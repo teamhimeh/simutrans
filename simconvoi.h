@@ -276,6 +276,12 @@ private:
 	bool no_load;
 
 	/**
+	* get off all goods at the next stop
+	* this flag should be reset when get off all goods.
+	*/
+	bool unload_all;
+
+	/**
 	* uncouple at this stop
 	*/
 	bool uncouple_done;
@@ -323,6 +329,7 @@ private:
 	 * This holds coordinates reserved by this convoy.
 	 * Used when reservation is triggered by longblocksignal.
 	 * @author THLeaderH
+	 * from v55_5, we add/remove tiles by front vehicle!
 	 */
 	vector_tpl<koord3d> reserved_tiles;
 
@@ -565,6 +572,9 @@ private:
 	
 	// a helper function for convoi_t::vorfahren(), check reserved_tiles
 	void clear_reserved_tile_if_not_matching_route();
+
+	// a helper function for convoi_t::vorfahren(), check the convoy run same direction, CALL BEFORE RESET THE POSITION.
+	bool go_same_direction_check_for_middle_convoys(const route_t* const &r) const;
 
 	// total length is enough than this length->coupling cancel
 	bool cease_coupling_due_to_length_over;
@@ -1010,6 +1020,8 @@ public:
 
 	koord3d get_home_depot() { return home_depot; }
 
+	const char* get_home_depot_name();
+
 	/**
 	 * Sends convoi to nearest depot.
 	 * Has to be called synchronously on all clients in networkmode!
@@ -1081,6 +1093,10 @@ public:
 
 	void set_no_load(bool new_no_load) { no_load = new_no_load; }
 
+	bool get_unload_all() const { return unload_all; }
+
+	void set_unload_all(bool new_unload_all) { unload_all = new_unload_all; }
+
 	void must_recalc_data() { recalc_data = true; }
 	void must_recalc_data_front() { recalc_data_front = true; }
 	void must_recalc_speed_limit() { recalc_speed_limit = true; }
@@ -1136,7 +1152,7 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
-	convoihandle_t uncouple_convoi();
+	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;

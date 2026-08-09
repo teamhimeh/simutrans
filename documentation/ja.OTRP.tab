@@ -83,6 +83,16 @@ coupled (loading)
 連結運転中(停車中)
 driving
 運転中
+suspended
+抑止中
+Suspend this convoy
+この編成をこの場で抑止します(信号等の予約を保ったまま停車し続けます)
+Suspension
+抑止
+Unload all at next stop
+次の駅で全員強制下車します
+Unload all
+全員下車
 #------Convoy coupling related stuff------
 #------増解結関連のエントリ------
 Reset coupling
@@ -125,6 +135,10 @@ try coupling convoy not enter here
 連結試行時の進入禁止
 remove signal
 この信号を撤去する
+allow reverse passage
+信号の逆向き通行を許可
+Allow reverse passage for convoys
+列車が信号を逆向きに通過可能になります(逆向きに通行する場合は信号をチェックしません)
 release back
 後ろを解放
 A convoy waits for other convoy to couple.
@@ -408,8 +422,8 @@ Full Get on/off Time
 Always use maximum boarding and alighting time, regardless of boardings and alightings.
 乗降数に関わらず、常に最大乗降時間を使用します
 #------運行中編成のコピー------
-Copy this convoi
-この編成をコピーします
+Copy this convoi (ctrl pressed: copy vehicle list as template format to clipboard)
+この編成をコピーします（ctrlキーを押すと編成をテンプレート書式でクリップボードにコピーします）
 Paste Convoi
 編成を貼り付け
 Paste the copied convoi
@@ -565,12 +579,14 @@ overloading revenue reduced
 過積載時に収入を減額(overloading_revenue_reduced)
 overloading runningcost increase
 過積載時に走行費を増額(overloading_runningcost_increase)
+overloaded_acceleration
+応荷重制御時,常に過積載時の重量を使用(overloaded_acceleration)
 advance_to_end
 ホーム終端まで進む(advance_to_end)
 reverse_by_default
 折り返し時に車両を自動で反転(reverse_by_default)
 first_come_first_serve
-到着順に乗車する(first_come_first_serve)
+すべて到着順に乗車する(first_come_first_serve)
 use_old_friction
 古い勾配の摩擦係数を使用(use_old_friction)
 allow_unload_longer_convoy
@@ -599,6 +615,18 @@ all cut
 全て省略
 pak dependence
 アドオンの設定を使用
+allow_elevated_way_over_others_halt
+他社駅直上に高架線を建設可(allow_elevated_way_over_others_halt)
+Detailed oneway
+通行可能な方向の詳細設定
+transit_by_foot
+徒歩乗り換え許可(transit_by_foot)
+foot_path_weight
+徒歩乗り換えの1マスあたりのコスト(foot_path_weight)
+foot_path_time_ticks
+徒歩乗り換え1マスに掛かる時間(foot_path_time_ticks)
+walk_cost_to_halt
+最寄り駅までの距離をルート計算に使用(walk_cost_to_halt)
 #------通知設定------
 New Year
 新年
@@ -653,6 +681,8 @@ Electrified
 Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
 #------その他の翻訳------
+v%d (current version)
+v%d (現在のバージョン)
 Freight ton-kilo
 輸送量(人キロ/トンキロ)
 Rotate Building
@@ -681,6 +711,8 @@ Fetching server list...
 サーバリストを取得中...
 Allow other players to connect
 他社の接続を許可
+Stopping permissions
+接続許可:
 No handle:
 次を扱わない:
 hl_btn_sort_throughput
@@ -767,3 +799,31 @@ Unused addons
 未使用アドオン
 Show unused addons list
 未使用アドオンリストを表示
+Templates
+テンプレ
+crossconnect_factories is enabled!
+全産業が接続済みです!
+Avg. density
+平均輸送密度
+Toggle convoy following underground mode
+編成追跡時の表示モード変更
+Decades
+10年データ
+Halts
+駅数
+TBD
+時刻未定
+\nis co-reserved by:
+\nこの編成も通過:
+Show convois
+編成を表示
+Show convoi positions on the map
+編成の位置を地図上に表示
+(walk)
+(徒歩)
+change city of citybuilding to nearest city
+建物の所属都市を最寄りの都市に変更
+This tool must be executed by the public player.
+このツールは公共事業のみ実行できます。
+No city found!
+都市が見つかりません！

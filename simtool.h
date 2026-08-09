@@ -61,12 +61,13 @@ public:
 
 // remove uppermost object from tile
 class tool_remover_t : public two_click_tool_t {
-private:
+protected:
 	bool tool_remover_intern(player_t *player, koord3d pos, sint8 type, const char *&msg);
 public:
 	tool_remover_t() : two_click_tool_t(TOOL_REMOVER | GENERAL_TOOL) { one_click = true; }
+	explicit tool_remover_t(uint16 id) : two_click_tool_t(id) { one_click = true; }
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Abriss"); }
-	char const* process(player_t*, koord3d);
+	virtual char const* process(player_t*, koord3d);
 	bool is_init_network_safe() const OVERRIDE { return true; }
 
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -75,6 +76,14 @@ public:
 	image_id get_icon(player_t *) const OVERRIDE { return tree_builder_t::has_trees() ? icon : IMG_EMPTY; }
 	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); one_click = true; return true; }
 	bool exit(player_t* player) OVERRIDE { one_click = true; return two_click_tool_t::exit(player); }
+};
+
+// removes only bridge pillars
+class tool_remove_pillar_t : public tool_remover_t {
+public:
+	tool_remove_pillar_t() : tool_remover_t(TOOL_REMOVE_PILLAR | GENERAL_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove bridge pillar"); }
+	char const* process(player_t*, koord3d) OVERRIDE;
 };
 
 // alter land height tools
@@ -92,7 +101,7 @@ protected:
 public:
 	tool_raise_lower_base_t(uint16 id) : two_click_tool_t(id | GENERAL_TOOL), is_dragging(false), drag_height(0), is_area_process(false) { offset = Z_GRID; one_click = true; }
 	image_id get_icon(player_t*) const OVERRIDE { return grund_t::underground_mode==grund_t::ugm_all ? IMG_EMPTY : icon; }
-	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); is_dragging = false; return true; }
+	bool init(player_t* player) OVERRIDE { two_click_tool_t::init(player); is_dragging = false; one_click = true; return true; }
 	bool exit(player_t*) OVERRIDE { is_dragging = false; one_click = true; return true; }
 	/**
 	 * technically move is not network safe, however its implementation is:
@@ -140,9 +149,18 @@ public:
 };
 
 /* slope tool definitions */
-class tool_setslope_t : public tool_t {
+class tool_setslope_t : public two_click_tool_t {
+private:
+	enum drag_mode_t {
+		drag_none,
+		drag_trajectory,
+		drag_area
+	};
+	drag_mode_t drag_mode;
+	koord3d last_drag_pos;
+	vector_tpl<koord> dragged_pos;
 public:
-	tool_setslope_t() : tool_t(TOOL_SETSLOPE | GENERAL_TOOL), old_slope_compatibility_mode(true) {}
+	tool_setslope_t() : two_click_tool_t(TOOL_SETSLOPE | GENERAL_TOOL), drag_mode(drag_none), last_drag_pos(koord3d::invalid), old_slope_compatibility_mode(true) { one_click = true; }
 	// if true then slope by default_param will be translated to new double-height system
 	// true by default, can be set to false (used for scripts)
 	bool old_slope_compatibility_mode;
@@ -155,8 +173,14 @@ public:
 	static const char *tool_set_slope_work( player_t *player, koord3d pos, int slope, bool old_slope_compatibility, bool just_check = false);
 	char const* get_tooltip(player_t const*) const OVERRIDE { return tooltip_with_price("Built artifical slopes", welt->get_settings().cst_set_slope); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
+	char const* move(player_t*, uint16, koord3d) OVERRIDE;
+	bool is_work_network_safe() const OVERRIDE { return drag_mode == drag_trajectory; }
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
-	char const* work(player_t* const player, koord3d const k) OVERRIDE { return tool_set_slope_work(player, k, atoi(default_param), old_slope_compatibility_mode); }
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 3; }
 };
 
 class tool_restoreslope_t : public tool_t {
@@ -386,7 +410,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -422,7 +447,8 @@ public:
 	waytype_t get_waytype() const OVERRIDE;
 	bool remove_preview_necessary() const OVERRIDE { return !is_first_click(); }
 	void rdwr_custom_data(memory_rw_t*) OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
@@ -472,7 +498,8 @@ public:
 	tool_build_wayobj_t(uint16 const id = TOOL_BUILD_WAYOBJ | GENERAL_TOOL, bool b = true) : two_click_tool_t(id), build(b) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool is_selected() const OVERRIDE;
-	bool init(player_t*) OVERRIDE;
+	bool init(player_t* player) OVERRIDE { return init(player, false); }
+	bool init(player_t*,bool called_from_move);
 	bool exit(player_t*) OVERRIDE;
 	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
 	void draw_after(scr_coord, bool dirty) const OVERRIDE;
@@ -495,7 +522,7 @@ class tool_build_station_t : public two_click_tool_t {
 	const char *tool_station_building_aux(player_t *, bool, koord3d, const building_desc_t *, sint8 rotation );
 	const char *tool_station_dock_aux(player_t *, koord3d, const building_desc_t * );
 	const char *tool_station_flat_dock_aux(player_t *, koord3d, const building_desc_t *, sint8 );
-	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix );
+	const char *tool_station_aux(player_t *, koord3d, const building_desc_t *, waytype_t, const char *halt_suffix, halthandle_t master_halt = halthandle_t());
 	const building_desc_t *get_desc( sint8 &rotation ) const;
 
   public:
@@ -510,21 +537,22 @@ class tool_build_station_t : public two_click_tool_t {
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	waytype_t get_waytype() const OVERRIDE;
 
-	char const* process(player_t*, koord3d) ;
+	char const* process(player_t*, koord3d, halthandle_t master_halt = halthandle_t());
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE {return 2;};
 };
 
-class tool_rotate_building_t : public tool_t {
+class tool_rotate_building_t : public two_click_tool_t {
 private:
-	const char *tool_rotate_platform(koord3d);
-	const char *tool_rotate_building(koord3d);
+	const char *rotate_building_at(player_t*, koord3d);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
 
 public:
-	tool_rotate_building_t() : tool_t(TOOL_ROTATE_BUILDING | GENERAL_TOOL) {}
+	tool_rotate_building_t() : two_click_tool_t(TOOL_ROTATE_BUILDING | GENERAL_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Rotate Building"); }
-	char const* work(player_t *, koord3d) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
 };
 
@@ -731,8 +759,11 @@ class tool_change_city_of_building_t : public two_click_kartenboden_tool_t {
 public:
 	cbuffer_t default_param_buffer;
 	tool_change_city_of_building_t() : two_click_kartenboden_tool_t(TOOL_CHANGE_CITY_OF_BUILDING | GENERAL_TOOL) { one_click = true; }
-	char const *get_tooltip(player_t const *) const OVERRIDE { return translator::translate("change city of citybuilding"); }
+	char const *get_tooltip(player_t const *) const OVERRIDE {
+		return get_highlighted_city() ? translator::translate("change city of citybuilding") : translator::translate("change city of citybuilding to nearest city");
+	}
 	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
 private:
 	char const *do_work(player_t*, koord3d const &, koord3d const &) OVERRIDE;
 	const char* work_on_ground(player_t*, koord, stadt_t*);
@@ -782,26 +813,49 @@ private:
 };
 
 // removes signal from tile
-class tool_remove_signal_t : public tool_t {
+class tool_remove_signal_t : public two_click_tool_t {
 public:
-	tool_remove_signal_t() : tool_t(TOOL_REMOVE_SIGNAL | GENERAL_TOOL) {}
+	tool_remove_signal_t() : two_click_tool_t(TOOL_REMOVE_SIGNAL | GENERAL_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove signal"); }
-	char const* work(player_t*, koord3d) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
+private:
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 2; }
+	image_id get_marker_image() const OVERRIDE;
+	bool calc_route(route_t&, player_t*, koord3d const&, koord3d const&);
+	bool remove_signal(player_t*, koord3d const&);
 };
 
 // removes station or stop from tile
+// ctrl (or ctrl+shift): area removal; shift or no modifier: route removal; drag: route removal
 class tool_remove_halt_t : public two_click_tool_t {
 	public:
-	tool_remove_halt_t() : two_click_tool_t(TOOL_REMOVE_HALT | GENERAL_TOOL) { one_click = true; }
+	tool_remove_halt_t() : two_click_tool_t(TOOL_REMOVE_HALT | GENERAL_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove halt"); }
 	bool is_init_network_safe() const OVERRIDE { return true; }
 private:
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
 	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
-	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE {return 2;};
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 2; }
 	image_id get_marker_image() const OVERRIDE;
 	bool remove_halt(player_t*, koord3d const&);
+	bool calc_route(route_t &, player_t *, koord3d const&, koord3d const&) const;
+	void add_marker(grund_t *);
+};
+
+// removes city buildings (not factories, attractions, halts, or cityhalls)
+class tool_remove_house_t : public two_click_tool_t {
+public:
+	tool_remove_house_t() : two_click_tool_t(TOOL_REMOVE_HOUSE | GENERAL_TOOL) { one_click = true; }
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("remove city building"); }
+	bool is_init_network_safe() const OVERRIDE { return true; }
+private:
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE { return 2; }
+	image_id get_marker_image() const OVERRIDE;
+	bool remove_house(player_t*, koord3d const&);
 };
 
 // internal tool: show error message at specific coordinate
@@ -1273,6 +1327,19 @@ public:
 	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
+class tool_follow_convoi_underground_t : public tool_t {
+public:
+	tool_follow_convoi_underground_t() : tool_t(TOOL_FOLLOW_CONVOI_UNDERGROUND | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Toggle convoy following underground mode"); }
+	bool init( player_t * ) OVERRIDE {
+		env_t::follow_convoi_underground = (env_t::follow_convoi_underground + 1) % grund_t::ugm_count;
+		welt->set_dirty();
+		return false;
+	}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
 class tool_show_ribi_t : public tool_t {
 public:
 	tool_show_ribi_t() : tool_t(TOOL_SHOW_RIBI| SIMPLE_TOOL) {}
@@ -1446,6 +1513,14 @@ public:
 	bool is_init_network_safe() const OVERRIDE { return false; }
 };
 
+// set per-player stop permissions; default_param = "halt_id,perms"
+class tool_change_permission_t : public tool_t {
+public:
+	tool_change_permission_t() : tool_t(TOOL_HALT_PERMISSION | SIMPLE_TOOL) {}
+	bool init(player_t*) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return false; }
+};
+
 // internal tool: rename stuff
 class tool_rename_t : public tool_t {
 public:
@@ -1491,6 +1566,66 @@ public:
 	bool init(player_t * )OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE {return false;}
 	bool is_work_network_safe() const OVERRIDE {return false;}
+};
+
+// Two-click route tool: change way settings (overtaking mode, street flags, vehicle offset)
+// along an existing way route without touching ribi or desc.
+// default_param encodes the waytype (as integer string, same as tool_wayremover_t).
+// Changes overtaking_mode and street_flag on roads only.
+// Ctrl+click on toolbar icon opens the settings dialog.
+class tool_change_way_settings_t : public two_click_tool_t {
+private:
+	overtaking_mode_t overtaking_mode;
+	uint8 street_flag;
+
+	bool calc_route(route_t &route, player_t *player, const koord3d &start, const koord3d &end);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
+
+public:
+	tool_change_way_settings_t() : two_click_tool_t(TOOL_CHANGE_WAY_SETTINGS | GENERAL_TOOL),
+		overtaking_mode(twoway_mode), street_flag(0) {}
+
+	waytype_t get_waytype() const OVERRIDE { return road_wt; }
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
+	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
+
+	void set_overtaking_mode(overtaking_mode_t m) { overtaking_mode = m; }
+	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
+	void set_street_flag(uint8 f) { street_flag = f; }
+	uint8 get_street_flag() const { return street_flag; }
+};
+
+// Changes vehicle_offset on ways of any type.
+// Waytype is detected from the first-clicked tile (Shift picks alternate waytype at crossings).
+// Ctrl+click on toolbar icon opens the settings dialog.
+class tool_change_way_offset_t : public two_click_tool_t {
+private:
+	sint8 vehicle_offset;  // packed raw byte: bits 7-1 = value, bit 0 = mode
+	waytype_t detected_wt; // set on first click; invalid_wt = use default_param
+
+	bool calc_route(route_t &route, player_t *player, const koord3d &start, const koord3d &end);
+	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	void mark_tiles(player_t*, koord3d const&, koord3d const&) OVERRIDE;
+	uint8 is_valid_pos(player_t*, koord3d const&, char const*&, koord3d const&) OVERRIDE;
+
+public:
+	tool_change_way_offset_t() : two_click_tool_t(TOOL_CHANGE_WAY_OFFSET | GENERAL_TOOL),
+		vehicle_offset(0), detected_wt(invalid_wt) {}
+
+	waytype_t get_waytype() const OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool init(player_t*) OVERRIDE;
+	bool exit(player_t*) OVERRIDE;
+	void rdwr_custom_data(memory_rw_t *packet) OVERRIDE;
+
+	void set_vehicle_offset(sint8 v) { vehicle_offset = (sint8)((v << 1) | (vehicle_offset & 1)); }
+	sint8 get_vehicle_offset() const { return vehicle_offset >> 1; }
+	void set_vehicle_offset_mode(bool m) { m ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
+	bool get_vehicle_offset_mode() const { return vehicle_offset & 1; }
 };
 
 #endif

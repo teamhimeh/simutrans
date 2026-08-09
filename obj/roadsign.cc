@@ -52,6 +52,7 @@ roadsign_t::roadsign_t(loadsave_t *file) : obj_t ()
 {
 	image = foreground_image = IMG_EMPTY;
 	preview = false;
+	choose_sign_flag = 0; // must initialize before rdwr(): old save formats use bitwise-OR on this field
 	rdwr(file);
 	if(desc) {
 		/* if more than one state, we will switch direction and phase for traffic lights
@@ -151,6 +152,32 @@ roadsign_t::~roadsign_t()
 }
 
 
+void roadsign_t::update_ribi_maske()
+{
+	if(  preview  ) {
+		return;
+	}
+	weg_t *weg = welt->lookup(get_pos())->get_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt);
+	if(  !weg  ) {
+		return;
+	}
+	if(  desc->is_single_way()  &&  is_detailed_oneway()  ) {
+		// block only entry directions where no exits are allowed at all
+		ribi_t::ribi blocked = ribi_t::none;
+		for(  int i = 0;  i < 4;  i++  ) {
+			ribi_t::ribi entry = ribi_t::nesw[i];
+			if(  get_detailed_oneway_out_ribi(entry) == ribi_t::none  ) {
+				blocked |= entry;
+			}
+		}
+		weg->set_ribi_maske(blocked);
+	}
+	else {
+		weg->set_ribi_maske(calc_mask());
+	}
+}
+
+
 void roadsign_t::set_dir(ribi_t::ribi dir)
 {
 	ribi_t::ribi olddir = this->dir;
@@ -164,7 +191,8 @@ void roadsign_t::set_dir(ribi_t::ribi dir)
 		if(desc->is_single_way()  ||  (desc->is_signal_type() && !get_two_ways())) {
 			// set mask, if it is a single way ...
 			weg->count_sign();
-			weg->set_ribi_maske(calc_mask());
+			// detailed_oneway uses its own per-entry table; ignore the simple dir mask.
+			update_ribi_maske();
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
 			grund_t *to;
 			for(int r = 0; r < 4; r++) {
@@ -220,15 +248,15 @@ void roadsign_t::show_info()
 		create_win(new trafficlight_info_t(this), w_info, (ptrdiff_t)this );
 	}
 	else if(  desc->is_single_way()  ) {
-		if(  (intersection_pos = get_intersection()) == koord3d::invalid  ) {
+		intersection_pos = get_intersection();
+		if(  intersection_pos == koord3d::invalid  ) {
 			set_lane_affinity(4);
-			obj_t::show_info();
 		}
 		else {
 			// off the "not applied" bit flag
 			lane_affinity = ~((~lane_affinity)|4);
-			create_win(new onewaysign_info_t(this, intersection_pos), w_info, (ptrdiff_t)this );
 		}
+		create_win(new onewaysign_info_t(this, intersection_pos), w_info, (ptrdiff_t)this );
 	}
 	else if(  desc->is_signal_type()  ) {
 		// this should be a signal.
@@ -712,6 +740,10 @@ void roadsign_t::rdwr(loadsave_t *file)
 		file->rdwr_byte(flag8);
 		if(  file->is_loading()  ) {
 			choose_sign_flag = flag8;
+			if(  file->get_OTRP_version()<=52  ) {
+				// stop_before_check was added in v53
+				set_stop_before_check(false);
+			}
 		}
 	}
 	else if(file->get_OTRP_version()>=22) {
@@ -952,4 +984,17 @@ const vector_tpl<const roadsign_desc_t*>& roadsign_t::get_available_signs(const 
 		}
 	}
 	return dummy;
+}
+
+bool roadsign_t::is_detailed_oneway() const
+{ 
+	const grund_t *gr = welt->lookup(get_pos());
+	const weg_t *weg = gr ? gr->get_weg(get_desc()->get_wtyp() != tram_wt
+								? get_desc()->get_wtyp() : track_wt) : NULL;
+	const ribi_t::ribi way_ribi = weg ? weg->get_ribi_unmasked() : ribi_t::none;
+	if(  !ribi_t::is_single(way_ribi) && !ribi_t::is_twoway(way_ribi)  ) {
+		// more than 2 direction -> allow using detailed setting.
+		return (choose_sign_flag&detailed_oneway)>0;
+	} 
+	return false;
 }

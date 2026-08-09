@@ -311,6 +311,7 @@ public:
 	* Determine the direction bits for this kind of vehicle.
 	*/
 	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return gr->get_weg_ribi(get_waytype()); }
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE;
 
 	sint32 get_purchase_time() const {return purchase_time;}
 
@@ -564,6 +565,7 @@ public:
 	void refresh();
 
 	void unreserve_all_tiles();
+	void unreserve_target_halt();
 };
 
 
@@ -579,6 +581,7 @@ protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE { return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid); }
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE { return check_next_tile(bd, need_electric, false, false, koord3d::invalid); }
 	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd, false, false, false, koord3d::invalid); }
+	bool check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_from, ribi_t::ribi exit) const OVERRIDE;
 	void enter_tile(grund_t*) OVERRIDE;
 
 	bool is_pre_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);

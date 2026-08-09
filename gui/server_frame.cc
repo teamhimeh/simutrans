@@ -127,7 +127,9 @@ server_frame_t::server_frame_t() :
 	gi(welt),
 	custom_valid(false),
 	serverlist( gui_scrolled_list_t::listskin, gui_scrolled_list_t::scrollitem_t::compare ),
-	game_text(&buf)
+	game_text(&buf),
+	clientlist( gui_scrolled_list_t::listskin ),
+	clientlist_generation_shown( 0xFFFFFFFFu )
 {
 	map = new gui_minimap_t();
 	// update_info();
@@ -221,6 +223,13 @@ server_frame_t::server_frame_t() :
 	}
 	end_table();
 	new_component<gui_divider_t>();
+
+	if (  env_t::networkmode  ) {
+		new_component<gui_label_t>("Clients:" );
+		add_component( &clientlist );
+		update_clientlist();
+		new_component<gui_divider_t>();
+	}
 
 	if (  !env_t::networkmode  ) {
 
@@ -507,6 +516,25 @@ void server_frame_t::handle_serverlist_request_result(cbuffer_t network_buf) {
 }
 
 
+void server_frame_t::update_clientlist()
+{
+	clientlist.clear_elements();
+
+	const vector_tpl<nwc_clientlist_t::entry_t>& entries = nwc_clientlist_t::get_client_list();
+	for (  uint32 i = 0;  i < entries.get_count();  i++  ) {
+		const nwc_clientlist_t::entry_t& e = entries[i];
+
+		cbuffer_t line;
+		line.printf( "%s", e.nickname.c_str() );
+
+		clientlist.new_component<client_scrollitem_t>( line, SYSCOL_TEXT );
+	}
+
+	clientlist.set_size( clientlist.get_size() );
+	clientlist_generation_shown = nwc_clientlist_t::get_generation();
+}
+
+
 bool server_frame_t::infowin_event (const event_t *ev)
 {
 	return gui_frame_t::infowin_event( ev );
@@ -659,6 +687,10 @@ void server_frame_t::draw (scr_coord pos, scr_size size)
 	server_list_request_result_t server_list_result = pop_server_list_result();
 	if(  server_list_result.window==this  ) {
 		handle_serverlist_request_result(server_list_result.network_buf);
+	}
+
+	if (  env_t::networkmode  &&  clientlist_generation_shown != nwc_clientlist_t::get_generation()  ) {
+		update_clientlist();
 	}
 
 	gui_frame_t::draw( pos, size );

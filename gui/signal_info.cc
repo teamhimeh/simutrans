@@ -60,24 +60,25 @@ signal(s)
 		add_component(&bt_length_based);
 	}
 
-	add_table(2,0);
-	{
-		lb_tiles_margin.set_text("Margin");
-		lb_tiles_margin.set_tooltip(translator::translate("tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)"));
-		numinp_tiles_margin.set_width(50);
-		numinp_tiles_margin.set_height(5);
-		numinp_tiles_margin.set_limits(0,200);
-		numinp_tiles_margin.set_increment_mode(1);
-		numinp_tiles_margin.disable();
-		numinp_tiles_margin.add_listener(this);
-		if(signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end()) {
+	lb_tiles_margin.set_text("Margin");
+	lb_tiles_margin.set_tooltip(translator::translate("tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)"));
+	numinp_tiles_margin.set_width(50);
+	numinp_tiles_margin.set_height(5);
+	numinp_tiles_margin.set_limits(0,200);
+	numinp_tiles_margin.set_increment_mode(1);
+	numinp_tiles_margin.disable();
+	numinp_tiles_margin.add_listener(this);
+	if(signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end()) {
+		add_table(2,0);
+		{
 			add_component(&lb_tiles_margin);
 			add_component(&numinp_tiles_margin);
 		}
+		end_table();
 	}
-	end_table();
 
 	bt_two_ways.init( button_t::square_state, translator::translate("allow reverse passage") );
+	bt_two_ways.set_tooltip(translator::translate("Allow reverse passage for convoys"));
 	bt_two_ways.add_listener(this);
 	bt_two_ways.pressed = signal->get_two_ways();
 	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );

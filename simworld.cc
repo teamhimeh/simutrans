@@ -418,6 +418,7 @@ void karte_t::destroy()
 		dbg->fatal( "karte_t::destroy()","Map cannot be cleanly destroyed in any rotation!" );
 	}
 
+	route_cache.clear();
 	goods_in_game.clear();
 
 	DBG_MESSAGE("karte_t::destroy()", "label clear");
@@ -520,6 +521,8 @@ void karte_t::destroy()
 
 assert( depot_t::get_depot_list().empty() );
 
+	convoy_templates.clear();
+
 	DBG_MESSAGE("karte_t::destroy()", "world destroyed");
 	destroying = false;
 }
@@ -535,6 +538,12 @@ void karte_t::add_convoi(convoihandle_t const cnv)
 void karte_t::rem_convoi(convoihandle_t const cnv)
 {
 	convoi_array.remove(cnv);
+}
+
+
+void karte_t::load_convoy_templates()
+{
+	convoi_template_load(env_t::pak_dir, env_t::default_settings.get_with_private_paks(), convoy_templates);
 }
 
 
@@ -638,6 +647,14 @@ void karte_t::init_tiles()
 		for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
 			finance_history_month[month][cost_type] = 0;
 		}
+	}
+	for (int decade=0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+		for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
+			finance_history_decade[decade][cost_type] = 0;
+		}
+	}
+	for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
+		finance_history_decade_acc[cost_type] = 0;
 	}
 	last_month_bev = 0;
 
@@ -1172,6 +1189,8 @@ sint8 *humidity;
 void karte_t::init(settings_t* const sets, sint8 const* const h_field)
 {
 	humidity = NULL;
+
+	step_year_count=0;
 
 	clear_random_mode( 7 );
 	mute_sound(true);
@@ -1840,8 +1859,11 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	dbg->message("karte_t::enlarge_map()","heightfield name is %s",settings.heightfield.c_str());
 	if(  !settings.heightfield.empty()  ) {
 		// init from file
-		for(  sint16 y = 0;  y<=new_size_y;  y++  ) {
-			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<=new_size_x;  x++  ) {
+		// h_field has new_size_x * new_size_y pixels; the grid has one extra row and column.
+		// The rightmost column is mirrored by the per-row copy below; the bottom row is
+		// mirrored by the memcpy below — so the inner loops must stay within h_field bounds.
+		for(  sint16 y = 0;  y<new_size_y;  y++  ) {
+			for(  sint16 x = (y>old_y) ? 0 : old_x+1;  x<new_size_x;  x++  ) {
 				grid_hgts[x + y*(cached_grid_size.x+1)] = h_field[x+(y*(sint32)cached_grid_size.x)]+1;
 			}
 			grid_hgts[cached_grid_size.x + y*(cached_grid_size.x+1)] = grid_hgts[cached_grid_size.x-1 + y*(cached_grid_size.x+1)];
@@ -2145,6 +2167,7 @@ karte_t::karte_t() :
 		players[i] = NULL;
 		player_password_hash[i].clear();
 	}
+	player_password_set_bits = 0;
 
 	// no distance to show at first ...
 	show_distance = koord3d::invalid;
@@ -3118,7 +3141,7 @@ void karte_t::set_tool( tool_t *tool_in, player_t *player )
 	// check for password-protected players
 	if(  (!tool_in->is_init_network_safe()  ||  !tool_in->is_work_network_safe())  &&  needs_check  &&
 		 !(tool_in->get_id()==(TOOL_CHANGE_PLAYER|SIMPLE_TOOL)  ||  tool_in->get_id()==(TOOL_ADD_MESSAGE | GENERAL_TOOL))  &&
-		 player  &&  player->is_locked()  ) {
+		 player  &&  !player_can_act_unrestricted(player)  ) {
 		// player is currently password protected => request unlock first
 		create_win( -1, -1, new password_frame_t(player), w_info, magic_pwd_t + player->get_player_nr() );
 		return;
@@ -3310,6 +3333,9 @@ DBG_MESSAGE( "karte_t::rotate90()", "called" );
 	// assume we can save this rotation
 	nosave_warning = nosave = false;
 
+	// cached routes reference koord3d positions that become invalid after rotation
+	route_cache.clear();
+
 	//announce current target rotation
 	settings.rotate90();
 
@@ -3463,7 +3489,7 @@ bool karte_t::rem_fab(fabrik_t *fab)
 				// first remove all the tiles that do not connect
 				plan->remove_from_haltlist( list[i] );
 				// then reconnect
-				list[i]->verbinde_fabriken();
+				list[i]->reconnect_factories();
 			}
 		}
 
@@ -4008,6 +4034,26 @@ void karte_t::new_month()
 }
 
 
+// Flow-type fields accumulate over the decade; snapshot/ratio fields just mirror year[0].
+// Order must match karte_t::player_cost enum.
+static const bool decade_flow_field[karte_t::MAX_WORLD_COST] = {
+	false, // WORLD_CITIZENS
+	true,  // WORLD_GROWTH
+	false, // WORLD_TOWNS
+	false, // WORLD_FACTORIES
+	false, // WORLD_CONVOIS
+	false, // WORLD_CITYCARS
+	false, // WORLD_PAS_RATIO
+	true,  // WORLD_PAS_GENERATED
+	false, // WORLD_MAIL_RATIO
+	true,  // WORLD_MAIL_GENERATED
+	false, // WORLD_GOODS_RATIO
+	true,  // WORLD_TRANSPORTED_GOODS
+	false  // WORLD_HALTS
+};
+static_assert(sizeof(decade_flow_field)/sizeof(bool) == karte_t::MAX_WORLD_COST,
+              "decade_flow_field must have one entry per MAX_WORLD_COST");
+
 void karte_t::new_year()
 {
 	last_year = current_month/12;
@@ -4016,6 +4062,30 @@ void karte_t::new_year()
 	for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
 		for( int y=MAX_WORLD_HISTORY_YEARS-1; y>0;  y--  ) {
 			finance_history_year[y][hist] = finance_history_year[y-1][hist];
+		}
+	}
+
+	// Decade history update.
+	// At a decade boundary, decade[0] already holds the complete 10-year total
+	// (set by update_history() called earlier in new_month()), so we just shift
+	// and reset the accumulator for the new decade.
+	// At non-boundary years, add the just-completed year[1] to the accumulator
+	// for flow fields; update_history() will keep decade[0] live.
+	bool const is_decade_boundary = (last_year - settings.get_starting_year() - step_year_count) % 10 == 0;
+	for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
+		if(  is_decade_boundary  ) {
+			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
+				finance_history_decade[d][hist] = finance_history_decade[d-1][hist];
+			}
+			if(  decade_flow_field[hist]  ) {
+				finance_history_decade_acc[hist] = 0;
+				finance_history_decade[0][hist] = 0;
+			}
+		}
+		else {
+			if(  decade_flow_field[hist]  ) {
+				finance_history_decade_acc[hist] += finance_history_year[1][hist];
+			}
 		}
 	}
 
@@ -4496,6 +4566,7 @@ void karte_t::update_history()
 {
 	finance_history_year[0][WORLD_CONVOIS] = finance_history_month[0][WORLD_CONVOIS] = convoi_array.get_count();
 	finance_history_year[0][WORLD_FACTORIES] = finance_history_month[0][WORLD_FACTORIES] = fab_list.get_count();
+	finance_history_year[0][WORLD_HALTS] = finance_history_month[0][WORLD_HALTS] = haltestelle_t::get_alle_haltestellen().get_count();
 
 	// now step all towns (to generate passengers)
 	sint64 bev=0;
@@ -4555,6 +4626,17 @@ void karte_t::update_history()
 	}
 	finance_history_month[0][WORLD_TRANSPORTED_GOODS] = transported;
 	finance_history_year[0][WORLD_TRANSPORTED_GOODS] = transported_year;
+
+	// Keep decade[0] live: flow fields = accumulated completed years + current year;
+	// snapshot/ratio fields mirror year[0].
+	for(  int hist=0;  hist<MAX_WORLD_COST;  hist++  ) {
+		if(  decade_flow_field[hist]  ) {
+			finance_history_decade[0][hist] = finance_history_decade_acc[hist] + finance_history_year[0][hist];
+		}
+		else {
+			finance_history_decade[0][hist] = finance_history_year[0][hist];
+		}
+	}
 }
 
 
@@ -4930,6 +5012,27 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 				file->rdwr_longlong(finance_history_month[month][cost_type]);
 			}
 		}
+		// WORLD_HALTS added in OTRP v56
+		if(  file->get_OTRP_version()>55  ) {
+			for(int year = 0; year < /*MAX_WORLD_HISTORY_YEARS*/12; year++) {
+				file->rdwr_longlong(finance_history_year[year][WORLD_HALTS]);
+			}
+			for(int month = 0; month < /*MAX_WORLD_HISTORY_MONTHS*/12; month++) {
+				file->rdwr_longlong(finance_history_month[month][WORLD_HALTS]);
+			}
+		}
+	}
+	if(  file->get_OTRP_version() >= 57  ) {
+		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
+			}
+		}
+	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
 	}
 
 	// finally a possible scenario
@@ -5132,7 +5235,9 @@ bool karte_t::load(const char *filename)
 
 	if(file.rd_open(name) != loadsave_t::FILE_STATUS_OK) {
 
-		if(  file.get_version_int()==0  ||  file.get_version_int()>loadsave_t::int_version(LOADGAME_VER_NR, NULL ).version  ) {
+		if(  file.get_version_int()==0
+		  || file.get_version_int()>loadsave_t::int_version(LOADGAME_VER_NR, NULL ).version
+		  || file.get_OTRP_version()>loadsave_t::int_version(LOADGAME_VER_NR, NULL ).OTRP_version  ) {
 			dbg->warning("karte_t::load()", translator::translate("WRONGSAVE") );
 			create_win( new news_img("WRONGSAVE"), w_info, magic_none );
 		}
@@ -5512,19 +5617,67 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 	else {
 		for (int year = 0;  year</*MAX_WORLD_HISTORY_YEARS*/12;  year++) {
-			for (int cost_type = 0; cost_type</*MAX_WORLD_COST*/12; cost_type++) {
+			for (int cost_type = 0; cost_type<WORLD_HALTS; cost_type++) {
 				file->rdwr_longlong(finance_history_year[year][cost_type]);
 			}
 		}
 		for (int month = 0;month</*MAX_WORLD_HISTORY_MONTHS*/12;month++) {
-			for (int cost_type = 0; cost_type</*MAX_WORLD_COST*/12; cost_type++) {
+			for (int cost_type = 0; cost_type<WORLD_HALTS; cost_type++) {
 				file->rdwr_longlong(finance_history_month[month][cost_type]);
+			}
+		}
+		// WORLD_HALTS added in OTRP v56; older files have no recorded data
+		if(  file->get_OTRP_version() > 55  ) {
+			for(int year = 0; year < /*MAX_WORLD_HISTORY_YEARS*/12; year++) {
+				file->rdwr_longlong(finance_history_year[year][WORLD_HALTS]);
+			}
+			for(int month = 0; month < /*MAX_WORLD_HISTORY_MONTHS*/12; month++) {
+				file->rdwr_longlong(finance_history_month[month][WORLD_HALTS]);
+			}
+		}
+		else {
+			for(int year = 0; year < /*MAX_WORLD_HISTORY_YEARS*/12; year++) {
+				finance_history_year[year][WORLD_HALTS] = 0;
+			}
+			for(int month = 0; month < /*MAX_WORLD_HISTORY_MONTHS*/12; month++) {
+				finance_history_month[month][WORLD_HALTS] = 0;
 			}
 		}
 		last_month_bev = finance_history_month[1][WORLD_CITIZENS];
 
 		if (file->is_version_atleast(112, 5) &&  file->is_version_less(120, 6)) {
 			restore_history(true);
+		}
+	}
+	if(  file->get_OTRP_version() >= 57  ) {
+		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
+			}
+		}
+	}
+	else {
+		// initialize decade history from year history for old saves
+		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+				finance_history_decade[decade][cost_type] = 0;
+			}
+		}
+	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
+	}
+	// Reconstruct the decade flow accumulator from year history.
+	// decade_acc = sum of year[1..k] where k = completed years in current decade.
+	const int years_in_decade = (last_year - settings.get_starting_year() - step_year_count) % 10;
+	for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+		finance_history_decade_acc[cost_type] = 0;
+		if(  decade_flow_field[cost_type]  ) {
+			for (int y = 1; y <= years_in_decade && y < MAX_WORLD_HISTORY_YEARS; y++) {
+				finance_history_decade_acc[cost_type] += finance_history_year[y][cost_type];
+			}
 		}
 	}
 
@@ -6963,6 +7116,8 @@ void karte_t::step_year()
 	DBG_MESSAGE("karte_t::step_year()","called");
 	current_month += 12;
 	last_year ++;
+	// we need to record how many times this tool called
+	step_year_count ++;
 	reset_timer();
 	recalc_average_speed();
 	koord::locality_factor = settings.get_locality_factor( last_year );
@@ -7002,7 +7157,7 @@ void karte_t::change_time_multiplier(sint32 delta)
 		if(time_multiplier<=0) {
 			time_multiplier = 1;
 		}
-		if(step_mode!=NORMAL) {
+		if(  !env_t::networkmode  &&  step_mode!=NORMAL  ) {
 			step_mode = NORMAL;
 			reset_timer();
 		}
@@ -7078,6 +7233,12 @@ void karte_t::remove_player(uint8 player_nr)
 		players[player_nr]->ai_bankrupt();
 		delete players[player_nr];
 		players[player_nr] = 0;
+		// Clear removed player's bit from all halt permissions
+		for(  halthandle_t const& h : haltestelle_t::get_alle_haltestellen()  ) {
+			if(  h.is_bound()  &&  !h->is_allow_other_player_connection()  ) {
+				h->set_permissions( h->get_permissions() & ~(1 << player_nr) );
+			}
+		}
 		nwc_chg_player_t::company_removed(player_nr);
 		// if default human, create new instace of it (to avoid crashes)
 		if(  player_nr == 0  ) {
@@ -7350,7 +7511,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					// already waiting longer than how far we're ahead, so set wait time shorter to the time ahead.
 					next_step_time = (sint64)timems - frame_timediff;
 			}
-			else if(  nwcid == NWC_CHECK  ) {
+			else {
 					// gentle slowing down
 					*ms_difference = timediff;
 				}
@@ -7362,7 +7523,7 @@ void karte_t::process_network_commands(sint32 *ms_difference)
 					next_step_time = timems;
 					*ms_difference = frame_timediff;
 				}
-				else if(  nwcid == NWC_CHECK  ) {
+				else {
 					// gentle catching up
 					*ms_difference = timediff;
 				}
@@ -7895,4 +8056,28 @@ const vector_tpl<const goods_desc_t*> &karte_t::get_goods_list()
 player_t *karte_t::get_public_player() const
 {
 	return get_player(1);
+}
+
+
+bool karte_t::player_can_act_unrestricted(player_t *player) const
+{
+	if (!player  ||  !player->is_locked()) {
+		return true;
+	}
+	// in network mode an unlocked public player can proxy-manage any locked company
+	return env_t::networkmode  &&  players[PUBLIC_PLAYER_NR]  &&  !players[PUBLIC_PLAYER_NR]->is_locked();
+}
+
+
+bool karte_t::is_player_password_set(uint8 player_nr) const
+{
+	if (player_nr >= PLAYER_UNOWNED) {
+		return false;
+	}
+	if (env_t::networkmode  &&  !env_t::server) {
+		// client: local hashes are not authoritative, use the state reported by the server
+		return (player_password_set_bits & (1<<player_nr)) != 0;
+	}
+	player_t *player = get_player(player_nr);
+	return player  &&  player->is_password_hash();
 }
