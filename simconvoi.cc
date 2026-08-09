@@ -2209,9 +2209,17 @@ void convoi_t::ziel_erreicht()
 			// swap parent/child if the schedule entry has REVERSE_COUPLING set.
 			// Always attach at the TAIL of the target chain so existing children are not orphaned.
 			convoihandle_t temp_parent_convoi;
-			// trying is parent: append waiting chain at the tail of the trying chain
-			temp_parent_convoi = self;
-			self->find_most_child_convoi()->couple_convoi(cc->get_most_parent_convoi());
+			if(  schedule->get_current_entry().is_reverse_convoi_coupling()  ) {
+				// trying becomes child: append trying chain at the tail of the waiting chain
+				temp_parent_convoi = cc->get_most_parent_convoi();
+				cc->find_most_child_convoi()->couple_convoi(self);
+				reverse_coupling_done=true;
+			}
+			else {
+				// trying is parent: append waiting chain at the tail of the trying chain
+				temp_parent_convoi = self;
+				self->find_most_child_convoi()->couple_convoi(cc->get_most_parent_convoi());
+			}
 			wait_lock = 0;
 			cc->set_coupling_done(true);
 			coupling_done = true;
@@ -4258,7 +4266,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 				c->uncouple_convoi();
 			}
 		}
-		if(  coupled_at_this_stop && get_schedule()->get_count()>1  ) {
+		if(  coupled_at_this_stop && get_schedule()->get_count()>1 && schedule->get_waytype()!=water_wt  ) {
 			dbg->message("convoi_t::hat_gehalten()","%s coupling at this stop. check the direction at %s",get_name(),temp_parent_convoi->front()->get_pos().get_str());
 			// chage the order if next direction is backward of "self"
 			// Attention! reverse_convoy_coupling() must be called when loading!
