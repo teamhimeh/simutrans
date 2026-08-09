@@ -1515,6 +1515,45 @@ void haltestelle_t::new_month()
 			}
 		}
 	}
+
+}
+
+
+void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
+{
+	const sint32 base = welt->get_settings().get_base_revenue_from_halt();
+	if(  base <= 0  ||  boarded_pax == 0  ) {
+		return;
+	}
+	if(  is_overcrowded( goods_manager_t::passengers->get_index() )  ) {
+		return;
+	}
+	// Sum level contributions only from buildings that can handle passengers
+	// (enabled == NOT_ENABLED means all goods; enabled & PAX means explicitly passenger-capable).
+	// Buildings that only handle post or freight are excluded.
+	sint32 capacity_factor = 0;
+	FOR(slist_tpl<tile_t>, const& t, tiles) {
+		if(  gebaeude_t* const gb = t.grund->find<gebaeude_t>()  ) {
+			const building_desc_t *desc = gb->get_tile()->get_desc();
+			if(  desc  ) {
+				const uint8 enabled = desc->get_enabled();
+				if(  enabled == NOT_ENABLED  ||  (enabled & PAX)  ) {
+					sint32 lv = (sint32)desc->get_level() - 3;
+					if(  lv > 0  ) { capacity_factor += min(lv / 2 + 1, 2); }
+				}
+			}
+		}
+		// we set max value of revenue
+		if(  capacity_factor>=50  ) {
+			capacity_factor = 50;
+			break;
+		}
+	}
+	if(  capacity_factor > 0  ) {
+		sint64 revenue = (sint64)base * capacity_factor * (sint64)boarded_pax / 10000;
+		owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
+		financial_history[0][HALT_REVENUE] += revenue;
+	}
 }
 
 
@@ -4306,9 +4345,21 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->is_version_atleast(111, 1)  ) {
-		for (int j = 0; j<MAX_HALT_COST; j++) {
+		// read/write original 8 stats
+		for (int j = 0; j<8; j++) {
 			for (size_t k = MAX_MONTHS; k-- != 0;) {
 				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		// HALT_REVENUE added in OTRP version 59
+		if(  file->get_OTRP_version() >= 59  ) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][HALT_REVENUE]);
+			}
+		}
+		else {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				financial_history[k][HALT_REVENUE] = 0;
 			}
 		}
 	}
@@ -4321,6 +4372,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][HALT_WALKED] = 0;
+			financial_history[k][HALT_REVENUE] = 0;
 		}
 	}
 

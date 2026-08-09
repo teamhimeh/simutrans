@@ -166,6 +166,7 @@ void convoi_t::init(player_t *player)
 	next_coupling_steps = 0;
 
 	coupling_done = false;
+	waiting_for_departure_allowance_by_other_convoy = false;
 	uncouple_done = false;
 
 	coupling_convoi = convoihandle_t();
@@ -1907,6 +1908,26 @@ void convoi_t::new_month()
 		}
 		state = WAITING_FOR_CLEARANCE_TWO_MONTHS;
 	}
+	// penalty fine for convoys blocked for two or more months
+	if(  state == WAITING_FOR_CLEARANCE_TWO_MONTHS  &&  welt->get_settings().get_penalty_wait_for_two_month()  ) {
+		sint64 pax_revenue = 0;
+		for(  uint i = 0;  i < anz_vehikel;  i++  ) {
+			if(  fahr[i]->get_cargo_type()->get_catg_index() == 0  ) {
+				sint64 freight_revenue = ware_t::calc_revenue(fahr[i]->get_cargo_type(), fahr[i]->get_waytype(), speed_to_kmh(get_min_top_speed()));
+				pax_revenue += fahr[i]->get_total_cargo() * freight_revenue;
+			}
+		}
+		if(  pax_revenue > 0  ) {
+			waytype_t wt = fahr[0]->get_waytype();
+			// penalty = (pax * revenue) * month_length * kmh_to_speed(100), normalised by >> 20, rounded value in cents
+			sint64 penalty = ((pax_revenue * (sint64)welt->ticks_per_world_month * (sint64)kmh_to_speed(100) >> 20) + 1500ll) / 3000ll;
+			player_t *public_player = welt->get_public_player();
+			public_player->book_toll_received( penalty, wt );
+			get_owner()->book_toll_paid( -penalty, wt );
+			book( -penalty, CONVOI_WAYTOLL );
+			book( -penalty, CONVOI_PROFIT );
+		}
+	}
 	// check for traffic jam
 	if(state==CAN_START) {
 		state = CAN_START_ONE_MONTH;
@@ -2190,6 +2211,46 @@ void convoi_t::ziel_erreicht()
 		set_next_coupling(route_t::INVALID_INDEX, 0);
 	}
 
+	// Water vehicle TRY_COUPLING: couple at stop without signal-based route reservation.
+	// can_enter_tile() already did the (route-search-based, so step-only) work of finding a
+	// waiting partner reachable in the same body of water and recorded it in
+	// convoi_coupling_in_progress; here we only re-check that it is still there and still
+	// waiting - is_same_waterway() must NOT be called again here, since ziel_erreicht() can
+	// run from sync_step and route calculation is only safe in step.
+	if(  front()->get_waytype() == water_wt
+	  &&  schedule->get_current_entry().is_try_coupling()
+	  &&  !coupling_done  ) {
+		convoihandle_t cc = get_convoi_coupling_in_progress();
+		if(  cc.is_bound()  &&  can_start_coupling(cc.get_rep())  &&  cc->is_loading()  ) {
+			akt_speed = 0;
+			if(  halt.is_bound()  &&  gr->get_weg_ribi(front()->get_waytype()) != 0  ) {
+				halt->book(1, HALT_CONVOIS_ARRIVED);
+			}
+			// For water vehicles: trying convoy (self) is the most-parent;
+			// swap parent/child if the schedule entry has REVERSE_COUPLING set.
+			// Always attach at the TAIL of the target chain so existing children are not orphaned.
+			convoihandle_t temp_parent_convoi;
+			if(  schedule->get_current_entry().is_reverse_convoi_coupling()  ) {
+				// trying becomes child: append trying chain at the tail of the waiting chain
+				temp_parent_convoi = cc->get_most_parent_convoi();
+				cc->find_most_child_convoi()->couple_convoi(self);
+				reverse_coupling_done=true;
+			}
+			else {
+				// trying is parent: append waiting chain at the tail of the trying chain
+				temp_parent_convoi = self;
+				self->find_most_child_convoi()->couple_convoi(cc->get_most_parent_convoi());
+			}
+			wait_lock = 0;
+			cc->set_coupling_done(true);
+			coupling_done = true;
+			unset_convoi_coupling_in_progress();
+			temp_parent_convoi->check_and_set_coupling_done_over_length();
+			check_electrification();
+			return;
+		}
+	}
+
 	// no depot reached, no coupling, check for stop!
 	if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0 && !schedule->get_current_entry().is_pass_stop()  ) {
 		// seems to be a stop, so book the money for the trip
@@ -2199,6 +2260,9 @@ void convoi_t::ziel_erreicht()
 			c->set_akt_speed(0);
 			c->set_state(c==self ? LOADING : COUPLED_LOADING);
 			c->set_arrived_time(world()->get_ticks());
+			if(  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  ) {
+				c->set_waiting_for_departure_allowance_by_other_convoy(true);
+			}
 			c = c->get_coupling_convoi();
 		}
 		check_and_set_coupling_done_over_length();
@@ -3650,6 +3714,11 @@ void convoi_t::rdwr(loadsave_t *file)
 	} else {
 		unload_all = false;
 	}
+	if(  file->get_OTRP_version()>=59  ) {
+		file->rdwr_bool(waiting_for_departure_allowance_by_other_convoy);
+	} else {
+		waiting_for_departure_allowance_by_other_convoy = false;
+	}
 
 	if(  file->is_loading()  ) {
 		recalc_catg_index();
@@ -3961,9 +4030,12 @@ sint32 subtract_ticks(uint32 v1, uint32 v2) {
  * 2) maximum waiting time
  * 3) designated departure time
  * 4) convoy coupling
- * 
- * if departure time is not set, can_depart = [4] * ([1] + [2])
+ * 5) departure allowance granted by another convoy
+ *
+ * if departure time is not set, can_depart = [4] * [5] * ([1] + [2])
  * if departure time is set and wait_coupling_done is false, can_depart = ([1] + [2]) * [3]
+ *
+ * Priority of departure allowance conditions (strongest first): minimum_loading > wait_for_allowance > wait_for_couple.
  *
  * @author THLeaderH
  */
@@ -3973,18 +4045,22 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 	go_on_ticks = 0;
 	bool loading_cond = true;
 	bool coupling_done_cond = true;
+	bool allowance_cond = true;
 	while(  c.is_bound()  ) {
 		const schedule_entry_t e = c->get_schedule()->get_current_entry();
 		// First, check whether we have to wait for coupling at this stop.
 		const bool coupling_waiting = (e.is_wait_for_coupling() &&  !c->is_coupling_done()  &&  !c->is_cease_coupling_due_to_length_over()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled()));
+		// And whether we have to wait for departure allowance granted by another convoy.
+		const bool allowance_waiting = (e.is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy());
 		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  (world()->get_ticks() - arrived_time) > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
-		coupling_cond |= (coupling_waiting && ~waiting_time_cond);
+		coupling_cond |= (coupling_waiting && !waiting_time_cond);
 		if (  c->is_coupling_done()  ||  !c->get_convoi_coupling_in_progress().is_bound()  ||  c->get_convoi_coupling_in_progress()->get_convoi_coupling_in_progress()!=c  ) {
 			// The convoi_coupling_in_progress flag blocks the departure.
 			// Reset the flag if it is outdated to avoid blocking the departure forever.
 			c->unset_convoi_coupling_in_progress();
 		}
 		coupling_done_cond &= (!coupling_waiting || waiting_time_cond);
+		allowance_cond &= (!allowance_waiting || waiting_time_cond);
 		c = c->get_coupling_convoi();
 	}
 	c = cnv;
@@ -4005,7 +4081,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 	// Use the scheduled departure time as long as the other departure conditions are satisfied.
 	// If departure time is set to the parent, all conditions of children are ignored.
 	// Departure time settings of children have no effect.
-	if(  current_entry.get_wait_for_time() &&  loading_cond  &&  (coupling_done_cond  ||  !current_entry.is_wait_coupling_done())  ) {
+	if(  current_entry.get_wait_for_time() &&  loading_cond  &&  allowance_cond  &&  (coupling_done_cond  ||  !current_entry.is_wait_coupling_done())  ) {
 		if(  arrived_time==0  ) {
 			// arrived_time is not registered for some reasons. replace it to the current ticks.
 			arrived_time = world()->get_ticks();
@@ -4034,7 +4110,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 	}
 
 	// if not calculate waiting time, return cond.
-	return loading_cond  &&  coupling_done_cond;
+	return loading_cond  &&  allowance_cond  &&  coupling_done_cond;
 }
 
 
@@ -4226,7 +4302,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 				c->uncouple_convoi();
 			}
 		}
-		if(  coupled_at_this_stop && get_schedule()->get_count()>1  ) {
+		if(  coupled_at_this_stop && get_schedule()->get_count()>1 && schedule->get_waytype()!=water_wt  ) {
 			dbg->message("convoi_t::hat_gehalten()","%s coupling at this stop. check the direction at %s",get_name(),temp_parent_convoi->front()->get_pos().get_str());
 			// chage the order if next direction is backward of "self"
 			// Attention! reverse_convoy_coupling() must be called when loading!
@@ -4275,6 +4351,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 
 	// cargo type of previous vehicle that could not be filled
 	const goods_desc_t* cargo_type_prev = NULL;
+	uint16 pax_boarded = 0; // total passengers that boarded at this stop
 	bool loading_needed = !get_no_load()  &&  !next_depot  &&  !is_invalid_convoy();
 	// When load_before_departure is enabled, load cargos only when the departure time condition is satisfied.
 	convoihandle_t leading_convoy = get_most_parent_convoi();
@@ -4331,7 +4408,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			if (amount>0  ||  cargo_type_prev==NULL  ||  !cargo_type_prev->is_interchangeable(v->get_cargo_type())) {
 				// load
 				const vector_tpl<halthandle_t> &destinations = destination_halts.get(v->get_cargo_type()->get_catg_index());
-				amount += fetch_goods_and_load(v, halt, destinations, capacity_left);
+				const uint16 loaded = fetch_goods_and_load(v, halt, destinations, capacity_left);
+				amount += loaded;
+				if(  v->get_cargo_type()->get_catg_index() == goods_manager_t::INDEX_PAS  ) {
+					pax_boarded += loaded;
+				}
 			}
 			if (v->get_total_cargo() < v->get_cargo_max()) {
 				// not full
@@ -4354,6 +4435,16 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
 	}
+	if(  !unloading_done  ) {
+		// Grant departure allowance to a waiting convoy of another line, if configured.
+		// This runs after unloading (self and all coupling children) so that goods just
+		// unloaded here are already available at the halt for the released convoy to load.
+		c = self;
+		while(  c.is_bound()  ) {
+			c->allow_other_convoy_to_depart(halt);
+			c = c->get_coupling_convoi();
+		}
+	}
 	if(  !schedule->get_current_entry().is_no_unload()  ) 
 	{
 		// after unload all, this flag should be false
@@ -4363,6 +4454,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	freight_info_resort |= changed_loading_level;
 	if(  changed_loading_level  ) {
 		halt->recalc_status();
+	}
+
+	// Revenue for the halt owner based on passengers that actually boarded
+	if(  pax_boarded > 0  ) {
+		halt->book_pax_boarding_revenue(pax_boarded);
 	}
 
 	// any unloading/loading went on?
@@ -4456,7 +4552,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if (  coupling_convoi.is_bound()  &&  !is_coupled()  &&  !is_waiting_for_coupling()  &&  !reverse_coupling_done  )
 	{
 		bool should_reverse_coupling_done = false;
-		if(world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default()) {
+		// Water vehicles do not use direction-based coupling reversal; only explicit REVERSE_COUPLING flag applies.
+		if(  front()->get_waytype() != water_wt
+		  &&  (world()->get_settings().is_default_reverse() || get_schedule()->is_reverse_default())  ) {
 			// the direction of the waiting vehicle is same? opposite?
 			route_t r;
 			route_t::route_result_t res = r.calc_route(welt, front()->get_pos(), get_schedule()->get_next_entry().pos, front(), speed_to_kmh(min_top_speed), 8888);
@@ -4510,6 +4608,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			loading_limit = 0;
 			loading_waiting_time = 0;
 			coupling_done = false;
+			waiting_for_departure_allowance_by_other_convoy = false;
 			scheduled_departure_time = 0;
 			// Advance schedule of coupling convoy recursively.
 			convoihandle_t c_cnv = coupling_convoi;
@@ -4519,6 +4618,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 				c_cnv->get_schedule()->advance();
 				c_cnv->set_state(COUPLED);
 				c_cnv->set_coupling_done(false);
+				c_cnv->set_waiting_for_departure_allowance_by_other_convoy(false);
 				c_cnv->reset_departure_time();
 				c_cnv = c_cnv->get_coupling_convoi();
 			}
@@ -6180,6 +6280,23 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 	return true;
 }
 
+bool convoi_t::is_same_waterway(convoihandle_t other_cnv) const
+{
+	if(  front()->get_waytype()!=water_wt  ||  !other_cnv.is_bound()  ||  other_cnv->front()->get_waytype()!=water_wt  ) {
+		return false;
+	}
+	const koord3d my_pos = schedule->get_current_entry().pos;
+	const koord3d other_pos = other_cnv->front()->get_pos();
+	if(  my_pos==other_pos  ) {
+		return true;
+	}
+	// Check whether the two positions are connected via water (same river, same sea,
+	// or a sea connected to a river etc.) by trying to find a route between them.
+	route_t r;
+	route_t::route_result_t result = r.calc_route( world(), my_pos, other_pos, front(), speed_to_kmh(get_min_top_speed()), 0, false );
+	return result!=route_t::no_route;
+}
+
 bool convoi_t::is_waiting_for_coupling() const {
 	convoihandle_t c = self;
 	bool waiting_for_coupling = false;
@@ -6188,6 +6305,41 @@ bool convoi_t::is_waiting_for_coupling() const {
 		c = c->get_coupling_convoi();
 	}
 	return waiting_for_coupling;
+}
+
+bool convoi_t::is_waiting_for_departure_allowance() const {
+	convoihandle_t c = self;
+	bool waiting_for_allowance = false;
+	while(  c.is_bound()  ) {
+		waiting_for_allowance |= (  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy());
+		c = c->get_coupling_convoi();
+	}
+	return waiting_for_allowance;
+}
+
+void convoi_t::allow_other_convoy_to_depart(halthandle_t halt) const {
+	const linehandle_t target_line = get_schedule()->get_current_entry().get_allow_depart_line();
+	if(  !halt.is_bound()  ||  !target_line.is_bound()  ) {
+		return;
+	}
+	FOR(  vector_tpl<convoihandle_t>,  cnv,  halt->get_loading_convois()  ) {
+		if(  !cnv.is_bound()  ||  cnv->get_line() != target_line  ||  cnv->get_most_parent_convoi()==get_most_parent_convoi()  ) {
+			continue;
+		}
+		// only one convoy is granted departure allowance per arrival; check leading and child convoys.
+		convoihandle_t c = cnv;
+		bool released = false;
+		while(  c.is_bound()  &&  !released  ) {
+			if(  c->is_waiting_for_departure_allowance_by_other_convoy()  ) {
+				c->set_waiting_for_departure_allowance_by_other_convoy(false);
+				released = true;
+			}
+			c = c->get_coupling_convoi();
+		}
+		if(  released  ) {
+			break;
+		}
+	}
 }
 
 void convoi_t::check_electrification() {
