@@ -800,7 +800,11 @@ void roadsign_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->get_OTRP_version() >= 59  ) {
-		if(  desc  &&  desc->is_private_way()  ) {
+		// Whether the mask follows must not depend on whether desc resolved on load (a missing pak would
+		// then desync the stream from what was actually written on save), so store presence explicitly.
+		bool has_private_way_mask = desc && desc->is_private_way();
+		file->rdwr_bool(has_private_way_mask);
+		if(  has_private_way_mask  ) {
 			file->rdwr_longlong((sint64&)private_way_mask);
 		}
 	}
