@@ -1912,7 +1912,8 @@ void convoi_t::new_month()
 		sint64 pax_count = 0;
 		for(  uint i = 0;  i < anz_vehikel;  i++  ) {
 			if(  fahr[i]->get_cargo_type()->get_catg_index() == 0  ) {
-				pax_count += fahr[i]->get_total_cargo();
+				sint64 freight_revenue = ware_t::calc_revenue(fahr[i]->get_cargo_type(), fahr[i]->get_desc()->get_waytype(), speed_to_kmh(get_min_top_speed()));
+				pax_count += fahr[i]->get_total_cargo() * freight_revenue;
 			}
 		}
 		if(  pax_count > 0  ) {
