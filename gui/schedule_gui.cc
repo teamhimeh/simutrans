@@ -492,7 +492,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		add_component(&bt_full_load_acceleration);
 
 		bt_full_load_time.init(button_t::square_state, "Full Get on/off Time");
-		bt_full_load_time.set_tooltip("Always use maximum boarding and alighting time, regardless of boardings and alightings.");
+		bt_full_load_time.set_tooltip(translator::translate("Always use maximum boarding and alighting time, regardless of boardings and alightings."));
 		bt_full_load_time.add_listener(this);
 		bt_full_load_time.pressed = schedule->is_full_load_time();
 		add_component(&bt_full_load_time);
@@ -754,7 +754,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		add_component(&bt_reset_coupling);
 
 		bt_wait_for_other_convoy.init(button_t::square_state, "Wait for other convoy");
-		bt_wait_for_other_convoy.set_tooltip("This convoy waits here until another convoy grants it departure allowance.");
+		bt_wait_for_other_convoy.set_tooltip(translator::translate("This convoy waits here until another convoy grants it departure allowance."));
 		bt_wait_for_other_convoy.add_listener(this);
 		bt_wait_for_other_convoy.disable();
 		add_component(&bt_wait_for_other_convoy);
