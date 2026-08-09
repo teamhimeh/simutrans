@@ -329,9 +329,9 @@ struct imd {
 	sint16 h; // current (zoomed) height
 
 	uint8 recode_flags;
-	uint16 player_flags; // bit # is player number, ==1 cache image needs recoding
+	uint64 player_flags; // bit # is player number, ==1 cache image needs recoding
 
-	PIXVAL* data[MAX_PLAYER_COUNT]; // current data - zoomed and recolored (player + daynight)
+	PIXVAL** data; // current data - zoomed and recolored (player + daynight); lazily allocated (MAX_PLAYER_COUNT entries) on first use, since most images never need player recoloring
 
 	PIXVAL* zoom_data; // zoomed original data
 	uint32 len;    // current zoom image data size (or base if not zoomed) (used for allocation purposes only)
@@ -1242,7 +1242,7 @@ static void activate_player_color(sint8 player_nr, bool daynight)
 static void recode()
 {
 	for(  image_id n = 0;  n < anz_images;  n++  ) {
-		images[n].player_flags = 0xFFFF;  // recode all player colors
+		images[n].player_flags = ~(uint64)0;  // recode all player colors
 	}
 }
 
@@ -1344,7 +1344,7 @@ static void recode_img(const image_id n, const sint8 player_nr)
 	// may this image be zoomed
 #ifdef MULTI_THREAD
 	pthread_mutex_lock( &recode_img_mutex );
-	if(  (images[n].player_flags & (1<<player_nr)) == 0  ) {
+	if(  (images[n].player_flags & ((uint64)1<<player_nr)) == 0  ) {
 		// other thread did already the re-code...
 		pthread_mutex_unlock( &recode_img_mutex );
 		return;
@@ -1352,13 +1352,17 @@ static void recode_img(const image_id n, const sint8 player_nr)
 #endif
 	PIXVAL *src = images[n].zoom_data != NULL ? images[n].zoom_data : images[n].base_data;
 
+	if(  images[n].data == NULL  ) {
+		images[n].data = MALLOCN( PIXVAL*, MAX_PLAYER_COUNT );
+		MEMZERON( images[n].data, MAX_PLAYER_COUNT );
+	}
 	if(  images[n].data[player_nr] == NULL  ) {
 		images[n].data[player_nr] = MALLOCN( PIXVAL, images[n].len );
 	}
 	// contains now the player color ...
 	activate_player_color( player_nr, true );
 	recode_img_src_target( images[n].h, src, images[n].data[player_nr] );
-	images[n].player_flags &= ~(1<<player_nr);
+	images[n].player_flags &= ~((uint64)1<<player_nr);
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &recode_img_mutex );
 #endif
@@ -1437,7 +1441,7 @@ static void rezoom_img(const image_id n)
 		}
 #endif
 		// we may need night conversion afterwards
-		images[n].player_flags = 0xFFFF; // recode all player colors
+		images[n].player_flags = ~(uint64)0; // recode all player colors
 
 		//  we recalculate the len (since it may be larger than before)
 		// thus we have to free the old caches
@@ -1445,10 +1449,12 @@ static void rezoom_img(const image_id n)
 			free( images[n].zoom_data );
 			images[n].zoom_data = NULL;
 		}
-		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-			if(  images[n].data[i] != NULL  ) {
-				free( images[n].data[i] );
-				images[n].data[i] = NULL;
+		if(  images[n].data != NULL  ) {
+			for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+				if(  images[n].data[i] != NULL  ) {
+					free( images[n].data[i] );
+					images[n].data[i] = NULL;
+				}
 			}
 		}
 
@@ -2149,7 +2155,7 @@ void register_image(image_t *image_in)
 	if(  image_in->zoomable  ) {
 		image->recode_flags |= FLAG_ZOOMABLE;
 	}
-	image->player_flags = 0xFFFF; // recode all player colors
+	image->player_flags = ~(uint64)0; // recode all player colors
 
 	// find out if there are really player colors
 	for(  PIXVAL *src = image_in->data, y = 0;  y < image_in->h;  ++y  ) {
@@ -2176,9 +2182,7 @@ void register_image(image_t *image_in)
 		} while(  runlen!=0  ); // end of row: runlen == 0
 	}
 
-	for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-		image->data[i] = NULL;
-	}
+	image->data = NULL;
 
 	image->zoom_data = NULL;
 	image->len = image_in->len;
@@ -2205,10 +2209,14 @@ void display_free_all_images_above( image_id above )
 		if(  images[anz_images].zoom_data != NULL  ) {
 			free( images[anz_images].zoom_data );
 		}
-		for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-			if(  images[anz_images].data[i] != NULL  ) {
-				free( images[anz_images].data[i] );
+		if(  images[anz_images].data != NULL  ) {
+			for(  uint8 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
+				if(  images[anz_images].data[i] != NULL  ) {
+					free( images[anz_images].data[i] );
+				}
 			}
+			free( images[anz_images].data );
+			images[anz_images].data = NULL;
 		}
 	}
 }
@@ -2773,7 +2781,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 
 		if(  use_player > 0  ) {
 			// player colour images are rezoomed/recoloured in display_color_img
-			sp = images[n].data[use_player];
+			sp = images[n].data != NULL ? images[n].data[use_player] : NULL;
 			if(  sp == NULL  ) {
 				dbg->warning("display_img_aux", "CImg[%i] %u failed!", use_player, n);
 				return;
@@ -3163,7 +3171,7 @@ void display_color_img(const image_id n, scr_coord_val xp, scr_coord_val yp, sin
 
 		if(  daynight  ||  night_shift == 0  ) {
 			// ok, now we could use the same faster code as for the normal images
-			if(  (images[n].player_flags & (1<<player_nr))  ) {
+			if(  (images[n].player_flags & ((uint64)1<<player_nr))  ) {
 				recode_img( n, player_nr );
 			}
 			display_img_aux( n, xp, yp, player_nr, true, dirty  CLIP_NUM_PAR);
@@ -4048,7 +4056,7 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		else if(  (images[n].player_flags & 1)  ) {
 			recode_img( n, 0 );
 		}
-		PIXVAL *sp = images[n].data[0];
+		PIXVAL *sp = images[n].data[0] != NULL ? images[n].data[0] : NULL;
 
 		// now, since zooming may have change this image
 		xp += images[n].x;
@@ -4132,7 +4140,7 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		if(  (images[alpha_n].recode_flags & FLAG_REZOOM)  ) {
 			rezoom_img( alpha_n );
 		}
-		PIXVAL *sp = images[n].data[0];
+		PIXVAL *sp = images[n].data[0] != NULL ? images[n].data[0] : NULL;
 		// alphamap image uses base data as we don't want to recode
 		PIXVAL *alphamap = images[alpha_n].zoom_data != NULL ? images[alpha_n].zoom_data : images[alpha_n].base_data;
 		// now, since zooming may have change this image

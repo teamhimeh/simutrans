@@ -360,6 +360,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	INIT_NUM( "toll_waycost_percentage", sets->get_way_toll_waycost_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_BOOL("disable_make_way_public", sets->get_disable_make_way_public());
 	INIT_BOOL("penalty_wait_for_two_month", sets->get_penalty_wait_for_two_month());
+	INIT_NUM( "base_revenue_from_halt", sets->get_base_revenue_from_halt(), 0, 1000000, gui_numberinput_t::AUTOLINEAR, false );
 	SEPERATOR
 
 	INIT_NUM( "just_in_time", sets->get_just_in_time(), 0, 2, gui_numberinput_t::AUTOLINEAR, false );
@@ -460,6 +461,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->way_toll_waycost_percentage );
 	READ_BOOL_VALUE(sets->disable_make_way_public);
 	READ_BOOL_VALUE(sets->penalty_wait_for_two_month);
+	READ_NUM_VALUE( sets->base_revenue_from_halt );
 
 	READ_NUM_VALUE( env_t::just_in_time );
 	sets->just_in_time = env_t::just_in_time;
