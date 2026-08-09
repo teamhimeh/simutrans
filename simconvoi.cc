@@ -1909,17 +1909,17 @@ void convoi_t::new_month()
 	}
 	// penalty fine for convoys blocked for two or more months
 	if(  state == WAITING_FOR_CLEARANCE_TWO_MONTHS  &&  welt->get_settings().get_penalty_wait_for_two_month()  ) {
-		sint64 pax_count = 0;
+		sint64 pax_revenue = 0;
 		for(  uint i = 0;  i < anz_vehikel;  i++  ) {
 			if(  fahr[i]->get_cargo_type()->get_catg_index() == 0  ) {
 				sint64 freight_revenue = ware_t::calc_revenue(fahr[i]->get_cargo_type(), fahr[i]->get_desc()->get_waytype(), speed_to_kmh(get_min_top_speed()));
-				pax_count += fahr[i]->get_total_cargo() * freight_revenue;
+				pax_revenue += fahr[i]->get_total_cargo() * freight_revenue;
 			}
 		}
-		if(  pax_count > 0  ) {
+		if(  pax_revenue > 0  ) {
 			waytype_t wt = fahr[0]->get_waytype();
-			// penalty = pax * month_length * kmh_to_speed(100), normalised by >> 20
-			sint64 penalty = pax_count * (sint64)welt->ticks_per_world_month * (sint64)kmh_to_speed(100) >> 20;
+			// penalty = (pax * revenue) * month_length * kmh_to_speed(100), normalised by >> 20, rounded value in cents
+			sint64 penalty = ((pax_revenue * (sint64)welt->ticks_per_world_month * (sint64)kmh_to_speed(100) >> 20) + 1500ll) / 3000ll;
 			player_t *public_player = welt->get_public_player();
 			public_player->book_toll_received( penalty, wt );
 			get_owner()->book_toll_paid( -penalty, wt );
