@@ -5135,6 +5135,49 @@ bool water_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, u
 				return false;
 			}
 		}
+
+		// TRY_COUPLING: wait 1 tile before the stop until the waiting convoy is present.
+		if(  cnv  &&  cnv != (convoi_t*)1  ) {
+			schedule_t *sched = cnv->get_schedule();
+			if(  sched  &&  sched->get_current_entry().is_try_coupling()  &&  !cnv->get_convoi_coupling_in_progress().is_bound()  ) {
+				const route_t *route = cnv->get_route();
+				if(  !route->empty()  &&  gr->get_pos() == route->back()  ) {
+					// about to enter the coupling destination tile; block until waiting convoy arrives
+					// Water convoys may be uncoupled and waiting anywhere reachable in the same
+					// body of water at this halt, not necessarily on this exact tile, so search the
+					// halt's loading convoy list instead of the tile's objects.
+					bool found_waiting = false;
+					halthandle_t halt = haltestelle_t::get_stoppable_halt(gr->get_pos(), cnv->get_owner(), water_wt);
+					if(  halt.is_bound()  ) {
+						if(  !cnv->is_waiting()  ||  halt->get_loading_convois().get_count()==0  ) {
+							// we check coupling target in step. return false
+							restart_speed = 0;
+							return false;
+						}
+						FOR(  vector_tpl<convoihandle_t>, const cc, halt->get_loading_convois()  ) {
+							if(  !cc.is_bound()  ||  !cnv->can_start_coupling(cc.get_rep())  ||  !cc->is_loading()  ) {
+								continue;
+							}
+							if(  cc->get_convoi_coupling_in_progress().is_bound()  &&  cc->get_convoi_coupling_in_progress()!=cnv->self  ) {
+								continue;
+							}
+							if(  !cnv->is_same_waterway(cc)  ) {
+								continue;
+							}
+							dbg->message("water_vehicle_t::can_enter_tile()","%s finds coupling target %s", cnv->get_name(), cc->get_name());
+							found_waiting = true;
+							cc->set_convoi_coupling_in_progress(cnv->self);
+							cnv->self->set_convoi_coupling_in_progress(cc);
+							break;
+						}
+					}
+					if(  !found_waiting  ) {
+						restart_speed = 0;
+						return false;
+					}
+				}
+			}
+		}
 	}
 	return true;
 }

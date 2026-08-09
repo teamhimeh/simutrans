@@ -1299,14 +1299,19 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_find_parent) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_try_coupling(!bt_find_parent.pressed);
-			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			if(schedule->get_waytype()!=water_wt)
+			{
+				schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			}
 			update_selection();
 		}
 	}
 	else if(comp == &bt_wait_for_child) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_wait_for_coupling(!bt_wait_for_child.pressed);
-			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			if(schedule->get_waytype()!=water_wt){
+				schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			}
 			update_selection();
 		}
 	}
@@ -1326,12 +1331,9 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_reverse_coupling) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(!bt_reverse_coupling.pressed);
-			if(  bt_wait_for_child.pressed  ) {
+			if(  schedule->get_waytype()!=water_wt  &&  (bt_wait_for_child.pressed || bt_find_parent.pressed)  ) {
 				schedule->at(schedule->get_current_stop()).reset_coupling();
-			} 
-			if(  bt_find_parent.pressed  ) {
-				schedule->at(schedule->get_current_stop()).reset_coupling();
-			} 
+			}
 			update_selection();
 		}
 	}
@@ -2008,7 +2010,7 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	sp_departure_settings.set_visible(yesno);
 	bt_pass_stop.set_visible(yesno);
 	
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);

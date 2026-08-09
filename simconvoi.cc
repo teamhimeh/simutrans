@@ -2190,6 +2190,46 @@ void convoi_t::ziel_erreicht()
 		set_next_coupling(route_t::INVALID_INDEX, 0);
 	}
 
+	// Water vehicle TRY_COUPLING: couple at stop without signal-based route reservation.
+	// can_enter_tile() already did the (route-search-based, so step-only) work of finding a
+	// waiting partner reachable in the same body of water and recorded it in
+	// convoi_coupling_in_progress; here we only re-check that it is still there and still
+	// waiting - is_same_waterway() must NOT be called again here, since ziel_erreicht() can
+	// run from sync_step and route calculation is only safe in step.
+	if(  front()->get_waytype() == water_wt
+	  &&  schedule->get_current_entry().is_try_coupling()
+	  &&  !coupling_done  ) {
+		convoihandle_t cc = get_convoi_coupling_in_progress();
+		if(  cc.is_bound()  &&  can_start_coupling(cc.get_rep())  &&  cc->is_loading()  ) {
+			akt_speed = 0;
+			if(  halt.is_bound()  &&  gr->get_weg_ribi(front()->get_waytype()) != 0  ) {
+				halt->book(1, HALT_CONVOIS_ARRIVED);
+			}
+			// For water vehicles: trying convoy (self) is the most-parent;
+			// swap parent/child if the schedule entry has REVERSE_COUPLING set.
+			// Always attach at the TAIL of the target chain so existing children are not orphaned.
+			convoihandle_t temp_parent_convoi;
+			if(  schedule->get_current_entry().is_reverse_convoi_coupling()  ) {
+				// trying becomes child: append trying chain at the tail of the waiting chain
+				temp_parent_convoi = cc->get_most_parent_convoi();
+				cc->find_most_child_convoi()->couple_convoi(self);
+				reverse_coupling_done=true;
+			}
+			else {
+				// trying is parent: append waiting chain at the tail of the trying chain
+				temp_parent_convoi = self;
+				self->find_most_child_convoi()->couple_convoi(cc->get_most_parent_convoi());
+			}
+			wait_lock = 0;
+			cc->set_coupling_done(true);
+			coupling_done = true;
+			unset_convoi_coupling_in_progress();
+			temp_parent_convoi->check_and_set_coupling_done_over_length();
+			check_electrification();
+			return;
+		}
+	}
+
 	// no depot reached, no coupling, check for stop!
 	if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0 && !schedule->get_current_entry().is_pass_stop()  ) {
 		// seems to be a stop, so book the money for the trip
@@ -4226,7 +4266,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 				c->uncouple_convoi();
 			}
 		}
-		if(  coupled_at_this_stop && get_schedule()->get_count()>1  ) {
+		if(  coupled_at_this_stop && get_schedule()->get_count()>1 && schedule->get_waytype()!=water_wt  ) {
 			dbg->message("convoi_t::hat_gehalten()","%s coupling at this stop. check the direction at %s",get_name(),temp_parent_convoi->front()->get_pos().get_str());
 			// chage the order if next direction is backward of "self"
 			// Attention! reverse_convoy_coupling() must be called when loading!
@@ -4456,7 +4496,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if (  coupling_convoi.is_bound()  &&  !is_coupled()  &&  !is_waiting_for_coupling()  &&  !reverse_coupling_done  )
 	{
 		bool should_reverse_coupling_done = false;
-		if(world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default()) {
+		// Water vehicles do not use direction-based coupling reversal; only explicit REVERSE_COUPLING flag applies.
+		if(  front()->get_waytype() != water_wt
+		  &&  (world()->get_settings().is_default_reverse() || get_schedule()->is_reverse_default())  ) {
 			// the direction of the waiting vehicle is same? opposite?
 			route_t r;
 			route_t::route_result_t res = r.calc_route(welt, front()->get_pos(), get_schedule()->get_next_entry().pos, front(), speed_to_kmh(min_top_speed), 8888);
@@ -6178,6 +6220,23 @@ bool convoi_t::can_start_coupling(convoi_t* parent) const {
 		return false;
 	}
 	return true;
+}
+
+bool convoi_t::is_same_waterway(convoihandle_t other_cnv) const
+{
+	if(  front()->get_waytype()!=water_wt  ||  !other_cnv.is_bound()  ||  other_cnv->front()->get_waytype()!=water_wt  ) {
+		return false;
+	}
+	const koord3d my_pos = schedule->get_current_entry().pos;
+	const koord3d other_pos = other_cnv->front()->get_pos();
+	if(  my_pos==other_pos  ) {
+		return true;
+	}
+	// Check whether the two positions are connected via water (same river, same sea,
+	// or a sea connected to a river etc.) by trying to find a route between them.
+	route_t r;
+	route_t::route_result_t result = r.calc_route( world(), my_pos, other_pos, front(), speed_to_kmh(get_min_top_speed()), 0, false );
+	return result!=route_t::no_route;
 }
 
 bool convoi_t::is_waiting_for_coupling() const {
