@@ -354,6 +354,7 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 	gui_frame_t( translator::translate("Fahrplan"), NULL),
 	line_selector(line_color_line_scroll_item_t::compare),
 	next_line_selector(non_color_line_scroll_item_t::compare),
+	allow_depart_line_selector(non_color_line_scroll_item_t::compare),
 	departure_slot_group_selector(company_color_line_scroll_item_t::compare),
 	lb_waitlevel(SYSCOL_TEXT_HIGHLIGHT, gui_label_t::right),
 	lb_wait("1/"),
@@ -491,7 +492,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		add_component(&bt_full_load_acceleration);
 
 		bt_full_load_time.init(button_t::square_state, "Full Get on/off Time");
-		bt_full_load_time.set_tooltip("Always use maximum boarding and alighting time, regardless of boardings and alightings.");
+		bt_full_load_time.set_tooltip(translator::translate("Always use maximum boarding and alighting time, regardless of boardings and alightings."));
 		bt_full_load_time.add_listener(this);
 		bt_full_load_time.pressed = schedule->is_full_load_time();
 		add_component(&bt_full_load_time);
@@ -752,6 +753,18 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_reset_coupling.disable();
 		add_component(&bt_reset_coupling);
 
+		bt_wait_for_other_convoy.init(button_t::square_state, "Wait for other convoy");
+		bt_wait_for_other_convoy.set_tooltip(translator::translate("This convoy waits here until another convoy grants it departure allowance."));
+		bt_wait_for_other_convoy.add_listener(this);
+		bt_wait_for_other_convoy.disable();
+		add_component(&bt_wait_for_other_convoy);
+
+		allow_depart_line_selector.clear_elements();
+		init_allow_depart_line_selector();
+		allow_depart_line_selector.add_listener(this);
+		allow_depart_line_selector.disable();
+		add_component(&allow_depart_line_selector,2);
+
 		bt_uncouple_child.init(button_t::square_state, "End couple");
 		bt_uncouple_child.set_tooltip("It will uncouple the child convoy here.");
 		bt_uncouple_child.add_listener(this);
@@ -1004,6 +1017,8 @@ void schedule_gui_t::update_selection()
 	bt_wait_full_load.disable();
 	bt_find_parent.disable();
 	bt_wait_for_child.disable();
+	bt_wait_for_other_convoy.disable();
+	allow_depart_line_selector.disable();
 	bt_uncouple_child.disable();
 	bt_reset_coupling.disable();
 	bt_no_load.disable();
@@ -1078,6 +1093,10 @@ void schedule_gui_t::update_selection()
 			bt_wait_for_child.enable();
 			bt_wait_for_child.pressed = schedule->at(current_stop).is_wait_for_coupling();
 			bt_reset_coupling.enable();
+			bt_wait_for_other_convoy.enable();
+			bt_wait_for_other_convoy.pressed = schedule->at(current_stop).is_wait_for_other_convoy();
+			allow_depart_line_selector.enable();
+			init_allow_depart_line_selector();
 			bt_no_load.enable();
 			bt_no_load.pressed = schedule->at(current_stop).is_no_load();
 			bt_no_unload.enable();
@@ -1319,6 +1338,25 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).reset_coupling();
 			schedule->at(schedule->get_current_stop()).set_uncouple_child(false);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_wait_for_other_convoy) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_wait_for_other_convoy(!bt_wait_for_other_convoy.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &allow_depart_line_selector) {
+		if(!schedule->empty()) {
+			uint32 selection = p.i;
+			if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(allow_depart_line_selector.get_element(selection))  ) {
+				schedule->at(schedule->get_current_stop()).set_allow_depart_line(li->get_line());
+			}
+			else {
+				schedule->at(schedule->get_current_stop()).set_allow_depart_line(linehandle_t());
+				allow_depart_line_selector.set_selection(0);
+			}
 			update_selection();
 		}
 	}
@@ -1811,6 +1849,37 @@ void schedule_gui_t::init_next_line_selector()
 	last_schedule_count = schedule->get_count();
 }
 
+void schedule_gui_t::init_allow_depart_line_selector()
+{
+	if(  schedule->empty()  ) {
+		return;
+	}
+	allow_depart_line_selector.clear_elements();
+	uint16 selection = 0;
+	vector_tpl<linehandle_t> lines;
+
+	player->simlinemgmt.get_lines(schedule->get_type(), &lines);
+
+	const uint8 current_stop = schedule->get_current_stop();
+	const linehandle_t allow_depart_line = schedule->at(current_stop).get_allow_depart_line();
+
+	int offset = 1;
+	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
+
+	FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
+		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ) {
+			allow_depart_line_selector.new_component<non_color_line_scroll_item_t>(line);
+		}
+		if(  allow_depart_line == line  ) {
+			selection = allow_depart_line_selector.count_elements()-1;
+		}
+	}
+
+	allow_depart_line_selector.set_selection( selection );
+	line_scrollitem_t::sort_mode = line_scrollitem_t::SORT_BY_NAME;
+	allow_depart_line_selector.sort( offset );
+}
+
 
 void schedule_gui_t::init_departure_slot_group_selector()
 {
@@ -1971,7 +2040,7 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
 	bt_reverse_default.set_visible(show_reverse_settings&&yesno);
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt; // water convoy does not use electricity
 	bt_no_use_electric.set_visible(coupling_waytype&&yesno);
 	sp_coupling_settings.set_visible(coupling_waytype&&yesno);	
 }
@@ -2009,7 +2078,9 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	numimp_balance_speed_kmh_of_convoi.set_visible(yesno);
 	sp_departure_settings.set_visible(yesno);
 	bt_pass_stop.set_visible(yesno);
-	
+	bt_wait_for_other_convoy.set_visible(yesno);
+	allow_depart_line_selector.set_visible(yesno);
+
 	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
