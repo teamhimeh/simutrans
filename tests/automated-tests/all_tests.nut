@@ -34,6 +34,7 @@ include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
+include("tests/test_transit_by_foot")
 include("tests/test_trees")
 include("tests/test_way_bridge")
 include("tests/test_way_elevated")
@@ -46,10 +47,12 @@ include("tests/test_schedule")
 include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
+include("tests/test_priority_signal_crossing")
 include("tests/test_otrp_signal_options")
 include("tests/test_reroute_reservation")
 include("tests/test_remove_house")
 include("tests/test_pillar")
+include("tests/test_crossing_reservation")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -243,6 +246,15 @@ all_tests <- [
 	test_transport_route_cache_invalidation,
 	test_transport_route_cache_need_electric,
 	test_transport_two_convoys_on_same_line,
+	test_transit_by_foot_connection_range_weight_and_goods,
+	test_transit_by_foot_time_based_weight,
+	test_transit_by_foot_height_difference,
+	test_transit_by_foot_vehicle_connection_precedes_walking,
+	test_transit_by_foot_between_two_vehicle_legs,
+	test_transit_by_foot_not_used_as_first_leg,
+	test_transit_by_foot_not_used_as_last_leg,
+	test_transit_by_foot_not_used_twice_consecutively,
+	test_transit_by_foot_walk_cost_to_halt_prefers_nearer_halts,
 	test_start_signal_default_false,
 	test_start_signal_convoy_stays_at_station,
 	test_start_signal_false_convoy_advances_to_signal,
@@ -254,6 +266,7 @@ all_tests <- [
 	test_stop_before_check_choose_signal_convoy_stops,
 	test_stop_before_check_false_convoy_does_not_stop,
 	test_priority_signal_reserve,
+	test_priority_signal_before_crossing_no_slowdown,
 	test_longblock_open_no_prefix_signal,
 	test_longblock_blocked_no_prefix_signal,
 	test_longblock_open_pre_signal,
@@ -302,6 +315,18 @@ all_tests <- [
 	test_remove_pillar_tool_basic,
 	test_remover_pillar_priority,
 	test_remove_pillar_tool_shift_area,
+	// 4-way crossing PBS co-reservation
+	test_crossing_straight_single_convoy,
+	test_crossing_straight_two_convoys_sequential,
+	test_crossing_straight_opposite_directions,
+	test_crossing_three_way_single_convoy,
+	test_crossing_four_way_ne_sw_permitted_a_first,
+	test_crossing_four_way_ne_sw_permitted_b_first,
+	test_crossing_four_way_se_nw_permitted_a_first,
+	test_crossing_four_way_se_nw_permitted_b_first,
+	test_crossing_four_way_ns_sequential_prohibited,
+	test_crossing_four_way_ne_ne_sequential_prohibited,
+	test_crossing_four_way_ne_se_sequential_prohibited,
 ]
 
 

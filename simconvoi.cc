@@ -314,7 +314,14 @@ void convoi_t::reserve_route()
 		for(  uint32 idx = 0;  idx < reserved_tiles.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( reserved_tiles[idx] )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( reserved_tiles[max(1u,idx)-1u], reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)] ) );
+					const koord3d prev = reserved_tiles[max(1u,idx)-1u];
+					const koord3d curr = reserved_tiles[idx];
+					const koord3d next = reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)];
+					if (!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+						// reservation invalid! do not continue reservation more!
+						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
+						break;
+					}
 				}
 			}
 		}
@@ -331,19 +338,31 @@ void convoi_t::reserve_route()
 			if(  is_reservation_empty() || route.at(idx)==reserved_tiles[0]  ) break;// reach first reserved tiles.
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
+					const koord3d curr = route.at(idx);
+					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
 				}
 			}
 		}
 	}
-	else if(  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
+	else if(  !is_coupled()  &&  !route.empty()  &&  anz_vehikel>0  &&  (is_waiting()  ||  state==DRIVING  ||  state==LEAVING_DEPOT)  ){
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
 		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
+					const koord3d curr = route.at(idx);
+					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
+					if(!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+						next_stop_index = idx;
+						next_reservation_index = idx;
+						// reservation invalid! do not continue reservation more!
+						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
+						break;
+					}
 				}
 			}
 		}
@@ -356,7 +375,10 @@ void convoi_t::reserve_route()
 		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < front()->get_route_index()  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					sch->reserve( self, ribi_type( route.at(max(1u,idx)-1u), route.at(min(route.get_count()-1u,idx+1u)) ) );
+					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
+					const koord3d curr = route.at(idx);
+					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
 				}
 			}
 		}
@@ -4296,7 +4318,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		// The total amount of goods which are loaded and unloaded
 		uint16 amount;
 		if(  !schedule->get_current_entry().is_no_unload() ) {
-			amount = v->unload_cargo(halt, next_depot  ||  ((schedule->get_current_entry().is_unload_all()  ||  get_unload_all())  &&  !unloading_done)  );
+			amount = v->unload_cargo(halt, next_depot  ||  (schedule->get_current_entry().is_unload_all()  &&  !unloading_done)  ||  get_unload_all()  );
 		} else {
 			amount = 0;
 		}
@@ -6048,7 +6070,7 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	return true;
 }
 
-convoihandle_t convoi_t::uncouple_convoi() {
+convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 	if(  !coupling_convoi.is_bound()  ) {
 		return convoihandle_t();
 	}
@@ -6071,6 +6093,24 @@ convoihandle_t convoi_t::uncouple_convoi() {
 	get_most_parent_convoi()->must_recalc_min_top_speed();
 	get_most_parent_convoi()->check_electrification();
 	get_most_parent_convoi()->must_recalc_friction_weight();
+	
+	// finally, we need to change reservation!
+	route_t const *r = get_route();
+	if(  need_reservation_update  &&  r  &&  r->get_count()>0  ) {
+		for(  uint16 i = max(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),max(back()->get_route_index(),1u)-1),r->get_count()); i++  ) {
+			koord3d const pos = r->at(i);
+			grund_t const *gr = welt->lookup(pos);
+			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
+			if(  sch1  ) {
+				sch1->unreserve(get_most_parent_convoi());
+				get_most_parent_convoi()->unreserve_pos(pos);
+				const ribi_t::ribi corner_set =
+				ribi_t::backward(ribi_type(r->at(max(1u,i)-1u), pos))
+					| ribi_type(pos, r->at(min(r->get_count()-1u,i+1u)));
+				sch1->reserve(ret,corner_set);
+			}
+		}
+	}
 	return ret;
 }
 
@@ -6374,7 +6414,8 @@ void convoi_t::reverse_convoy_coupling()
 	if (  !new_parent_convoy.is_bound()  ) {
 		return;	
 	}
-	uncouple_convoi();
+	// here, we do NOT need to change reservation tiles.
+	uncouple_convoi(false);
 	if (new_parent_convoy->get_coupling_convoi().is_bound()) {
 		new_parent_convoy->reverse_convoy_coupling();
 	}

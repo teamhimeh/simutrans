@@ -178,19 +178,23 @@ function test_sign_build_oneway()
 				"........"
 			])
 
-		// change direction of sign on road crossing, should fail
-		local error_caught = false
-		try {
-			ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 3, 0), sign), null)
-		}
-		catch (e) {
-			ASSERT_EQUAL(e, "Tool has no effects")
-			error_caught = true
-		}
-		ASSERT_TRUE(error_caught)
+		// change direction of sign on road crossing, should now succeed
+		ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 3, 0), sign), null)
+		// on a road/road crossing the sign direction cycles but ribi_maske resets to 0
+		ASSERT_WAY_PATTERN_MASKED(wt_road, coord3d(0, 0, 0),
+			[
+				"........",
+				"..4.....",
+				"..5.....",
+				".2F8....",
+				"..1.....",
+				"........",
+				"........",
+				"........"
+			])
 	}
 
-	// remove sign, try to build again (should fail because of crossing)
+	// remove sign, try to build again (should success after v56)
 	{
 		ASSERT_EQUAL(remover.work(pl, coord3d(2, 3, 0)), null)
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
@@ -215,7 +219,7 @@ function test_sign_build_oneway()
 			ASSERT_EQUAL(e, "Tool has no effects")
 			error_caught = true
 		}
-		ASSERT_TRUE(error_caught)
+		ASSERT_FALSE(error_caught)
 	}
 
 	ASSERT_EQUAL(wayremover.work(pl, coord3d(1, 3, 0), coord3d(3, 3, 0), "" + wt_road), null)

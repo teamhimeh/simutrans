@@ -1190,6 +1190,8 @@ void karte_t::init(settings_t* const sets, sint8 const* const h_field)
 {
 	humidity = NULL;
 
+	step_year_count=0;
+
 	clear_random_mode( 7 );
 	mute_sound(true);
 	if (env_t::networkmode) {
@@ -3331,6 +3333,9 @@ DBG_MESSAGE( "karte_t::rotate90()", "called" );
 	// assume we can save this rotation
 	nosave_warning = nosave = false;
 
+	// cached routes reference koord3d positions that become invalid after rotation
+	route_cache.clear();
+
 	//announce current target rotation
 	settings.rotate90();
 
@@ -4066,7 +4071,7 @@ void karte_t::new_year()
 	// and reset the accumulator for the new decade.
 	// At non-boundary years, add the just-completed year[1] to the accumulator
 	// for flow fields; update_history() will keep decade[0] live.
-	bool const is_decade_boundary = (last_year - settings.get_starting_year()) % 10 == 0;
+	bool const is_decade_boundary = (last_year - settings.get_starting_year() - step_year_count) % 10 == 0;
 	for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
 		if(  is_decade_boundary  ) {
 			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
@@ -5026,6 +5031,11 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 			}
 		}
 	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
+	}
 
 	// finally a possible scenario
 	scenario->rdwr( file );
@@ -5656,16 +5666,19 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 			}
 		}
 	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
+	}
 	// Reconstruct the decade flow accumulator from year history.
 	// decade_acc = sum of year[1..k] where k = completed years in current decade.
-	{
-		const int years_in_decade = (last_year - settings.get_starting_year()) % 10;
-		for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
-			finance_history_decade_acc[cost_type] = 0;
-			if(  decade_flow_field[cost_type]  ) {
-				for (int y = 1; y <= years_in_decade && y < MAX_WORLD_HISTORY_YEARS; y++) {
-					finance_history_decade_acc[cost_type] += finance_history_year[y][cost_type];
-				}
+	const int years_in_decade = (last_year - settings.get_starting_year() - step_year_count) % 10;
+	for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+		finance_history_decade_acc[cost_type] = 0;
+		if(  decade_flow_field[cost_type]  ) {
+			for (int y = 1; y <= years_in_decade && y < MAX_WORLD_HISTORY_YEARS; y++) {
+				finance_history_decade_acc[cost_type] += finance_history_year[y][cost_type];
 			}
 		}
 	}
@@ -7105,6 +7118,8 @@ void karte_t::step_year()
 	DBG_MESSAGE("karte_t::step_year()","called");
 	current_month += 12;
 	last_year ++;
+	// we need to record how many times this tool called
+	step_year_count ++;
 	reset_timer();
 	recalc_average_speed();
 	koord::locality_factor = settings.get_locality_factor( last_year );

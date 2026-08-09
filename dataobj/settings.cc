@@ -349,6 +349,11 @@ settings_t::settings_t() :
 	allow_elevated_way_over_others_halt = false;
 
 	use_route_cache = false;
+
+	transit_by_foot = false;
+	foot_path_weight = 24;
+	foot_path_time_ticks = 1800;
+	walk_cost_to_halt = false;
 }
 
 
@@ -1121,6 +1126,17 @@ void settings_t::rdwr(loadsave_t *file)
 			allow_unlock_by_public = true;
 			allow_elevated_way_over_others_halt = false;
 			overloaded_acceleration = false;
+		}
+		if(  file->get_OTRP_version() >= 58  ) {
+			file->rdwr_bool(transit_by_foot);
+			file->rdwr_long(foot_path_weight);
+			file->rdwr_long(foot_path_time_ticks);
+			file->rdwr_bool(walk_cost_to_halt);
+		} else {
+			transit_by_foot = false;
+			foot_path_weight = 24;
+			foot_path_time_ticks = 1800;
+			walk_cost_to_halt = false;			
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1988,6 +2004,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	base_waiting_ticks_for_road_convoi = contents.get_int("base_waiting_ticks_for_road_convoi", base_waiting_ticks_for_road_convoi);
 	base_waiting_ticks_for_ship_convoi = contents.get_int("base_waiting_ticks_for_ship_convoi", base_waiting_ticks_for_ship_convoi);
 	base_waiting_ticks_for_air_convoi = contents.get_int("base_waiting_ticks_for_air_convoi", base_waiting_ticks_for_air_convoi);
+
+	transit_by_foot       = contents.get_int("transit_by_foot",       transit_by_foot) != 0;
+	foot_path_weight      = contents.get_int("foot_path_weight",      foot_path_weight);
+	foot_path_time_ticks  = contents.get_int("foot_path_time_ticks",  foot_path_time_ticks);
+	walk_cost_to_halt     = contents.get_int("walk_cost_to_halt",     walk_cost_to_halt) != 0;
 
 	// Default pak file path
 	objfilename = ltrim(contents.get_string("pak_file_path", objfilename.c_str() ) );

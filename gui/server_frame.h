@@ -80,6 +80,31 @@ private:
 	};
 
 	/**
+	 * One row of the connected-clients list: nickname and the names of the
+	 * companies this client is currently unlocked to (actively able to) play.
+	 */
+	class client_scrollitem_t : public gui_scrolled_list_t::const_text_scrollitem_t {
+	private:
+		cbuffer_t line;
+	public:
+		client_scrollitem_t (const cbuffer_t& line_, PIXVAL col) :
+			gui_scrolled_list_t::const_text_scrollitem_t( NULL, col ),
+			line( line_ )
+		{}
+		char const* get_text () const OVERRIDE { return line.get_str(); }
+		void set_text (char const* newtext) OVERRIDE { line.clear(); line.append( newtext ); }
+	};
+
+	gui_scrolled_list_t clientlist;
+	uint32 clientlist_generation_shown;
+
+	/**
+	 * Rebuilds clientlist from the latest data received from / assembled by
+	 * the network layer (nwc_clientlist_t)
+	 */
+	void update_clientlist();
+
+	/**
 	 * Update UI fields with data from the current state of gameinfo_t gi
 	 */
 	PIXVAL update_info();
