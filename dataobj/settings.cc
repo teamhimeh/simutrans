@@ -677,7 +677,9 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_str(language_code_names, lengthof(language_code_names) );
 
 			// restore AI state
-			for(  int i=0;  i<15;  i++  ) {
+			const int old_player_type_count = 15;
+			const int player_type_count = file->get_OTRP_version() < 59 ? old_player_type_count : MAX_PLAYER_COUNT-1;
+			for(  int i=0;  i<player_type_count;  i++  ) {
 				if(file->is_version_less(122,1)) {
 					bool player_active = true;
 					file->rdwr_bool(player_active);
@@ -686,6 +688,11 @@ void settings_t::rdwr(loadsave_t *file)
 				if(  file->is_version_less(102, 3)  ) {
 					char dummy[2] = { 0, 0 };
 					file->rdwr_str(dummy, lengthof(dummy) );
+				}
+			}
+			if(  file->is_loading()  &&  player_type_count < MAX_PLAYER_COUNT-1  ) {
+				for(  int i=player_type_count;  i<MAX_PLAYER_COUNT-1;  i++  ) {
+					player_type[i] = player_t::EMPTY;
 				}
 			}
 
@@ -865,9 +872,17 @@ void settings_t::rdwr(loadsave_t *file)
 
 		if(  file->is_version_atleast(110, 1)  ) {
 			file->rdwr_bool( default_player_color_random );
-			for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			const int old_player_count = 16;
+			const int player_count = file->get_OTRP_version()<59 ? old_player_count : MAX_PLAYER_COUNT;
+			for(  int i=0;  i<player_count;  i++  ) {
 				file->rdwr_byte( default_player_color[i][0] );
 				file->rdwr_byte( default_player_color[i][1] );
+			}
+			if(  file->is_loading()  &&  player_count<MAX_PLAYER_COUNT  ) {
+				for(  int i=player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+					default_player_color[i][0] = 255;
+					default_player_color[i][1] = 255;
+				}
 			}
 		}
 		else if(  file->is_loading()  ) {

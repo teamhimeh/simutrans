@@ -4967,7 +4967,9 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "start");
 
 	rdwr_gamestate(file, ls);
 
-	for(int i=0; i<MAX_PLAYER_COUNT; i++) {
+	// old format (OTRP < 59) only supports player slots 0..14
+	const int save_player_count = (file->is_saving() && file->get_OTRP_version() < 59) ? 15 : MAX_PLAYER_COUNT;
+	for(int i=0; i<save_player_count; i++) {
 		// **** REMOVE IF SOON! *********
 		if(file->is_version_less(101, 0)) {
 			if(  i<8  ) {
@@ -5899,7 +5901,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 		// Update minimap for new world
 		minimap_t::get_instance()->init();
 
-		ls->set_max( get_size().y*2+256 );
+		ls->set_max( get_size().y*2+256+8*MAX_PLAYER_COUNT );
 		init_tiles();
 
 		// reinit pointer with new pointer object and old values
@@ -7236,7 +7238,7 @@ void karte_t::remove_player(uint8 player_nr)
 		// Clear removed player's bit from all halt permissions
 		for(  halthandle_t const& h : haltestelle_t::get_alle_haltestellen()  ) {
 			if(  h.is_bound()  &&  !h->is_allow_other_player_connection()  ) {
-				h->set_permissions( h->get_permissions() & ~(1 << player_nr) );
+				h->set_permissions( h->get_permissions() & ~((uint64)1 << player_nr) );
 			}
 		}
 		nwc_chg_player_t::company_removed(player_nr);
@@ -7332,11 +7334,11 @@ void karte_t::stop(bool exit_game)
 
 			// remove passwords before transfer on the server and set default client mask
 			// they will be restored in karte_t::laden
-			uint16 unlocked_players = 0;
+			uint64 unlocked_players = (uint64)0;
 			for (int i = 0; i < PLAYER_UNOWNED; i++) {
 				player_t* player = world->get_player(i);
 				if (player == NULL || player->access_password_hash().empty()) {
-					unlocked_players |= (1 << i);
+					unlocked_players |= ((uint64)1 << i);
 				}
 				else {
 					player->access_password_hash().clear();
@@ -8076,7 +8078,7 @@ bool karte_t::is_player_password_set(uint8 player_nr) const
 	}
 	if (env_t::networkmode  &&  !env_t::server) {
 		// client: local hashes are not authoritative, use the state reported by the server
-		return (player_password_set_bits & (1<<player_nr)) != 0;
+		return (player_password_set_bits & ((uint64)1<<player_nr)) != 0;
 	}
 	player_t *player = get_player(player_nr);
 	return player  &&  player->is_password_hash();
