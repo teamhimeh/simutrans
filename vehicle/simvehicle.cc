@@ -2391,7 +2391,7 @@ bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 			if(  rs->get_desc()->get_min_speed()>0  &&  rs->get_desc()->get_min_speed()>kmh_to_speed(get_desc()->get_topspeed())  ) {
 				return false;
 			}
-			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & (1<<get_owner_nr()) ) == 0  ) {
+			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
 				// private road
 				return false;
 			}
@@ -3657,7 +3657,7 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 				// below speed limit
 				return false;
 			}
-			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & (1<<get_owner_nr()) ) == 0  ) {
+			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
 				// private road
 				return false;
 			}
@@ -4241,6 +4241,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 	// parse to next signal; if needed recurse, since we allow cascading
 	uint16 next_signal, next_crossing;
 
+	// Where we were told to stop before this check began. can_enter_tile() re-checks a priority
+	// signal on every tile while the convoy is next to it, so we get here again after
+	// can_enter_tile() has already requested the crossing behind the signal and moved the stop
+	// point past it -- and the recursive is_signal_clear() below overwrites next_stop_index, so
+	// afterwards there is no way to tell that apart. Remember it now.
+	const uint16 stop_index_before = cnv->get_next_stop_index();
+
 	if(  block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false )  ) {
 		if(  next_signal == route_t::INVALID_INDEX  ||  cnv->get_route()->at(next_signal) == cnv->get_route()->back()  ) {
 			// ok, end of route => we can go
@@ -4254,7 +4261,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			// ok, the next signal is clear
 			sig->set_state( roadsign_t::STATE_GREEN );
 			// Only shorten next_stop_index when a crossing requires an earlier stop.
-			if(  next_crossing < cnv->get_next_stop_index() - 1  ) {
+			// A crossing that already lay behind stop_index_before-1 is one can_enter_tile()
+			// has requested and moved us past; braking for it again would undo that advance on
+			// every re-check and hold the convoy inside the brake countdown all the way over
+			// the crossing. Reached from can_enter_tile()'s block_reserver path this changes
+			// nothing: there stop_index_before-1 is next_block, and block_reserver() starts at
+			// next_block+1, so next_crossing is always beyond it.
+			if(  next_crossing+1 >= stop_index_before  &&  next_crossing < cnv->get_next_stop_index() - 1  ) {
 				cnv->set_next_stop_index( next_crossing );
 			}
 			return true;
@@ -5074,7 +5087,7 @@ bool water_vehicle_t::check_next_tile(const grund_t *bd,const bool) const
 				// below speed limit
 				return false;
 			}
-			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & (1<<get_owner_nr()) ) == 0  ) {
+			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
 				// private road
 				return false;
 			}
@@ -5124,6 +5137,49 @@ bool water_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, u
 			if(!cr->request_crossing(this)) {
 				restart_speed = 0;
 				return false;
+			}
+		}
+
+		// TRY_COUPLING: wait 1 tile before the stop until the waiting convoy is present.
+		if(  cnv  &&  cnv != (convoi_t*)1  ) {
+			schedule_t *sched = cnv->get_schedule();
+			if(  sched  &&  sched->get_current_entry().is_try_coupling()  &&  !cnv->get_convoi_coupling_in_progress().is_bound()  ) {
+				const route_t *route = cnv->get_route();
+				if(  !route->empty()  &&  gr->get_pos() == route->back()  ) {
+					// about to enter the coupling destination tile; block until waiting convoy arrives
+					// Water convoys may be uncoupled and waiting anywhere reachable in the same
+					// body of water at this halt, not necessarily on this exact tile, so search the
+					// halt's loading convoy list instead of the tile's objects.
+					bool found_waiting = false;
+					halthandle_t halt = haltestelle_t::get_stoppable_halt(gr->get_pos(), cnv->get_owner(), water_wt);
+					if(  halt.is_bound()  ) {
+						if(  !cnv->is_waiting()  ||  halt->get_loading_convois().get_count()==0  ) {
+							// we check coupling target in step. return false
+							restart_speed = 0;
+							return false;
+						}
+						FOR(  vector_tpl<convoihandle_t>, const cc, halt->get_loading_convois()  ) {
+							if(  !cc.is_bound()  ||  !cnv->can_start_coupling(cc.get_rep())  ||  !cc->is_loading()  ) {
+								continue;
+							}
+							if(  cc->get_convoi_coupling_in_progress().is_bound()  &&  cc->get_convoi_coupling_in_progress()!=cnv->self  ) {
+								continue;
+							}
+							if(  !cnv->is_same_waterway(cc)  ) {
+								continue;
+							}
+							dbg->message("water_vehicle_t::can_enter_tile()","%s finds coupling target %s", cnv->get_name(), cc->get_name());
+							found_waiting = true;
+							cc->set_convoi_coupling_in_progress(cnv->self);
+							cnv->self->set_convoi_coupling_in_progress(cc);
+							break;
+						}
+					}
+					if(  !found_waiting  ) {
+						restart_speed = 0;
+						return false;
+					}
+				}
 			}
 		}
 	}
@@ -5656,6 +5712,32 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 	const route_t *route = cnv->get_route();
 	if(route->empty()) {
 		return false;
+	}
+
+	if(  reserve  &&  route_index<takeoff  ) {
+		// Make sure the taxiway between our current position and the runway is
+		// clear of other convois' aircraft before granting the reservation.
+		// Without this, reservations re-acquired after loading a savegame (or
+		// granted purely by call order) could let a convoi further from the
+		// runway "overtake" one that is still on the taxiway ahead of it.
+		uint32 from = min( route_index, start );
+		uint32 to = max( route_index, start );
+		for(  uint32 i=from;  i<=to  &&  i<route->get_count();  i++  ) {
+			grund_t *gr = welt->lookup(route->at(i));
+			if(  !gr  ) {
+				continue;
+			}
+			for(  uint8 j=1;  j<gr->get_top();  j++  ) {
+				obj_t *obj = gr->obj_bei(j);
+				if(  obj  &&  obj->get_typ()==obj_t::air_vehicle  ) {
+					air_vehicle_t *other = (air_vehicle_t *)obj;
+					if(  other!=this  &&  other->get_convoi()!=cnv  &&  other->is_on_ground()  ) {
+						// taxiway not clear yet - do not grab the runway ahead of them
+						return false;
+					}
+				}
+			}
+		}
 	}
 
 	for(  uint32 i=start;  success  &&  i<end  &&  i<route->get_count();  i++) {

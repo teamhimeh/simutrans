@@ -1318,14 +1318,19 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_find_parent) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_try_coupling(!bt_find_parent.pressed);
-			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			if(schedule->get_waytype()!=water_wt)
+			{
+				schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			}
 			update_selection();
 		}
 	}
 	else if(comp == &bt_wait_for_child) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_wait_for_coupling(!bt_wait_for_child.pressed);
-			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			if(schedule->get_waytype()!=water_wt){
+				schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			}
 			update_selection();
 		}
 	}
@@ -1364,12 +1369,9 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_reverse_coupling) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(!bt_reverse_coupling.pressed);
-			if(  bt_wait_for_child.pressed  ) {
+			if(  schedule->get_waytype()!=water_wt  &&  (bt_wait_for_child.pressed || bt_find_parent.pressed)  ) {
 				schedule->at(schedule->get_current_stop()).reset_coupling();
-			} 
-			if(  bt_find_parent.pressed  ) {
-				schedule->at(schedule->get_current_stop()).reset_coupling();
-			} 
+			}
 			update_selection();
 		}
 	}
@@ -2038,7 +2040,7 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
 	bt_reverse_default.set_visible(show_reverse_settings&&yesno);
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt; // water convoy does not use electricity
 	bt_no_use_electric.set_visible(coupling_waytype&&yesno);
 	sp_coupling_settings.set_visible(coupling_waytype&&yesno);	
 }
@@ -2079,7 +2081,7 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	bt_wait_for_other_convoy.set_visible(yesno);
 	allow_depart_line_selector.set_visible(yesno);
 
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);

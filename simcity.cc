@@ -631,8 +631,7 @@ void stadt_t::remove_gebaeude_from_stadt(gebaeude_t* gb)
 	for (grund_t* gr : gb_tiles) {
 		gebaeude_t* remove_gb = gr->find<gebaeude_t>();
 		remove_gb->set_stadt(NULL);
-		bool ok = buildings.remove(remove_gb);
-		assert(ok);
+		buildings.remove(remove_gb);
 	}
 	recalc_city_size();
 }

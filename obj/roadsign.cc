@@ -101,12 +101,7 @@ roadsign_t::roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const ro
 	if(  desc->is_private_way()  ) {
 		// init ownership of private ways
 		ticks_ns = ticks_ow = 0;
-		if(  player->get_player_nr() >= 8  ) {
-			ticks_ow = 1 << (player->get_player_nr()-8);
-		}
-		else {
-			ticks_ns = 1 << player->get_player_nr();
-		}
+		private_way_mask = (uint64)1 << player->get_player_nr();
 	}
 	if(  desc->is_signal_type()  ) {
 		set_two_ways(false);
@@ -341,7 +336,7 @@ void roadsign_t::calc_image()
 	// private way have also closed/open states
 	if(  desc->is_private_way()  ) {
 		uint8 image = 1-(dir&1);
-		if(  (1<<welt->get_active_player_nr()) & get_player_mask()  ) {
+		if(  private_way_mask & ((uint64)1 << welt->get_active_player_nr())  ) {
 			// gate open
 			image += 2;
 		}
@@ -571,7 +566,7 @@ sync_result roadsign_t::sync_step(uint32 /*delta_t*/)
 {
 	if(  desc->is_private_way()  ) {
 		uint8 image = 1-(dir&1);
-		if(  (1<<welt->get_active_player_nr()) & get_player_mask()  ) {
+		if(  private_way_mask & ((uint64)1 << welt->get_active_player_nr())  ) {
 			// gate open
 			image += 2;
 			// force redraw
@@ -695,6 +690,13 @@ void roadsign_t::rdwr(loadsave_t *file)
 			ticks_ns = ticks_ow = 16;
 		}
 	}
+	else if(  file->is_saving()  &&  desc  &&  desc->is_private_way()  &&  file->get_OTRP_version() < 59  ) {
+		// truncate 64-bit mask to legacy 16-bit layout for old saves
+		uint8 ns_byte = (uint8)(private_way_mask & 0xFF);
+		uint8 ow_byte = (uint8)((private_way_mask >> 8) & 0xFF);
+		file->rdwr_byte(ns_byte);
+		file->rdwr_byte(ow_byte);
+	}
 	else {
 		file->rdwr_byte(ticks_ns);
 		file->rdwr_byte(ticks_ow);
@@ -794,6 +796,20 @@ void roadsign_t::rdwr(loadsave_t *file)
 		// ticks_ns is repurposed as two_ways flag for signals; old saves may have timing value
 		if(  desc  &&  desc->is_signal_type()  &&  ticks_ns >= 2  ) {
 			ticks_ns = 0;
+		}
+	}
+
+	if(  file->get_OTRP_version() >= 59  ) {
+		if(  desc  &&  desc->is_private_way()  ) {
+			file->rdwr_longlong((sint64&)private_way_mask);
+		}
+	}
+	else if(  file->is_loading()  &&  desc  &&  desc->is_private_way()  ) {
+		if(  file->is_version_less(110, 7)  ) {
+			private_way_mask = ~(uint64)0;
+		}
+		else {
+			private_way_mask = ((uint64)ticks_ow << 8) | ticks_ns;
 		}
 	}
 }

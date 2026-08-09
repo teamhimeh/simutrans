@@ -62,9 +62,9 @@ private:
 	sint8 yoff;
 
 	/**
-	 * Owner of the object (1 - public player, 15 - unowned)
+	 * Owner of the object (1 - public player, PLAYER_UNOWNED - unowned)
 	 */
-	uint8 owner_n:4;
+	uint8 owner_n:6;
 
 	/**
 	 * @see flag_values

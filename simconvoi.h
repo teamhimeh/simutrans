@@ -1180,6 +1180,11 @@ public:
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
 
+	// Whether this convoy can reach other_cnv's position by water (same river, same sea,
+	// or a sea connected to a river etc.) - used to find valid TRY_COUPLING partners at a
+	// halt without relying on both convoys occupying the exact same tile.
+	bool is_same_waterway(convoihandle_t other_cnv) const;
+
 	bool is_coupling_done() const { return coupling_done; }
 	void set_coupling_done(bool tf) { coupling_done = tf; }
 

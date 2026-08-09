@@ -256,6 +256,7 @@ settings_t::settings_t() :
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
+	base_revenue_from_halt = 0;
 
 	// stop buildings
 	cst_multiply_dock=-50000;
@@ -676,7 +677,9 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_str(language_code_names, lengthof(language_code_names) );
 
 			// restore AI state
-			for(  int i=0;  i<15;  i++  ) {
+			const int old_player_type_count = 15;
+			const int player_type_count = file->get_OTRP_version() < 59 ? old_player_type_count : MAX_PLAYER_COUNT-1;
+			for(  int i=0;  i<player_type_count;  i++  ) {
 				if(file->is_version_less(122,1)) {
 					bool player_active = true;
 					file->rdwr_bool(player_active);
@@ -685,6 +688,11 @@ void settings_t::rdwr(loadsave_t *file)
 				if(  file->is_version_less(102, 3)  ) {
 					char dummy[2] = { 0, 0 };
 					file->rdwr_str(dummy, lengthof(dummy) );
+				}
+			}
+			if(  file->is_loading()  &&  player_type_count < MAX_PLAYER_COUNT-1  ) {
+				for(  int i=player_type_count;  i<MAX_PLAYER_COUNT-1;  i++  ) {
+					player_type[i] = player_t::EMPTY;
 				}
 			}
 
@@ -864,9 +872,17 @@ void settings_t::rdwr(loadsave_t *file)
 
 		if(  file->is_version_atleast(110, 1)  ) {
 			file->rdwr_bool( default_player_color_random );
-			for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			const int old_player_count = 16;
+			const int player_count = file->get_OTRP_version()<59 ? old_player_count : MAX_PLAYER_COUNT;
+			for(  int i=0;  i<player_count;  i++  ) {
 				file->rdwr_byte( default_player_color[i][0] );
 				file->rdwr_byte( default_player_color[i][1] );
+			}
+			if(  file->is_loading()  &&  player_count<MAX_PLAYER_COUNT  ) {
+				for(  int i=player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+					default_player_color[i][0] = 255;
+					default_player_color[i][1] = 255;
+				}
 			}
 		}
 		else if(  file->is_loading()  ) {
@@ -1121,7 +1137,12 @@ void settings_t::rdwr(loadsave_t *file)
 			transit_by_foot = false;
 			foot_path_weight = 24;
 			foot_path_time_ticks = 1800;
-			walk_cost_to_halt = false;			
+			walk_cost_to_halt = false;
+		}
+		if(  file->get_OTRP_version() >= 59  ) {
+			file->rdwr_long(base_revenue_from_halt);
+		} else {
+			base_revenue_from_halt = 0;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1460,6 +1481,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
+	base_revenue_from_halt = contents.get_int( "base_revenue_from_halt", base_revenue_from_halt );
 
 	env_t::use_old_friction		   = contents.get_int( "use_old_friction",				 env_t::use_old_friction ) != 0;
 

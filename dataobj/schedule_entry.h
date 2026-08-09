@@ -222,6 +222,22 @@ public:
 	void push_journey_time(uint32 time);
 	void push_waiting_time(uint32 time);
 	void push_convoy_stopping_time(uint32 time);
+
+	// preserve recorded times when re-applying a schedule whose stops/order did not change
+	void copy_time_records_from(const schedule_entry_t &other) {
+		jt_at_index = other.jt_at_index;
+		wt_at_index = other.wt_at_index;
+		cs_at_index = other.cs_at_index;
+		for(uint8 i = 0; i < NUM_ARRIVAL_TIME_STORED; i++) {
+			journey_time[i] = other.journey_time[i];
+		}
+		for(uint8 i = 0; i < NUM_WAITING_TIME_STORED; i++) {
+			waiting_time[i] = other.waiting_time[i];
+		}
+		for(uint8 i = 0; i < NUM_STOPPING_TIME_STORED; i++) {
+			convoy_stopping_time[i] = other.convoy_stopping_time[i];
+		}
+	}
 	
 	uint32 get_median_journey_time() const;
 	uint32 get_average_waiting_time() const;
