@@ -63,7 +63,7 @@ protected:
 	uint8 lane_affinity;
 	koord3d intersection_pos;
 
-	uint64 private_way_mask;
+	uint64 private_way_mask = 0ll;
 
 	const roadsign_desc_t *desc;
 
