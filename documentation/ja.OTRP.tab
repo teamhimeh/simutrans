@@ -837,8 +837,10 @@ This tool must be executed by the public player.
 このツールは公共事業のみ実行できます。
 No city found!
 都市が見つかりません！
-Players 16+ exist but cannot be merged in network mode.\nThey will be absent from the saved file.\nServer state is unaffected.
-プレイヤーは16社以上あるため、\n古いバージョンで保存するため\nネットワークから落ちます。
+Players 16+ exist; this save cannot use the selected older format.\nSaving in the current format instead.\nServer state is unaffected.
+プレイヤーが16社以上存在するため、選択した古い形式では保存できません。\n代わりに現在の形式で保存します。\nサーバーの状態には影響ありません。
+Players 16+ exist and must be merged into company 0 to use this older format.\nThis cannot be undone. Hold SHIFT and click Save again to confirm.
+プレイヤーが16社以上存在するため、この古い形式で保存するには\n会社0へ統合する必要があります。この操作は取り消せません。\n確認のため、SHIFTを押しながらもう一度保存ボタンを押してください。
 This convoy waits here until another convoy grants it departure allowance
 他編成が本路線の出発許可を与えるまで，発車を待機します．
 Show Route Cache
