@@ -2795,7 +2795,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 			else if(  (images[n].player_flags & 1)  ) {
 				recode_img( n, 0 );
 			}
-			sp = images[n].data[0];
+			sp = images[n].data != NULL ? images[n].data[0] : NULL;
 			if(  sp == NULL  ) {
 				dbg->warning("display_img_aux", "Img %u failed!", n);
 				return;
@@ -4056,7 +4056,11 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		else if(  (images[n].player_flags & 1)  ) {
 			recode_img( n, 0 );
 		}
-		PIXVAL *sp = images[n].data[0] != NULL ? images[n].data[0] : NULL;
+		PIXVAL *sp = images[n].data != NULL ? images[n].data[0] : NULL;
+		if(  sp == NULL  ) {
+			dbg->warning("display_rezoomed_img_blend", "Img %u failed!", n);
+			return;
+		}
 
 		// now, since zooming may have change this image
 		xp += images[n].x;
@@ -4140,7 +4144,11 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		if(  (images[alpha_n].recode_flags & FLAG_REZOOM)  ) {
 			rezoom_img( alpha_n );
 		}
-		PIXVAL *sp = images[n].data[0] != NULL ? images[n].data[0] : NULL;
+		PIXVAL *sp = images[n].data != NULL ? images[n].data[0] : NULL;
+		if(  sp == NULL  ) {
+			dbg->warning("display_rezoomed_img_alpha", "Img %u failed!", n);
+			return;
+		}
 		// alphamap image uses base data as we don't want to recode
 		PIXVAL *alphamap = images[alpha_n].zoom_data != NULL ? images[alpha_n].zoom_data : images[alpha_n].base_data;
 		// now, since zooming may have change this image
