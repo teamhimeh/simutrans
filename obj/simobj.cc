@@ -185,16 +185,8 @@ void obj_t::rdwr(loadsave_t *file)
 	file->rdwr_byte(byte);
 	yoff = (sint8)(((sint16)byte*OBJECT_OFFSET_STEPS)/16);
 	byte = owner_n;
-	// in old version, unowned player id is 15.
-	if(  file->is_saving()  &&  file->get_OTRP_version()<59  &&  byte==PLAYER_UNOWNED  ) {
-		byte = 15;
-	}
-	file->rdwr_byte(byte);
-	if(  file->is_loading()  &&  file->get_OTRP_version()<59  &&  byte==15  ) {
-		owner_n = PLAYER_UNOWNED;
-	} else {
-		owner_n = byte;
-	}
+	file->rdwr_player_nr(byte);
+	owner_n = byte;
 }
 
 

@@ -3152,7 +3152,7 @@ void convoi_t::rdwr(loadsave_t *file)
 
 	bool dummy_bool=false;
 	file->rdwr_bool(dummy_bool);
-	file->rdwr_long(owner_n);
+	file->rdwr_player_nr(owner_n);
 	file->rdwr_long(akt_speed);
 	file->rdwr_long(akt_speed_soll);
 	file->rdwr_long(sp_soll);
