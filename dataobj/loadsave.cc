@@ -11,6 +11,7 @@
 #include <errno.h>
 
 #include "../sys/simsys.h"
+#include "../simconst.h"
 #include "../simtypes.h"
 #include "../macros.h"
 #include "../simversion.h"
@@ -797,6 +798,33 @@ void loadsave_t::rdwr_long(uint32 &l)
 	sint32 ll=l;
 	rdwr_long(ll);
 	l = (uint32)ll;
+}
+
+
+// pre-v59 savegames only had 16 player slots and used 15 as the "unowned" sentinel
+static const sint32 LEGACY_PLAYER_UNOWNED = 15;
+
+void loadsave_t::rdwr_player_nr(sint8 &owner_n)
+{
+	if(  is_saving()  &&  get_OTRP_version() < 59  &&  owner_n == PLAYER_UNOWNED  ) {
+		owner_n = (sint8)LEGACY_PLAYER_UNOWNED;
+	}
+	rdwr_byte(owner_n);
+	if(  is_loading()  &&  get_OTRP_version() < 59  &&  owner_n == LEGACY_PLAYER_UNOWNED  ) {
+		owner_n = PLAYER_UNOWNED;
+	}
+}
+
+
+void loadsave_t::rdwr_player_nr(sint32 &owner_n)
+{
+	if(  is_saving()  &&  get_OTRP_version() < 59  &&  owner_n == PLAYER_UNOWNED  ) {
+		owner_n = LEGACY_PLAYER_UNOWNED;
+	}
+	rdwr_long(owner_n);
+	if(  is_loading()  &&  get_OTRP_version() < 59  &&  owner_n == LEGACY_PLAYER_UNOWNED  ) {
+		owner_n = PLAYER_UNOWNED;
+	}
 }
 
 

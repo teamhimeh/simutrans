@@ -4203,7 +4203,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	if(file->is_version_less(99, 8)) {
 		init_pos.rdwr( file );
 	}
-	file->rdwr_long(owner_n);
+	file->rdwr_player_nr(owner_n);
 
 	if(file->is_version_less(88, 6)) {
 		bool dummy;
