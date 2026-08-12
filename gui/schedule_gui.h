@@ -51,7 +51,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// only active with lines
 	button_t bt_promote_to_line;
-	gui_combobox_t line_selector, departure_slot_group_selector, next_line_selector;
+	gui_combobox_t line_selector, departure_slot_group_selector, next_line_selector, allow_depart_line_selector;
 	gui_label_buf_t lb_waitlevel;
 	gui_fill_t sp_schedule_settings,sp_load_settings,sp_departure_settings,sp_coupling_settings,sp_reverse_settings,sp_road_settings,sp_schedule_reverse_settings,sp_schedule_coupling_settings;
 
@@ -69,6 +69,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	// coupling, load/unload only, temp schedule, departure time, max_speed
 	button_t bt_extract_schedule_settings, bt_extract_loading_settings, bt_extract_driving_settings;
 	button_t bt_find_parent, bt_wait_for_child, bt_reset_coupling; // convoy coupling
+	button_t bt_wait_for_other_convoy; // wait for departure allowance granted by another convoy
 	button_t bt_no_go_no_users;
 	button_t bt_wait_full_load;
 	button_t bt_no_use_electric;
@@ -135,6 +136,7 @@ public:
 	// for updating info ...
 	void init_line_selector();
 	void init_next_line_selector();
+	void init_allow_depart_line_selector();
 	void init_departure_slot_group_selector();
 
 	bool infowin_event(event_t const*) OVERRIDE;

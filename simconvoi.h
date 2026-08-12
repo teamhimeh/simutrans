@@ -343,6 +343,21 @@ private:
 
 	bool coupling_done;
 
+	/**
+	 * True while this convoy is blocked at its current stop, waiting for
+	 * another convoy (of the schedule entry's allow_depart_line) to grant
+	 * it departure allowance.
+	 * @author THLeaderH
+	 */
+	bool waiting_for_departure_allowance_by_other_convoy;
+
+	/**
+	 * Grant departure allowance to one waiting convoy of the given line, if any,
+	 * that is currently loading at halt. Only one convoy is released per call.
+	 * @author THLeaderH
+	 */
+	void allow_other_convoy_to_depart(halthandle_t halt) const;
+
 
 	/**
 	 * Time when convoi arrived at the current stop
@@ -1156,6 +1171,8 @@ public:
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;
+	// true if self or any coupling child is currently blocked waiting for departure allowance by another convoy.
+	bool is_waiting_for_departure_allowance() const;
 	void set_convoi_coupling_in_progress(convoihandle_t);
 	convoihandle_t get_convoi_coupling_in_progress() const { return convoi_coupling_in_progress; }
 	void unset_convoi_coupling_in_progress();
@@ -1163,8 +1180,16 @@ public:
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
 
+	// Whether this convoy can reach other_cnv's position by water (same river, same sea,
+	// or a sea connected to a river etc.) - used to find valid TRY_COUPLING partners at a
+	// halt without relying on both convoys occupying the exact same tile.
+	bool is_same_waterway(convoihandle_t other_cnv) const;
+
 	bool is_coupling_done() const { return coupling_done; }
 	void set_coupling_done(bool tf) { coupling_done = tf; }
+
+	bool is_waiting_for_departure_allowance_by_other_convoy() const { return waiting_for_departure_allowance_by_other_convoy; }
+	void set_waiting_for_departure_allowance_by_other_convoy(bool tf) { waiting_for_departure_allowance_by_other_convoy = tf; }
 
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 	uint32 get_arrived_time() const { return arrived_time; }

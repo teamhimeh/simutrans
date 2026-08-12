@@ -10722,6 +10722,12 @@ bool tool_change_traffic_light_t::init( player_t *player )
 	else if(  ns == 3  ) {
 		rs->set_ticks_yellow_ow( (uint8)ticks );
 	}
+	else if(  ns == 5  ) {
+		sint32 mask_lo = 0, mask_hi = 0;
+		sscanf( default_param, "%hi,%hi,%hhi,%hi,%hi,%i,%i", &pos2d.x, &pos2d.y, &z, &ns, &ticks, &mask_lo, &mask_hi );
+		uint64 new_mask = ((uint64)(uint32)mask_hi << 32) | (uint32)mask_lo;
+		rs->set_player_mask( new_mask );
+	}
 	// update the window
 	if(  rs->get_desc()->is_traffic_light()  ) {
 		trafficlight_info_t* trafficlight_win = (trafficlight_info_t*)win_get_magic((ptrdiff_t)rs);
@@ -11089,15 +11095,15 @@ bool tool_change_halt_t::init(player_t *player) {
 bool tool_change_permission_t::init(player_t *player)
 {
 	uint32 halt_id = 0;
-	uint32 perms = 0;
+	unsigned long long perms_ull = 0;
 	const char *p = default_param;
 	while(  *p  &&  *p <= ' '  ) { p++; }
-	sscanf( p, "%u,%u", &halt_id, &perms );
+	sscanf( p, "%u,%llu", &halt_id, &perms_ull );
 
 	halthandle_t halt;
 	halt.set_id(halt_id);
 	if(  halt.is_bound()  &&  player_t::check_owner(halt->get_owner(), player)  ) {
-		halt->set_permissions((uint16)perms);
+		halt->set_permissions((uint64)perms_ull);
 	}
 	return false;
 }
@@ -11358,9 +11364,9 @@ bool tool_merge_player_t::init( player_t *player )
 			halt->make_private_and_join(merger_player, false);
 		}
 		else if(  !halt->is_allow_other_player_connection()
-		          &&  (halt->get_permissions() & (1 << merged_player_num))  ) {
+		          &&  (halt->get_permissions() & ((uint64)1 << merged_player_num))  ) {
 			// Transfer merged player's stop permission to the merger player
-			halt->set_permissions( halt->get_permissions() | (1 << merger_player_num) );
+			halt->set_permissions( halt->get_permissions() | ((uint64)1 << merger_player_num) );
 		}
 	}
 	
@@ -11379,6 +11385,15 @@ bool tool_merge_player_t::init( player_t *player )
 						continue;
 					}
 					obj->set_owner(merger_player);
+					if(  roadsign_t* const sign = obj_cast<roadsign_t>(obj)  ) {
+						// migrate the merged player's private-way permission bit, otherwise it is
+						// orphaned on the old owner's slot and lost entirely when saved in a legacy
+						// format that truncates it, locking out the new owner as well
+						const uint64 mask = sign->get_player_mask();
+						if(  mask & ((uint64)1 << merged_player_num)  ) {
+							sign->set_player_mask( (mask & ~((uint64)1 << merged_player_num)) | ((uint64)1 << merger_player_num) );
+						}
+					}
 				}
 			}
 			pos_2d.x += 1;
