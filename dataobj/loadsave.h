@@ -156,6 +156,16 @@ public:
 	void rdwr_bool(bool &i);
 	void rdwr_double(double &dbl);
 
+	/**
+	 * Read/write a player index (owner_n, convoy/factory/city owner, ...) that uses
+	 * PLAYER_UNOWNED as its "no owner" sentinel. Savegames older than OTRP version 59 only had
+	 * 16 player slots and used 15 as that sentinel, so this transparently remaps between the two
+	 * conventions on old-format save/load - callers just get/set the current PLAYER_UNOWNED value
+	 * and never need to know about the legacy encoding.
+	 */
+	void rdwr_player_nr(sint8 &owner_n);
+	void rdwr_player_nr(sint32 &owner_n);
+
 	/// Read and write the given vector object.
 	/// @tparam T The type of the vector.
 	/// @param vector The vector to read and write.

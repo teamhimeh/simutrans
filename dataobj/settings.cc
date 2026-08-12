@@ -256,6 +256,7 @@ settings_t::settings_t() :
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
+	penalty_wait_for_two_month = false;
 	base_revenue_from_halt = 0;
 
 	// stop buildings
@@ -1140,8 +1141,10 @@ void settings_t::rdwr(loadsave_t *file)
 			walk_cost_to_halt = false;
 		}
 		if(  file->get_OTRP_version() >= 59  ) {
+			file->rdwr_bool(penalty_wait_for_two_month);
 			file->rdwr_long(base_revenue_from_halt);
 		} else {
+			penalty_wait_for_two_month = false;
 			base_revenue_from_halt = 0;
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
@@ -1481,6 +1484,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
+	penalty_wait_for_two_month     = contents.get_int( "penalty_wait_for_two_month",     penalty_wait_for_two_month ) != 0;
 	base_revenue_from_halt = contents.get_int( "base_revenue_from_halt", base_revenue_from_halt );
 
 	env_t::use_old_friction		   = contents.get_int( "use_old_friction",				 env_t::use_old_friction ) != 0;

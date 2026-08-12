@@ -252,7 +252,14 @@ int default_font_ascent = 0;
 int default_font_linespace = 0;
 
 
-#define RGBMAPSIZE (0x8000+LIGHT_COUNT+MAX_PLAYER_COUNT)
+// Fixed size of the per-pixel "player color" ramp reserved at 0x8000-0x800F in the pixel
+// encoding (8 shades of primary company color + 8 shades of secondary company color). This is
+// a pak/image-format constant, NOT the number of players in the game - it must stay 16
+// regardless of MAX_PLAYER_COUNT, or the Day&Night special colors written right after it end up
+// at the wrong offset (they used to coincide with MAX_PLAYER_COUNT back when that was also 16).
+#define PLAYER_COLOR_RAMP_SIZE (16)
+
+#define RGBMAPSIZE (0x8000+LIGHT_COUNT+PLAYER_COLOR_RAMP_SIZE)
 
 
 /*
@@ -303,16 +310,16 @@ static PIXVAL specialcolormap_all_day_for_line[256];
  * contains all color conversions for transparency
  * 16 player colors, 15 special colors and 1024 3 4 3 encoded colors for transparent base
  */
-static PIXVAL transparent_map_day_night[MAX_PLAYER_COUNT+LIGHT_COUNT+1024];
-static PIXVAL transparent_map_all_day[MAX_PLAYER_COUNT+LIGHT_COUNT+1024];
+static PIXVAL transparent_map_day_night[PLAYER_COLOR_RAMP_SIZE+LIGHT_COUNT+1024];
+static PIXVAL transparent_map_all_day[PLAYER_COLOR_RAMP_SIZE+LIGHT_COUNT+1024];
 //static PIXVAL *transparent_map_current;
 
 /*
  * contains all color conversions for transparency
  * 16 player colors, 15 special colors and 1024 3 4 3 encoded colors for transparent base
  */
-static uint8 transparent_map_day_night_rgb[(MAX_PLAYER_COUNT+LIGHT_COUNT+1024)*4];
-static uint8 transparent_map_all_day_rgb[(MAX_PLAYER_COUNT+LIGHT_COUNT+1024)*4];
+static uint8 transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE+LIGHT_COUNT+1024)*4];
+static uint8 transparent_map_all_day_rgb[(PLAYER_COLOR_RAMP_SIZE+LIGHT_COUNT+1024)*4];
 //static uint8 *transparent_map_current_rgb;
 
 // offsets of first and second company color
@@ -1979,17 +1986,17 @@ static void calc_base_pal_from_night_shift(const int night)
 #ifdef RGB555
 		// 15 bit colors form here!
 		PIXVAL color = get_system_color(R, G, B);
-		transparent_map_day_night[MAX_PLAYER_COUNT + LIGHT_COUNT + i] = (color >> 2) & TWO_OUT_15;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 0] = color >> 10;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 1] = (color >> 5) & 0x1F;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 2] = color & 0x1F;
+		transparent_map_day_night[PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i] = (color >> 2) & TWO_OUT_15;
+		transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i) * 4 + 0] = color >> 10;
+		transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i) * 4 + 1] = (color >> 5) & 0x1F;
+		transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i) * 4 + 2] = color & 0x1F;
 #else
 		// 16 bit colors form here!
 		PIXVAL color = get_system_color(R, G, B);
-		transparent_map_day_night[MAX_PLAYER_COUNT + LIGHT_COUNT + i] = (color >> 2) & TWO_OUT_16;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 0] = color >> 11;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 1] = (color >> 5) & 0x3F;
-		transparent_map_day_night_rgb[(MAX_PLAYER_COUNT + LIGHT_COUNT + i) * 4 + 2] = color & 0x1F;
+		transparent_map_day_night[PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i] = (color >> 2) & TWO_OUT_16;
+		transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i) * 4 + 0] = color >> 11;
+		transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i) * 4 + 1] = (color >> 5) & 0x3F;
+		transparent_map_day_night_rgb[(PLAYER_COLOR_RAMP_SIZE + LIGHT_COUNT + i) * 4 + 2] = color & 0x1F;
 #endif
 	}
 
@@ -2060,19 +2067,19 @@ static void calc_base_pal_from_night_shift(const int night)
 		const int B = (day_B * day + night_B * night2) >> 2;
 
 		PIXVAL color = get_system_color(R > 0 ? R : 0, G > 0 ? G : 0, B > 0 ? B : 0);
-		rgbmap_day_night[0x8000 + MAX_PLAYER_COUNT + i] = color;
+		rgbmap_day_night[0x8000 + PLAYER_COLOR_RAMP_SIZE + i] = color;
 #ifdef RGB555
 		// 15 bit colors from here!
-		transparent_map_day_night[i + MAX_PLAYER_COUNT] = (color >> 2) & TWO_OUT_15;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 0] = color >> 10;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 1] = (color >> 5) & 0x1F;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 2] = color & 0x1F;
+		transparent_map_day_night[i + PLAYER_COLOR_RAMP_SIZE] = (color >> 2) & TWO_OUT_15;
+		transparent_map_day_night_rgb[(i + PLAYER_COLOR_RAMP_SIZE) * 4 + 0] = color >> 10;
+		transparent_map_day_night_rgb[(i + PLAYER_COLOR_RAMP_SIZE) * 4 + 1] = (color >> 5) & 0x1F;
+		transparent_map_day_night_rgb[(i + PLAYER_COLOR_RAMP_SIZE) * 4 + 2] = color & 0x1F;
 #else
 		// 16 bit colors from here!
-		transparent_map_day_night[i + MAX_PLAYER_COUNT] = (color >> 2) & TWO_OUT_16;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 0] = color >> 11;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 1] = (color >> 5) & 0x3F;
-		transparent_map_day_night_rgb[(i + MAX_PLAYER_COUNT) * 4 + 2] = color & 0x1F;
+		transparent_map_day_night[i + PLAYER_COLOR_RAMP_SIZE] = (color >> 2) & TWO_OUT_16;
+		transparent_map_day_night_rgb[(i + PLAYER_COLOR_RAMP_SIZE) * 4 + 0] = color >> 11;
+		transparent_map_day_night_rgb[(i + PLAYER_COLOR_RAMP_SIZE) * 4 + 1] = (color >> 5) & 0x3F;
+		transparent_map_day_night_rgb[(i + PLAYER_COLOR_RAMP_SIZE) * 4 + 2] = color & 0x1F;
 #endif
 	}
 
@@ -2795,7 +2802,7 @@ void display_img_aux(const image_id n, scr_coord_val xp, scr_coord_val yp, const
 			else if(  (images[n].player_flags & 1)  ) {
 				recode_img( n, 0 );
 			}
-			sp = images[n].data[0];
+			sp = images[n].data != NULL ? images[n].data[0] : NULL;
 			if(  sp == NULL  ) {
 				dbg->warning("display_img_aux", "Img %u failed!", n);
 				return;
@@ -4056,7 +4063,11 @@ void display_rezoomed_img_blend(const image_id n, scr_coord_val xp, scr_coord_va
 		else if(  (images[n].player_flags & 1)  ) {
 			recode_img( n, 0 );
 		}
-		PIXVAL *sp = images[n].data[0] != NULL ? images[n].data[0] : NULL;
+		PIXVAL *sp = images[n].data != NULL ? images[n].data[0] : NULL;
+		if(  sp == NULL  ) {
+			dbg->warning("display_rezoomed_img_blend", "Img %u failed!", n);
+			return;
+		}
 
 		// now, since zooming may have change this image
 		xp += images[n].x;
@@ -4140,7 +4151,11 @@ void display_rezoomed_img_alpha(const image_id n, const image_id alpha_n, const 
 		if(  (images[alpha_n].recode_flags & FLAG_REZOOM)  ) {
 			rezoom_img( alpha_n );
 		}
-		PIXVAL *sp = images[n].data[0] != NULL ? images[n].data[0] : NULL;
+		PIXVAL *sp = images[n].data != NULL ? images[n].data[0] : NULL;
+		if(  sp == NULL  ) {
+			dbg->warning("display_rezoomed_img_alpha", "Img %u failed!", n);
+			return;
+		}
 		// alphamap image uses base data as we don't want to recode
 		PIXVAL *alphamap = images[alpha_n].zoom_data != NULL ? images[alpha_n].zoom_data : images[alpha_n].base_data;
 		// now, since zooming may have change this image
@@ -5705,9 +5720,15 @@ bool simgraph_init(scr_size window_size, sint16 full_screen)
 	MEMZERON( tile_dirty_old, tile_buffer_length );
 
 	// init player colors
+	// SPECIAL_COLOR_COUNT only holds a fixed number of 8-shade color families (independent of
+	// MAX_PLAYER_COUNT), so wrap around it instead of indexing past specialcolormap_*[256] for
+	// higher player numbers; display_set_player_color_scheme() overwrites this with the player's
+	// actual chosen (always in-range) color as soon as one is assigned.
+	const int player_color_family_count = SPECIAL_COLOR_COUNT / 8;
 	for( int i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
-		player_offsets[i][0] = i*8;
-		player_offsets[i][1] = i*8+24;
+		const int family = i % player_color_family_count;
+		player_offsets[i][0] = family*8;
+		player_offsets[i][1] = family*8+24;
 	}
 
 	display_set_clip_wh(0, 0, disp_width, disp_height);

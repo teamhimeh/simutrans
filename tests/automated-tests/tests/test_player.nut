@@ -72,6 +72,7 @@ function test_player_create()
 	local scripted_ai = player_x(5)
 	local invalid_type = player_x(6)
 	local last_slot = player_x(14)
+	local max_valid_slot = player_x(62) // PLAYER_UNOWNED-1: the true highest valid player id
 
 	ASSERT_FALSE(human.is_valid())
 	ASSERT_FALSE(goods_ai.is_valid())
@@ -79,6 +80,7 @@ function test_player_create()
 	ASSERT_FALSE(scripted_ai.is_valid())
 	ASSERT_FALSE(invalid_type.is_valid())
 	ASSERT_FALSE(last_slot.is_valid())
+	ASSERT_FALSE(max_valid_slot.is_valid())
 
 	ASSERT_TRUE(world.create_player(2, 1))
 	ASSERT_TRUE(human.is_valid())
@@ -99,6 +101,10 @@ function test_player_create()
 	ASSERT_TRUE(world.create_player(14, 1))
 	ASSERT_TRUE(last_slot.is_valid())
 	ASSERT_EQUAL(last_slot.get_type(), 1)
+
+	ASSERT_TRUE(world.create_player(62, 1))
+	ASSERT_TRUE(max_valid_slot.is_valid())
+	ASSERT_EQUAL(max_valid_slot.get_type(), 1)
 
 	ASSERT_FALSE(world.create_player(2, 1))
 	ASSERT_FALSE(world.create_player(-1, 1))

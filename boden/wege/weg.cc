@@ -216,7 +216,7 @@ void weg_t::rdwr(loadsave_t *file)
 	// save owner
 	if(  file->is_version_atleast(99, 6)  ) {
 		sint8 spnum=get_owner_nr();
-		file->rdwr_byte(spnum);
+		file->rdwr_player_nr(spnum);
 		set_owner_nr(spnum);
 	}
 
