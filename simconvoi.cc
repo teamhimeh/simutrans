@@ -4478,7 +4478,7 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	// Grant departure allowance to a waiting convoy of another line, if configured.
 	// This runs after unloading (self and all coupling children) so that goods just
 	// unloaded here are already available at the halt for the released convoy to load.
-	if(  !unloading_done  ||  c->waiting_for_departure_make_another_convoy_depart  ) {
+	if(  !unloading_done  ||  waiting_for_departure_make_another_convoy_depart  ) {
 		waiting_for_departure_make_another_convoy_depart = !allow_other_convoy_to_depart(halt);
 	}
 	if(  !schedule->get_current_entry().is_no_unload()  ) 
