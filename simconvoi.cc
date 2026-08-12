@@ -2187,6 +2187,18 @@ void convoi_t::ziel_erreicht()
 				akt_speed = 0;
 				if(  halt.is_bound() &&  gr->get_weg_ribi(v->get_waytype())!=0  ) {
 					halt->book(1, HALT_CONVOIS_ARRIVED);
+					c = self;
+					while(  c.is_bound()  ) {
+						c->set_akt_speed(0);
+						c->set_arrived_time(world()->get_ticks());
+						if(  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  ) {
+							c->set_waiting_for_departure_allowance_by_other_convoy(true);
+						}
+						if(  c->get_schedule()->get_current_entry().is_wait_allow_convoy_departure()  &&  c->get_schedule()->get_current_entry().get_allow_depart_line().is_bound()  ) {
+							c->set_waiting_for_departure_make_another_convoy_depart(true);
+						}
+						c = c->get_coupling_convoi();
+					}
 				}
 				// First, the waiting convoy is set as parent
 				convoihandle_t temp_parent_convoi;
@@ -2225,6 +2237,18 @@ void convoi_t::ziel_erreicht()
 			akt_speed = 0;
 			if(  halt.is_bound()  &&  gr->get_weg_ribi(front()->get_waytype()) != 0  ) {
 				halt->book(1, HALT_CONVOIS_ARRIVED);
+				c = self;
+				while(  c.is_bound()  ) {
+					c->set_akt_speed(0);
+					c->set_arrived_time(world()->get_ticks());
+					if(  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  ) {
+						c->set_waiting_for_departure_allowance_by_other_convoy(true);
+					}
+					if(  c->get_schedule()->get_current_entry().is_wait_allow_convoy_departure()  &&  c->get_schedule()->get_current_entry().get_allow_depart_line().is_bound()  ) {
+						c->set_waiting_for_departure_make_another_convoy_depart(true);
+					}
+					c = c->get_coupling_convoi();
+				}
 			}
 			// For water vehicles: trying convoy (self) is the most-parent;
 			// swap parent/child if the schedule entry has REVERSE_COUPLING set.
@@ -2263,6 +2287,9 @@ void convoi_t::ziel_erreicht()
 			if(  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  ) {
 				c->set_waiting_for_departure_allowance_by_other_convoy(true);
 			}
+			if(  c->get_schedule()->get_current_entry().is_wait_allow_convoy_departure()  &&  c->get_schedule()->get_current_entry().get_allow_depart_line().is_bound()  ) {
+				c->set_waiting_for_departure_make_another_convoy_depart(true);
+			}
 			c = c->get_coupling_convoi();
 		}
 		check_and_set_coupling_done_over_length();
@@ -2280,6 +2307,14 @@ void convoi_t::ziel_erreicht()
 		while(  c.is_bound()  ) {
 			if(c->get_schedule()->get_current_entry().is_reverse_convoy()) {
 				c->reversing_needed=true;
+			}
+			if(  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  ) {
+				c->set_waiting_for_departure_allowance_by_other_convoy(true);
+			}
+			if(  c->get_schedule()->get_current_entry().is_wait_allow_convoy_departure()  &&  c->get_schedule()->get_current_entry().get_allow_depart_line().is_bound()  ) {
+				c->set_waiting_for_departure_make_another_convoy_depart(true);
+			} else {
+				c->set_waiting_for_departure_make_another_convoy_depart(false);
 			}
 			c->get_schedule()->advance();
 			c = c->get_coupling_convoi();
@@ -3719,6 +3754,11 @@ void convoi_t::rdwr(loadsave_t *file)
 	} else {
 		waiting_for_departure_allowance_by_other_convoy = false;
 	}
+	if(  file->get_OTRP_version()>=60  ) {
+		file->rdwr_bool(waiting_for_departure_make_another_convoy_depart);
+	} else {
+		waiting_for_departure_make_another_convoy_depart = false;
+	}
 
 	if(  file->is_loading()  ) {
 		recalc_catg_index();
@@ -4051,7 +4091,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 		// First, check whether we have to wait for coupling at this stop.
 		const bool coupling_waiting = (e.is_wait_for_coupling() &&  !c->is_coupling_done()  &&  !c->is_cease_coupling_due_to_length_over()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled()));
 		// And whether we have to wait for departure allowance granted by another convoy.
-		const bool allowance_waiting = (e.is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy());
+		const bool allowance_waiting = (e.is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy()) || (e.allow_depart_line.is_bound()  &&  e.is_wait_allow_convoy_departure()  &&  c->is_waiting_for_departure_make_another_convoy_depart());
 		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  (world()->get_ticks() - arrived_time) > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
 		coupling_cond |= (coupling_waiting && !waiting_time_cond);
 		if (  c->is_coupling_done()  ||  !c->get_convoi_coupling_in_progress().is_bound()  ||  c->get_convoi_coupling_in_progress()->get_convoi_coupling_in_progress()!=c  ) {
@@ -4435,15 +4475,11 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
 	}
-	if(  !unloading_done  ) {
-		// Grant departure allowance to a waiting convoy of another line, if configured.
-		// This runs after unloading (self and all coupling children) so that goods just
-		// unloaded here are already available at the halt for the released convoy to load.
-		c = self;
-		while(  c.is_bound()  ) {
-			c->allow_other_convoy_to_depart(halt);
-			c = c->get_coupling_convoi();
-		}
+	// Grant departure allowance to a waiting convoy of another line, if configured.
+	// This runs after unloading (self and all coupling children) so that goods just
+	// unloaded here are already available at the halt for the released convoy to load.
+	if(  !unloading_done  ||  c->waiting_for_departure_make_another_convoy_depart  ) {
+		waiting_for_departure_make_another_convoy_depart = !allow_other_convoy_to_depart(halt);
 	}
 	if(  !schedule->get_current_entry().is_no_unload()  ) 
 	{
@@ -6317,13 +6353,13 @@ bool convoi_t::is_waiting_for_departure_allowance() const {
 	return waiting_for_allowance;
 }
 
-void convoi_t::allow_other_convoy_to_depart(halthandle_t halt) const {
+bool convoi_t::allow_other_convoy_to_depart(halthandle_t halt) const {
 	const linehandle_t target_line = get_schedule()->get_current_entry().get_allow_depart_line();
 	if(  !halt.is_bound()  ||  !target_line.is_bound()  ) {
-		return;
+		return true;
 	}
 	FOR(  vector_tpl<convoihandle_t>,  cnv,  halt->get_loading_convois()  ) {
-		if(  !cnv.is_bound()  ||  cnv->get_line() != target_line  ||  cnv->get_most_parent_convoi()==get_most_parent_convoi()  ) {
+		if(  !cnv.is_bound()  ||  cnv->get_line()->get_schedule()->get_departure_slot_group_id() != target_line->get_schedule()->get_departure_slot_group_id()  ||  cnv->get_most_parent_convoi()==get_most_parent_convoi()  ) {
 			continue;
 		}
 		// only one convoy is granted departure allowance per arrival; check leading and child convoys.
@@ -6337,9 +6373,10 @@ void convoi_t::allow_other_convoy_to_depart(halthandle_t halt) const {
 			c = c->get_coupling_convoi();
 		}
 		if(  released  ) {
-			break;
+			return true;
 		}
 	}
+	return false;
 }
 
 void convoi_t::check_electrification() {
