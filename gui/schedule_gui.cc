@@ -1883,17 +1883,21 @@ void schedule_gui_t::init_allow_depart_line_selector()
 	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
 
 	halthandle_t h = haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()==tram_wt?track_wt:schedule->get_waytype());
-	vector_tpl<linehandle_t> lines = h->registered_lines;
-	FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
-		// only show leader lines (lines that are their own departure slot group)
-		if(  line->get_schedule()->get_departure_slot_group_id() != line  ) {
-			continue;
-		}
-		if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  schedule->get_departure_slot_group_id() == line) {
-			allow_depart_line_selector.new_component<company_color_line_scroll_item_t>(line);
-		}
-		if(  allow_depart_line==line->get_schedule()->get_departure_slot_group_id()  &&  selection==0  ) {
-			selection = allow_depart_line_selector.count_elements()-1;
+	
+	if(  h.is_bound()  ) 
+	{
+		vector_tpl<linehandle_t> lines = h->registered_lines;
+		FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
+			// only show leader lines (lines that are their own departure slot group)
+			if(  line->get_schedule()->get_departure_slot_group_id() != line  ) {
+				continue;
+			}
+			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  schedule->get_departure_slot_group_id() == line) {
+				allow_depart_line_selector.new_component<company_color_line_scroll_item_t>(line);
+			}
+			if(  allow_depart_line==line->get_schedule()->get_departure_slot_group_id()  &&  selection==0  ) {
+				selection = allow_depart_line_selector.count_elements()-1;
+			}
 		}
 	}
 
