@@ -2813,6 +2813,18 @@ void convoi_t::vorfahren()
 		if (c->reversing_needed^((world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!need_reverse_each_convoy)){
 			c->reverse_vehicles_at_halt_if_needed();
 		}
+		if(  c->reversing_needed  &&  !go_same_direction  &&  c->front()->get_waytype()==road_wt  ) {
+			// the convoy physically reverses instead of turning around: the same real-world
+			// lane it was standing in now corresponds to the opposite overtaking state, since
+			// the direction of travel flips.
+			strasse_t* str0 = (strasse_t*)welt->lookup(c->front()->get_pos())->get_weg(road_wt);
+			if(  str0->get_overtaking_mode() == prohibited_mode  ) {
+				c->set_tiles_overtaking(0);
+			}
+			else {
+				c->set_tiles_overtaking(  c->is_overtaking() ? 0 : 3  );
+			}
+		}
 		// reset uncouple done flag
 		c->uncouple_done = false;
 		c->reverse_coupling_done = false;
@@ -2962,7 +2974,7 @@ void convoi_t::vorfahren()
 				}
 				inspecting = inspecting->get_coupling_convoi();
 			}
-			if(  !go_same_direction  &&  !get_coupling_convoi().is_bound()  &&  get_vehicle_count()==1  &&  !reversing_convoy_exists  ) {
+			if(  (reversing_convoy_exists^go_same_direction)  &&  !get_coupling_convoi().is_bound()  &&  get_vehicle_count()==1  ) {
 				// In case that single car bus or truck is turning around...
 				if(  road_vehicle_t* rv = dynamic_cast<road_vehicle_t*>(self->front())  ) {
 					rv->set_sideways_image();

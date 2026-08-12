@@ -551,10 +551,6 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		add_component(&bt_no_use_electric);
 		add_component(&sp_coupling_settings);
 		add_component(&sp_coupling_settings);
-
-		bt_same_lane_back.init(button_t::square_state, "Same Lane When Back");
-		bt_same_lane_back.set_tooltip(translator::translate("do not move to another lane when run back"));
-		bt_same_lane_back.add_listener(this);
 	}
 	end_table();
 
@@ -1564,10 +1560,6 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		schedule->set_reverse_default(!bt_reverse_default.pressed);
 		bt_reverse_default.pressed = schedule->is_reverse_default();
 	}
-	else if(comp == &bt_same_lane_back) {
-		schedule->set_same_lane_back(!bt_same_lane_back.pressed);
-		bt_same_lane_back.pressed = schedule->is_same_lane_back();
-	}
 	else if(comp == &bt_wait_for_time) {
 		if (!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_wait_for_time(!bt_wait_for_time.pressed);
@@ -2052,8 +2044,7 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
 	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt; // water convoy does not use electricity
 	bt_no_use_electric.set_visible(coupling_waytype&&yesno);
-	sp_coupling_settings.set_visible(coupling_waytype&&yesno);	
-	bt_same_lane_back.set_visible(schedule->get_waytype()==road_wt&&yesno);
+	sp_coupling_settings.set_visible(coupling_waytype&&yesno);
 }
 void schedule_gui_t::extract_loading_settings(bool yesno) {
 	bt_extract_loading_settings.set_typ(yesno? button_t::arrowup: button_t::arrowdown);

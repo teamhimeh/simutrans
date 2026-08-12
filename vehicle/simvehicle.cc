@@ -2513,18 +2513,9 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 	if(cnv) {
 		// first we set reversing images
 		if(  cnv->is_reversed()  ) {
-			if(  cnv->get_schedule()->is_same_lane_back()  ) {
-				if(  welt->get_settings().is_drive_left()  ) {
-					xoff -= 2*tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
-					yoff -= 2*tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
-				} else {
-					xoff -= tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
-					yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );	
-				}
-			}
-			else if(  welt->get_settings().is_drive_left()  ) {
+			if(  welt->get_settings().is_drive_left()  ) {
 				xoff -= tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
-				yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );	
+				yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
 			}
 		}
 

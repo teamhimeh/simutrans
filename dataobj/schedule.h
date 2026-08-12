@@ -90,8 +90,7 @@ public:
 		FULL_LOAD_ACCELERATION = 1U << 2, // Always use full load acceleration.
 		FULL_LOAD_TIME         = 1U << 3, // Always use full load time at stop.
 		REVERSE_DEFAULT		   = 1U << 4, // reverse when next direction is opposite
-		NO_USE_ELECTRIC		   = 1U << 5, // not in service
-		SAME_LANE_BACK		   = 1U << 6  // run same lane during reversing (only for road_wt).
+		NO_USE_ELECTRIC		   = 1U << 5  // not in service
 	};
 
 	/**
@@ -168,8 +167,6 @@ public:
 	void set_reverse_default(bool y) { y? flags |= REVERSE_DEFAULT : flags &= ~REVERSE_DEFAULT; }
 	bool is_no_use_electric() const { return (flags&NO_USE_ELECTRIC)>0; }
 	void set_no_use_electric(bool y) { y? flags |= NO_USE_ELECTRIC : flags &= ~NO_USE_ELECTRIC; }
-	bool is_same_lane_back() const { return (flags&SAME_LANE_BACK)>0; }
-	void set_same_lane_back(bool y) { y? flags |= SAME_LANE_BACK : flags &= ~SAME_LANE_BACK; }
 	uint16 get_max_speed() const { return max_speed; }
 	void set_max_speed(uint16 v) { max_speed = v; }
 	linehandle_t get_departure_slot_group_id() const { return departure_slot_group_id; }
