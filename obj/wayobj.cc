@@ -241,9 +241,6 @@ void wayobj_t::rotate90()
 	obj_t::rotate90();
 	dir = ribi_t::rotate90( dir);
 	hang = slope_t::rotate90( hang );
-	if (close_diagonal_state) {
-		close_diagonal_state ^= 3;
-	}
 }
 
 
@@ -269,7 +266,6 @@ void wayobj_t::calc_image()
 #endif
 	grund_t *gr = welt->lookup(get_pos());
 	diagonal = false;
-	close_diagonal_state = 0;
 	if(gr) {
 		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
 		weg_t *w=gr->get_weg(wt);
@@ -341,40 +337,6 @@ void wayobj_t::calc_image()
 				if(image==IMG_EMPTY  &&  after==IMG_EMPTY) {
 					// no diagonals available
 					diagonal = false;
-				}
-			}
-		}
-		else if(dir == ribi_t::all  &&  desc->has_close_diagonal_image()) {
-			// fourway dir => could be close diagonals (two diagonal wayobjs crossing)
-			ribi_t::ribi r[4];
-			uint8 non_bent = 0;
-			bool connected = true;
-			for(uint8 i = 0; i < 4; i++) {
-				grund_t *to;
-				if(!gr->get_neighbour(to, wt, ribi_t::nesw[i])) {
-					connected = false;
-					break;
-				}
-				const wayobj_t* wo = to->get_wayobj(wt);
-				r[i] = wo ? wo->get_dir() : ribi_t::none;
-				if(!ribi_t::is_bend(r[i])) {
-					// only one entry point
-					if(non_bent++) {
-						connected = false;
-						break;
-					}
-				}
-			}
-			if(connected) {
-				if(r[0] == r[1]  ||  r[2] == r[3]) {
-					if( (r[0] + r[2] == ribi_t::all  ||  r[1] + r[3] == ribi_t::all) ) {
-						close_diagonal_state = 2;
-					}
-				}
-				else {
-					if( (r[0] + r[1] == ribi_t::all  ||  r[2] + r[3] == ribi_t::all) ) {
-						close_diagonal_state = 1;
-					}
 				}
 			}
 		}

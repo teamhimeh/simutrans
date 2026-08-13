@@ -33,11 +33,6 @@ private:
 	uint8 nw:1;
 	uint8 dir:7;
 
-	// 0=no, 1=horizontal, 2=vertical: set on dir==all tiles where two diagonal
-	// wayobjs cross, so a close-diagonal image can be used instead of the
-	// normal crossing image. @see calc_image
-	uint8 close_diagonal_state:2;
-
 	static const uint8 dir_unknown = 127;
 
 	ribi_t::ribi find_next_ribi(const grund_t *start, const ribi_t::ribi dir, const waytype_t wt) const;
@@ -61,11 +56,9 @@ public:
 	* the back image, drawn before vehicles
 	*/
 	image_id get_image() const OVERRIDE {
-		return hang ? desc->get_back_slope_image_id(hang) :
-			(diagonal ? desc->get_back_diagonal_image_id(dir) :
-				(close_diagonal_state && desc->has_close_diagonal_image() ? desc->get_back_close_diagonal_image_id(close_diagonal_state-1) :
-					(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,false) : desc->get_back_image_id(dir))
-				)
+		return hang ? desc->get_back_slope_image_id(hang) :		
+			(diagonal ? desc->get_back_diagonal_image_id(dir) : 
+				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,false) : desc->get_back_image_id(dir))
 			);
 	}
 
@@ -74,10 +67,8 @@ public:
 	 */
 	image_id get_front_image() const OVERRIDE {
 		return hang ? desc->get_front_slope_image_id(hang) :
-			(diagonal ? desc->get_front_diagonal_image_id(dir) :
-				(close_diagonal_state && desc->has_close_diagonal_image() ? desc->get_front_close_diagonal_image_id(close_diagonal_state-1) :
-					(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,true) : desc->get_front_image_id(dir))
-				)
+			(diagonal ? desc->get_front_diagonal_image_id(dir) : 
+				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,true) : desc->get_front_image_id(dir))
 			);
 	}
 #else
@@ -85,10 +76,8 @@ public:
 	* the back image, drawn before vehicles
 	*/
 	image_id get_image() const OVERRIDE {
-		return hang ? desc->get_back_slope_image_id(hang) :
-			(diagonal ? desc->get_back_diagonal_image_id(dir) :
-				(close_diagonal_state && desc->has_close_diagonal_image() ? desc->get_back_close_diagonal_image_id(close_diagonal_state-1) : desc->get_back_image_id(dir))
-			);
+		return hang ? desc->get_back_slope_image_id(hang) :		
+			(diagonal ? desc->get_back_diagonal_image_id(dir) : desc->get_back_image_id(dir));
 	}
 
 	/**
@@ -96,27 +85,18 @@ public:
 	 */
 	image_id get_front_image() const OVERRIDE {
 		return hang ? desc->get_front_slope_image_id(hang) :
-			(diagonal ? desc->get_front_diagonal_image_id(dir) :
-				(close_diagonal_state && desc->has_close_diagonal_image() ? desc->get_front_close_diagonal_image_id(close_diagonal_state-1) : desc->get_front_image_id(dir))
-			);
+			(diagonal ? desc->get_front_diagonal_image_id(dir) : desc->get_front_image_id(dir));
 	}
 #endif
 	image_id get_image_test() const {
 		return hang ? desc->get_back_slope_image_id(hang) :
-			(diagonal ? desc->get_back_diagonal_image_id(dir) :
-				(close_diagonal_state && desc->has_close_diagonal_image() ? desc->get_back_close_diagonal_image_id(close_diagonal_state-1) : desc->get_back_image_id(dir))
-			);
+			(diagonal ? desc->get_back_diagonal_image_id(dir) : desc->get_back_image_id(dir));
 	}
 
 	image_id get_front_image_test() const {
 		return hang ? desc->get_front_slope_image_id(hang) :
-			(diagonal ? desc->get_front_diagonal_image_id(dir) :
-				(close_diagonal_state && desc->has_close_diagonal_image() ? desc->get_front_close_diagonal_image_id(close_diagonal_state-1) : desc->get_front_image_id(dir))
-			);
+			(diagonal ? desc->get_front_diagonal_image_id(dir) : desc->get_front_image_id(dir));
 	}
-
-	inline void set_close_diagonal(uint8 n) { close_diagonal_state = n&3; }
-	inline uint8 is_close_diagonal() const { return close_diagonal_state; }
 
 	typ get_typ() const OVERRIDE { return wayobj; }
 

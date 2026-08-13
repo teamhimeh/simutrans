@@ -159,7 +159,6 @@ void weg_t::init()
 	init_statistics();
 	alle_wege.insert(this);
 	flags = 0;
-	close_diagonal_state = 0;
 	image = IMG_EMPTY;
 	foreground_image = IMG_EMPTY;
 	max_wayobj_speed = 0;
@@ -227,10 +226,6 @@ void weg_t::rdwr(loadsave_t *file)
 	if(  file->is_loading()  ) {
 		ribi = dummy8 & 15; // before: high bits was maske
 		ribi_maske = 0; // maske will be restored by signal/roadsing
-		if (ribi == ribi_t::all) {
-			// will be recalculated later but may be needed for loading convois
-			close_diagonal_state = 1;
-		}
 	}
 
 	uint16 dummy16=max_speed;
@@ -421,9 +416,6 @@ void weg_t::rotate90()
 	obj_t::rotate90();
 	ribi = ribi_t::rotate90( ribi );
 	ribi_maske = ribi_t::rotate90( ribi_maske );
-	if (close_diagonal_state) {
-		close_diagonal_state ^= 3;
-	}
 }
 
 
@@ -500,11 +492,6 @@ void weg_t::set_images(image_type typ, uint8 ribi, bool snow, bool switch_nw)
 			set_image( desc->get_diagonal_image_id(ribi, snow) );
 			set_foreground_image( desc->get_diagonal_image_id(ribi, snow, true) );
 			break;
-		case image_close_diagonal:
-			set_is_ex_image(false);
-			set_image( desc->get_close_diagonal_image_id(ribi-1, snow) );
-			set_foreground_image( desc->get_close_diagonal_image_id(ribi-1, snow, true) );
-			break;
 	}
 }
 
@@ -549,9 +536,6 @@ bool weg_t::check_season(const bool calc_only_season_change)
 
 	if(  is_diagonal()  ) {
 		set_images( image_diagonal, ribi, snow );
-	}
-	else if(  is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
-		set_images( image_close_diagonal, is_close_diagonal(), snow );
 	}
 	else if(  ribi_t::is_threeway( ribi )  &&  desc->has_switch_image()  ) {
 		// there might be two states of the switch; remember it when changing seasons
@@ -657,7 +641,6 @@ void weg_t::calc_image()
 			}
 
 			// try diagonal image
-			bool close_diagonal_drawn = false;
 			if(  desc->has_diagonal_image()  ) {
 				check_diagonal();
 
@@ -668,16 +651,10 @@ void weg_t::calc_image()
 						set_images(image_diagonal, ribi, snow);
 					}
 				}
-				else if(  is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
-					// two diagonal ways crossing at a fourway tile: use the close-diagonal
-					// image instead of falling through to the switch/crossing selection below
-					set_images(image_close_diagonal, is_close_diagonal(), snow);
-					close_diagonal_drawn = true;
-				}
 			}
 
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
-			if(!is_diagonal() && !close_diagonal_drawn && desc->has_switch_image()){
+			if(!is_diagonal() && desc->has_switch_image()){
 				waytype_t type_name = get_waytype();
 				if(type_name == track_wt){
 					select_switch_image(snow);
@@ -1115,52 +1092,15 @@ void weg_t::check_diagonal()
 {
 	bool diagonal = false;
 	flags &= ~IS_DIAGONAL;
-	close_diagonal_state = 0;
 
 	const ribi_t::ribi ribi = get_ribi_unmasked();
-
-	grund_t *from = welt->lookup(get_pos());
-	grund_t *to;
-
-	if (ribi_t::all == ribi) {
-		// fourway ribi => could be close diagonals (two diagonal ways crossing)
-		ribi_t::ribi r[4];
-		uint8 non_bent = 0;
-		for (uint8 i = 0; i < 4; i++) {
-			if (!from->get_neighbour(to, get_waytype(), ribi_t::nesw[i])) {
-				// only happens during construction of ways
-				dbg->warning("weg_t::check_diagonal()", "4way ribi not connected at %s", get_pos().get_str());
-				return;
-			}
-			r[i] = to->get_weg_ribi_unmasked(get_waytype());
-			if (!ribi_t::is_bend(r[i])) {
-				// only one entry point
-				if (non_bent++) {
-					return;
-				}
-			}
-		}
-		if (r[0] == r[1] || r[2] == r[3]) {
-			if (r[0] + r[2] != ribi_t::all  &&  r[1] + r[3] != ribi_t::all) {
-				// entry and exit not parallel => crossing
-				return;
-			}
-			close_diagonal_state = 2;
-		}
-		else {
-			if (r[0] + r[1] != ribi_t::all  &&  r[2] + r[3] != ribi_t::all) {
-				// entry and exit not parallel => crossing
-				return;
-			}
-			close_diagonal_state = 1;
-		}
-		return;
-	}
-
 	if(  !ribi_t::is_bend(ribi)  ) {
 		// This is not a curve, it can't be a diagonal
 		return;
 	}
+
+	grund_t *from = welt->lookup(get_pos());
+	grund_t *to;
 
 	ribi_t::ribi r1 = ribi_t::none;
 	ribi_t::ribi r2 = ribi_t::none;

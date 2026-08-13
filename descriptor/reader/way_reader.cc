@@ -22,10 +22,6 @@ void way_reader_t::register_obj(obj_desc_t *&data)
 {
 	way_desc_t *desc = static_cast<way_desc_t *>(data);
 
-	// just calculate those once
-	desc->diagonals = (desc->get_diagonal_image_id(ribi_t::northeast,0,false) != IMG_EMPTY || desc->get_diagonal_image_id(ribi_t::northeast,0,true) != IMG_EMPTY);
-	desc->close_diagonals = (desc->get_close_diagonal_image_id(0,0,false) != IMG_EMPTY || desc->get_close_diagonal_image_id(0,0,true) != IMG_EMPTY);
-
 	way_builder_t::register_desc(desc);
 	obj_for_xref(get_type(), desc->get_name(), data);
 

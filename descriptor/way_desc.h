@@ -62,11 +62,6 @@ private:
 
 	bool clip_below; // only relevant for elevated ways
 
-	// cached at load time in way_reader_t::register_obj(), so callers don't
-	// have to re-walk the image lists on every query
-	bool diagonals;
-	bool close_diagonals;
-
 	/**
 	 * calculates index of image list for flat ways
 	 * for winter and/or front images
@@ -209,27 +204,16 @@ public:
 		return get_child<image_list_t>(n)->get_image_id(ribi / 3 - 1);
 	}
 
-	// "close" diagonal images share the same image list as the regular
-	// diagonals (indices 4/5, right after the four normal bend images)
-	image_id get_close_diagonal_image_id(uint8 nr, uint8 season, bool front = false) const
-	{
-		if (front  &&  !front_images) {
-			return IMG_EMPTY;
-		}
-		const uint16 n = image_list_base_index(season, front) + 2;
-		return get_child<image_list_t>(n)->get_image_id(4 + nr);
-	}
-
 	bool has_double_slopes() const {
 		// return get_child<image_list_t>(3)->get_count() > 4
 		// ||     get_child<image_list_t>(image_list_base_index(false, true) + 1)->get_count() > 4;
 		return true;
 	}
 
-	// quick query functions, cached in diagonals/close_diagonals
-	// @see way_reader_t::register_obj
-	bool has_diagonal_image() const { return diagonals; }
-	bool has_close_diagonal_image() const { return close_diagonals; }
+	bool has_diagonal_image() const {
+		return get_child<image_list_t>(4)->get_image_id(0) != IMG_EMPTY
+		||     get_child<image_list_t>(image_list_base_index(false, true)+2)->get_image_id(0) != IMG_EMPTY;
+	}
 
 	bool has_switch_image() const {
 		return get_child<image_list_t>(2)->get_count() > 16
