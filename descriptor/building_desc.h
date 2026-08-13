@@ -94,6 +94,23 @@ public:
 	koord get_offset() const;
 
 	uint8 get_layout() const;
+
+	/**
+	 * How far this tile's artwork rises above its ground line, in full z-axis
+	 * tiles (world height steps).
+	 *
+	 * The ground line is at half the cell and image coordinates run from the top
+	 * left, so one row of artwork reaches (cell/2 - y) above it. Each further image
+	 * row is drawn a whole tile higher again (gebaeude_t::display). The pixel extent
+	 * is then divided by the pixel height of one z-axis tile, so a finer pak height
+	 * granularity (smaller TILE_HEIGHT_STEP) yields proportionally more tiles for the
+	 * same drawn artwork.
+	 *
+	 * Read from the base images, so the value does not change with the zoom.
+	 * Computed, not stored: it is only wanted once, to seed the building's single
+	 * height_clearance.
+	 */
+	uint8 get_drawn_height() const;
 };
 
 /**
@@ -209,6 +226,17 @@ private:
 
 	uint16 preservation_year_month;
 
+	/**
+	 * The clearance this building needs above its ground, in full z-axis tiles
+	 * (world height steps): the tallest of its tiles, over every layout.
+	 *
+	 * It is the whole building and not the single tile on purpose. A tile that
+	 * draws nothing above the ground may still belong to a tower, and asking
+	 * only the tile a way happens to cross lets the way through the low corner
+	 * of a tall building.
+	 */
+	uint8 height_clearance;
+
 	bool is_type(building_desc_t::btype u) const {
 		return type == u;
 	}
@@ -284,6 +312,15 @@ public:
 		assert(index < layouts * size.x * size.y);
 		return get_child<building_tile_desc_t>(index + 2);
 	}
+
+	/**
+	 * The clearance this building needs above its ground, in full z-axis tiles.
+	 * @see height_clearance
+	 */
+	uint8 get_height_clearance() const { return height_clearance; }
+
+	/// Derive get_height_clearance() from the tiles. @see building_tile_desc_t::get_drawn_height
+	void calc_height_clearance();
 
 	const building_tile_desc_t *get_tile(uint8 layout, sint16 x, sint16 y) const;
 
