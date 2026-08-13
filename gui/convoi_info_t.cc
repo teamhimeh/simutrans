@@ -28,6 +28,7 @@
 #include "convoi_detail_t.h"
 #include "convoi_stops_list_t.h"
 #include "depot_picker.h"
+#include "route_display.h"
 
 #define CHART_HEIGHT (100)
 
@@ -524,6 +525,14 @@ koord3d convoi_info_t::get_weltpos( bool set )
 	}
 }
 
+void convoi_info_t::hide_route_display(void *owner)
+{
+	convoi_info_t *win = static_cast<convoi_info_t*>(owner);
+	win->is_route_show = false;
+	win->show_route(false);
+}
+
+
 void convoi_info_t::show_route(bool const yesno)
 {
 	if(!cnv_route.empty()) {
@@ -538,11 +547,15 @@ void convoi_info_t::show_route(bool const yesno)
 		}
 		cnv_route.clear();
 	}
+	if(!yesno) {
+		route_display_t::deactivate(this);
+	}
 	if(!cnv.is_bound() || route_search_in_progress || cnv->get_state()==convoi_t::EDIT_SCHEDULE || cnv->get_route()->get_count()<1) {
 		return;
 	}
 	// draw route
 	if(yesno) {
+		route_display_t::activate(this, &convoi_info_t::hide_route_display);
 		for( uint32 i=0; i<cnv->get_route()->get_count(); i++) {
 			cnv_route.append(cnv->get_route()->at(i));
 		}

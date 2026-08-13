@@ -37,8 +37,8 @@ void nwc_scenario_t::rdwr()
 {
 	network_command_t::rdwr();
 	packet->rdwr_short(what);
-	packet->rdwr_short(won);
-	packet->rdwr_short(lost);
+	packet->rdwr_longlong((sint64&)won);
+	packet->rdwr_longlong((sint64&)lost);
 	packet->rdwr_str(function);
 	packet->rdwr_str(result);
 }

@@ -3219,7 +3219,7 @@ uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, cons
 		}
 		// elevated ways have to check tile above
 		if(  elevated  ) {
-			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance() ) );
+			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance()+height_offset ) );
 			if(  gr == NULL  ) {
 				return 2;
 			}
@@ -8029,24 +8029,48 @@ const char* tool_change_city_of_building_t::work_on_ground( player_t* player, ko
 
 	gebaeude_t* gb = gr->find<gebaeude_t>();
 
+	// target: city buildings, headquarters, or monuments
 	if (!gb || !gb->is_building_of_city()) {
 		return "";
 	}
 
 	stadt_t* old_city = gb->get_stadt();
 
-	if (!(old_city && new_city)) {
-		return "Building doesn't have city or no city highlighted";
-	} else if (old_city == new_city) {
+	if (!new_city) {
+		// no city highlighted: fall back to the city whose townhall is closest by simple distance
+		uint32 min_dist = 0xFFFFFFFFu;
+		FOR(  weighted_vector_tpl<stadt_t*>,  const city,  welt->get_cities()  ) {
+			const uint32 dist = koord_distance( k, city->get_pos() );
+			if (  dist < min_dist  ) {
+				min_dist = dist;
+				new_city = city;
+			}
+		}
+		if (!new_city) {
+			return "No city found!";
+		}
+	}
+
+	if (old_city == new_city) {
 		return "";
 	}
 
-	old_city->remove_gebaeude_from_stadt(gb);
+	if (old_city) {
+		old_city->remove_gebaeude_from_stadt(gb);
+	}
 	new_city->add_gebaeude_to_stadt(gb);
 
 	welt->set_dirty();
-	
+
 	return NULL;
+}
+
+bool tool_change_city_of_building_t::init(player_t *player) {
+	if (!player->is_public_service()) {
+		open_error_msg_win("This tool must be executed by the public player.");
+		return false;
+	}
+	return two_click_kartenboden_tool_t::init(player);
 }
 
 const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d const &start, koord3d const &end) {
@@ -8059,9 +8083,6 @@ const char* tool_change_city_of_building_t::do_work(player_t* player, koord3d co
 	one_click = true;
 
 	stadt_t* const new_city = get_highlighted_city();
-	if(  !new_city  ) {
-		return "No new city found!";
-	}
 	koord k;
 
 	if ( end == koord3d::invalid) {
@@ -9841,6 +9862,9 @@ bool tool_change_convoi_t::init( player_t *player )
 		case 'k':
 		{
 			cnv->set_unload_all(atoi(p)!=0);
+			if(  atoi(p)!=0  ) {
+				cnv->set_no_load(true);
+			}
 		}
 		break;
 	}
@@ -10371,7 +10395,7 @@ bool tool_change_depot_t::init( player_t *player )
 						while(nr<cnv->get_vehicle_count()) {
 							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
 							nr ++;
-							if(info->get_trailer_count()!=1) {
+							if(info->get_trailer_count()!=1 || info->get_trailer(0)==vehicle_desc_t::any_vehicle) {
 								break;
 							}
 						}
@@ -10697,6 +10721,12 @@ bool tool_change_traffic_light_t::init( player_t *player )
 	}
 	else if(  ns == 3  ) {
 		rs->set_ticks_yellow_ow( (uint8)ticks );
+	}
+	else if(  ns == 5  ) {
+		sint32 mask_lo = 0, mask_hi = 0;
+		sscanf( default_param, "%hi,%hi,%hhi,%hi,%hi,%i,%i", &pos2d.x, &pos2d.y, &z, &ns, &ticks, &mask_lo, &mask_hi );
+		uint64 new_mask = ((uint64)(uint32)mask_hi << 32) | (uint32)mask_lo;
+		rs->set_player_mask( new_mask );
 	}
 	// update the window
 	if(  rs->get_desc()->is_traffic_light()  ) {
@@ -11065,15 +11095,15 @@ bool tool_change_halt_t::init(player_t *player) {
 bool tool_change_permission_t::init(player_t *player)
 {
 	uint32 halt_id = 0;
-	uint32 perms = 0;
+	unsigned long long perms_ull = 0;
 	const char *p = default_param;
 	while(  *p  &&  *p <= ' '  ) { p++; }
-	sscanf( p, "%u,%u", &halt_id, &perms );
+	sscanf( p, "%u,%llu", &halt_id, &perms_ull );
 
 	halthandle_t halt;
 	halt.set_id(halt_id);
 	if(  halt.is_bound()  &&  player_t::check_owner(halt->get_owner(), player)  ) {
-		halt->set_permissions((uint16)perms);
+		halt->set_permissions((uint64)perms_ull);
 	}
 	return false;
 }
@@ -11334,9 +11364,9 @@ bool tool_merge_player_t::init( player_t *player )
 			halt->make_private_and_join(merger_player, false);
 		}
 		else if(  !halt->is_allow_other_player_connection()
-		          &&  (halt->get_permissions() & (1 << merged_player_num))  ) {
+		          &&  (halt->get_permissions() & ((uint64)1 << merged_player_num))  ) {
 			// Transfer merged player's stop permission to the merger player
-			halt->set_permissions( halt->get_permissions() | (1 << merger_player_num) );
+			halt->set_permissions( halt->get_permissions() | ((uint64)1 << merger_player_num) );
 		}
 	}
 	
@@ -11355,6 +11385,15 @@ bool tool_merge_player_t::init( player_t *player )
 						continue;
 					}
 					obj->set_owner(merger_player);
+					if(  roadsign_t* const sign = obj_cast<roadsign_t>(obj)  ) {
+						// migrate the merged player's private-way permission bit, otherwise it is
+						// orphaned on the old owner's slot and lost entirely when saved in a legacy
+						// format that truncates it, locking out the new owner as well
+						const uint64 mask = sign->get_player_mask();
+						if(  mask & ((uint64)1 << merged_player_num)  ) {
+							sign->set_player_mask( (mask & ~((uint64)1 << merged_player_num)) | ((uint64)1 << merger_player_num) );
+						}
+					}
 				}
 			}
 			pos_2d.x += 1;
