@@ -254,7 +254,7 @@ obj_desc_t * building_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 
 	if (version == 12) {
 		// height_clearance
-		btyp = (old_btyp::typ)0;
+		btyp = (old_btyp::typ)decode_uint8(p);
 		desc->type = (building_desc_t::btype)decode_uint8(p);
 		desc->level = decode_uint16(p);
 		desc->extra_data = decode_uint32(p);
