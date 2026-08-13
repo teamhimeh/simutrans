@@ -24,12 +24,10 @@
 #include "../gui/minimap.h"
 
 #include "../descriptor/bridge_desc.h"
-#include "../descriptor/building_desc.h"
 
 #include "../dataobj/marker.h"
 #include "../dataobj/scenario.h"
 #include "../obj/bruecke.h"
-#include "../obj/gebaeude.h"
 #include "../obj/leitung2.h"
 #include "../obj/pillar.h"
 #include "../obj/signal.h"
@@ -285,17 +283,6 @@ bool bridge_builder_t::is_blocked(koord3d pos, ribi_t::ribi check_ribi, const ch
 			// monorail tiles will be checked in is_monorail_junction
 			error_msg = "Tile not empty.";
 			return true;
-		}
-	}
-
-	// check for buildings below that are too tall for the clearance left underneath
-	if(  grund_t *gr_ground = welt->lookup_kartenboden( pos.get_2d() )  ) {
-		if(  gebaeude_t *gb = gr_ground->find<gebaeude_t>()  ) {
-			const sint8 gap_z = pos.z - gr_ground->get_hoehe();
-			if(  gap_z > 0  &&  gb->get_tile()->get_desc()->get_height_clearance() > gap_z  ) {
-				error_msg = "Bridge blocked by building below.";
-				return true;
-			}
 		}
 	}
 

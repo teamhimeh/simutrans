@@ -9,9 +9,6 @@
 
 #include "building_desc.h"
 #include "../network/checksum.h"
-#include "../display/simgraph.h"
-#include "../dataobj/environment.h"
-#include "../simconst.h"
 
 
 
@@ -34,56 +31,6 @@ koord building_tile_desc_t::get_offset() const
 	const building_desc_t *desc = get_desc();
 	koord size = desc->get_size(get_layout()); // rotate if necessary
 	return koord( index % size.x, (index / size.x) % size.y );
-}
-
-
-uint8 building_tile_desc_t::get_drawn_height() const
-{
-	const scr_coord_val cell = get_base_tile_raster_width();
-	const scr_coord_val pixel_per_zstep = tile_raster_scale_y(TILE_HEIGHT_STEP, cell);
-	if(  pixel_per_zstep <= 0  ) {
-		return 0;
-	}
-
-	scr_coord_val max_pixels_above_ground = 0;
-
-	image_array_t const* const imglist = get_child<image_array_t>(0); // season 0, background
-	const uint16 max_h = imglist->get_count();
-	for(  uint16 h = 0;  h < max_h;  h++  ) {
-		if(  image_t const* const image = imglist->get_image(h, 0)  ) {
-			const scr_coord_val above_ground = cell/2 - image->y + (scr_coord_val)h * pixel_per_zstep;
-			if(  above_ground > max_pixels_above_ground  ) {
-				max_pixels_above_ground = above_ground;
-			}
-		}
-	}
-
-	if(  max_pixels_above_ground <= 0  ) {
-		return 0;
-	}
-	// ceiling division: number of whole z-axis tiles needed to clear the tallest drawn pixel extent
-	return (uint8)( (max_pixels_above_ground + pixel_per_zstep - 1) / pixel_per_zstep );
-}
-
-
-void building_desc_t::calc_height_clearance()
-{
-	// One clearance value for the whole building, the tallest of its tiles. The draw path
-	// reads this single value for every tile: a per-tile lookup so less cache miss per tile.
-
-	if(  height_clearance != 255  ) {
-		// this building has its height clearance set in its dat file, in full z-axis
-		// tiles already => do not touch it
-		return;
-	}
-
-	height_clearance = 0;
-	for(  uint16 i = 0;  i < (uint16)(layouts * size.x * size.y);  i++  ) {
-		const uint8 h = get_tile(i)->get_drawn_height();
-		if(  h > height_clearance  ) {
-			height_clearance = h;
-		}
-	}
 }
 
 
@@ -209,7 +156,6 @@ void building_desc_t::calc_checksum(checksum_t *chk) const
 		}
 	}
 	chk->input(preservation_year_month);
-	chk->input(height_clearance);
 }
 
 

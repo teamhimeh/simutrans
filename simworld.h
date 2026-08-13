@@ -46,7 +46,6 @@ class tool_t;
 class scenario_t;
 class message_t;
 class way_desc_t;
-class building_desc_t;
 class network_world_command_t;
 class goods_desc_t;
 class memory_rw_t;
@@ -1811,7 +1810,7 @@ public:
 	/**
 	 * @return true, if square in place (i,j) with size w, h is constructible.
 	 */
-	bool square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl, const building_desc_t *desc = NULL) const;
+	bool square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const;
 
 	/**
 	 * @return A list of all buildable squares with size w, h.

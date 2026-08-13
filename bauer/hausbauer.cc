@@ -142,9 +142,6 @@ bool hausbauer_t::successfully_loaded()
 	FOR(stringhashtable_tpl<building_desc_t const*>, const& i, desc_table) {
 		building_desc_t const* const desc = i.value;
 
-		// derive height_clearance from tile artwork if the .dat did not set it explicitly
-		const_cast<building_desc_t*>(desc)->calc_height_clearance();
-
 		// now insert the desc into the correct list.
 		if(  desc->is_city_building()  ) {
 			if(  desc->get_x()>3 || desc->get_y()>3  ) {

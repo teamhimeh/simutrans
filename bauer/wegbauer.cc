@@ -598,7 +598,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			if(gb) {
 				// no halt => citybuilding => do not touch
 				// also check for too high buildings ...
-				if(gb->get_tile()->get_desc()->get_height_clearance() > get_way_height_offset(to)) {
+				if(gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
 					return false;
 				}
 				if(!check_owner(gb->get_owner(),player_builder)) {
