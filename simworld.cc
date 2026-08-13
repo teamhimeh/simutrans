@@ -4829,8 +4829,7 @@ bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_b
 			// is there an elevated way/bridge above that this building would be too tall to fit under?
 			bool blocked_above = false;
 			if(  desc  &&  desc->get_height_clearance() > 0  ) {
-				const uint8 z_steps = (desc->get_height_clearance() + TILE_HEIGHT_STEP - 1) / TILE_HEIGHT_STEP;
-				for(  uint8 z = 1;  z <= z_steps  &&  !blocked_above;  z++  ) {
+				for(  uint8 z = 1;  z <= desc->get_height_clearance()  &&  !blocked_above;  z++  ) {
 					blocked_above = lookup( gr->get_pos() + koord3d(0,0,z) ) != NULL;
 				}
 			}

@@ -172,9 +172,11 @@ void building_desc_t::calc_height_clearance()
 	height_clearance = 0;
 
 	for(  uint16 i = 0;  i < (uint16)(layouts * size.x * size.y);  i++  ) {
-		const uint8 h = get_tile(i)->get_drawn_height();
-		if(  h > height_clearance  ) {
-			height_clearance = h;
+		if(  const building_tile_desc_t *t = get_tile(i)  ) {
+			const uint8 h = t->get_drawn_height();
+			if(  h > height_clearance  ) {
+				height_clearance = h;
+			}
 		}
 	}
 }

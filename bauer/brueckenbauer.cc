@@ -292,7 +292,7 @@ bool bridge_builder_t::is_blocked(koord3d pos, ribi_t::ribi check_ribi, const ch
 	if(  grund_t *gr_ground = welt->lookup_kartenboden( pos.get_2d() )  ) {
 		if(  gebaeude_t *gb = gr_ground->find<gebaeude_t>()  ) {
 			const sint8 gap_z = pos.z - gr_ground->get_hoehe();
-			if(  gap_z > 0  &&  gb->get_tile()->get_desc()->get_height_clearance() > gap_z * TILE_HEIGHT_STEP  ) {
+			if(  gap_z > 0  &&  gb->get_tile()->get_desc()->get_height_clearance() > gap_z  ) {
 				error_msg = "Bridge blocked by building below.";
 				return true;
 			}
