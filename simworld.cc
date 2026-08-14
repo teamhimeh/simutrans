@@ -25,6 +25,7 @@
 #include "display/simimg.h"
 #include "siminteraction.h"
 #include "simintr.h"
+#include "simline.h"
 #include "simlinemgmt.h"
 #include "simloadingscreen.h"
 #include "simmenu.h"
@@ -538,6 +539,28 @@ void karte_t::add_convoi(convoihandle_t const cnv)
 void karte_t::rem_convoi(convoihandle_t const cnv)
 {
 	convoi_array.remove(cnv);
+}
+
+
+void karte_t::recalc_distance_new_records(sint32 old_tile_length, sint32 new_tile_length)
+{
+	FOR(vector_tpl<convoihandle_t>, const cnv, convoi_array) {
+		for (size_t k = 0; k < MAX_MONTHS; k++) {
+			const sint64 old_value = cnv->get_finance_history(k, convoi_t::CONVOI_DISTANCE_NEW);
+			cnv->set_finance_history( k, convoi_t::CONVOI_DISTANCE_NEW, old_value * new_tile_length / old_tile_length );
+		}
+	}
+
+	for (uint8 i = 0; i < PLAYER_UNOWNED; i++) {
+		if (player_t* pl = players[i]) {
+			FOR(vector_tpl<linehandle_t>, const line, pl->simlinemgmt.get_line_list()) {
+				for (size_t k = 0; k < MAX_MONTHS; k++) {
+					const sint64 old_value = line->get_finance_history(k, LINE_DISTANCE_NEW);
+					line->set_finance_history( k, LINE_DISTANCE_NEW, old_value * new_tile_length / old_tile_length );
+				}
+			}
+		}
+	}
 }
 
 

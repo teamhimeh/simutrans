@@ -28,7 +28,8 @@
 #define LINE_MAXSPEED          7 // maximum speed for bonus calculation of all convois
 #define LINE_WAYTOLL           8 // way toll paid by vehicles of line
 #define LINE_TONKILO		   9 // the amount of transported ware integrated by distance.
-#define MAX_LINE_COST          10 // Total number of cost items
+#define LINE_DISTANCE_NEW      10 // distance covered by all convois, in meters (LINE_DISTANCE * settings_t::tile_length)
+#define MAX_LINE_COST          11 // Total number of cost items
 
 class karte_ptr_t;
 class loadsave_t;
@@ -198,6 +199,7 @@ public:
 	sint64* get_finance_history() { return *financial_history; }
 
 	sint64 get_finance_history(int month, int cost_type) const { return financial_history[month][cost_type]; }
+	void set_finance_history(int month, int cost_type, sint64 value) { financial_history[month][cost_type] = value; }
 	sint64 get_stat_converted(int month, int cost_type) const;
 
 	void book(sint64 amount, int cost_type) { financial_history[0][cost_type] += amount; }

@@ -65,6 +65,7 @@ static const char *cost_type[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 	"Maxspeed",
 	"Road toll",
 	"Freight ton-kilo",
+	"Distance (m)",
 	"Avg. density" // not recorded in financial_history
 };
 
@@ -80,6 +81,7 @@ const uint8 cost_type_color[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 	COL_MAXSPEED,
 	COL_TOLL,
 	COL_TONKILO,
+	COL_DISTANCE,
 	COL_TRANSPORT_DENSITY // not recorded in financial_history
 };
 
@@ -96,7 +98,8 @@ static uint8 statistic[MAX_LINE_COST] = {
 	LINE_DISTANCE,
 	LINE_MAXSPEED,
 	LINE_WAYTOLL,
-	LINE_TONKILO
+	LINE_TONKILO,
+	LINE_DISTANCE_NEW
 };
 
 static uint8 statistic_type[MAX_LINE_COST] = {
@@ -109,6 +112,7 @@ static uint8 statistic_type[MAX_LINE_COST] = {
 	STANDARD,
 	STANDARD,
 	MONEY,
+	STANDARD,
 	STANDARD
 };
 

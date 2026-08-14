@@ -64,6 +64,7 @@ public:
 		CONVOI_MAXSPEED,           // average max. possible speed
 		CONVOI_WAYTOLL,			   // waytoll
 		CONVOI_TONKILO,			   // the amount of transported ware integrated by transported distance.
+		CONVOI_DISTANCE_NEW,       // total distance traveled this month, in meters (CONVOI_DISTANCE * settings_t::tile_length)
 		MAX_CONVOI_COST            // Total number of cost items
 	};
 
@@ -1017,6 +1018,7 @@ public:
 	* return a specified element from the financial history
 	*/
 	sint64 get_finance_history(int month, int cost_type) const { return financial_history[month][cost_type]; }
+	void set_finance_history(int month, int cost_type, sint64 value) { financial_history[month][cost_type] = value; }
 	sint64 get_stat_converted(int month, int cost_type) const;
 
 	/**

@@ -137,6 +137,7 @@ bool settings_frame_t::infowin_event(const event_t *ev)
 		const bool   old_transit_by_foot     = sets->is_transit_by_foot();
 		const uint32 old_foot_path_weight    = sets->get_foot_path_weight();
 		const uint32 old_foot_path_time_ticks = sets->get_foot_path_time_ticks();
+		const sint32 old_tile_length          = sets->get_tile_length();
 		general.read( sets );
 		display.read( sets );
 		routing.read( sets );
@@ -153,6 +154,11 @@ bool settings_frame_t::infowin_event(const event_t *ev)
 		     sets->get_foot_path_weight() != old_foot_path_weight  ||
 		     sets->get_foot_path_time_ticks() != old_foot_path_time_ticks  ) {
 			world()->set_schedule_counter();
+		}
+
+		// tile_length changed: rescale all stored *_DISTANCE_NEW records for convois and lines
+		if(  sets->get_tile_length() != old_tile_length  ) {
+			world()->recalc_distance_new_records( old_tile_length, sets->get_tile_length() );
 		}
 	}
 	return gui_frame_t::infowin_event(ev);
