@@ -28,7 +28,7 @@
 #define LINE_MAXSPEED          7 // maximum speed for bonus calculation of all convois
 #define LINE_WAYTOLL           8 // way toll paid by vehicles of line
 #define LINE_TONKILO		   9 // the amount of transported ware integrated by distance.
-#define LINE_DISTANCE_NEW      10 // distance covered by all convois, in meters (LINE_DISTANCE * settings_t::tile_length)
+#define LINE_DISTANCE_METERS      10 // distance covered by all convois, in meters (LINE_DISTANCE * settings_t::tile_length)
 #define MAX_LINE_COST          11 // Total number of cost items
 
 class karte_ptr_t;

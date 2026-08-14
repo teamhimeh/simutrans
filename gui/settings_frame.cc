@@ -156,7 +156,7 @@ bool settings_frame_t::infowin_event(const event_t *ev)
 			world()->set_schedule_counter();
 		}
 
-		// tile_length changed: rescale all stored *_DISTANCE_NEW records for convois and lines
+		// tile_length changed: rescale all stored *_DISTANCE_METERS records for convois and lines
 		if(  sets->get_tile_length() != old_tile_length  ) {
 			world()->recalc_distance_new_records( old_tile_length, sets->get_tile_length() );
 		}

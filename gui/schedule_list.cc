@@ -99,7 +99,7 @@ static uint8 statistic[MAX_LINE_COST] = {
 	LINE_MAXSPEED,
 	LINE_WAYTOLL,
 	LINE_TONKILO,
-	LINE_DISTANCE_NEW
+	LINE_DISTANCE_METERS
 };
 
 static uint8 statistic_type[MAX_LINE_COST] = {

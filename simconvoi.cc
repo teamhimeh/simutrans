@@ -861,7 +861,7 @@ void convoi_t::add_running_cost( const weg_t *weg )
 	book( 1, CONVOI_DISTANCE );
 	ribi_t::ribi dir = get_most_parent_convoi()->front()->get_direction();
 	sint32 const tile_length_base = ribi_t::is_bend(dir)?welt->get_settings().get_pak_diagonal_multiplier():1024;
-	book( welt->get_settings().get_tile_length()*tile_length_base/1024, CONVOI_DISTANCE_NEW );
+	book( welt->get_settings().get_tile_length()*tile_length_base/1024, CONVOI_DISTANCE_METERS );
 	for (uint16 i=0; i<anz_vehikel; i++) {
 		book( fahr[i]->get_total_cargo(), CONVOI_TONKILO );
 	}
@@ -3444,19 +3444,19 @@ void convoi_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][CONVOI_TONKILO] = 0;
-			financial_history[k][CONVOI_DISTANCE_NEW] = 0;
+			financial_history[k][CONVOI_DISTANCE_METERS] = 0;
 		}
 	}
 	else if (  file->get_OTRP_version()<60  )
 	{
 		// load statistics
-		for (int j = 0; j<CONVOI_DISTANCE_NEW; j++) {
+		for (int j = 0; j<CONVOI_DISTANCE_METERS; j++) {
 			for (size_t k = MAX_MONTHS; k-- != 0;) {
 				file->rdwr_longlong(financial_history[k][j]);
 			}
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
-			financial_history[k][CONVOI_DISTANCE_NEW] = financial_history[k][CONVOI_DISTANCE] * welt->get_settings().get_tile_length();
+			financial_history[k][CONVOI_DISTANCE_METERS] = financial_history[k][CONVOI_DISTANCE] * welt->get_settings().get_tile_length();
 		}
 	}
 	else
