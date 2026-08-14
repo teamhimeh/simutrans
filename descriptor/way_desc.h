@@ -203,15 +203,6 @@ public:
 		const uint16 n = image_list_base_index(season, front) + 2;
 		return get_child<image_list_t>(n)->get_image_id(ribi / 3 - 1);
 	}
-	
-	image_id get_close_diagonal_image_id(uint8 nr, uint8 season, bool front = false) const
-	{
-		if (front && !front_images) {
-			return IMG_EMPTY;
-		}
-		const uint16 n = image_list_base_index(season, front) + 2;
-		return get_child<image_list_t>(n)->get_image_id(4+nr);
-	}
 
 	bool has_double_slopes() const {
 		// return get_child<image_list_t>(3)->get_count() > 4
