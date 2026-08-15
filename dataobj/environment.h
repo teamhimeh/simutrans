@@ -231,6 +231,13 @@ public:
 
 	static scr_size iconsize;
 
+	/**
+	 * thickness (in pixels) of the scrollbar strip drawn just outside the
+	 * main menu bar's icon row/column (below for MENU_TOP/BOTTOM, beside for
+	 * MENU_LEFT/RIGHT); the menu bar's on-screen footprint is iconsize plus this
+	 */
+	static const scr_coord_val menu_scrollbar_thickness = 10;
+
 	/// customize your tooltips
 	static bool show_tooltips;
 	static uint32 tooltip_color_rgb;

@@ -45,6 +45,18 @@ private:
 
 	bool has_prev_next, is_dragging;
 
+	bool is_scrollbar_dragging;
+
+	// window-relative rect of the scrollbar strip (drawn just outside the icon
+	// area: below it for single-row toolbars, beside it otherwise); valid
+	// whenever has_prev_next is true
+	scr_rect get_scrollbar_rect() const;
+
+	// scroll axis and units for the scrollbar: horizontal iff a single icon row
+	// (menubar or a one-row popup), else vertical; for a multi-column grid, one
+	// unit is a whole row (tool_icon_width icons) so the columns stay aligned
+	void get_scroll_metrics(bool &horizontal, sint32 &unit, sint32 &visible_units, sint32 &total_units) const;
+
 	/**
 	 * Window title
 	 */

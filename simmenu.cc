@@ -680,6 +680,10 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 	tabfileobj_t contents;
 	menuconf.read(contents);
 
+	// pak-specific icon size overrides the theme default; width is always equal
+	// to height, so only icon_height is read (icon_width in menuconf.tab, if present, is ignored)
+	env_t::iconsize.h = env_t::iconsize.w = contents.get_int("icon_height", env_t::iconsize.h);
+
 	// structure to hold information for iterating through different tool types
 	struct tool_class_info_t {
 		const char* type;

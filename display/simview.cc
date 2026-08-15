@@ -116,7 +116,7 @@ void main_view_t::display(bool force_dirty)
 		autojump(); // If autojump is needed, do it.
 	}
 
-	scr_rect clip_rr(0, env_t::iconsize.w, disp_width, disp_height - env_t::iconsize.h);
+	scr_rect clip_rr(0, env_t::iconsize.h + env_t::menu_scrollbar_thickness, disp_width, disp_height - env_t::iconsize.h - env_t::menu_scrollbar_thickness);
 	switch (env_t::menupos) {
 	case MENU_TOP:
 		// rect default
@@ -125,10 +125,10 @@ void main_view_t::display(bool force_dirty)
 		clip_rr.y = win_get_statusbar_height() + (!ticker::empty() ? TICKER_HEIGHT : 0);
 		break;
 	case MENU_LEFT:
-		clip_rr = scr_rect(env_t::iconsize.w, 0, disp_width - env_t::iconsize.w, disp_height);
+		clip_rr = scr_rect(env_t::iconsize.w + env_t::menu_scrollbar_thickness, 0, disp_width - env_t::iconsize.w - env_t::menu_scrollbar_thickness, disp_height);
 		break;
 	case MENU_RIGHT:
-		clip_rr = scr_rect(0, 0, disp_width - env_t::iconsize.w, disp_height);
+		clip_rr = scr_rect(0, 0, disp_width - env_t::iconsize.w - env_t::menu_scrollbar_thickness, disp_height);
 		break;
 	}
 	display_set_clip_wh(clip_rr.x, clip_rr.y, clip_rr.w, clip_rr.h);
