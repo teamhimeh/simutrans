@@ -1779,8 +1779,13 @@ void win_display_flush(double konto)
 
 	// display main menu
 	tool_selector_t *main_menu = tool_t::toolbar_tool[0]->get_tool_selector();
+	const uint32 menu_tool_count = main_menu->get_tool_count();
+	// reserve the scrollbar strip only if the icons actually overflow the
+	// available space, so a short/empty menubar doesn't grow for nothing
+	bool menu_scrollbar = env_t::iconsize.w > 0  &&  (uint32)disp_width < menu_tool_count * (uint32)env_t::iconsize.w;
+	scr_coord_val extra = menu_scrollbar ? env_t::menu_scrollbar_thickness : 0;
 	scr_coord menu_pos(0,0);
-	scr_size menu_size(disp_width, env_t::iconsize.h + env_t::menu_scrollbar_thickness);
+	scr_size menu_size(disp_width, env_t::iconsize.h + extra);
 	scr_rect clip_rr(0, menu_size.h, disp_width, disp_height - menu_size.h);
 	switch (env_t::menupos) {
 		case MENU_TOP:
@@ -1793,16 +1798,24 @@ void win_display_flush(double konto)
 			// size default
 			clip_rr.y = 0;
 			break;
-		case MENU_LEFT:
+		case MENU_LEFT: {
 			// pos default (see above)
-			menu_size = scr_size(env_t::iconsize.w + env_t::menu_scrollbar_thickness, disp_height-win_get_statusbar_height()-show_ticker*TICKER_HEIGHT);
+			const scr_coord_val avail_h = disp_height-win_get_statusbar_height()-show_ticker*TICKER_HEIGHT;
+			menu_scrollbar = env_t::iconsize.h > 0  &&  (uint32)avail_h < menu_tool_count * (uint32)env_t::iconsize.h;
+			extra = menu_scrollbar ? env_t::menu_scrollbar_thickness : 0;
+			menu_size = scr_size(env_t::iconsize.w + extra, avail_h);
 			clip_rr = scr_rect(menu_size.w, 0, disp_width - menu_size.w, disp_height);
 			break;
-		case MENU_RIGHT:
-			menu_size = scr_size(env_t::iconsize.w + env_t::menu_scrollbar_thickness, disp_height - win_get_statusbar_height()-show_ticker*TICKER_HEIGHT );
+		}
+		case MENU_RIGHT: {
+			const scr_coord_val avail_h = disp_height-win_get_statusbar_height()-show_ticker*TICKER_HEIGHT;
+			menu_scrollbar = env_t::iconsize.h > 0  &&  (uint32)avail_h < menu_tool_count * (uint32)env_t::iconsize.h;
+			extra = menu_scrollbar ? env_t::menu_scrollbar_thickness : 0;
+			menu_size = scr_size(env_t::iconsize.w + extra, avail_h);
 			menu_pos.x = disp_width - menu_size.w;
 			clip_rr = scr_rect(0, 0, disp_width - menu_size.w, disp_height);
 			break;
+		}
 	}
 
 	display_set_clip_wh( menu_pos.x, menu_pos.y, menu_size.w, menu_size.h );

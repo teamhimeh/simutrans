@@ -86,6 +86,11 @@ public:
 	// untranslated title
 	const char *get_internal_name() const {return title;}
 
+	// number of (non-empty-icon) tools currently in this toolbar; used by simwin.cc
+	// to decide, before drawing, whether the main menubar needs to reserve space
+	// for a scrollbar strip
+	uint32 get_tool_count() const { return tools.get_count(); }
+
 	bool has_title() const OVERRIDE { return toolbar_id!=0; }
 
 	const char *get_help_filename() const OVERRIDE {return help_file;}
