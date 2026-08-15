@@ -163,6 +163,22 @@ void tool_selector_t::get_scroll_metrics(bool &horizontal, sint32 &unit, sint32 
 
 bool tool_selector_t::infowin_event(const event_t *ev)
 {
+	// mouse-wheel scrolling anywhere over the toolbar moves the scrollbar by one unit
+	if(  has_prev_next  &&  (IS_WHEELUP(ev)  ||  IS_WHEELDOWN(ev))  ) {
+		bool horizontal;
+		sint32 unit, visible_units, total_units;
+		get_scroll_metrics( horizontal, unit, visible_units, total_units );
+		sint32 cur_unit = unit>0 ? tool_icon_disp_start/unit : 0;
+		cur_unit += IS_WHEELDOWN(ev) ? 1 : -1;
+		cur_unit = clamp( cur_unit, 0, max(0,total_units-visible_units) );
+		tool_icon_disp_start = (uint16)(cur_unit*unit);
+		offset.x = 0;
+		offset.y = 0;
+		tool_icon_disp_end = min( (uint32)tool_icon_disp_start + (uint32)tool_icon_width*tool_icon_height, (uint32)tools.get_count() );
+		dirty = true;
+		return true;
+	}
+
 	// every toolbar (main menubar and popup icon-list windows alike) shows a thin,
 	// continuously draggable scrollbar strip outside the icon area when it overflows
 	// (see get_scrollbar_rect()); handle clicks/drags on it here
