@@ -248,7 +248,7 @@ bool enlarge_map_frame_t::action_triggered( gui_action_creator_t *comp,value_t v
 			sets->heightfield = "";
 			load_relief_frame_t* lrf = new load_relief_frame_t(sets);
 			create_win(lrf, w_info, magic_load_t );
-			win_set_pos(lrf, (display_get_width() - lrf->get_windowsize().w-10), env_t::iconsize.h + env_t::menu_scrollbar_thickness);
+			win_set_pos(lrf, (display_get_width() - lrf->get_windowsize().w-10), env_t::iconsize.h + get_main_menu_scrollbar_extra());
 			loaded_heightfield = true;
 		} else {
 			inp_x_size.enable();

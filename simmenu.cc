@@ -681,8 +681,10 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 	menuconf.read(contents);
 
 	// pak-specific icon size overrides the theme default; width is always equal
-	// to height, so only icon_height is read (icon_width in menuconf.tab, if present, is ignored)
-	env_t::iconsize.h = env_t::iconsize.w = contents.get_int("icon_height", env_t::iconsize.h);
+	// to height, so only icon_height is read (icon_width in menuconf.tab, if present, is ignored).
+	// once set here, later theme (re)loads must not reset it back to the theme's icon_width
+	env_t::iconsize.h = env_t::iconsize.w = contents.get_int_clamped("icon_height", env_t::iconsize.h, 0, 64);
+	env_t::iconsize_set_by_pak = true;
 
 	// structure to hold information for iterating through different tool types
 	struct tool_class_info_t {
