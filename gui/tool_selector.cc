@@ -45,6 +45,12 @@ tool_selector_t::tool_selector_t(const char* title, const char *help_file, uint3
  */
 void tool_selector_t::add_tool_selector(tool_t *tool_in)
 {
+	if(  env_t::iconsize.w <= 0  ||  env_t::iconsize.h <= 0  ) {
+		// icons disabled (icon_height<=0 in menuconf.tab): do not add anything,
+		// bail out before any division by iconsize below
+		return;
+	}
+
 	image_id tool_img = tool_in->get_icon(welt->get_active_player());
 	if(  tool_img == IMG_EMPTY  &&  tool_in!=tool_t::dummy  ) {
 		return;
@@ -110,6 +116,11 @@ void tool_selector_t::reset_tools()
 
 bool tool_selector_t::is_hit(int x, int y)
 {
+	if(  env_t::iconsize.w <= 0  ||  env_t::iconsize.h <= 0  ) {
+		// icons disabled: nothing to hit besides the (icon-less) titlebar
+		return x>=0  &&  y>=0  &&  y<D_TITLEBAR_HEIGHT  &&  x<get_windowsize().w;
+	}
+
 	if(  has_prev_next  &&  get_scrollbar_rect().contains( scr_coord(x,y) )  ) {
 		return true;
 	}
@@ -163,6 +174,16 @@ void tool_selector_t::get_scroll_metrics(bool &horizontal, sint32 &unit, sint32 
 
 bool tool_selector_t::infowin_event(const event_t *ev)
 {
+	if(  env_t::iconsize.w <= 0  ||  env_t::iconsize.h <= 0  ) {
+		// icons disabled (icon_height<=0): skip all icon-grid math below, since it
+		// divides by iconsize and would otherwise crash (or hang, for the sanity-check
+		// loops) with a zero or negative value
+		if(  ev->ev_class==INFOWIN  &&  (ev->ev_code==WIN_TOP  ||  ev->ev_code==WIN_OPEN)  ) {
+			set_name( translator::translate(title) );
+		}
+		return false;
+	}
+
 	// mouse-wheel scrolling anywhere over the toolbar moves the scrollbar by one unit
 	if(  has_prev_next  &&  (IS_WHEELUP(ev)  ||  IS_WHEELDOWN(ev))  ) {
 		bool horizontal;
@@ -373,6 +394,17 @@ bool tool_selector_t::infowin_event(const event_t *ev)
 
 void tool_selector_t::draw(scr_coord pos, scr_size sz)
 {
+	if(  env_t::iconsize.w <= 0  ||  env_t::iconsize.h <= 0  ) {
+		// icons disabled (icon_height<=0): skip all layout/draw math below, since
+		// it divides by iconsize and would otherwise crash. This runs every frame
+		// for the main menubar (toolbar_id==0), regardless of how many tools were
+		// ever added, so the guard must be unconditional and come first.
+		has_prev_next = false;
+		dirty = false;
+		unset_dirty();
+		return;
+	}
+
 	player_t *player = welt->get_active_player();
 
 	if( toolbar_id == 0 ) {
