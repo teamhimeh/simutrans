@@ -1013,6 +1013,7 @@ void schedule_list_gui_t::show_route_cache(bool const yesno)
 			}
 			route_cache_route.clear();
 		}
+		minimap_t::get_instance()->clear_highlighted_route();
 		route_display_t::deactivate(this);
 		return;
 	}
@@ -1058,6 +1059,7 @@ void schedule_list_gui_t::show_route_cache(bool const yesno)
 			}
 		}
 	}
+	minimap_t::get_instance()->set_highlighted_route(route_cache_route.get_route());
 }
 
 
