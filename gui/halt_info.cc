@@ -209,7 +209,7 @@ private:
 	uint32 cached_convoy_count;
 
 	halthandle_t halt;
-	uint16 halt_permissions;
+	uint64 halt_permissions;
 	button_t other_players_connection_button;
 	button_t connected_players[MAX_PLAYER_COUNT];
 	button_t bt_no_handle_pax, bt_no_handle_post, bt_no_handle_ware;
@@ -293,7 +293,8 @@ const char cost_type[MAX_HALT_COST][64] =
 	"Arrived",
 	"Departed",
 	"Convoys",
-	"Walked"
+	"Walked",
+	"Revenue"
 };
 
 const uint8 index_of_haltinfo[MAX_HALT_COST] = {
@@ -304,7 +305,8 @@ const uint8 index_of_haltinfo[MAX_HALT_COST] = {
 	HALT_ARRIVED,
 	HALT_DEPARTED,
 	HALT_CONVOIS_ARRIVED,
-	HALT_WALKED
+	HALT_WALKED,
+	HALT_REVENUE
 };
 
 const uint8 cost_type_color[MAX_HALT_COST] =
@@ -316,7 +318,13 @@ const uint8 cost_type_color[MAX_HALT_COST] =
 	COL_ARRIVED,
 	COL_DEPARTED,
 	COL_CONVOI_COUNT,
-	COL_LILAC
+	COL_LILAC,
+	COL_REVENUE
+};
+
+static const bool cost_type_money[MAX_HALT_COST] =
+{
+	false, false, false, false, false, false, false, false, true
 };
 
 struct type_symbol_t {
@@ -502,9 +510,9 @@ void halt_info_t::init(halthandle_t halt)
 	chart.set_background(SYSCOL_CHART_BACKGROUND);
 	container_chart.add_component(&chart);
 
-	container_chart.add_table(4,2);
+	container_chart.add_table(4,3);
 	for (int cost = 0; cost<MAX_HALT_COST; cost++) {
-		uint16 curve = chart.add_curve(color_idx_to_rgb(cost_type_color[cost]), halt->get_finance_history(), MAX_HALT_COST, index_of_haltinfo[cost], MAX_MONTHS, 0, false, true, 0);
+		uint16 curve = chart.add_curve(color_idx_to_rgb(cost_type_color[cost]), halt->get_finance_history(), MAX_HALT_COST, index_of_haltinfo[cost], MAX_MONTHS, cost_type_money[cost], false, true, cost_type_money[cost]*2);
 
 		button_t *b = container_chart.new_component<button_t>();
 		b->init(button_t::box_state_automatic | button_t::flexible, cost_type[cost]);
@@ -648,7 +656,7 @@ void gui_halt_detail_t::update_button_states()
 	other_players_connection_button.pressed = allow_all;
 	for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
 		connected_players[i].enable(allow_change && !allow_all);
-		connected_players[i].pressed = halt->get_permissions() & (1 << i);
+		connected_players[i].pressed = (halt->get_permissions() & ((uint64)1 << i)) != 0;
 	}
 	bt_no_handle_pax.set_visible(true);
 	bt_no_handle_post.set_visible(true);
@@ -686,18 +694,18 @@ bool gui_halt_detail_t::action_triggered(gui_action_creator_t *comp, value_t)
 	}
 	// Check if a permission button was clicked
 	bool perm_changed = false;
-	uint16 new_perms = 0;
+	uint64 new_perms = 0;
 	for(  uint16 i = 0;  i < MAX_PLAYER_COUNT;  i++  ) {
 		if(  comp == &connected_players[i]  ) {
 			perm_changed = true;
 		}
 		if(  connected_players[i].pressed  ) {
-			new_perms |= (1 << i);
+			new_perms |= (uint64)1 << i;
 		}
 	}
 	if(  perm_changed  ) {
 		cbuffer_t buf;
-		buf.printf("%u,%u", halt.get_id(), (uint32)new_perms);
+		buf.printf("%u,%llu", halt.get_id(), (unsigned long long)new_perms);
 		tool_t::simple_tool[TOOL_HALT_PERMISSION]->set_default_param(buf);
 		world()->set_tool(tool_t::simple_tool[TOOL_HALT_PERMISSION], world()->get_active_player());
 	}
@@ -767,7 +775,7 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 				if(  pl == halt->get_owner()  ) { continue; }
 				connected_players[i].init(button_t::square_automatic, pl->get_name());
 				connected_players[i].text_color = PLAYER_FLAG | color_idx_to_rgb(pl->get_player_color1() + env_t::gui_player_color_dark);
-				connected_players[i].pressed = halt_permissions & (1 << i);
+				connected_players[i].pressed = (halt_permissions & ((uint64)1 << i)) != 0;
 				connected_players[i].enable(!halt->is_allow_other_player_connection());
 				how_many++;
 			}

@@ -37,9 +37,9 @@
 #define REROUTING (2)
 #define WEIGHT_UPDATE (3) // Reconnect the network to update weight, but do not cause rerouting
 
-#define MAX_HALT_COST   8 // Total number of cost items
+#define MAX_HALT_COST   9 // Total number of cost items
 #define MAX_MONTHS     12 // Max history
-#define MAX_HALT_NON_MONEY_TYPES 7 // number of non money types in HALT's financial statistic
+#define MAX_HALT_NON_MONEY_TYPES 8 // number of non money types in HALT's financial statistic
 #define HALT_ARRIVED         0 // the amount of ware that arrived here
 #define HALT_DEPARTED        1 // the amount of ware that has departed from here
 #define HALT_WAITING         2 // the amount of ware waiting
@@ -48,6 +48,7 @@
 #define HALT_NOROUTE         5 // number of no-route passengers
 #define HALT_CONVOIS_ARRIVED 6 // number of convois arrived this month
 #define HALT_WALKED          7 // could walk to destination
+#define HALT_REVENUE         8 // revenue from passengers boarding at this halt
 
 #define DST_SIZE 101 // size of departure_slot_table
 
@@ -133,7 +134,7 @@ private:
 
 	PIXVAL status_color, last_status_color;
 	sint16 last_bar_count;
-	uint16 last_permissions;
+	uint64 last_permissions;
 	uint16 last_player_count;
 	vector_tpl<scr_coord_val> last_bar_height; // caches the last height of the station bar for each good type drawn in display_status(). used for dirty tile management
 	uint32 capacity[3]; // passenger, mail, goods
@@ -378,7 +379,7 @@ private:
 
 	/// Bitfield: bit i set means player i is allowed to stop at this halt.
 	/// Owner and public service are always set. 0xFFFF for public halts.
-	uint16 permissions;
+	uint64 permissions;
 
 	/**
 	 * versucht die ware mit beriets wartender ware zusammenzufassen
@@ -714,9 +715,9 @@ public:
 	 * Public-service owner forces all bits on.
 	 * Also rebuilds registered lines/convoys if the set changed.
 	 */
-	void set_permissions(uint16 perms);
+	void set_permissions(uint64 perms);
 
-	uint16 get_permissions() const { return permissions; }
+	uint64 get_permissions() const { return permissions; }
 
 	bool is_allow_other_player_connection() const { return (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION) != 0; }
 
@@ -841,6 +842,9 @@ public:
 	};
 
 	void fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to, const uint8 goods_category_index, const vector_tpl<halthandle_t>& destination_halts);
+
+	// Book revenue for passengers that just boarded a vehicle at this halt.
+	void book_pax_boarding_revenue(uint16 boarded_pax);
 
 	/**
 	 * Delivers goods (ware_t) to this halt.

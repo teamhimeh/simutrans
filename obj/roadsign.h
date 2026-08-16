@@ -63,6 +63,8 @@ protected:
 	uint8 lane_affinity;
 	koord3d intersection_pos;
 
+	uint64 private_way_mask = 0ll;
+
 	const roadsign_desc_t *desc;
 
 	ribi_t::ribi calc_mask() const { return ribi_t::is_single(dir) ? dir : (ribi_t::ribi)ribi_t::none; }
@@ -95,7 +97,8 @@ public:
 	const char* get_name() const OVERRIDE { return "Roadsign"; }
 
 	// assuming this is a private way sign
-	uint16 get_player_mask() const { return (ticks_ow<<8)|ticks_ns; }
+	uint64 get_player_mask() const { return private_way_mask; }
+	void set_player_mask(uint64 mask) { private_way_mask = mask; }
 
 	/**
 	 * waytype associated with this object

@@ -14,8 +14,11 @@
 
 privatesign_info_t::privatesign_info_t(roadsign_t* s) :
 	obj_infowin_t(s),
-	sign(s)
+	sign(s),
+	scrolly(&player_cont)
 {
+	player_cont.set_table_layout(1,0);
+
 	for(  int i=0;  i<PLAYER_UNOWNED;  i++  ) {
 		if(  welt->get_player(i)  ) {
 			players[i].init( button_t::square_state, welt->get_player(i)->get_name());
@@ -25,9 +28,11 @@ privatesign_info_t::privatesign_info_t(roadsign_t* s) :
 			players[i].init( button_t::square_state, "");
 			players[i].disable();
 		}
-		players[i].pressed = (i>=8? sign->get_ticks_ow() & (1<<(i-8)) : sign->get_ticks_ns() & (1<<i) )!=0;
-		add_component( &players[i] );
+		players[i].pressed = (sign->get_player_mask() & ((uint64)1 << i)) != 0;
+		player_cont.add_component( &players[i] );
 	}
+
+	add_component( &scrolly );
 
 	// show author below the settings
 	if (char const* const maker = sign->get_desc()->get_copyright()) {
@@ -52,18 +57,13 @@ bool privatesign_info_t::action_triggered( gui_action_creator_t *comp, value_t /
 		char param[256];
 		for(  int i=0;  i<PLAYER_UNOWNED;  i++  ) {
 			if(comp == &players[i]) {
-				uint16 mask = sign->get_player_mask();
-				mask ^= 1 << i;
-				// change active player mask for this private sign
-				if(  i<8  ) {
-					sprintf( param, "%s,1,%i", sign->get_pos().get_str(), mask & 0x00FF );
-				}
-				else {
-					sprintf( param, "%s,0,%i", sign->get_pos().get_str(), mask >> 8 );
-				}
+				uint64 new_mask = sign->get_player_mask() ^ ((uint64)1 << i);
+				sint32 mask_lo = (sint32)(new_mask & 0xFFFFFFFFULL);
+				sint32 mask_hi = (sint32)(new_mask >> 32);
+				sprintf( param, "%s,5,0,%d,%d", sign->get_pos().get_str(), mask_lo, mask_hi );
 				tool_t::simple_tool[TOOL_CHANGE_TRAFFIC_LIGHT]->set_default_param( param );
 				welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_TRAFFIC_LIGHT], welt->get_active_player() );
-				players[i].pressed = (mask >> i)&1;
+				players[i].pressed = (new_mask >> i) & 1;
 			}
 		}
 	}
@@ -75,6 +75,6 @@ bool privatesign_info_t::action_triggered( gui_action_creator_t *comp, value_t /
 void privatesign_info_t::update_data()
 {
 	for(  int i=0;  i<PLAYER_UNOWNED;  i++  ) {
-		players[i].pressed = (i>=8? sign->get_ticks_ow() & (1<<(i-8)) : sign->get_ticks_ns() & (1<<i) )!=0;
+		players[i].pressed = (sign->get_player_mask() & ((uint64)1 << i)) != 0;
 	}
 }

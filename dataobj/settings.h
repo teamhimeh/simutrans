@@ -339,6 +339,12 @@ private:
 
 	// true if companies can make ways public
 	bool disable_make_way_public;
+
+	// if true, convoys waiting for clearance for two months are fined
+	bool penalty_wait_for_two_month;
+
+	// revenue per boarding passenger per capacity-unit for halts (0 = disabled)
+	sint32 base_revenue_from_halt;
 	
 	// parameters related to routing of citycars
 	uint16 citycar_max_look_forward;
@@ -753,6 +759,10 @@ public:
 
 	bool get_allow_underground_transformers() const { return allow_underground_transformers; }
 	bool get_disable_make_way_public() const { return disable_make_way_public; }
+
+	bool get_penalty_wait_for_two_month() const { return penalty_wait_for_two_month; }
+
+	sint32 get_base_revenue_from_halt() const { return base_revenue_from_halt; }
 
 	uint32 get_allow_merge_distant_halt() const { return allow_merge_distant_halt; }
 

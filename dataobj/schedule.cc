@@ -442,7 +442,12 @@ void schedule_t::rdwr(loadsave_t *file)
 			if(file->get_OTRP_version()>=52) {
 				file->rdwr_short(entries[i].balance_speed_kmh_of_convoi);
 			} else {
-				entries[i].balance_speed_kmh_of_convoi;
+				entries[i].balance_speed_kmh_of_convoi = 0;
+			}
+			if(file->get_OTRP_version()>=59) {
+				simline_t::rdwr_linehandle_t(file, entries[i].allow_depart_line);
+			} else {
+				entries[i].allow_depart_line = linehandle_t();
 			}
 		}
 	}
@@ -505,7 +510,8 @@ bool schedule_t::matches(karte_t *welt, const schedule_t *schedule)
 		&&  schedule->entries[(uint8)f2].maximum_loading == entries[(uint8)f1].maximum_loading
 		&&  schedule->entries[(uint8)f2].length_coupling_done == entries[(uint8)f1].length_coupling_done
 		&&  schedule->entries[(uint8)f2].max_speed_kmh_of_convoi == entries[(uint8)f1].max_speed_kmh_of_convoi
-		&&  schedule->entries[(uint8)f2].balance_speed_kmh_of_convoi == entries[(uint8)f1].balance_speed_kmh_of_convoi) {
+		&&  schedule->entries[(uint8)f2].balance_speed_kmh_of_convoi == entries[(uint8)f1].balance_speed_kmh_of_convoi
+		&&	schedule->entries[(uint8)f2].allow_depart_line == entries[(uint8)f1].allow_depart_line) {
 			f1++;
 			f2++;
 		}
@@ -615,7 +621,7 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 	uint32 s = current_stop + (flags<<8) + (max_speed<<16);
 	buf.printf("%u|%u|%u|%d|%u|", s, (uint32)departure_slot_group_id.get_id(), additional_base_waiting_time, (int)get_type(), next_line.get_id());
 	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
-		buf.printf("%s,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.get_stop_flags(), i.max_speed_kmh_of_convoi, i.spacing, i.spacing_shift, i.delay_tolerance, i.length_coupling_done, i.maximum_loading, i.balance_speed_kmh_of_convoi);
+		buf.printf("%s,%i,%i,%i,%i,%i,%i,%i,%i,%i,%i,%u|", i.pos.get_str(), (int)i.minimum_loading, (int)i.waiting_time_shift, i.get_stop_flags(), i.max_speed_kmh_of_convoi, i.spacing, i.spacing_shift, i.delay_tolerance, i.length_coupling_done, i.maximum_loading, i.balance_speed_kmh_of_convoi, (uint32)i.get_allow_depart_line().get_id());
 	}
 }
 
@@ -623,6 +629,12 @@ void schedule_t::sprintf_schedule( cbuffer_t &buf ) const
 bool schedule_t::sscanf_schedule( const char *ptr )
 {
 	const char *p = ptr;
+	// keep a copy of the old entries so we can preserve their recorded journey/waiting/stopping
+	// times for stops whose position did not move (i.e. only flags/orders were edited)
+	minivec_tpl<schedule_entry_t> old_entries(entries.get_count());
+	FOR(minivec_tpl<schedule_entry_t>, const& i, entries) {
+		old_entries.append(i);
+	}
 	// first: clear current schedule
 	while (!entries.empty()) {
 		remove();
@@ -692,17 +704,17 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 	p++;
 	// now scan the entries
 	while(  *p>0  ) {
-		sint32 values[13];
-		for(  sint8 i=0;  i<13;  i++  ) {
+		sint32 values[14];
+		for(  sint8 i=0;  i<14;  i++  ) {
 			values[i] = atoi( p );
 			while(  *p  &&  (*p!=','  &&  *p!='|')  ) {
 				p++;
 			}
-			if(  i<12  &&  *p!=','  ) {
+			if(  i<13  &&  *p!=','  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete string!" );
 				return false;
 			}
-			if(  i==12  &&  *p!='|'  ) {
+			if(  i==13  &&  *p!='|'  ) {
 				dbg->error( "schedule_t::sscanf_schedule()","incomplete entry termination!" );
 				return false;
 			}
@@ -711,14 +723,28 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 		// ok, now we have a complete entry
 		schedule_entry_t entry = schedule_entry_t(koord3d(values[0], values[1], values[2]), values[3], values[4], values[5], values[6], values[10], values[11], values[12]);
 		entry.set_spacing(values[7], values[8], values[9]);
+		linehandle_t allow_depart_line;
+		allow_depart_line.set_id((uint32)values[13]);
+		entry.set_allow_depart_line(allow_depart_line);
 		entries.append(entry);
+	}
+	// check entry changes and set old journey time record if stop does not changed
+	uint8 j=0;
+	for(  uint8 i=0; i<old_entries.get_count(); i++  ) {
+		if(  j>=entries.get_count()  ) {
+			break;
+		}
+		if(  (entries[j==0?entries.get_count()-1:j-1].pos == old_entries[i==0?old_entries.get_count()-1:i-1].pos)  &&  (entries[j].pos == old_entries[i].pos)  ) {
+			entries[j].copy_time_records_from(old_entries[i]);
+			j++;
+		}
 	}
 	return true;
 }
 
 void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const& entry) {
 	uint8 cnt = 1;
-	char str[10];
+	char str[24];
 	str[0] = '[';
 	const uint32 flag = entry.get_stop_flags();
 	if(  flag&schedule_entry_t::WAIT_FOR_COUPLING  ) {
@@ -783,6 +809,10 @@ void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const&
 	}
 	if(  entry.is_pass_stop()  ) {
 		str[cnt] = 'P';
+		cnt++;
+	}
+	if(  entry.is_wait_for_other_convoy()  ) {
+		str[cnt] = 'O';
 		cnt++;
 	}
 	// there are at least one attributes.
