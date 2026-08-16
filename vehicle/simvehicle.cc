@@ -3386,7 +3386,6 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 		}
 	}
 	if(  leading  ){
-		dbg->message("road_vehicle_t::enter_tile()","%s entering (%s) leading: current_lane=%s tiles_overtaking=%d next_lane=%d hold=%d route_index=%d", cnv->get_name(), gr->get_pos().get_str(), cnv->is_overtaking()?"overtaking":"normal", cnv->get_tiles_overtaking(), (int)next_lane, cnv->is_reversing_lane_hold(), route_index);
 		cnv->update_tiles_overtaking();
 		// The lane forced by a physical reversal in vorfahren() has to last while the convoy is still
 		// in the stop it reversed in: on a stop longer than one tile it is otherwise merging back
