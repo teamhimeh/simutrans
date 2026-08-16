@@ -2719,7 +2719,6 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		// physically reversing in the opposite direction: it was deliberately placed on the
 		// overtaking lane in vorfahren(), and this logic has no notion of that intent.
 		const strasse_t* current_str = (strasse_t*)(welt->lookup(get_pos())->get_weg(road_wt));
-		dbg->message("road_vehicle_t::can_enter_tile()","%s at (%s) current_lane=%s (is_overtaking=%d) current_mode=%d next_mode=%d hold=%d", cnv->get_name(), get_pos().get_str(), cnv->is_overtaking()?"overtaking":"normal", cnv->is_overtaking(), current_str?(int)current_str->get_overtaking_mode():-99, str->get_overtaking_mode(), cnv->is_reversing_lane_hold());
 		if(  !cnv->is_reversing_lane_hold()  ) {
 			if(  current_str  &&  current_str->get_overtaking_mode()==inverted_mode  ) {
 				if(  str->get_overtaking_mode()<inverted_mode  ) {
@@ -2729,11 +2728,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 
 			if(  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
 				next_lane = -1;
-				dbg->message("road_vehicle_t::can_enter_tile()","%s next_lane forced to -1 (traffic lane) at (%s)", cnv->get_name(), get_pos().get_str());
 			}
-		}
-		else {
-			dbg->message("road_vehicle_t::can_enter_tile()","%s next_lane force-to-traffic SKIPPED (reversing_lane_hold) at (%s)", cnv->get_name(), get_pos().get_str());
 		}
 
 		vehicle_base_t *obj = NULL;
@@ -2822,7 +2817,6 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 							if(  test_index-route_index==0  ) this_direction = get_90direction();
 							if(  test_index-route_index==1  ) this_direction = get_next_90direction();
 							if(  ribi_t::reverse_single(this_direction) == other_direction  ) {
-								dbg->message("road_vehicle_t::can_enter_tile()","%s crash avoid at (%s) current_lane=%s test_index=%d route_index=%d this_dir=%d other_dir=%d", cnv->get_name(), get_pos().get_str(), cnv->is_overtaking()?"overtaking":"normal", test_index, route_index, this_direction, other_direction);
 								cnv->set_tiles_overtaking(0);
 							}
 						}

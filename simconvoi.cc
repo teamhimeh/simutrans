@@ -1724,7 +1724,6 @@ void convoi_t::step()
 				if(  fahr[0]->get_waytype()==road_wt  ) {
 					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
 					if(  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
-						dbg->message("convoi_t::step()","%s CAN_START reset: tiles_overtaking=%d -> 0", get_name(), get_tiles_overtaking());
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -1745,7 +1744,6 @@ void convoi_t::step()
 				if(  fahr[0]->get_waytype()==road_wt  ) {
 					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
 					if(  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
-						dbg->message("convoi_t::step()","%s WAITING_FOR_CLEARANCE reset: tiles_overtaking=%d -> 0", get_name(), get_tiles_overtaking());
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -2991,7 +2989,6 @@ void convoi_t::vorfahren()
 
 			// to advance more smoothly
 			sint32 restart_speed = -1;
-			dbg->message("convoi_t::vorfahren()","%s before can_enter_tile: tiles_overtaking=%d is_overtaking=%d", get_name(), get_tiles_overtaking(), is_overtaking());
 			if(  fahr[0]->can_enter_tile( restart_speed, 0 )  ) {
 				// can reserve new block => drive on
 				if(haltestelle_t::get_stoppable_halt(k0,owner,front()->get_waytype()).is_bound()) {
@@ -2999,7 +2996,6 @@ void convoi_t::vorfahren()
 				}
 				state = DRIVING;
 			}
-			dbg->message("convoi_t::vorfahren()","%s after can_enter_tile: tiles_overtaking=%d is_overtaking=%d state=%d", get_name(), get_tiles_overtaking(), is_overtaking(), (int)state);
 			if(  reversing_lane_hold  ) {
 				// the convoy physically reverses instead of turning around: the same real-world
 				// lane it was standing in now corresponds to the opposite overtaking state, since
@@ -3036,7 +3032,6 @@ void convoi_t::vorfahren()
 						set_requested_change_lane(true);
 					}
 				}
-				dbg->message("convoi_t::vorfahren()","%s forced reversing lane: tiles_overtaking=%d is_overtaking=%d", get_name(), get_tiles_overtaking(), is_overtaking());
 			}
 		}
 		else {
