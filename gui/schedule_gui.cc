@@ -2090,6 +2090,9 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	bt_reset_coupling.set_visible(coupling_waytype && yesno);
 	bt_reverse_convoy.set_visible(reversible_waytype  &&  yesno);
 	bt_reverse_coupling.set_visible(reversible_waytype  &&  yesno);
+	if(  !reversible_waytype  ) {
+		bt_reverse_coupling.disable();
+	}
 	sp_reverse_settings.set_visible(reversible_waytype && yesno);
 	bt_wait_coupling_done.set_visible(coupling_waytype && yesno);
 	bt_uncouple_child.set_visible(coupling_waytype && yesno);

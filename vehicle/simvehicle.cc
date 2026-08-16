@@ -2514,8 +2514,11 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 		// first we set reversing images
 		if(  cnv->is_reversed()  ) {
 			if(  welt->get_settings().is_drive_left()  ) {
+				xoff += 2*tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
+				yoff += 2*tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
+			} else {
 				xoff -= tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
-				yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );
+				yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );				
 			}
 		}
 
@@ -2717,15 +2720,25 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 
 		// When overtaking_mode changes from inverted_mode to others, no cars blocking must work as the convoi is on traffic lane. Otherwise, no_cars_blocking cannot recognize vehicles on the traffic lane of the next tile.
 		//next_lane = -1 does NOT mean that the vehicle must go traffic lane on the next tile.
+		// Skip this traffic-lane-forcing computation entirely while a road vehicle is departing by
+		// physically reversing in the opposite direction: it was deliberately placed on the
+		// overtaking lane in vorfahren(), and this logic has no notion of that intent.
 		const strasse_t* current_str = (strasse_t*)(welt->lookup(get_pos())->get_weg(road_wt));
-		if(  current_str  &&  current_str->get_overtaking_mode()==inverted_mode  ) {
-			if(  str->get_overtaking_mode()<inverted_mode  ) {
+		dbg->message("road_vehicle_t::can_enter_tile()","%s at (%s) current_lane=%s (is_overtaking=%d) current_mode=%d next_mode=%d hold=%d", cnv->get_name(), get_pos().get_str(), cnv->is_overtaking()?"overtaking":"normal", cnv->is_overtaking(), current_str?(int)current_str->get_overtaking_mode():-99, str->get_overtaking_mode(), cnv->is_reversing_lane_hold());
+		if(  !cnv->is_reversing_lane_hold()  ) {
+			if(  current_str  &&  current_str->get_overtaking_mode()==inverted_mode  ) {
+				if(  str->get_overtaking_mode()<inverted_mode  ) {
+					next_lane = -1;
+				}
+			}
+
+			if(  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
 				next_lane = -1;
+				dbg->message("road_vehicle_t::can_enter_tile()","%s next_lane forced to -1 (traffic lane) at (%s)", cnv->get_name(), get_pos().get_str());
 			}
 		}
-
-		if(  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
-			next_lane = -1;
+		else {
+			dbg->message("road_vehicle_t::can_enter_tile()","%s next_lane force-to-traffic SKIPPED (reversing_lane_hold) at (%s)", cnv->get_name(), get_pos().get_str());
 		}
 
 		vehicle_base_t *obj = NULL;
@@ -2791,11 +2804,19 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 							if(  cnv == at->get_convoi()  ||  at->get_convoi()->is_overtaking()  ){
 								continue;
 							}
+							// a stationary vehicle parked on our own current tile is not an oncoming hazard
+							// (e.g. opposite-facing vehicles loading at the same halt_mode stop).
+							if(  test_index==route_index  &&  at->get_convoi()->get_akt_speed()==0  ) {
+								continue;
+							}
 							other_direction = at->get_90direction();
 						}
 						//check for city car
 						else if(  private_car_t* const caut = obj_cast<private_car_t>(v)  ) {
 							if(  caut->is_overtaking()  ) {
+								continue;
+							}
+							if(  test_index==route_index  &&  caut->get_current_speed()==0  ) {
 								continue;
 							}
 							other_direction = v->get_90direction();
@@ -2806,7 +2827,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 							if(  test_index-route_index==0  ) this_direction = get_90direction();
 							if(  test_index-route_index==1  ) this_direction = get_next_90direction();
 							if(  ribi_t::reverse_single(this_direction) == other_direction  ) {
-								//printf("%s: crash avoid. (%d,%d)\n", cnv->get_name(), get_pos().x, get_pos().y);
+								dbg->message("road_vehicle_t::can_enter_tile()","%s crash avoid at (%s) current_lane=%s test_index=%d route_index=%d this_dir=%d other_dir=%d", cnv->get_name(), get_pos().get_str(), cnv->is_overtaking()?"overtaking":"normal", test_index, route_index, this_direction, other_direction);
 								cnv->set_tiles_overtaking(0);
 							}
 						}
@@ -3248,6 +3269,18 @@ overtaker_t* road_vehicle_t::get_overtaker()
 	return cnv;
 }
 
+bool road_vehicle_t::can_return_to_traffic_lane()
+{
+	const grund_t* gr = welt->lookup(get_pos());
+	strasse_t* str = gr ? (strasse_t*)gr->get_weg(road_wt) : NULL;
+	if(  !str  ||  str->get_overtaking_mode() > oneway_mode  ) {
+		// the same restriction the tiles_overtaking==1 branch of enter_tile() has.
+		return false;
+	}
+	return cnv->get_lane_affinity() != 1  &&  other_lane_blocked() == NULL  &&  !str->is_reserved_by_others(this, false, pos_prev, pos_next);
+}
+
+
 vehicle_base_t* road_vehicle_t::other_lane_blocked(const bool only_search_top, sint8 offset) const{
 	// This function calculate whether the convoi can change lane.
 	// only_search_top == false: check whether there's no car in -1 ~ +1 section.
@@ -3364,7 +3397,27 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 		}
 	}
 	if(  leading  ){
+		dbg->message("road_vehicle_t::enter_tile()","%s entering (%s) leading: current_lane=%s tiles_overtaking=%d next_lane=%d hold=%d route_index=%d", cnv->get_name(), gr->get_pos().get_str(), cnv->is_overtaking()?"overtaking":"normal", cnv->get_tiles_overtaking(), (int)next_lane, cnv->is_reversing_lane_hold(), route_index);
 		cnv->update_tiles_overtaking();
+		// The lane forced by a physical reversal in vorfahren() has to last while the convoy is still
+		// in the stop it reversed in: on a stop longer than one tile it is otherwise merging back
+		// into the traffic lane inside the station, i.e. jumping sideways between platform tiles.
+		// The test is on pos_next, not on the tile entered: the lane may be changed on the tile
+		// right behind the halt, so the countdown - and with it the lane-change safety check below -
+		// has to be released already when entering the last tile of the halt. (vorfahren() arms the
+		// hold after it has re-placed its vehicles, so no repositioning enter_tile() consumes it.)
+		if(  cnv->is_reversing_lane_hold()  ) {
+			// both tiles must belong to the same halt: the entered one, so that the hold ends as soon
+			// as the convoy is out on the road (the next tile may well be the following stop of the
+			// route, which must not re-arm anything), and pos_next, so that it ends one tile early.
+			const grund_t* gr_next = welt->lookup(pos_next);
+			if(  cnv->is_overtaking()  &&  gr_next  &&  gr->get_halt().is_bound()  &&  gr->get_halt()==gr_next->get_halt()  ) {
+				cnv->set_tiles_overtaking( cnv->calc_reversing_lane_tiles() );
+			}
+			else {
+				cnv->set_reversing_lane_hold(false);
+			}
+		}
 		if(  next_lane==1  ) {
 			cnv->set_tiles_overtaking(3);
 			next_lane = 0;
