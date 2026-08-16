@@ -214,6 +214,11 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 	inp_filter.add_listener(this);
 	add_component(&inp_filter);
 
+	bt_memo_filter.init(button_t::square_state, "Using filter for memo",scr_coord( D_MARGIN_LEFT, D_MARGIN_TOP+SCL_HEIGHT+D_V_SPACE+D_EDIT_HEIGHT+D_V_SPACE ),scr_size(3*D_BUTTON_WIDTH+2*D_H_SPACE, D_BUTTON_HEIGHT) );
+	bt_memo_filter.set_tooltip(translator::translate("Using filter for memo of lines"));
+	bt_memo_filter.add_listener(this);
+	add_component(&bt_memo_filter);
+
 	sint16 bt_y = D_MARGIN_TOP+SCL_HEIGHT+D_V_SPACE+D_EDIT_HEIGHT*2+D_V_SPACE*2+D_INDICATOR_HEIGHT+D_V_SPACE+D_BUTTON_HEIGHT+D_V_SPACE ;
 
 	// sort by what
@@ -620,6 +625,10 @@ bool schedule_list_gui_t::action_triggered( gui_action_creator_t *comp, value_t 
 			create_win(new line_colour_gui_t(line, player), w_info, magic_line_colour_gui_t);
 		}
 	}
+	else if(  comp == &bt_memo_filter  ) {
+		bt_memo_filter.pressed ^= 1;
+		build_line_list(tabs.get_active_tab_index());
+	}
 	else {
 		if(  line.is_bound()  ) {
 			for(  int i=0;  i<MAX_LINE_COST_GUI;  i++  ) {
@@ -814,7 +823,7 @@ void schedule_list_gui_t::build_line_list(int filter)
 
 	FOR(vector_tpl<linehandle_t>, const l, lines) {
 		// search name
-		if(  !*schedule_filter  ||  utf8caseutf8(l->get_name(), schedule_filter)  ) {
+		if(  !*schedule_filter  ||  utf8caseutf8(l->get_name(), schedule_filter)  ||  (bt_memo_filter.pressed && utf8caseutf8(l->get_memo(), schedule_filter))  ) {
 			// match good category
 			if(  is_matching_freight_catg( l->get_goods_catg_index() )  ) {
 				scl.new_component<line_scrollitem_t>(l);

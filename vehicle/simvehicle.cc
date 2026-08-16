@@ -2544,6 +2544,34 @@ bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_dire
 		return true;
 	}
 
+	// check, if there is another choose signal or end_of_choose on the route
+	for(  uint32 idx=index+1;  idx<cnv->get_route()->get_count();  idx++  ) {
+		koord3d temp_pos = cnv->get_route()->at(idx);
+		grund_t *gr = welt->lookup(temp_pos);
+		if(  gr==0  ) {
+			return false;
+		}
+		weg_t *way = gr->get_weg(get_waytype());
+		if(  way==0  ) {
+			return false;
+		}
+		if(  way->has_sign()  ) {
+			roadsign_t *rs = gr->find<roadsign_t>();
+			// check end of choose
+			if(  rs  &&  rs->get_desc()->get_wtyp()==get_waytype()  ) {
+				if(  (rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA ) ) {	
+					return true;
+				}
+			}
+			// check next choose sign
+			if(  rs  &&  idx<cnv->get_route()->get_count()-1  ) {
+				if(  rs->is_free_route(ribi_type(temp_pos, cnv->get_route()->at(idx+1))) ) {
+					return true;
+				}
+			}
+		}
+	}
+
 	// are we heading to a target?
 	route_t *rt = cnv->access_route();
 	target_halt = haltestelle_t::get_stoppable_halt( rt->back(), get_owner(), get_waytype() );
