@@ -687,6 +687,17 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 		}
 		reserve_route();
 	}
+
+	// reversing_lane_hold is not part of the savegame, but its lifetime can span a save: reconstruct
+	// it. A road convoy sitting on the passing lane inside a halt either reversed there or is on its
+	// way out of that stop, and in both cases the lane has to be kept until it has left the halt -
+	// exactly what the hold does. See vorfahren() and road_vehicle_t::enter_tile().
+	reversing_lane_hold = false;
+	if(  anz_vehikel>0  &&  front()->get_waytype()==road_wt  &&  is_overtaking()  ) {
+		if(  const grund_t* gr = welt->lookup(front()->get_pos())  ) {
+			reversing_lane_hold = gr->get_halt().is_bound();
+		}
+	}
 }
 
 

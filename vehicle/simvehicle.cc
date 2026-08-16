@@ -2794,19 +2794,11 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 							if(  cnv == at->get_convoi()  ||  at->get_convoi()->is_overtaking()  ){
 								continue;
 							}
-							// a stationary vehicle parked on our own current tile is not an oncoming hazard
-							// (e.g. opposite-facing vehicles loading at the same halt_mode stop).
-							if(  test_index==route_index  &&  at->get_convoi()->get_akt_speed()==0  ) {
-								continue;
-							}
 							other_direction = at->get_90direction();
 						}
 						//check for city car
 						else if(  private_car_t* const caut = obj_cast<private_car_t>(v)  ) {
 							if(  caut->is_overtaking()  ) {
-								continue;
-							}
-							if(  test_index==route_index  &&  caut->get_current_speed()==0  ) {
 								continue;
 							}
 							other_direction = v->get_90direction();
