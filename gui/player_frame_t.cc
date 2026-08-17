@@ -17,6 +17,7 @@
 
 #include "simwin.h"
 #include "components/gui_divider.h"
+#include "components/gui_component.h"
 #include "../utils/simstring.h"
 #include "../player/ai_scripted.h"
 
@@ -41,12 +42,13 @@ public:
 
 
 ki_kontroll_t::ki_kontroll_t() :
-	gui_frame_t( translator::translate("Spielerliste") )
+	gui_frame_t( translator::translate("Spielerliste") ),
+	scrolly(&player_list, false, true)
 {
 	set_table_layout(1,0);
 
 	// player rows go into a scrollable container
-	player_list.set_table_layout(6,0);
+	player_list.set_table_layout(7,0);
 
 	for(int i=0; i<MAX_PLAYER_COUNT-1; i++) {
 
@@ -112,9 +114,15 @@ ki_kontroll_t::ki_kontroll_t() :
 		// Income label
 		ai_income[i] = player_list.new_component<gui_label_buf_t>(MONEY_PLUS, gui_label_t::money_right);
 		ai_income[i]->set_rigid(true);
+
+		player_list.new_component<gui_margin_t>(D_SCROLLBAR_WIDTH+D_H_SPACE,D_V_SPACE);
 	}
 
-	new_component<gui_scrollpane_t>(&player_list);
+	// let the window grow wide enough to show the whole player list instead of clipping to the default width
+	// (leave room for the vertical scrollbar so it does not cover the rightmost column)
+	scrolly.set_size_corner(true);
+	scrolly.set_min_width( player_list.get_min_size().w );
+	add_component( &scrolly );
 
 	// freeplay mode
 	freeplay.init( button_t::square_state, "freeplay mode");
@@ -315,6 +323,9 @@ void ki_kontroll_t::update_data()
 	}
 
 	update_income();
+
+	// player names (and thus the required width of the list) may have changed
+	scrolly.set_min_width( player_list.get_min_size().w + D_SCROLLBAR_WIDTH );
 
 	reset_min_windowsize();
 }
