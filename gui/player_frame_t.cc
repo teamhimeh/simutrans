@@ -324,7 +324,7 @@ void ki_kontroll_t::update_data()
 	update_income();
 
 	// player names (and thus the required width of the list) may have changed
-	scrolly.set_min_width( player_list.get_min_size().w + D_SCROLLBAR_WIDTH );
+	scrolly.set_min_width( player_list.get_min_size().w );
 
 	reset_min_windowsize();
 }

@@ -31,22 +31,20 @@ player_merge_frame_t::player_merge_frame_t() :
       continue;
     }
 
-    button_t* bt_merged_player = new button_t();
+    button_t* bt_merged_player = player_table.new_component<button_t>();
     bt_merged_player->init(button_t::roundbox_state | button_t::flexible, player->get_name());
 		bt_merged_player->pressed = false;
     bt_merged_player->add_listener(this);
-		player_table.add_component(bt_merged_player);
 		player_item_t merged_player_item;
 		merged_player_item.button = bt_merged_player;
 		merged_player_item.player_num = i;
     players_merged.append(merged_player_item);
 
-    button_t* bt_to_player = new button_t();
+    button_t* bt_to_player = player_table.new_component<button_t>();
     bt_to_player->init(button_t::roundbox_state | button_t::flexible, player->get_name());
 		bt_to_player->pressed = false;
     bt_to_player->add_listener(this);
     bt_to_player->disable();
-		player_table.add_component(bt_to_player);
 		player_item_t to_player_item;
 		to_player_item.button = bt_to_player;
 		to_player_item.player_num = i;
