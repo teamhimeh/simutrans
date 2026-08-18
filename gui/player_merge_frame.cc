@@ -56,7 +56,7 @@ player_merge_frame_t::player_merge_frame_t() :
   }
 
 	// leave room for the vertical scrollbar so it does not cover the "merge to" column
-	scrolly.set_min_width( player_table.get_min_size().w);
+	scrolly.set_min_width( player_table.get_min_size().w );
 	add_component(&scrolly);
 
 	new_component<gui_divider_t>();

@@ -120,7 +120,6 @@ ki_kontroll_t::ki_kontroll_t() :
 
 	// let the window grow wide enough to show the whole player list instead of clipping to the default width
 	// (leave room for the vertical scrollbar so it does not cover the rightmost column)
-	scrolly.set_size_corner(true);
 	scrolly.set_min_width( player_list.get_min_size().w );
 	add_component( &scrolly );
 
