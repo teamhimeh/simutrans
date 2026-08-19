@@ -454,7 +454,10 @@ void grund_t::rdwr(loadsave_t *file)
 	if (file->is_loading()  &&  has_two_ways()) {
 		const weg_t* w1 = ((weg_t*)obj_bei(0));
 		const weg_t* w2 = ((weg_t*)obj_bei(1));
-		if(w1->needs_crossing(w2->get_desc())){
+		// two different waytypes on non-crossing diagonal bends never share the tile
+		// center, so no crossing_t is needed even if the waytype pair normally requires one
+		const bool disjoint_diagonal = ribi_t::are_disjoint_bends(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
+		if(w1->needs_crossing(w2->get_desc())  &&  !disjoint_diagonal){
 			if (crossing_t* cr = get_crossing()) {
 				cr->finish_rd();
 			}
@@ -1986,7 +1989,15 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player)
 			weg->set_ribi(ribi);
 			weg->set_pos(pos);
 			flags |= has_way2;
-			if (weg->needs_crossing(other->get_desc())) {
+			// two different waytypes on non-crossing diagonal bends never share the tile
+			// center, so no crossing_t is needed even if the waytype pair normally requires
+			// one. The new way may still be just a single-direction stub on its first tile
+			// (its second leg not built yet), so only require the OTHER way to already be a
+			// bend disjoint from our (possibly partial) ribi -- once the second leg is built
+			// this reduces to the same "both full bends, disjoint" check as elsewhere.
+			const ribi_t::ribi other_ribi = other->get_ribi_unmasked();
+			const bool disjoint_diagonal = ribi_t::is_bend(other_ribi)  &&  (ribi & other_ribi)==0;
+			if (weg->needs_crossing(other->get_desc()) && !disjoint_diagonal) {
 				//crossing needed!
 				waytype_t w2 =  other->get_waytype();
 				const crossing_desc_t *cr_desc = crossing_logic_t::get_crossing( weg->get_waytype(), w2, weg->get_max_speed(), other->get_max_speed(), welt->get_timeline_year_month() );

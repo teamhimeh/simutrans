@@ -357,6 +357,16 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	if(!check_owner(w->get_owner(),player)  &&  ! (wtyp==road_wt  &&  bd->has_two_ways()) ) {
 		return false;
 	}
+	// two different waytypes on non-crossing diagonal bends: they never share the tile
+	// center, so no crossing_t object is needed at all (also covers pairs with no
+	// crossing_desc defined, e.g. monorail+track, track+airplane).
+	// zv is always a single-direction step here (is_allowed_step walks edge by edge); bd is
+	// entered via zv, so the new way's own local ribi bit on bd is backward(ribi_type(zv))
+	// (the side it was entered from). Checking that bit against the other way's ribi is
+	// enough to guarantee the way being built here can only end up as the exact opposite bend.
+	if (zv != koord(0,0)  &&  ribi_t::is_bend(w->get_ribi_unmasked())  &&  (w->get_ribi_unmasked() & ribi_t::backward(ribi_type(zv)))==0) {
+		return true;
+	}
 	// check for existing crossing
 	crossing_t *cr = bd->find<crossing_t>();
 	if (cr&&zv!=koord(0,0)) {
@@ -541,9 +551,31 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 	static monorailboden_t to_dummy(koord3d::invalid, slope_t::flat);
 	static monorailboden_t from_dummy(koord3d::invalid, slope_t::flat);
 
-	if(bautyp==luft  &&  (from->get_grund_hang()+to->get_grund_hang()!=0  ||  (from->hat_wege()  &&  from->hat_weg(air_wt)==0)  ||  (to->hat_wege()  &&  to->hat_weg(air_wt)==0))) {
-		// absolutely no slopes for runways, neither other ways
-		return false;
+	if(bautyp==luft) {
+		// absolutely no slopes for runways, neither other ways -- except a different
+		// waytype's way that is a disjoint diagonal bend, which never shares the tile
+		// center with the runway/taxiway (mirrors check_crossing's bend exception, and
+		// the equivalent exception in the "case luft" switch below).
+		// gr is entered via direction step_zv; its own local ribi bit there is the
+		// reverse of the travel direction, i.e. the side it was entered from.
+		auto blocks_air = [&](const grund_t* gr, koord step_zv) {
+			if(  !gr->hat_wege()  ||  gr->hat_weg(air_wt)  ) {
+				return false;
+			}
+			ribi_t::ribi other_ribi = gr->get_weg_nr(0)->get_ribi_unmasked();
+			if(  step_zv == koord(0,0)  ) {
+				// standalone tile-validity check (from==to, e.g. as a route start/end
+				// candidate) -- no direction to test the bend exception against yet, so
+				// just admit bends as possible candidates; the real per-edge steps of
+				// the search will validate the exact direction once known
+				return !ribi_t::is_bend(other_ribi);
+			}
+			ribi_t::ribi entry_ribi = ribi_t::backward(ribi_type(step_zv));
+			return !( ribi_t::is_bend(other_ribi)  &&  (other_ribi & entry_ribi)==0 );
+		};
+		if(  from->get_grund_hang()+to->get_grund_hang()!=0  ||  blocks_air(from,-zv)  ||  blocks_air(to,zv)  ) {
+			return false;
+		}
 	}
 
 	bool to_flat = false; // to tile will be flattened
@@ -889,7 +921,27 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 					// cannot go over the end of a runway with a taxiway
 					return false;
 				}
-				ok = !to->is_water() && (w  ||  !to->hat_wege())  &&  to->find<leitung_t>()==NULL  &&  !fundament;
+				// a different waytype's way is normally fatal for air ways, unless it is a
+				// disjoint diagonal bend that never shares the tile center with the air way
+				bool other_way_ok = !to->hat_wege();
+				if(  !other_way_ok  ) {
+					const weg_t *other = to->get_weg_nr(0);
+					if(  other  &&  other->get_waytype()!=air_wt  &&  ribi_t::is_bend(other->get_ribi_unmasked())  ) {
+						if(  zv==koord(0,0)  ) {
+							// standalone tile-validity check (from==to, e.g. as a route
+							// start/end candidate) -- no direction to test the bend
+							// exception against yet, so admit the bend as a possible
+							// candidate; the real per-edge steps validate the exact direction
+							other_way_ok = true;
+						}
+						else {
+							ribi_t::ribi entry_ribi = ribi_t::backward(ribi_type(zv));
+							other_way_ok = (other->get_ribi_unmasked() & entry_ribi)==0;
+						}
+					}
+				}
+				ok = !to->is_water() && (w  ||  other_way_ok)  &&  to->find<leitung_t>()==NULL  &&  !fundament;
+				dbg->warning("case luft DEBUG2", "to=%d,%d zv=%d,%d w=%p other_way_ok=%d is_water=%d leitung=%p fundament=%d ok=%d", to->get_pos().x, to->get_pos().y, zv.x, zv.y, (const void*)w, other_way_ok, to->is_water(), (void*)to->find<leitung_t>(), fundament, ok);
 				// calculate costs
 				*costs = s.way_count_straight;
 			}
@@ -2121,7 +2173,9 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 	if(	 !(welt->is_within_limits(start-koord(border,border))  &&  welt->is_within_limits(start+koord(border,border)))  ||
 		 !(welt->is_within_limits(ziel-koord(border,border))  &&  welt->is_within_limits(ziel+koord(border,border)))  ) {
 		if(player_builder==welt->get_active_player()) {
-			create_win( new news_img("Zu nah am Kartenrand"), w_time_delete, magic_none);
+			news_img* const win = new news_img("Zu nah am Kartenrand");
+			create_win( win, w_time_delete, magic_none);
+			destroy_win( win );
 			return false;
 		}
 	}
