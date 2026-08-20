@@ -419,6 +419,7 @@ private:
 	bool reversing_needed;// Whether this convoy's vehicles will be arranged in reverse order.
 	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
 	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
+	bool reversing_lane_hold;// lane was deliberately forced by a physical reversal in vorfahren(); protects it from the CAN_START/WAITING_FOR_CLEARANCE stale-lane safety reset until the next tile is entered.
 
 	bool unloading_done;//unload once in stop
 
@@ -592,6 +593,12 @@ public:
 	void set_reversed(bool yesno) { reversed = yesno; }
 	bool is_reversing_needed() const { return reversing_needed; }
 	void set_reversing_needed(bool yesno) { reversing_needed = yesno; }
+	bool is_reversing_lane_hold() const { return reversing_lane_hold; }
+	void set_reversing_lane_hold(bool yesno) { reversing_lane_hold = yesno; }
+	// number of tiles a road convoy has to stay on the lane it was forced onto by a physical
+	// reversal: its own length plus one, so the lane-change safety check in
+	// road_vehicle_t::enter_tile() runs once the whole convoy has cleared the tile it departed from.
+	sint8 calc_reversing_lane_tiles() const;
 	// Reorder the vehicle array
 	// Can be executed even with a vehicle array that does not belong to convoy for UI
 	

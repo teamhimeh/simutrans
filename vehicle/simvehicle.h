@@ -562,6 +562,11 @@ public:
 	virtual vehicle_base_t* other_lane_blocked(const bool only_search_top = false, sint8 offset = 0) const;
 	virtual vehicle_base_t* other_lane_blocked_offset() const { return other_lane_blocked(false,1); }
 
+	// Is the traffic lane free on the tile this vehicle is standing on? Same test as the
+	// tiles_overtaking==1 branch of enter_tile(), for callers that have to decide about the lane
+	// without a tile entry to hook on - see convoi_t::vorfahren().
+	bool can_return_to_traffic_lane();
+
 	void refresh();
 
 	void unreserve_all_tiles();

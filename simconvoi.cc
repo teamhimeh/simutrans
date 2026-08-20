@@ -139,6 +139,7 @@ void convoi_t::init(player_t *player)
 	reversing_needed = false;
 	reverse_coupling_done = false;
 	reversing_coupling_needed = false;
+	reversing_lane_hold = false;
 
 	alte_richtung = ribi_t::none;
 	next_wolke = 0;
@@ -1436,7 +1437,7 @@ bool convoi_t::drive_to()
 		else {
 			// if change direction at waypoint, we must reverse coupling here!
 			grund_t *gr=welt->lookup(start);
-			if(  env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!reverse_coupling_done&&state!=INITIAL&&!(gr  &&  gr->get_depot())  ) {
+			if(  env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&front()->get_waytype()!=road_wt&&!reverse_coupling_done&&state!=INITIAL&&!(gr  &&  gr->get_depot())  ) {
 				const bool reverse_here=(world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&((route.get_count()<2) ? false : ((ribi_type(route.at(0), route.at(1)) & front()->get_direction()) == 0 ? true : false));
 				if( reversing_coupling_needed^reverse_here )
 				{
@@ -1722,7 +1723,7 @@ void convoi_t::step()
 				}
 				if(  fahr[0]->get_waytype()==road_wt  ) {
 					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
-					if(  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  ) {
+					if(  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -1742,7 +1743,7 @@ void convoi_t::step()
 				}
 				if(  fahr[0]->get_waytype()==road_wt  ) {
 					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
-					if(  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  ) {
+					if(  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -2798,10 +2799,16 @@ void convoi_t::vorfahren()
 		reversing_convoy_exists |= c->reversing_needed;
 		c = c->get_coupling_convoi();
 	}
+	bool const old_overtaking_mode = is_overtaking();
 
 	// is driving direction not change?
 	ribi_t::ribi neue_richtung_rwr = ribi_t::backward(front()->calc_direction(route.front(), route.at(min(1, route.get_count() - 1))));
 	bool const go_same_direction = (neue_richtung_rwr&alte_richtung)==0;
+	// Whether the lane must be held across this departure. It cannot be stored in the member yet:
+	// the vehicle repositioning below (move_to()/do_drive()) calls enter_tile(), which consumes the
+	// flag. The member is set further down, right before can_enter_tile() runs.
+	bool const hold_lane_for_reversal = reversing_needed  &&  !go_same_direction  &&  front()->get_waytype()==road_wt;
+	reversing_lane_hold = false;
 	vehicle_t *last_car=find_most_child_convoi()->back();
 	uint8 const start_step = last_car->get_steps();
 	koord3d const start_pos = front()->get_pos();
@@ -2990,7 +2997,7 @@ void convoi_t::vorfahren()
 				}
 				inspecting = inspecting->get_coupling_convoi();
 			}
-			if(  !go_same_direction  &&  !get_coupling_convoi().is_bound()  &&  get_vehicle_count()==1  ) {
+			if(  (reversing_convoy_exists==go_same_direction)  &&  !get_coupling_convoi().is_bound()  &&  get_vehicle_count()==1  ) {
 				// In case that single car bus or truck is turning around...
 				if(  road_vehicle_t* rv = dynamic_cast<road_vehicle_t*>(self->front())  ) {
 					rv->set_sideways_image();
@@ -3003,6 +3010,11 @@ void convoi_t::vorfahren()
 			// Vehicles already occupy route tiles; ensure reservation covers them on reload.
 			set_next_reservation_index(front()->get_route_index());
 
+			// All repositioning enter_tile() calls are done by now, so the hold can be armed here
+			// without being consumed by them. road_vehicle_t::can_enter_tile() below then suppresses
+			// its own traffic-lane-forcing (next_lane=-1) computation for this departure.
+			reversing_lane_hold = hold_lane_for_reversal;
+
 			// to advance more smoothly
 			sint32 restart_speed = -1;
 			if(  fahr[0]->can_enter_tile( restart_speed, 0 )  ) {
@@ -3011,6 +3023,43 @@ void convoi_t::vorfahren()
 					fahr[0]->play_sound();
 				}
 				state = DRIVING;
+			}
+			if(  reversing_lane_hold  ) {
+				// the convoy physically reverses instead of turning around: the same real-world
+				// lane it was standing in now corresponds to the opposite overtaking state, since
+				// the direction of travel flips. Force it AFTER can_enter_tile() has already run,
+				// so its crash-avoid re-validation (which cannot distinguish "stale artifact" from
+				// "deliberate reversal") doesn't immediately undo it.
+				strasse_t* str0 = (strasse_t*)welt->lookup(front()->get_pos())->get_weg(road_wt);
+				if(  str0->get_overtaking_mode() == prohibited_mode  ) {
+					set_tiles_overtaking(0);
+				}
+				else {
+					// not the fixed 3 of a real overtaking manoeuvre: the convoy is not passing
+					// anybody, it only ends up on the passing lane because it reversed. It has to
+					// keep that lane exactly until it has physically cleared this tile, i.e. for its
+					// own length, and merge back as soon as that is safe.
+					sint8 lane_tiles = calc_reversing_lane_tiles();
+					// does the next hop leave the halt? (same test as road_vehicle_t::enter_tile())
+					const grund_t* gr_next = welt->lookup(front()->get_pos_next());
+					const bool leaving_halt = !welt->lookup(front()->get_pos())->get_halt().is_bound()
+						||  !gr_next  ||  welt->lookup(front()->get_pos())->get_halt() != gr_next->get_halt();
+					if(  road_vehicle_t* rv = dynamic_cast<road_vehicle_t*>(front())  ) {
+						if(  leaving_halt  &&  rv->can_return_to_traffic_lane()  ) {
+							// The traffic lane is free here. enter_tile() would only test this one
+							// tile later - there is no tile entry on the tile the convoy is standing
+							// on - and the convoy would keep the passing lane for one tile more than
+							// needed. Doing the test now lets it merge back the moment it has
+							// cleared this tile.
+							lane_tiles = max( (sint8)1, (sint8)(lane_tiles - 1) );
+						}
+					}
+					set_tiles_overtaking(  old_overtaking_mode ? 0 : lane_tiles  );
+					if(  !old_overtaking_mode  ) {
+						// ask a blocking convoy to make room instead of lingering on the passing lane.
+						set_requested_change_lane(true);
+					}
+				}
 			}
 		}
 		else {
@@ -3749,8 +3798,12 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 	if(  file->get_OTRP_version()>=60  ) {
 		file->rdwr_bool(waiting_for_departure_make_another_convoy_depart);
+		// the lane forced by a physical reversal outlives a save: a convoy can stand in CAN_START or
+		// work its way out of a multi-tile stop for a long time while the hold is set.
+		file->rdwr_bool(reversing_lane_hold);
 	} else {
 		waiting_for_departure_make_another_convoy_depart = false;
+		reversing_lane_hold = false;
 	}
 
 	if(  file->is_loading()  ) {
@@ -5288,6 +5341,14 @@ PIXVAL convoi_t::get_status_color() const
 
 
 // returns tiles needed for this convoi
+sint8 convoi_t::calc_reversing_lane_tiles() const
+{
+	// +1 so that the counter reaches 1 - the value at which road_vehicle_t::enter_tile() tests
+	// whether the traffic lane is free - only after the whole convoy has left the departure tile.
+	return (sint8)min( (uint16)127, (uint16)(get_tile_length(true) + 1) );
+}
+
+
 uint16 convoi_t::get_tile_length(bool entire) const
 {
 	uint16 carunits=0;
