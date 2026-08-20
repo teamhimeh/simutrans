@@ -106,6 +106,12 @@ void settings_general_stats_t::init(settings_t const* const sets)
 	SEPERATOR
 	INIT_NUM( "world_maximum_height", sets->get_maximumheight(), 16, 127, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "world_minimum_height", sets->get_minimumheight(), -127, -12, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "tile_length", sets->get_tile_length(), 1, 0x7FFFFFFFul, gui_numberinput_t::AUTOLINEAR, false );
+	if(  env_t::networkmode  ) {
+		// changing tile_length mid-game rescales all convoy/line distance records,
+		// which is not safe to do independently on each client in network mode
+		numinp.back()->disable();
+	}
 
 	INIT_END
 	clear_dirty();
@@ -152,6 +158,7 @@ void settings_general_stats_t::read(settings_t* const sets)
 
 	READ_NUM_VALUE( sets->world_maximum_height );
 	READ_NUM_VALUE( sets->world_minimum_height );
+	READ_NUM_VALUE( sets->tile_length );
 }
 
 void settings_display_stats_t::init(settings_t const* const)

@@ -1577,6 +1577,10 @@ public:
 	void rem_convoi(convoihandle_t);
 	vector_tpl<convoihandle_t> const& convoys() const { return convoi_array; }
 
+	// rescales the stored CONVOI_DISTANCE_METERS/LINE_DISTANCE_METERS history for all convois and
+	// lines by new_tile_length/old_tile_length; called whenever the tile_length setting changes
+	void recalc_distance_new_records(sint32 old_tile_length, sint32 new_tile_length);
+
 	void load_convoy_templates();
 	const vector_tpl<convoi_template_t>& get_convoy_templates() const { return convoy_templates; }
 

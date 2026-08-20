@@ -134,6 +134,12 @@ private:
 	sint8 world_maximum_height;
 	sint8 world_minimum_height;
 
+	/**
+	 * length of one map tile, in meters (not km); used to convert tile-based
+	 * distance counters into real-world distance
+	 */
+	sint32 tile_length;
+
 	 /**
 	 * waterlevel, climate borders, lowest snow in winter
 	 */
@@ -528,6 +534,11 @@ public:
 
 	sint8 get_maximumheight() const { return world_maximum_height; }
 	sint8 get_minimumheight() const { return world_minimum_height; }
+
+	sint32 get_tile_length() const { return tile_length; }
+
+	// computes the default value for tile_length (meters)
+	static sint32 calc_default_tile_length();
 
 	sint8 get_groundwater() const {return (sint8)groundwater;}
 
