@@ -1271,7 +1271,7 @@ void vehicle_t::hop(grund_t* gr)
 			}
 			convoihandle_t c = cnv->self;
 			while(  c.is_bound()  ) {
-				c->allow_other_convoy_to_depart(haltestelle_t::get_stoppable_halt(pos_next, c->get_owner(), get_waytype()));
+				c->allow_other_convoy_to_depart(haltestelle_t::get_stoppable_halt(cnv->get_schedule()->get_current_entry().pos, c->get_owner(), get_waytype()));
 				if(c->get_schedule()->get_current_entry().is_reverse_convoy()) {
 					c->reverse_vehicles_on_user_request();
 				}

@@ -2308,14 +2308,7 @@ void convoi_t::ziel_erreicht()
 			if(c->get_schedule()->get_current_entry().is_reverse_convoy()) {
 				c->reversing_needed=true;
 			}
-			if(  c->get_schedule()->get_current_entry().is_wait_for_other_convoy()  ) {
-				c->set_waiting_for_departure_allowance_by_other_convoy(true);
-			}
-			if(  c->get_schedule()->get_current_entry().is_wait_allow_convoy_departure()  &&  c->get_schedule()->get_current_entry().get_allow_depart_line().is_bound()  ) {
-				c->set_waiting_for_departure_make_another_convoy_depart(true);
-			} else {
-				c->set_waiting_for_departure_make_another_convoy_depart(false);
-			}
+			c->allow_other_convoy_to_depart(haltestelle_t::get_stoppable_halt(c->get_schedule()->get_current_entry().pos, c->get_owner(), c->front()->get_waytype()));
 			c->get_schedule()->advance();
 			c = c->get_coupling_convoi();
 		}
