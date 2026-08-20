@@ -29,6 +29,7 @@
 #include "convoi_stops_list_t.h"
 #include "depot_picker.h"
 #include "route_display.h"
+#include "minimap.h"
 
 #define CHART_HEIGHT (100)
 
@@ -547,6 +548,7 @@ void convoi_info_t::show_route(bool const yesno)
 			}
 		}
 		cnv_route.clear();
+		minimap_t::get_instance()->clear_highlighted_route();
 	}
 	if(!yesno) {
 		route_display_t::deactivate(this);
@@ -573,6 +575,7 @@ void convoi_info_t::show_route(bool const yesno)
 				}
 			}
 		}
+		minimap_t::get_instance()->set_highlighted_route(cnv_route.get_route());
 	}
 }
 

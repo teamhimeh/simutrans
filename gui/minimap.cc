@@ -1196,6 +1196,7 @@ void minimap_t::init()
 	last_schedule_counter = world->get_schedule_counter()-1;
 	set_selected_cnv(convoihandle_t());
 	set_selected_route(nullptr, nullptr);
+	highlighted_route_tiles.clear();
 }
 
 
@@ -2088,6 +2089,17 @@ void minimap_t::draw(scr_coord pos)
 			if(  text  ) {
 				display_proportional_clip_rgb( p.x + 6, p.y - LINESPACE / 2, text, ALIGN_LEFT, pcol, true );
 			}
+		}
+	}
+
+	// draw highlighted convoy/line route (from convoi_info_t / schedule_list_gui_t "show route" button)
+	if(  !highlighted_route_tiles.empty()  ) {
+		const PIXVAL route_col = color_idx_to_rgb(COL_SOFT_BLUE);
+		const scr_coord_val tile_size = max( 2, zoom_in );
+		FOR(  vector_tpl<koord3d>,  const &k3d,  highlighted_route_tiles  ) {
+			scr_coord p = map_to_screen_coord(k3d.get_2d());
+			p += pos;
+			display_fillbox_wh_clip_rgb( p.x, p.y, tile_size, tile_size, route_col, true );
 		}
 	}
 }
