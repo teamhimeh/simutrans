@@ -1282,17 +1282,6 @@ int simu_main(int argc, char** argv)
 		script_tool_manager_t::load_scripts(("addons/" + env_t::objfilename + "tool/").c_str());
 	}
 
-	dbg->message("simu_main()","Reading menu configuration ...");
-	dr_chdir( env_t::data_dir );
-	if (!tool_t::read_menu(env_t::pak_dir + "config/menuconf.tab")) {
-		// Fatal error while reading menuconf.tab, we cannot continue!
-		dbg->fatal(
-			"Could not read %sconfig/menuconf.tab.\n"
-			"This file is required for a valid pak set (graphics).\n"
-			"Please install and select a valid pak set.",
-			env_t::pak_dir.c_str());
-	}
-
 #if COLOUR_DEPTH != 0
 	// reread theme
 	dr_chdir( env_t::user_dir );
@@ -1306,6 +1295,21 @@ int simu_main(int argc, char** argv)
 	}
 #endif
 	dr_chdir( env_t::data_dir );
+
+	// read_menu() must come after the theme (re)reads above: it overrides
+	// env_t::iconsize with the pak-specific icon_height from menuconf.tab
+	// (see tool_t::read_menu()), and it also builds the toolbar windows,
+	// which must use the final iconsize
+	dbg->message("simu_main()","Reading menu configuration ...");
+	dr_chdir( env_t::data_dir );
+	if (!tool_t::read_menu(env_t::pak_dir + "config/menuconf.tab")) {
+		// Fatal error while reading menuconf.tab, we cannot continue!
+		dbg->fatal(
+			"Could not read %sconfig/menuconf.tab.\n"
+			"This file is required for a valid pak set (graphics).\n"
+			"Please install and select a valid pak set.",
+			env_t::pak_dir.c_str());
+	}
 
 	if(  translator::get_language()==-1  ) {
 		// try current language

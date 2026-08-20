@@ -32,6 +32,13 @@
 #define NEVER 0xFFFFU
 
 
+// TODO: define the actual default value for tile_length
+sint32 settings_t::calc_default_tile_length()
+{
+	return 1000;
+}
+
+
 settings_t::settings_t() :
 	filename(""),
 	heightfield("")
@@ -63,6 +70,8 @@ settings_t::settings_t() :
 
 	world_maximum_height = 32;
 	world_minimum_height = -12;
+
+	tile_length = calc_default_tile_length();
 
 	// default climate zones
 	set_default_climates( );
@@ -1147,6 +1156,11 @@ void settings_t::rdwr(loadsave_t *file)
 			penalty_wait_for_two_month = false;
 			base_revenue_from_halt = 0;
 		}
+		if(  file->get_OTRP_version() >= 60  ) {
+			file->rdwr_long(tile_length);
+		} else {
+			tile_length = calc_default_tile_length();
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
@@ -1991,6 +2005,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// note: no need to check for min_height < max_height, since -12 < 16
 	world_maximum_height = contents.get_int_clamped("world_maximum_height", world_maximum_height, 16, 127);
 	world_minimum_height = contents.get_int_clamped("world_minimum_height", world_minimum_height, -127, -12);
+
+	tile_length = contents.get_int("tile_length", tile_length);
 
 	citycar_max_look_forward = contents.get_int("citycar_max_look_forward", citycar_max_look_forward);
 	citycar_route_weight_crowded = contents.get_int("citycar_route_weight_crowded", citycar_route_weight_crowded);
