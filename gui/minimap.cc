@@ -1196,6 +1196,7 @@ void minimap_t::init()
 	last_schedule_counter = world->get_schedule_counter()-1;
 	set_selected_cnv(convoihandle_t());
 	set_selected_route(nullptr, nullptr);
+	highlighted_route_tiles.clear();
 }
 
 
