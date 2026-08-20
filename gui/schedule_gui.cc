@@ -6,6 +6,8 @@
 #include "../simline.h"
 #include "../simcolor.h"
 #include "../simhalt.h"
+#include "../simlinemgmt.h"
+#include "../simline.h"
 #include "../simworld.h"
 #include "../simmenu.h"
 #include "../simconvoi.h"
@@ -763,7 +765,13 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		init_allow_depart_line_selector();
 		allow_depart_line_selector.add_listener(this);
 		allow_depart_line_selector.disable();
-		add_component(&allow_depart_line_selector,2);
+		add_component(&allow_depart_line_selector);
+
+		bt_wait_allow_convoy_depart.init(button_t::square_state, "Wait allow other convoy depart");
+		bt_wait_allow_convoy_depart.set_tooltip(translator::translate("Waiting until make another convoy depart"));
+		bt_wait_allow_convoy_depart.add_listener(this);
+		bt_wait_allow_convoy_depart.disable();
+		add_component(&bt_wait_allow_convoy_depart);
 
 		bt_uncouple_child.init(button_t::square_state, "End couple");
 		bt_uncouple_child.set_tooltip("It will uncouple the child convoy here.");
@@ -1088,15 +1096,20 @@ void schedule_gui_t::update_selection()
 		bt_pass_stop.pressed = schedule->at(current_stop).is_pass_stop();
 		// if the next_line is set, the last entry is same as the next_line->get_schedule()->at(0)
 		// so, the flags of last entry can not be editted.
-		if( haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()).is_bound() && ( (current_stop != schedule->get_count()-1) || !schedule->get_next_line().is_bound() ) && !schedule->at(current_stop).is_pass_stop() ) {			bt_find_parent.enable();
+		if( haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()).is_bound() && ( (current_stop != schedule->get_count()-1) || !schedule->get_next_line().is_bound() ) ) {
+			allow_depart_line_selector.enable();
+			init_allow_depart_line_selector();
+		}
+		if( haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()).is_bound() && ( (current_stop != schedule->get_count()-1) || !schedule->get_next_line().is_bound() ) && !schedule->at(current_stop).is_pass_stop() ) {
+			bt_find_parent.enable();
 			bt_find_parent.pressed = schedule->at(current_stop).is_try_coupling();
 			bt_wait_for_child.enable();
 			bt_wait_for_child.pressed = schedule->at(current_stop).is_wait_for_coupling();
 			bt_reset_coupling.enable();
 			bt_wait_for_other_convoy.enable();
 			bt_wait_for_other_convoy.pressed = schedule->at(current_stop).is_wait_for_other_convoy();
-			allow_depart_line_selector.enable();
-			init_allow_depart_line_selector();
+			bt_wait_allow_convoy_depart.enable(schedule->at(current_stop).get_allow_depart_line().is_bound());
+			bt_wait_allow_convoy_depart.pressed = schedule->at(current_stop).is_wait_allow_convoy_departure();
 			bt_no_load.enable();
 			bt_no_load.pressed = schedule->at(current_stop).is_no_load();
 			bt_no_unload.enable();
@@ -1344,6 +1357,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_wait_for_other_convoy) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_wait_for_other_convoy(!bt_wait_for_other_convoy.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_wait_allow_convoy_depart) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_wait_allow_convoy_departure(!bt_wait_allow_convoy_depart.pressed);
 			update_selection();
 		}
 	}
@@ -1856,9 +1875,6 @@ void schedule_gui_t::init_allow_depart_line_selector()
 	}
 	allow_depart_line_selector.clear_elements();
 	uint16 selection = 0;
-	vector_tpl<linehandle_t> lines;
-
-	player->simlinemgmt.get_lines(schedule->get_type(), &lines);
 
 	const uint8 current_stop = schedule->get_current_stop();
 	const linehandle_t allow_depart_line = schedule->at(current_stop).get_allow_depart_line();
@@ -1866,12 +1882,22 @@ void schedule_gui_t::init_allow_depart_line_selector()
 	int offset = 1;
 	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
 
-	FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
-		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ) {
-			allow_depart_line_selector.new_component<non_color_line_scroll_item_t>(line);
-		}
-		if(  allow_depart_line == line  ) {
-			selection = allow_depart_line_selector.count_elements()-1;
+	halthandle_t h = haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()==tram_wt?track_wt:schedule->get_waytype());
+	
+	if(  h.is_bound()  ) 
+	{
+		vector_tpl<linehandle_t> lines = h->registered_lines;
+		FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
+			// only show leader lines (lines that are their own departure slot group)
+			if(  line->get_schedule()->get_departure_slot_group_id() != line  ) {
+				continue;
+			}
+			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  schedule->get_departure_slot_group_id() == line) {
+				allow_depart_line_selector.new_component<company_color_line_scroll_item_t>(line);
+			}
+			if(  allow_depart_line==line->get_schedule()->get_departure_slot_group_id()  &&  selection==0  ) {
+				selection = allow_depart_line_selector.count_elements()-1;
+			}
 		}
 	}
 
@@ -2080,6 +2106,7 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	bt_pass_stop.set_visible(yesno);
 	bt_wait_for_other_convoy.set_visible(yesno);
 	allow_depart_line_selector.set_visible(yesno);
+	bt_wait_allow_convoy_depart.set_visible(yesno);
 
 	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());

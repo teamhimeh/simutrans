@@ -348,17 +348,10 @@ private:
 	 * True while this convoy is blocked at its current stop, waiting for
 	 * another convoy (of the schedule entry's allow_depart_line) to grant
 	 * it departure allowance.
-	 * @author THLeaderH
 	 */
 	bool waiting_for_departure_allowance_by_other_convoy;
 
-	/**
-	 * Grant departure allowance to one waiting convoy of the given line, if any,
-	 * that is currently loading at halt. Only one convoy is released per call.
-	 * @author THLeaderH
-	 */
-	void allow_other_convoy_to_depart(halthandle_t halt) const;
-
+	bool waiting_for_departure_make_another_convoy_depart;
 
 	/**
 	 * Time when convoi arrived at the current stop
@@ -1199,6 +1192,14 @@ public:
 
 	bool is_waiting_for_departure_allowance_by_other_convoy() const { return waiting_for_departure_allowance_by_other_convoy; }
 	void set_waiting_for_departure_allowance_by_other_convoy(bool tf) { waiting_for_departure_allowance_by_other_convoy = tf; }
+	bool is_waiting_for_departure_make_another_convoy_depart() const { return waiting_for_departure_make_another_convoy_depart; }
+	void set_waiting_for_departure_make_another_convoy_depart(bool tf) { waiting_for_departure_make_another_convoy_depart = tf; }
+	/**
+	 * Grant departure allowance to one waiting convoy of the given line, if any,
+	 * that is currently loading at halt. Only one convoy is released per call.
+	 */
+	bool allow_other_convoy_to_depart(halthandle_t halt) const;
+
 
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 	uint32 get_arrived_time() const { return arrived_time; }
