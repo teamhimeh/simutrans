@@ -67,6 +67,7 @@ private:
 
 	// only show schedules containing ...
 	char schedule_filter[512], old_schedule_filter[512];
+	button_t bt_memo_filter;
 
 	// so even japanese can have long enough names ...
 	char line_name[512], old_line_name[512];
