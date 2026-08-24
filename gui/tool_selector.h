@@ -52,6 +52,13 @@ private:
 	// whenever has_prev_next is true
 	scr_rect get_scrollbar_rect() const;
 
+	// for the main menubar (toolbar_id==0) only: when env_t::menupos anchors
+	// the bar to the bottom or right screen edge, the reserved scrollbar strip
+	// sits on the inner (game-view) side, so the icon grid itself must be
+	// pushed towards the outer edge by menu_scrollbar_thickness pixels to keep
+	// hugging the screen border the way it already does for MENU_TOP/MENU_LEFT
+	scr_coord get_icon_area_offset() const;
+
 	// scroll axis and units for the scrollbar: horizontal iff a single icon row
 	// (menubar or a one-row popup), else vertical; for a multi-column grid, one
 	// unit is a whole row (tool_icon_width icons) so the columns stay aligned
