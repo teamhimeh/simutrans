@@ -1880,7 +1880,7 @@ void schedule_gui_t::init_allow_depart_line_selector()
 	const linehandle_t allow_depart_line = schedule->at(current_stop).get_allow_depart_line();
 
 	int offset = 1;
-	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
+	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("Select Line Allow Departure"), SYSCOL_TEXT ) ;
 
 	halthandle_t h = haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()==tram_wt?track_wt:schedule->get_waytype());
 	
