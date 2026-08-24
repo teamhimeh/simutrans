@@ -39,6 +39,7 @@ class ki_kontroll_t : public gui_frame_t, private action_listener_t
 			player_select[MAX_PLAYER_COUNT-1];
 
 		gui_aligned_container_t player_list;
+		gui_scrollpane_t scrolly;
 
 		void update_income();
 

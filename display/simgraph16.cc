@@ -5504,7 +5504,7 @@ void display_flush_buffer()
 #ifdef USE_SOFTPOINTER
 	ex_ord_update_mx_my();
 
-	const scr_coord_val ticker_ypos_bottom = display_get_height() - win_get_statusbar_height() - (env_t::menupos == MENU_BOTTOM) * env_t::iconsize.h;
+	const scr_coord_val ticker_ypos_bottom = display_get_height() - win_get_statusbar_height() - (env_t::menupos == MENU_BOTTOM) * (env_t::iconsize.h + get_main_menu_scrollbar_extra());
 	const scr_coord_val ticker_ypos_top = ticker_ypos_bottom - TICKER_HEIGHT;
 
 	// use mouse pointer image if available

@@ -29,12 +29,13 @@
 #include "convoi_stops_list_t.h"
 #include "depot_picker.h"
 #include "route_display.h"
+#include "minimap.h"
 
 #define CHART_HEIGHT (100)
 
 static const char cost_type[convoi_t::MAX_CONVOI_COST][64] =
 {
-	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo"
+	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo", "Distance (m)"
 };
 
 static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
@@ -47,12 +48,13 @@ static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
 	COL_DISTANCE,
 	COL_MAXSPEED,
 	COL_TOLL,
-	COL_TONKILO
+	COL_TONKILO,
+	COL_DISTANCE
 };
 
 static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 {
-	false, false, true, true, true, false, false, true, false
+	false, false, true, true, true, false, false, true, false, false
 };
 
 
@@ -546,6 +548,7 @@ void convoi_info_t::show_route(bool const yesno)
 			}
 		}
 		cnv_route.clear();
+		minimap_t::get_instance()->clear_highlighted_route();
 	}
 	if(!yesno) {
 		route_display_t::deactivate(this);
@@ -572,6 +575,7 @@ void convoi_info_t::show_route(bool const yesno)
 				}
 			}
 		}
+		minimap_t::get_instance()->set_highlighted_route(cnv_route.get_route());
 	}
 }
 
