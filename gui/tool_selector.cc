@@ -33,6 +33,7 @@ tool_selector_t::tool_selector_t(const char* title, const char *help_file, uint3
 	has_prev_next = false;
 	is_dragging = false;
 	is_scrollbar_dragging = false;
+	last_tool_icon_disp_start = 0;
 	offset = scr_coord( 0, 0 );
 	set_windowsize( scr_size(max(env_t::iconsize.w,MIN_WIDTH), D_TITLEBAR_HEIGHT) );
 	dirty = true;
@@ -111,6 +112,7 @@ void tool_selector_t::reset_tools()
 	tool_icon_disp_end = 0;
 	offset = scr_coord( 0, 0 );
 	is_scrollbar_dragging = false;
+	last_tool_icon_disp_start = 0;
 }
 
 
@@ -487,6 +489,17 @@ void tool_selector_t::draw(scr_coord pos, scr_size sz)
 	// (0,0) unless this is the main menubar with a reserved scrollbar strip
 	// on its inner side (MENU_BOTTOM/MENU_RIGHT); see get_icon_area_offset()
 	const scr_coord icon_off = get_icon_area_offset();
+
+	if(  tool_icon_disp_start != last_tool_icon_disp_start  ) {
+		// the visible tools shifted (drag, wheel, scrollbar-drag, or a window-resize
+		// auto-adjust) since the last draw: a cell may now show a different tool, and
+		// an IMG_EMPTY one is simply skipped below rather than redrawn, so without this
+		// the previous tool's icon would be left on screen at that cell. Re-render the
+		// whole icon+scrollbar area instead of relying on per-icon dirty marking.
+		mark_rect_dirty_wc( pos.x, pos.y+D_TITLEBAR_HEIGHT, pos.x+sz.w, pos.y+sz.h+D_TITLEBAR_HEIGHT );
+		dirty = true;
+		last_tool_icon_disp_start = tool_icon_disp_start;
+	}
 
 	for(  uint i = tool_icon_disp_start;  i < tool_icon_disp_end;  i++  ) {
 		const image_id icon_img = tools[i].tool->get_icon(player);

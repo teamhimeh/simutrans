@@ -47,6 +47,14 @@ private:
 
 	bool is_scrollbar_dragging;
 
+	// tool_icon_disp_start as of the previous draw() call; used to detect that
+	// scrolling (drag, wheel, or scrollbar-drag) moved which tools occupy the
+	// visible cells since then, so the whole icon area can be re-rendered rather
+	// than just the icons themselves (an icon that is now IMG_EMPTY at a cell is
+	// simply skipped when drawing, which would otherwise leave the previous
+	// frame's icon image behind on screen)
+	uint16 last_tool_icon_disp_start;
+
 	// window-relative rect of the scrollbar strip (drawn just outside the icon
 	// area: below it for single-row toolbars, beside it otherwise); valid
 	// whenever has_prev_next is true
