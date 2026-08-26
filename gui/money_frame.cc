@@ -339,11 +339,22 @@ money_frame_t::money_frame_t(player_t *player) :
 		send_money_player_num.add_listener( this );
 		add_component(&send_money_player_num);
 
-		write_money.set_width( 100 );
+		add_table(3,0);
+		{
+		write_money.set_width( 120 );
 		write_money.set_value( 0 );
 		write_money.set_increment_mode(1);
 		write_money.add_listener(this);
 		add_component(&write_money);
+		new_component<gui_label_t>(".");
+		write_money_cents.set_width(10);
+		write_money_cents.set_value(0);
+		write_money_cents.set_increment_mode(1);
+		write_money_cents.add_listener(this);
+		write_money_cents.set_limits(0,99);
+		add_component(&write_money_cents);
+		}
+		end_table();
 
 		add_component(&send_money_button);
 		send_money_button.init(button_t::roundbox, "");
@@ -523,20 +534,25 @@ void money_frame_t::update_labels()
 	// update send_money button
 	send_money_button.disable();
 	write_money.disable();
+	write_money_cents.disable();
+	write_money_cents.set_visible(!env_t::show_yen);
 	if(  player == welt->get_active_player()  ){
 		write_money.enable();
+		write_money_cents.enable();
 		send_money_button.enable();
-		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/1000 <= 2000000000){
-			write_money.set_limits(0, welt->get_active_player()->get_finance()->get_account_balance()/1000);
+		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor <= 2000000000){
+			write_money.set_limits(0, welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor);
 		}
 		else{
 			write_money.set_limits(0, 2000000000);
 		}
-		money_to_string(send_money_format_str, (double)write_money.get_value(), false);
+		double write_money_float = env_t::show_yen?(double)write_money.get_value()*.01:(double)write_money.get_value()+(double)write_money_cents.get_value()*.01;
+		money_to_string(send_money_format_str, write_money_float, true);
 	}
 	else{
 		send_money_player_num.set_selection(player->get_player_nr());
 		write_money.set_value(0);
+		write_money_cents.set_value(0);
 		sprintf(send_money_format_str, "0");
 	}
 
@@ -632,7 +648,7 @@ bool money_frame_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 		return true;
 	}
 	if(  comp == &send_money_button  ){
-		sint64 chech_send_money_value = (sint64)write_money.get_value() * 100;
+		sint64 chech_send_money_value = env_t::show_yen?(sint64)write_money.get_value():(sint64)write_money.get_value() * 100+(sint64)write_money_cents.get_value();
 		if(welt->get_active_player_nr() == 1 || player->get_finance()->get_account_balance()>chech_send_money_value){
 			if ( welt->get_player(viewable_players[send_money_player_num.get_selection()]) ){
 				bool suspended = false;
@@ -641,11 +657,13 @@ bool money_frame_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 				buf.printf( "%lld", chech_send_money_value );
 				tmp_tool->set_default_param( buf );
 				welt->call_work(tmp_tool, player, koord3d(0,0,viewable_players[send_money_player_num.get_selection()]), suspended);
+				write_money.set_value(0);
+				write_money_cents.set_value(0);
 			}
 		}
 
-		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/1000 <= 2000000000 && write_money.get_value() >= welt->get_active_player()->get_finance()->get_account_balance()/1000){
-			write_money.set_value(welt->get_active_player()->get_finance()->get_account_balance()/1000);
+		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor <= 2000000000 && write_money.get_value() >= welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor){
+			write_money.set_value(welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor);
 		}
 	}
 	return false;
