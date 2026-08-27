@@ -371,6 +371,10 @@ Waiting for departure allowance!
 発車許可待ち
 Wait for other convoy
 他編成の到着を待機
+Wait allow other convoy depart
+他編成を発車させるまで待機
+Waiting until make another convoy depart
+他の編成に発車許可を出すまで待機します(通過駅には付与できません)
 #------円表記------
 $
  円
@@ -637,6 +641,8 @@ penalty_wait_for_two_month
 停滞中に課税する(penalty_wait_for_two_month)
 base_revenue_from_halt
 駅からの収入を得る(base_revenue_from_halt)
+tile_length
+直線1タイルの長さ(tile_length) (m)
 #------通知設定------
 New Year
 新年
@@ -690,6 +696,8 @@ Electrified
 %sは異なる会社か\n異なる属性の車両を\n連結しているため\n入庫できません.\n
 Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
+Distance (m)
+走行距離 (m)
 #------その他の翻訳------
 v%d (current version)
 v%d (現在のバージョン)

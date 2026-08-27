@@ -65,7 +65,8 @@ public:
 		TEMP_UNLOAD       = 1U << 17,// unload temporary(not use for goods routing)
 		TEMP_UNLOAD_ALL   = 1U << 18,// unload all only for goods routing
 		BALANCE_SPEED_KMH_OF_CONVOI= 1U<<19,// Overwrite balance speed of convoy here.
-		WAIT_FOR_OTHER_CONVOY= 1U<<20 // The convoy waits here until another convoy (of allow_depart_line) grants departure.
+		WAIT_FOR_OTHER_CONVOY= 1U<<20,// The convoy waits here until another convoy (of allow_depart_line) grants departure.
+		WAIT_ALLOW_DEPARTURE = 1U<<21 // Wait until make other convoy depart. (only allow_departure_line exist)
 	};
 
 	/**
@@ -207,6 +208,8 @@ public:
 	void set_wait_for_other_convoy(bool y) { y ? stop_flags |= WAIT_FOR_OTHER_CONVOY : stop_flags &= ~WAIT_FOR_OTHER_CONVOY; }
 	linehandle_t get_allow_depart_line() const { return allow_depart_line; }
 	void set_allow_depart_line(linehandle_t l) { allow_depart_line = l; }
+	bool is_wait_allow_convoy_departure() const { return (stop_flags&WAIT_ALLOW_DEPARTURE)>0; }
+	void set_wait_allow_convoy_departure(bool y) { y ? stop_flags |= WAIT_ALLOW_DEPARTURE : stop_flags &= ~WAIT_ALLOW_DEPARTURE; }
 
 
 	void set_spacing(uint16 a, uint16 b, uint16 c) {

@@ -35,7 +35,7 @@
 
 static const char cost_type[convoi_t::MAX_CONVOI_COST][64] =
 {
-	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo"
+	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo", "Distance (m)"
 };
 
 static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
@@ -48,12 +48,13 @@ static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
 	COL_DISTANCE,
 	COL_MAXSPEED,
 	COL_TOLL,
-	COL_TONKILO
+	COL_TONKILO,
+	COL_DISTANCE
 };
 
 static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 {
-	false, false, true, true, true, false, false, true, false
+	false, false, true, true, true, false, false, true, false, false
 };
 
 

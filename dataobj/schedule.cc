@@ -815,6 +815,10 @@ void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const&
 		str[cnt] = 'O';
 		cnt++;
 	}
+	if(  entry.is_wait_allow_convoy_departure()  ) {
+		str[cnt] = 'o';
+		cnt++;
+	}
 	// there are at least one attributes.
 	if(  cnt>1  ) {
 		str[cnt] = ']';
