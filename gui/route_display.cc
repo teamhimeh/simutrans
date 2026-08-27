@@ -14,6 +14,22 @@
 
 static karte_ptr_t rd_welt;
 
+
+const char *format_route_time_hours( uint32 ticks )
+{
+	static char buf[64];
+	const uint32 month_ticks = rd_welt->ticks_per_world_month;
+	// one in-game "day" == one world month of ticks (see halt_info.cc)
+	const double hours = month_ticks ? (double)ticks * 24.0 / (double)month_ticks : 0.0;
+	if(  hours >= 24.0  ) {
+		sprintf( buf, "%.1f h (%.1f d)", hours, hours / 24.0 );
+	}
+	else {
+		sprintf( buf, "%.1f h", hours );
+	}
+	return buf;
+}
+
 void *route_display_t::active_owner = NULL;
 route_display_t::hide_func_t route_display_t::active_hide = NULL;
 
@@ -32,6 +48,15 @@ void route_display_t::deactivate(void *owner)
 		active_owner = NULL;
 		active_hide = NULL;
 	}
+}
+
+
+bool schedule_route_overlay_t::route_ready() const
+{
+	// this overlay owns the shared route and step() has already calculated it
+	return shown
+		&&  rd_welt->get_schedule_route_owner() == owner_id()
+		&&  !rd_welt->is_schedule_route_pending();
 }
 
 

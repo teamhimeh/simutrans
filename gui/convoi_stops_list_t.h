@@ -13,6 +13,7 @@
 
 #include "components/gui_scrollpane.h"
 #include "components/gui_button.h"
+#include "components/gui_label.h"
 
 #include "route_display.h"
 
@@ -39,11 +40,13 @@ class convoi_stops_list_t : public gui_aligned_container_t, action_listener_t, p
 
 	// whole-route overlay toggle (disabled for air, which routes itself)
 	button_t bt_show_whole_route;
+	gui_label_buf_t lb_route_time;
 	schedule_route_overlay_t route_overlay;
 	bool is_whole_route_show;
 	uint32 last_route_schedule_count;
 	static void hide_whole_route_overlay(void *win);
 	void update_whole_route_overlay();
+	void update_route_time_label();
 public:
 	player_t*  player;
 

@@ -238,12 +238,41 @@ void convoi_stops_list_t::update_whole_route_overlay()
 }
 
 
+void convoi_stops_list_t::update_route_time_label()
+{
+	lb_route_time.buf().clear();
+	if(  is_whole_route_show  ) {
+		if(  !route_overlay.route_ready()  ||  !cnv.is_bound()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else if(  !welt->is_schedule_route_complete()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT_STRONG );
+			lb_route_time.buf().append( translator::translate("NO ROUTE!") );
+		}
+		else if(  welt->get_schedule_route().empty()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			const uint32 ticks = convoi_t::calc_ticks_until_arrival( cnv, &welt->get_schedule_route(), true );
+			lb_route_time.buf().printf( "%s: %s", translator::translate("Route time"), format_route_time_hours( ticks ) );
+		}
+	}
+	lb_route_time.update();
+}
+
+
 
 void convoi_stops_list_t::update_schedule()
 {
 	remove_all();
 	entries.clear();
+	add_table(2,1);
 	add_component(&bt_show_whole_route);
+	add_component(&lb_route_time);
+	end_table();
 	gui_schedule = cnv->get_schedule()->copy();
 	static cbuffer_t buf;
 	if (gui_schedule->empty()) {
@@ -266,6 +295,7 @@ void convoi_stops_list_t::draw(scr_coord offset)
 	}
 	update_whole_route_overlay();
 	route_overlay.poll();
+	update_route_time_label();
 	gui_aligned_container_t::draw(offset);
 }
 

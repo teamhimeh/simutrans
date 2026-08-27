@@ -973,7 +973,10 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	if(  schedule->get_waytype() == air_wt  ) {
 		bt_show_line_route.disable();
 	}
+	add_table(2,1);
 	add_component(&bt_show_line_route);
+	add_component(&lb_route_time);
+	end_table();
 
 	scrolly.set_show_scroll_x(true);
 	scrolly.set_scroll_amount_y(LINESPACE+1);
@@ -2041,10 +2044,38 @@ void schedule_gui_t::update_line_route_overlay()
 }
 
 
+void schedule_gui_t::update_route_time_label()
+{
+	lb_route_time.buf().clear();
+	if(  is_line_route_show  ) {
+		convoihandle_t ref = get_route_reference_convoi();
+		if(  !route_overlay.route_ready()  ||  !ref.is_bound()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else if(  !welt->is_schedule_route_complete()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT_STRONG );
+			lb_route_time.buf().append( translator::translate("NO ROUTE!") );
+		}
+		else if(  welt->get_schedule_route().empty()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			const uint32 ticks = convoi_t::calc_ticks_until_arrival( ref, &welt->get_schedule_route(), true );
+			lb_route_time.buf().printf( "%s: %s", translator::translate("Route time"), format_route_time_hours( ticks ) );
+		}
+	}
+	lb_route_time.update();
+}
+
+
 void schedule_gui_t::draw(scr_coord pos, scr_size size)
 {
 	update_line_route_overlay();
 	route_overlay.poll();
+	update_route_time_label();
 
 	if(  player->simlinemgmt.get_line_count()!=old_line_count  ||  last_schedule_count!=schedule->get_count()  ) {
 		// lines added or deleted

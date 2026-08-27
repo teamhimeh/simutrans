@@ -84,12 +84,15 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// shows the whole route of the schedule under editing on map + minimap
 	button_t bt_show_line_route;
+	gui_label_buf_t lb_route_time; ///< estimated time to drive the whole route
 	schedule_route_overlay_t route_overlay;
 	bool is_line_route_show;
 	uint32 last_route_schedule_count;
 	static void hide_line_route_overlay(void *win);
 	// (re)issue the route request when shown, and update the button state
 	void update_line_route_overlay();
+	// refresh the estimated whole-route time label from the computed route
+	void update_route_time_label();
 
 	gui_numberinput_t numimp_spacing, numimp_spacing_shift,
 		numimp_delay_tolerance, numimp_max_speed, numimp_max_speed_kmh_of_convoi , numimp_tbgr_waiting_time, numimp_length_coupling_done;

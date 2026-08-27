@@ -12,6 +12,10 @@
 class schedule_t;
 class player_t;
 
+/// format a tick (== ms) duration as a compact in-game "N.N h" string, for
+/// the whole-route time estimate shown next to the "show route" buttons
+const char *format_route_time_hours( uint32 ticks );
+
 /**
  * Ensures that at most one window's route (or route cache) is highlighted
  * on the map at a time. When a window activates its own display, whichever
@@ -62,6 +66,8 @@ public:
 	void poll();
 
 	bool is_shown() const { return shown; }
+	// true once step_schedule_route() has run for this overlay's request (route may be empty)
+	bool route_ready() const;
 
 private:
 	void unmark();
