@@ -724,10 +724,20 @@ void schedule_list_gui_t::draw(scr_coord pos, scr_size size)
 		POP_CLIP();
 	}
 
-	// show route cache update
-	show_route_cache(is_route_cache_show);
-	bt_show_route_cache.pressed = is_route_cache_show;
-	bt_show_route_cache.enable( line.is_bound()  &&  line->count_convoys()>0 );
+	// show route cache update - yield to a whole-schedule route overlay
+	if(  welt->is_schedule_route_active()  ) {
+		if(  is_route_cache_show  ) {
+			is_route_cache_show = false;
+			show_route_cache(false);
+		}
+		bt_show_route_cache.pressed = false;
+		bt_show_route_cache.disable();
+	}
+	else {
+		show_route_cache(is_route_cache_show);
+		bt_show_route_cache.pressed = is_route_cache_show;
+		bt_show_route_cache.enable( line.is_bound()  &&  line->count_convoys()>0 );
+	}
 }
 
 

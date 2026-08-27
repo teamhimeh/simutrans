@@ -12,6 +12,9 @@
 #include "components/action_listener.h"
 
 #include "components/gui_scrollpane.h"
+#include "components/gui_button.h"
+
+#include "route_display.h"
 
 #include "../convoihandle_t.h"
 #include "../tpl/vector_tpl.h"
@@ -33,10 +36,19 @@ class convoi_stops_list_t : public gui_aligned_container_t, action_listener_t, p
 
 	vector_tpl<convoi_stops_list_item_t*> entries;
 	schedule_t *gui_schedule; // displayed schedule
+
+	// whole-route overlay toggle (disabled for air, which routes itself)
+	button_t bt_show_whole_route;
+	schedule_route_overlay_t route_overlay;
+	bool is_whole_route_show;
+	uint32 last_route_schedule_count;
+	static void hide_whole_route_overlay(void *win);
+	void update_whole_route_overlay();
 public:
 	player_t*  player;
 
 	convoi_stops_list_t(convoihandle_t cnv_ = convoihandle_t());
+	~convoi_stops_list_t();
 
 	// shows/deletes highlighting of tiles
 	void update_schedule();

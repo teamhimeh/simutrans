@@ -17,6 +17,8 @@
 
 #include "components/gui_scrollpane.h"
 
+#include "route_display.h"
+
 #include "../convoihandle_t.h"
 #include "../linehandle_t.h"
 #include "simwin.h"
@@ -80,6 +82,15 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	button_t bt_reverse_default;
 	button_t bt_up, bt_down;
 
+	// shows the whole route of the schedule under editing on map + minimap
+	button_t bt_show_line_route;
+	schedule_route_overlay_t route_overlay;
+	bool is_line_route_show;
+	uint32 last_route_schedule_count;
+	static void hide_line_route_overlay(void *win);
+	// (re)issue the route request when shown, and update the button state
+	void update_line_route_overlay();
+
 	gui_numberinput_t numimp_spacing, numimp_spacing_shift,
 		numimp_delay_tolerance, numimp_max_speed, numimp_max_speed_kmh_of_convoi , numimp_tbgr_waiting_time, numimp_length_coupling_done;
 	gui_numberinput_t numimp_balance_speed_kmh_of_convoi;
@@ -119,6 +130,10 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	void extract_driving_settings(bool yesno);
 	
 protected:
+	// convoy whose speed/electrification the shown line route should match;
+	// line_management_gui_t overrides this to use its line's convoy
+	virtual convoihandle_t get_route_reference_convoi() const;
+
 	schedule_t *schedule;
 	schedule_t* old_schedule;
 	player_t *player;

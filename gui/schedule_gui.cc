@@ -382,6 +382,7 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 
 schedule_gui_t::~schedule_gui_t()
 {
+	route_overlay.hide();
 	if(  player  ) {
 		update_tool( false );
 		// hide schedule on minimap (may not current, but for safe)
@@ -962,6 +963,18 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	add_component(&bt_remove);
 	end_table();
 
+	// whole-route overlay toggle (not available for air, which routes itself)
+	bt_show_line_route.init(button_t::roundbox_state | button_t::flexible, "Show Line Route");
+	bt_show_line_route.set_tooltip("Show the whole route of this schedule on the map and minimap.");
+	bt_show_line_route.add_listener(this);
+	bt_show_line_route.pressed = false;
+	is_line_route_show = false;
+	last_route_schedule_count = 0xFFFFFFFFu;
+	if(  schedule->get_waytype() == air_wt  ) {
+		bt_show_line_route.disable();
+	}
+	add_component(&bt_show_line_route);
+
 	scrolly.set_show_scroll_x(true);
 	scrolly.set_scroll_amount_y(LINESPACE+1);
 	add_component(&scrolly);
@@ -1476,6 +1489,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_return) {
 		schedule->add_return_way();
 	}
+	else if(comp == &bt_show_line_route) {
+		is_line_route_show = !is_line_route_show  &&  schedule->get_waytype() != air_wt;
+		last_route_schedule_count = 0xFFFFFFFFu; // force a fresh request
+		update_line_route_overlay();
+		should_set_schedule_tool = false;
+	}
 	else if(comp == &line_selector) {
 		uint32 selection = p.i;
 		dbg->message("schedule_gui_t::action_triggered()","set_line_selection %p, %i",comp,selection);
@@ -1965,8 +1984,68 @@ void schedule_gui_t::init_departure_slot_group_selector()
 	// departure_slot_group_selector.sort( offset );
 }
 
+void schedule_gui_t::hide_line_route_overlay(void *win)
+{
+	schedule_gui_t *sg = static_cast<schedule_gui_t *>(win);
+	sg->is_line_route_show = false;
+	sg->route_overlay.hide();
+	sg->bt_show_line_route.pressed = false;
+}
+
+
+convoihandle_t schedule_gui_t::get_route_reference_convoi() const
+{
+	if(  cnv.is_bound()  ) {
+		return cnv;
+	}
+	if(  new_line.is_bound()  &&  new_line->count_convoys() > 0  ) {
+		return new_line->get_convoy( 0 );
+	}
+	return convoihandle_t();
+}
+
+
+void schedule_gui_t::update_line_route_overlay()
+{
+	const bool air = schedule->get_waytype() == air_wt;
+	bt_show_line_route.enable( !air );
+	bt_show_line_route.pressed = is_line_route_show && !air;
+	if(  air  ) {
+		is_line_route_show = false;
+	}
+	if(  !is_line_route_show  ) {
+		if(  route_overlay.is_shown()  ) {
+			route_overlay.hide();
+		}
+		last_route_schedule_count = 0xFFFFFFFFu;
+		return;
+	}
+
+	// only (re)issue the request when first shown or when the schedule changed,
+	// otherwise every frame would wipe the pending result before step() runs
+	if(  route_overlay.is_shown()  &&  schedule->get_count() == last_route_schedule_count  ) {
+		return;
+	}
+	last_route_schedule_count = schedule->get_count();
+
+	// derive the driving speed and catenary need from a convoy running this
+	// schedule, if there is one; otherwise fall back to a plain estimate
+	uint16 speed_kmh = 60;
+	bool   electric  = false;
+	convoihandle_t ref = get_route_reference_convoi();
+	if(  ref.is_bound()  ) {
+		speed_kmh = (uint16)speed_to_kmh( ref->get_min_top_speed() );
+		electric  = ref->get_use_electric();
+	}
+	route_overlay.show( schedule, player, speed_kmh, electric, this, &schedule_gui_t::hide_line_route_overlay );
+}
+
+
 void schedule_gui_t::draw(scr_coord pos, scr_size size)
 {
+	update_line_route_overlay();
+	route_overlay.poll();
+
 	if(  player->simlinemgmt.get_line_count()!=old_line_count  ||  last_schedule_count!=schedule->get_count()  ) {
 		// lines added or deleted
 		init_line_selector();

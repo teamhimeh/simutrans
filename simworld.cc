@@ -4483,6 +4483,11 @@ void karte_t::step()
 		}
 	}
 
+	// client-local: compute the whole route of a schedule for the "show route"
+	// overlay. Must stay here in step() (never sync_step()): it runs calc_route()
+	// and only happens when a local schedule editor asked for it.
+	step_schedule_route();
+
 	DBG_DEBUG4("karte_t::step", "end");
 }
 
@@ -8106,3 +8111,144 @@ bool karte_t::is_player_password_set(uint8 player_nr) const
 	player_t *player = get_player(player_nr);
 	return player  &&  player->is_password_hash();
 }
+
+
+/* Route of the schedule shown by a schedule editor. Kept file local like the
+ * deferred move above: this is client local display state that must never end
+ * up in a savegame.
+ */
+static vector_tpl<koord3d> schedule_route;   ///< koord3d::invalid separates legs without a route
+static uint8  schedule_route_player_nr = PLAYER_UNOWNED;
+static uint32 schedule_route_owner = 0;      ///< component owning the overlay, 0 = nobody
+
+static schedule_t *schedule_route_request = NULL; ///< pending, belongs to schedule_route_owner
+static uint8  schedule_route_request_player_nr = PLAYER_UNOWNED;
+static uint16 schedule_route_request_speed = 0;
+static bool   schedule_route_request_electric = false;
+
+
+const vector_tpl<koord3d> &karte_t::get_schedule_route() const { return schedule_route; }
+uint32 karte_t::get_schedule_route_owner() const { return schedule_route_owner; }
+uint8 karte_t::get_schedule_route_player_nr() const { return schedule_route_player_nr; }
+bool karte_t::is_schedule_route_active() const { return schedule_route_owner != 0  ||  schedule_route_request != NULL; }
+
+
+void karte_t::request_schedule_route(schedule_t *schedule, player_t *pl, uint32 owner, uint16 speed_kmh, bool needs_electrification)
+{
+	if(  schedule == NULL  ||  pl == NULL  ||  owner == 0  ) {
+		return;
+	}
+	// a newer request always replaces a pending one, and takes over the overlay
+	// right away: whatever is shown belongs to an older schedule from now on
+	delete schedule_route_request;
+	schedule_route_request = schedule->copy();
+	schedule_route_request_player_nr = pl->get_player_nr();
+	schedule_route_request_speed = speed_kmh;
+	schedule_route_request_electric = needs_electrification;
+	schedule_route_owner = owner;
+	if(  !schedule_route.empty()  ) {
+		schedule_route.clear();
+		set_dirty();
+	}
+}
+
+
+void karte_t::clear_schedule_route(uint32 owner)
+{
+	// an editor that no longer owns the overlay must not drop a newer one
+	if(  owner != 0  &&  owner != schedule_route_owner  ) {
+		return;
+	}
+	// dropping the pending request is what keeps an outdated result from arriving
+	delete schedule_route_request;
+	schedule_route_request = NULL;
+	schedule_route_owner = 0;
+	if(  !schedule_route.empty()  ) {
+		schedule_route.clear();
+		set_dirty();
+	}
+}
+
+
+void karte_t::step_schedule_route()
+{
+	if(  schedule_route_request == NULL  ) {
+		return;
+	}
+	// a request only survives to here while its editor still owns the overlay:
+	// clear_schedule_route drops it as soon as that editor lets go
+	schedule_t *schedule = schedule_route_request;
+	const uint16 speed   = schedule_route_request_speed;
+	const bool electric  = schedule_route_request_electric;
+	player_t *pl         = get_player( schedule_route_request_player_nr );
+	schedule_route_request = NULL;
+
+	if(  pl != NULL  ) {
+		schedule_route.clear();
+		schedule_route_player_nr = pl->get_player_nr();
+
+		// A throw away vehicle to query the ways; it is never put on the map. It
+		// carries the owner (private ways depend on it), the speed of the convoi
+		// driving this schedule, and whether that convoi needs catenary.
+		// the vehicle keeps a pointer to its descriptor, so the descriptor must
+		// outlive it: both live until the end of this function
+		const waytype_t wt = schedule->get_waytype();
+		vehicle_desc_t test_desc( (uint8)wt, speed, electric ? vehicle_desc_t::electric : vehicle_desc_t::diesel );
+		vehicle_t *test_driver = NULL;
+		switch(  wt  ) {
+			case road_wt:
+			case track_wt:
+			case tram_wt:
+			case monorail_wt:
+			case maglev_wt:
+			case narrowgauge_wt:
+			case water_wt:
+				test_driver = vehicle_builder_t::build( koord3d(), pl, NULL, &test_desc );
+				test_driver->set_flag( obj_t::not_on_map );
+				// no convoi to ask, so the restriction is set on the vehicle itself
+				test_driver->set_leading(true);
+				break;
+
+			default:
+				// air_wt routes are found by air_vehicle_t itself, not by calc_route
+				break;
+		}
+
+		const uint8 count = schedule->get_count();
+		if(  test_driver  &&  count > 1  ) {
+			route_t leg;
+			for(  uint8 i = 0;  i < count;  i++  ) {
+				if(  schedule->get_next_line().is_bound()  &&  i==count-1  ) {
+					break;
+				}
+				const koord3d start  = schedule->at(i).pos;
+				const koord3d target = schedule->at((i+1) % count).pos;
+				if(  start == target  ) {
+					continue;
+				}
+				leg.clear();
+				if(  leg.calc_route( this, start, target, test_driver, speed, 1 ) == route_t::no_route  ) {
+					// mark the gap, so that the display does not connect across it
+					if(  !schedule_route.empty()  &&  schedule_route.back() != koord3d::invalid  ) {
+						schedule_route.append( koord3d::invalid );
+					}
+					continue;
+				}
+				for(  koord3d const& pos : leg.get_route()  ) {
+					if(  schedule_route.empty()  ||  schedule_route.back() != pos  ) {
+						schedule_route.append( pos );
+					}
+				}
+			}
+		}
+		if(  test_driver  ) {
+			// it was built on a real tile, and the destructor of a rail vehicle would
+			// release the reservation of whoever holds that tile: take it off the map first
+			test_driver->set_pos( koord3d::invalid );
+			delete test_driver;
+		}
+		set_dirty();
+	}
+	delete schedule;
+}
+
