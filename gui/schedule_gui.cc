@@ -2140,6 +2140,7 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 
 	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
+	const bool track_waytype = schedule->get_waytype()!=road_wt && schedule->get_waytype()!=water_wt && schedule->get_waytype()!=air_wt;
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);
 	bt_reset_coupling.set_visible(coupling_waytype && yesno);
@@ -2156,4 +2157,6 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	sp_coupling_settings.set_visible(coupling_waytype && yesno);
 	bt_no_overtake.set_visible(schedule->get_waytype()==road_wt && yesno); // only for road vehicle
 	sp_road_settings.set_visible(schedule->get_waytype()==road_wt && yesno);
+	bt_drive_without_reservation.set_visible(track_waytype && yesno);
+	bt_all_without_reservation.set_visible(track_waytype && yesno);
 }
