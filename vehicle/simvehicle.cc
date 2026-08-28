@@ -4757,12 +4757,6 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 		}
 #endif
 		if(reserve) {
-			for(uint8 i=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i))&&i!=cnv->get_schedule()->get_current_stop()-1; i++) {
-				i %= cnv->get_schedule()->get_count();
-				if(  cnv->get_schedule()->at(i).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i).pos  ) {
-					break;
-				}
-			}
 			if(  sch1->has_signal()  &&  i<route->get_count()  ) {
 				if( i < route->get_count()-1 ) {
 					signal_t* signal = gr->find<signal_t>();
@@ -4804,6 +4798,12 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			}
 			if(next_crossing_index==route_t::INVALID_INDEX  &&  gr->get_crossing()) {
 				next_crossing_index = i;
+			}
+			for(uint8 i_stop=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i_stop))&&i_stop!=cnv->get_schedule()->get_current_stop()-1; i_stop++) {
+				i_stop %= cnv->get_schedule()->get_count();
+				if(  cnv->get_schedule()->at(i_stop).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i_stop).pos  ) {
+					break;
+				}
 			}
 		}
 		else if(sch1) {
