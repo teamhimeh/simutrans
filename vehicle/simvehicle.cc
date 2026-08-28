@@ -3975,7 +3975,7 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 
 		if(  success  ) {
 			// ok, would be free
-			if(  next_next_signal<target_rt.get_count()  ) {
+			if(  next_next_signal<target_rt.get_count()  ||  schedule->at(schedule_index).is_drive_without_reservation()  ) {
 				// and here is a signal => finished
 				sig->set_state( roadsign_t::STATE_GREEN );
 				// we stop at the end of the route.
@@ -4757,6 +4757,12 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 		}
 #endif
 		if(reserve) {
+			for(uint8 i=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i))&&i!=cnv->get_schedule()->get_current_stop()-1; i++) {
+				i %= cnv->get_schedule()->get_count();
+				if(  cnv->get_schedule()->at(i).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i).pos  ) {
+					break;
+				}
+			}
 			if(  sch1->has_signal()  &&  i<route->get_count()  ) {
 				if( i < route->get_count()-1 ) {
 					signal_t* signal = gr->find<signal_t>();
