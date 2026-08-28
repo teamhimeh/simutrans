@@ -1260,6 +1260,13 @@ void vehicle_t::hop(grund_t* gr)
 			cnv->set_schedule_target( koord3d::invalid );
 		}
 		else {
+			convoihandle_t c = cnv->self;
+			// reset drive_without_reservation
+			while(  c.is_bound()  ) {
+				c->set_drive_without_reservation(c->get_schedule()->get_current_entry().is_drive_without_reservation());
+				c = c->get_coupling_convoi();
+			}
+			c = cnv->self;
 			cnv->register_journey_time();
 			// before reverse convoy coupling, uncouple child
 			cnv->uncouple_convoy_by_schedule_setting();
@@ -1269,7 +1276,6 @@ void vehicle_t::hop(grund_t* gr)
 				// this vehicle is no longer the most parent convoy's leading car.
 				return;
 			}
-			convoihandle_t c = cnv->self;
 			while(  c.is_bound()  ) {
 				c->allow_other_convoy_to_depart(haltestelle_t::get_stoppable_halt(cnv->get_schedule()->get_current_entry().pos, c->get_owner(), get_waytype()));
 				if(c->get_schedule()->get_current_entry().is_reverse_convoy()) {
@@ -4454,9 +4460,19 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	assert(leading);
 	uint16 next_signal, next_crossing, next_coupling;
 	uint8 next_c_steps;
+	grund_t* gr_current = welt->lookup(get_pos());
+	// reset driving without reservation
+	if(  gr_current  ) {
+		if(weg_t* w = gr_current->get_weg(get_waytype())) {
+			if(w->has_signal()) {
+				cnv->set_drive_without_reservation(false);
+			}
+		}
+	}
+
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
 		// reserve first block at the start until the next signal
-		if (grund_t* gr_current = welt->lookup(get_pos())) {
+		if (gr_current) {
 			if (weg_t* w = gr_current->get_weg(get_waytype())) {
 				// before start, we must check other cars
 				for(  uint8 pos=1;  pos<(volatile uint8)gr_current->get_top();  pos++  ) {
@@ -4478,8 +4494,15 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				if (!(w->has_signal()  ||  gr_current->get_crossing())) {
 					// free track => reserve up to next signal
 					if (!block_reserver(cnv->get_route(), max(route_index, 1) - 1, next_signal, next_crossing, 0, true, false)) {
-						restart_speed = 0;
-						return false;
+						if(  cnv->is_drive_without_reservation()  ) {
+							// we ignore signal, ok!
+							// cnv->set_next_stop_index(next_crossing < next_signal ? next_crossing : next_signal);
+							return true;
+						}
+						else {
+							restart_speed = 0;
+							return false;
+						}
 					}
 					if(  next_signal>cnv->get_route()->get_count()-1  ) {
 						// no signal until next stop, go!
@@ -4671,7 +4694,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	}
 
 	// finally check the signal if needed
-	if(  signal_to_check != route_t::INVALID_INDEX  ) {
+	if(  signal_to_check != route_t::INVALID_INDEX  &&  !cnv->is_drive_without_reservation()  ) {
 		if(  !is_signal_clear( signal_to_check, restart_speed )  ) {
 			if(  signal_to_check == route_index && signal_to_check != next_block  ) {
 				cnv->set_next_stop_index( route_index + 1 ); 

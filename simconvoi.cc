@@ -203,6 +203,8 @@ void convoi_t::init(player_t *player)
 	max_balance_speed_convoi = 0;
 	unloading_done = false;
 	invalid_convoy = false;
+
+	drive_without_reservation = false;
 }
 
 
@@ -352,7 +354,7 @@ void convoi_t::reserve_route()
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
-		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
+		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < drive_without_reservation?front()->get_route_index():next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
@@ -1449,7 +1451,7 @@ bool convoi_t::drive_to()
 					reverse_convoy_coupling();
 					reversing_coupling_needed=reverse_here;
 					get_most_parent_convoi()->reversing_coupling_needed=reverse_here;
-					get_most_parent_convoi()->state=ROUTING_1;
+					get_most_parent_convoi()->set_state(ROUTING_1);
 					get_most_parent_convoi()->alte_richtung=get_most_parent_convoi()->front()->get_direction();
 					get_most_parent_convoi()->check_electrification();
 					return false;
@@ -1563,6 +1565,7 @@ bool convoi_t::drive_to()
  */
 void convoi_t::suche_neue_route()
 {
+	drive_without_reservation=false;
 	state = ROUTING_1;
 	wait_lock = 0;
 }
@@ -2049,6 +2052,8 @@ void convoi_t::start()
 		no_load = false;
 		unload_all = false;
 
+		drive_without_reservation = false;
+
 		state = ROUTING_1;
 
 		// recalc weight and image
@@ -2108,6 +2113,13 @@ void convoi_t::ziel_erreicht()
 	c = self;
 	while(  c.is_bound()  ) {
 		c->reset_departure_time();
+		c = c->get_coupling_convoi();
+	}
+
+	// reset driving without reservation
+	c = self;
+	while(  c.is_bound()  ) {
+		c->set_drive_without_reservation(c->get_schedule()->get_current_entry().is_drive_without_reservation());
 		c = c->get_coupling_convoi();
 	}
 
@@ -3820,6 +3832,11 @@ void convoi_t::rdwr(loadsave_t *file)
 	} else {
 		waiting_for_departure_make_another_convoy_depart = false;
 		reversing_lane_hold = false;
+	}
+	if(  file->get_OTRP_version()>=61  ) {
+		file->rdwr_bool(drive_without_reservation);
+	} else {
+		drive_without_reservation=false;
 	}
 
 	if(  file->is_loading()  ) {
