@@ -57,7 +57,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: git zip unzip svn base-devel mingw-w64-x86_64-toolchain autoconf mingw-w64-x86_64-gcc mingw-w64-x86_64-freetype mingw-w64-x86_64-zstd mingw-w64-x86_64-libpng mingw-w64-x86_64-brotli mingw-w64-x86_64-SDL3 mingw-w64-x86_64-pkg-config
+          install: git zip unzip svn base-devel mingw-w64-x86_64-toolchain autoconf mingw-w64-x86_64-gcc mingw-w64-x86_64-freetype mingw-w64-x86_64-zstd mingw-w64-x86_64-libpng mingw-w64-x86_64-brotli mingw-w64-x86_64-sdl3 mingw-w64-x86_64-pkg-config
 
       - name: Checkout code
         uses: actions/checkout@v4
