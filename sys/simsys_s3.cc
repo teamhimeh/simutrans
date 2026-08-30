@@ -151,11 +151,15 @@ static bool has_soft_keyboard = false;
 static sint32 x_scale = SCALE_NEUTRAL_X;
 static sint32 y_scale = SCALE_NEUTRAL_Y;
 
-/* Whether the scale above was derived from the display rather than chosen. Only
- * an automatic scale may be recomputed behind the user's back when the display
- * changes; a percentage someone typed has to survive it. -autodpi does not go
- * through env_t::dpi_scale, so the caller cannot be asked - what the scale was
- * last set from is recorded here instead. */
+/* A percentage shown to the user is relative to the size the operating system
+ * recommends for content, not to a physical back-buffer pixel. x_scale and
+ * y_scale include that OS scale; this value deliberately does not, so a Retina
+ * display can use an effective 200% while the settings window still says 100%. */
+static sint16 requested_scale_percent = 100;
+
+/* Whether the effective scale above was selected by -autodpi. Both automatic
+ * and user-selected scales must be recomputed when the window moves to a display
+ * with a different content scale; only the requested percentage stays fixed. */
 static bool scale_is_automatic = false;
 
 /* When using -autodpi, attempt to scale things on screen to this DPI value.
@@ -237,7 +241,7 @@ static SDL_DisplayID current_display()
 
 /* --------------------------------------------------------------- scaling */
 
-bool dr_set_screen_scale(sint16 scale_percent)
+static bool apply_screen_scale(sint16 scale_percent, bool push_resize)
 {
 	const sint32 old_x_scale = x_scale;
 	const sint32 old_y_scale = y_scale;
@@ -343,16 +347,17 @@ bool dr_set_screen_scale(sint16 scale_percent)
 			}
 		}
 	}
-	else if(  scale_percent == 0  ) {
-		x_scale = SCALE_NEUTRAL_X;
-		y_scale = SCALE_NEUTRAL_Y;
-	}
 	else {
-		x_scale = (scale_percent * SCALE_NEUTRAL_X) / 100;
-		y_scale = (scale_percent * SCALE_NEUTRAL_Y) / 100;
+		requested_scale_percent = scale_percent == 0 ? 100 : scale_percent;
+		const float display_scale = window ? SDL_GetWindowDisplayScale( window ) : 1.0f;
+		const float effective_scale = display_scale > 0.0f ? display_scale : 1.0f;
+		x_scale = (sint32)((requested_scale_percent * effective_scale * SCALE_NEUTRAL_X) / 100.0f + 0.5f);
+		y_scale = (sint32)((requested_scale_percent * effective_scale * SCALE_NEUTRAL_Y) / 100.0f + 0.5f);
+		DBG_MESSAGE("dr_set_screen_scale(SDL3)", "user scale %i%% * display scale %.2f -> x=%i, y=%i",
+			requested_scale_percent, effective_scale, x_scale, y_scale);
 	}
 
-	if(  window  &&  (x_scale != old_x_scale  ||  y_scale != old_y_scale)  ) {
+	if(  push_resize  &&  window  &&  (x_scale != old_x_scale  ||  y_scale != old_y_scale)  ) {
 		// force window resize
 		int w, h;
 		SDL_GetWindowSize( window, &w, &h );
@@ -374,9 +379,25 @@ bool dr_set_screen_scale(sint16 scale_percent)
 }
 
 
+bool dr_set_screen_scale(sint16 scale_percent)
+{
+	return apply_screen_scale( scale_percent, true );
+}
+
+
 sint16 dr_get_screen_scale()
 {
-	return (sint16)((x_scale * 100) / SCALE_NEUTRAL_X);
+	if(  !scale_is_automatic  ) {
+		return requested_scale_percent;
+	}
+
+	/* The display settings dialog persists the value returned here as a manual
+	 * percentage. Remove the OS factor from an automatic effective scale, or an
+	 * auto-detected 200% Retina scale would be saved as user 200% and become an
+	 * effective 400% on the next start. */
+	const float display_scale = window ? SDL_GetWindowDisplayScale( window ) : 1.0f;
+	const float effective_scale = display_scale > 0.0f ? display_scale : 1.0f;
+	return (sint16)(((double)x_scale * 100.0) / ((double)SCALE_NEUTRAL_X * effective_scale) + 0.5);
 }
 
 
@@ -679,18 +700,7 @@ static bool internal_create_surfaces(int tex_width, int tex_height)
 // open the window
 int dr_os_open(int screen_width, int screen_height, sint16 fs)
 {
-	// scale up
-	const resolution res   = dr_query_screen_resolution();
-	const int        tex_w = clamp( res.w, 1, SCREEN_TO_TEX_X(screen_width) );
-	const int        tex_h = clamp( res.h, 1, SCREEN_TO_TEX_Y(screen_height) );
-
-	DBG_MESSAGE("dr_os_open(SDL3)", "Screen requested %i,%i, available max %i,%i", tex_w, tex_h, res.w, res.h);
-
 	fullscreen = fs ? BORDERLESS : WINDOWED;
-
-	// some cards need those alignments
-	// especially 64bit want a border of 8bytes
-	const int tex_pitch = max( (tex_w + 15) & 0x7FF0, 16 );
 
 	/* SDL2->SDL3: SDL_CreateWindow lost its position arguments and the flags
 	 * are 64 bit. SDL_WINDOW_FULLSCREEN without an explicit fullscreen mode is
@@ -714,6 +724,26 @@ int dr_os_open(int screen_width, int screen_height, sint16 fs)
 		dbg->error( "dr_os_open(SDL3)", "Could not open the window: %s", SDL_GetError() );
 		return 0;
 	}
+
+	/* Before the window exists macOS reports a display content scale of 1 even
+	 * for a Retina screen. Now the window can report the combined display scale,
+	 * so fold it into either the requested percentage or the automatic scale
+	 * before deciding how large the CPU framebuffer should be. */
+	apply_screen_scale( scale_is_automatic ? -1 : requested_scale_percent, false );
+
+	int pixel_w = WINDOW_TO_PIXEL( (float)screen_width );
+	int pixel_h = WINDOW_TO_PIXEL( (float)screen_height );
+	SDL_GetWindowSizeInPixels( window, &pixel_w, &pixel_h );
+
+	const resolution res   = dr_query_screen_resolution();
+	const int        tex_w = clamp( res.w, 1, SCREEN_TO_TEX_X(pixel_w) );
+	const int        tex_h = clamp( res.h, 1, SCREEN_TO_TEX_Y(pixel_h) );
+
+	DBG_MESSAGE("dr_os_open(SDL3)", "Screen requested %i,%i, available max %i,%i", tex_w, tex_h, res.w, res.h);
+
+	// some cards need those alignments
+	// especially 64bit want a border of 8bytes
+	const int tex_pitch = max( (tex_w + 15) & 0x7FF0, 16 );
 
 	if(  !internal_create_surfaces( tex_pitch, tex_h )  ||  !internal_create_framebuffer( tex_pitch, tex_h )  ) {
 		// Every failure path releases what it has already built, in the reverse
@@ -1736,23 +1766,20 @@ static void internal_GetEvents()
 
 		/* The window side of the same story: which display the window is on, and
 		 * what that display says its scale is. The texture is still sized from
-		 * SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED above; what these two do is keep an
-		 * automatic scale in step with the display that is showing the game.
+		 * SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED above; what these two do is keep the
+		 * effective scale in step with the display that is showing the game.
 		 *
-		 * Both are needed. A move makes everything the automatic scale reads off a
-		 * display stale, not only its scale but the mode it is bounded by, and the
-		 * scale event alone does not catch it: moving between two displays scaled
-		 * the same emits no scale change at all, so a move from a 2560x1440 screen
-		 * to a 1024x600 one would leave the game area below the minimum height
-		 * that limit exists to guarantee. When both events do arrive the second
-		 * recompute finds the same numbers and asks for no resize. */
+		 * Both are needed. A move makes the selected display and its content scale
+		 * stale, and the scale event alone does not catch a move between displays
+		 * scaled the same. When both events arrive the second recompute finds the
+		 * same numbers and asks for no resize. */
 		case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
 			DBG_MESSAGE( "internal_GetEvents(SDL3)",
 				"window %u moved to display %d%s",
 				(unsigned)event.window.windowID, (int)event.window.data1,
 				scale_is_automatic ? "" : " (scale is user set, kept)" );
-			if(  scale_is_automatic  &&  window  ) {
-				dr_set_screen_scale( -1 );
+			if(  window  ) {
+				dr_set_screen_scale( scale_is_automatic ? -1 : requested_scale_percent );
 			}
 			sys_event.type = SIM_IGNORE_EVENT;
 			sys_event.code = 0;
@@ -1760,22 +1787,17 @@ static void internal_GetEvents()
 
 		/* The window is now being shown at a different size per unit of content -
 		 * a display setting changed, or it was dragged onto a monitor that is
-		 * scaled differently. An automatic scale is derived from exactly that
-		 * number, so it is now stale and the whole UI is drawn at the wrong
-		 * physical size until something recomputes it. dr_set_screen_scale is
-		 * that something: it already knows the arithmetic and already forces the
-		 * resize that applies a new scale.
-		 *
-		 * A scale the user chose is left alone. The point of typing 150% is that
-		 * it stays 150%. */
+		 * scaled differently. Recompute the effective scale for both modes. An
+		 * automatic value follows the display, while a user value such as 150%
+		 * remains 150% relative to that display's recommended content size. */
 		case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
 			DBG_MESSAGE( "internal_GetEvents(SDL3)",
 				"window %u display scale now %.2f%s",
 				(unsigned)event.window.windowID,
 				window ? SDL_GetWindowDisplayScale( window ) : 0.0f,
 				scale_is_automatic ? "" : " (scale is user set, kept)" );
-			if(  scale_is_automatic  &&  window  ) {
-				dr_set_screen_scale( -1 );
+			if(  window  ) {
+				dr_set_screen_scale( scale_is_automatic ? -1 : requested_scale_percent );
 			}
 			sys_event.type = SIM_IGNORE_EVENT;
 			sys_event.code = 0;
