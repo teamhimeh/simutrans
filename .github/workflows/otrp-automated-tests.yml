@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
@@ -15,7 +15,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get -y update
-        sudo apt-get -ym install libsdl3-dev libfreetype6-dev libminiupnpc-dev libbz2-dev pkg-config autoconf
+        sudo apt-get -ym install libsdl2-dev libfreetype6-dev libminiupnpc-dev libbz2-dev pkg-config autoconf
 
     - name: Install zstd 1.4.4
       run: |
@@ -31,6 +31,7 @@ jobs:
       run: |
         autoconf
         ./configure
+        echo "BACKEND = sdl2" >>config.default
         echo "FLAGS = -DREVISION=$(svn info --show-item revision svn://servers.simutrans.org/simutrans) " >>config.default
         echo "STATIC = 1" >>config.default
         cat config.default
@@ -53,7 +54,7 @@ jobs:
         path: dist/
 
   list-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     outputs:
       test-batches: ${{ steps.list.outputs.test-batches }}
@@ -98,7 +99,7 @@ jobs:
 
   test:
     needs: [build, list-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       matrix:
@@ -117,7 +118,7 @@ jobs:
     - name: Install runtime dependencies
       run: |
         sudo apt-get -y update
-        sudo apt-get -ym install libsdl3-0 libminiupnpc-dev libfreetype6
+        sudo apt-get -ym install libsdl2-2.0-0 libminiupnpc-dev libfreetype6
         # Install bundled shared libraries (e.g., zstd built from source)
         sudo cp dist/libzstd.so* /usr/local/lib/ 2>/dev/null || true
         sudo ldconfig

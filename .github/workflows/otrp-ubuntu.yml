@@ -9,8 +9,22 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 24.04 / SDL2 (distribution)
+            os: ubuntu-24.04
+            backend: sdl2
+            sdl_package: libsdl2-dev
+            distribute: true
+          - name: Ubuntu 26.04 / SDL3
+            os: ubuntu-26.04
+            backend: sdl3
+            sdl_package: libsdl3-dev
+            distribute: false
     
     steps:
     - uses: actions/checkout@v4
@@ -18,7 +32,7 @@ jobs:
     - name: install_dependencies
       run: |
         sudo apt-get -y update 
-        sudo apt-get -ym install libsdl3-dev
+        sudo apt-get -ym install ${{ matrix.sdl_package }}
         sudo apt-get -ym install libfreetype6-dev
         sudo apt-get -ym install libminiupnpc-dev
         sudo apt-get -ym install libbz2-dev
@@ -39,6 +53,7 @@ jobs:
       run: |
         autoconf 
         ./configure
+        echo "BACKEND = ${{ matrix.backend }}" >>config.default
         echo "FLAGS = -DREVISION=$(svn info --show-item revision svn://servers.simutrans.org/simutrans) " >>config.default
         echo "STATIC = 1" >>config.default
         cat config.default >>/dev/stderr
@@ -48,6 +63,7 @@ jobs:
         make -j
 
     - name: Set suffix for file naming
+      if: matrix.distribute
       run: |
         if [[ $GITHUB_REF == refs/tags/* ]]; then
           echo "SUFFIX=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
@@ -56,6 +72,7 @@ jobs:
         fi
 
     - name: Rename executable
+      if: matrix.distribute
       run: |
         if [ -n "${{ env.SUFFIX }}" ]; then
           mv sim sim-linux-OTRP${{ env.SUFFIX }}
@@ -64,6 +81,7 @@ jobs:
         fi
 
     - name: Upload the executable
+      if: matrix.distribute
       uses: actions/upload-artifact@v4
       with:
         name: sim-linux-OTRP${{ env.SUFFIX }}
