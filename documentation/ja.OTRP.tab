@@ -629,6 +629,12 @@ allow_elevated_way_over_others_halt
 他社駅直上に高架線を建設可(allow_elevated_way_over_others_halt)
 Detailed oneway
 通行可能な方向の詳細設定
+Copy oneway detail
+通行方向の詳細設定をコピー
+Paste oneway detail
+通行方向の詳細設定を貼り付け
+Click an arrow to toggle whether that turn is allowed
+矢印をクリックすると、その進行方向の可否を切り替えます
 transit_by_foot
 徒歩乗り換え許可(transit_by_foot)
 foot_path_weight
