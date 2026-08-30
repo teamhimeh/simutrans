@@ -134,6 +134,12 @@ private:
 	sint8 world_maximum_height;
 	sint8 world_minimum_height;
 
+	/**
+	 * length of one map tile, in meters (not km); used to convert tile-based
+	 * distance counters into real-world distance
+	 */
+	sint32 tile_length;
+
 	 /**
 	 * waterlevel, climate borders, lowest snow in winter
 	 */
@@ -339,6 +345,12 @@ private:
 
 	// true if companies can make ways public
 	bool disable_make_way_public;
+
+	// if true, convoys waiting for clearance for two months are fined
+	bool penalty_wait_for_two_month;
+
+	// revenue per boarding passenger per capacity-unit for halts (0 = disabled)
+	sint32 base_revenue_from_halt;
 	
 	// parameters related to routing of citycars
 	uint16 citycar_max_look_forward;
@@ -395,6 +407,15 @@ private:
 
 	// public player can unlock any player without entering their password
 	bool allow_unlock_by_public;
+
+	// transit by foot between overlapping pax stops
+	bool transit_by_foot;
+	uint32 foot_path_weight;      // added to route cost for walking connection
+	uint32 foot_path_time_ticks;  // added to journey time for time-based routing
+	// When true, the walking distance from a passenger's origin/destination tile to each
+	// candidate halt is included in the route cost so that nearer halts are preferred.
+	// When false, all halts within station coverage are treated as equidistant (old behaviour).
+	bool walk_cost_to_halt;
 
 public:
 	/* the big cost section */
@@ -513,6 +534,11 @@ public:
 
 	sint8 get_maximumheight() const { return world_maximum_height; }
 	sint8 get_minimumheight() const { return world_minimum_height; }
+
+	sint32 get_tile_length() const { return tile_length; }
+
+	// computes the default value for tile_length (meters)
+	static sint32 calc_default_tile_length();
 
 	sint8 get_groundwater() const {return (sint8)groundwater;}
 
@@ -745,6 +771,10 @@ public:
 	bool get_allow_underground_transformers() const { return allow_underground_transformers; }
 	bool get_disable_make_way_public() const { return disable_make_way_public; }
 
+	bool get_penalty_wait_for_two_month() const { return penalty_wait_for_two_month; }
+
+	sint32 get_base_revenue_from_halt() const { return base_revenue_from_halt; }
+
 	uint32 get_allow_merge_distant_halt() const { return allow_merge_distant_halt; }
 
 	uint16 get_remove_dummy_player_months() const { return remove_dummy_player_months; }
@@ -796,6 +826,16 @@ public:
 	void set_allow_unlock_by_public(bool y) { allow_unlock_by_public = y; }
 
 	bool is_using_route_cache() const { return use_route_cache; }
+
+	bool is_transit_by_foot() const { return transit_by_foot; }
+	void set_transit_by_foot(bool v) { transit_by_foot = v; }
+	uint32 get_foot_path_weight() const { return foot_path_weight; }
+	void set_foot_path_weight(uint32 v) { foot_path_weight = v; }
+	uint32 get_foot_path_time_ticks() const { return foot_path_time_ticks; }
+	void set_foot_path_time_ticks(uint32 v) { foot_path_time_ticks = v; }
+	bool is_walk_cost_to_halt() const { return walk_cost_to_halt; }
+	void set_walk_cost_to_halt(bool v) { walk_cost_to_halt = v; }
+
 	void set_use_route_cache(bool b) { use_route_cache = b; }
 };
 

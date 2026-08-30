@@ -317,6 +317,12 @@ private:
 	sint64 finance_history_decade[MAX_WORLD_HISTORY_DECADES][MAX_WORLD_COST];
 
 	/**
+	 * Accumulator of completed years' flow-type values within the current decade.
+	 * Used to compute decade[0] = decade_acc + year[0] in update_history().
+	 */
+	sint64 finance_history_decade_acc[MAX_WORLD_COST];
+
+	/**
 	 * World record speed manager.
 	 * Keeps track of the fastest vehicles in game.
 	 */
@@ -454,7 +460,7 @@ private:
 	 * Network client only: bitmask of players that have a password stored on the server
 	 * (bit i = player i). Updated by nwc_auth_player_t; not saved.
 	 */
-	uint16 player_password_set_bits;
+	uint64 player_password_set_bits;
 	/** @} */
 
 	/**
@@ -581,6 +587,11 @@ private:
 	 * Last year.
 	 */
 	sint32 last_year;
+
+	/**
+	 * How many times step year
+	 */
+	sint32 step_year_count;
 
 	/**
 	 * Current season.
@@ -936,7 +947,7 @@ public:
 	 * Player management here
 	 */
 	uint8 sp2num(player_t *player);
-	player_t * get_player(uint8 n) const { return players[n&15]; }
+	player_t * get_player(uint8 n) const { return players[n&PLAYER_UNOWNED]; }
 	player_t* get_active_player() const { return active_player; }
 	uint8 get_active_player_nr() const { return active_player_nr; }
 	void switch_active_player(uint8 nr, bool silent);
@@ -968,7 +979,7 @@ public:
 	bool is_player_password_set(uint8 player_nr) const;
 
 	/// network client only: store password-set state received from the server
-	void set_player_password_set_bits(uint16 bits) { player_password_set_bits = bits; }
+	void set_player_password_set_bits(uint64 bits) { player_password_set_bits = bits; }
 
 	/**
 	 * Network safe initiation of new and deletion of players, change freeplay.
@@ -1565,6 +1576,10 @@ public:
 	void add_convoi(convoihandle_t);
 	void rem_convoi(convoihandle_t);
 	vector_tpl<convoihandle_t> const& convoys() const { return convoi_array; }
+
+	// rescales the stored CONVOI_DISTANCE_METERS/LINE_DISTANCE_METERS history for all convois and
+	// lines by new_tile_length/old_tile_length; called whenever the tile_length setting changes
+	void recalc_distance_new_records(sint32 old_tile_length, sint32 new_tile_length);
 
 	void load_convoy_templates();
 	const vector_tpl<convoi_template_t>& get_convoy_templates() const { return convoy_templates; }

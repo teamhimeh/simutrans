@@ -32,6 +32,13 @@
 #define NEVER 0xFFFFU
 
 
+// TODO: define the actual default value for tile_length
+sint32 settings_t::calc_default_tile_length()
+{
+	return 1000;
+}
+
+
 settings_t::settings_t() :
 	filename(""),
 	heightfield("")
@@ -63,6 +70,8 @@ settings_t::settings_t() :
 
 	world_maximum_height = 32;
 	world_minimum_height = -12;
+
+	tile_length = calc_default_tile_length();
 
 	// default climate zones
 	set_default_climates( );
@@ -256,6 +265,8 @@ settings_t::settings_t() :
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
+	penalty_wait_for_two_month = false;
+	base_revenue_from_halt = 0;
 
 	// stop buildings
 	cst_multiply_dock=-50000;
@@ -349,6 +360,11 @@ settings_t::settings_t() :
 	allow_elevated_way_over_others_halt = false;
 
 	use_route_cache = false;
+
+	transit_by_foot = false;
+	foot_path_weight = 24;
+	foot_path_time_ticks = 1800;
+	walk_cost_to_halt = false;
 }
 
 
@@ -671,7 +687,9 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_str(language_code_names, lengthof(language_code_names) );
 
 			// restore AI state
-			for(  int i=0;  i<15;  i++  ) {
+			const int old_player_type_count = 15;
+			const int player_type_count = file->get_OTRP_version() < 59 ? old_player_type_count : MAX_PLAYER_COUNT-1;
+			for(  int i=0;  i<player_type_count;  i++  ) {
 				if(file->is_version_less(122,1)) {
 					bool player_active = true;
 					file->rdwr_bool(player_active);
@@ -680,6 +698,11 @@ void settings_t::rdwr(loadsave_t *file)
 				if(  file->is_version_less(102, 3)  ) {
 					char dummy[2] = { 0, 0 };
 					file->rdwr_str(dummy, lengthof(dummy) );
+				}
+			}
+			if(  file->is_loading()  &&  player_type_count < MAX_PLAYER_COUNT-1  ) {
+				for(  int i=player_type_count;  i<MAX_PLAYER_COUNT-1;  i++  ) {
+					player_type[i] = player_t::EMPTY;
 				}
 			}
 
@@ -859,9 +882,17 @@ void settings_t::rdwr(loadsave_t *file)
 
 		if(  file->is_version_atleast(110, 1)  ) {
 			file->rdwr_bool( default_player_color_random );
-			for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			const int old_player_count = 16;
+			const int player_count = file->get_OTRP_version()<59 ? old_player_count : MAX_PLAYER_COUNT;
+			for(  int i=0;  i<player_count;  i++  ) {
 				file->rdwr_byte( default_player_color[i][0] );
 				file->rdwr_byte( default_player_color[i][1] );
+			}
+			if(  file->is_loading()  &&  player_count<MAX_PLAYER_COUNT  ) {
+				for(  int i=player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+					default_player_color[i][0] = 255;
+					default_player_color[i][1] = 255;
+				}
 			}
 		}
 		else if(  file->is_loading()  ) {
@@ -1106,6 +1137,29 @@ void settings_t::rdwr(loadsave_t *file)
 			allow_unlock_by_public = true;
 			allow_elevated_way_over_others_halt = false;
 			overloaded_acceleration = false;
+		}
+		if(  file->get_OTRP_version() >= 58  ) {
+			file->rdwr_bool(transit_by_foot);
+			file->rdwr_long(foot_path_weight);
+			file->rdwr_long(foot_path_time_ticks);
+			file->rdwr_bool(walk_cost_to_halt);
+		} else {
+			transit_by_foot = false;
+			foot_path_weight = 24;
+			foot_path_time_ticks = 1800;
+			walk_cost_to_halt = false;
+		}
+		if(  file->get_OTRP_version() >= 59  ) {
+			file->rdwr_bool(penalty_wait_for_two_month);
+			file->rdwr_long(base_revenue_from_halt);
+		} else {
+			penalty_wait_for_two_month = false;
+			base_revenue_from_halt = 0;
+		}
+		if(  file->get_OTRP_version() >= 60  ) {
+			file->rdwr_long(tile_length);
+		} else {
+			tile_length = calc_default_tile_length();
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1444,6 +1498,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
+	penalty_wait_for_two_month     = contents.get_int( "penalty_wait_for_two_month",     penalty_wait_for_two_month ) != 0;
+	base_revenue_from_halt = contents.get_int( "base_revenue_from_halt", base_revenue_from_halt );
 
 	env_t::use_old_friction		   = contents.get_int( "use_old_friction",				 env_t::use_old_friction ) != 0;
 
@@ -1950,6 +2006,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	world_maximum_height = contents.get_int_clamped("world_maximum_height", world_maximum_height, 16, 127);
 	world_minimum_height = contents.get_int_clamped("world_minimum_height", world_minimum_height, -127, -12);
 
+	tile_length = contents.get_int("tile_length", tile_length);
+
 	citycar_max_look_forward = contents.get_int("citycar_max_look_forward", citycar_max_look_forward);
 	citycar_route_weight_crowded = contents.get_int("citycar_route_weight_crowded", citycar_route_weight_crowded);
 	citycar_route_weight_vacant = contents.get_int("citycar_route_weight_vacant", citycar_route_weight_vacant);
@@ -1973,6 +2031,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	base_waiting_ticks_for_road_convoi = contents.get_int("base_waiting_ticks_for_road_convoi", base_waiting_ticks_for_road_convoi);
 	base_waiting_ticks_for_ship_convoi = contents.get_int("base_waiting_ticks_for_ship_convoi", base_waiting_ticks_for_ship_convoi);
 	base_waiting_ticks_for_air_convoi = contents.get_int("base_waiting_ticks_for_air_convoi", base_waiting_ticks_for_air_convoi);
+
+	transit_by_foot       = contents.get_int("transit_by_foot",       transit_by_foot) != 0;
+	foot_path_weight      = contents.get_int("foot_path_weight",      foot_path_weight);
+	foot_path_time_ticks  = contents.get_int("foot_path_time_ticks",  foot_path_time_ticks);
+	walk_cost_to_halt     = contents.get_int("walk_cost_to_halt",     walk_cost_to_halt) != 0;
 
 	// Default pak file path
 	objfilename = ltrim(contents.get_string("pak_file_path", objfilename.c_str() ) );

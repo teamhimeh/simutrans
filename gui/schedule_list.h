@@ -23,6 +23,7 @@
 #include "halt_list_frame.h"
 #include "../simline.h"
 #include "../descriptor/goods_desc.h"
+#include "../dataobj/route.h"
 
 class player_t;
 
@@ -41,6 +42,11 @@ private:
 	button_t bt_new_line, bt_edit_line, bt_delete_line, bt_withdraw_line, bt_teleport_line_to_depot;
 	button_t bt_copy_line, bt_show_journey_time, bt_goods_waiting_time;
 	button_t bt_copy_data;
+	button_t bt_show_route_cache;
+	bool is_route_cache_show;
+	route_t route_cache_route;
+	void show_route_cache(bool yesno);
+	static void hide_route_display(void *owner);
 	gui_scrolled_list_t scl, scrolly_convois, scrolly_haltestellen;
 	gui_speedbar_t filled_bar;
 	button_t bt_colour_line;
@@ -61,6 +67,7 @@ private:
 
 	// only show schedules containing ...
 	char schedule_filter[512], old_schedule_filter[512];
+	button_t bt_memo_filter;
 
 	// so even japanese can have long enough names ...
 	char line_name[512], old_line_name[512];

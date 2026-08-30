@@ -1271,6 +1271,7 @@ void vehicle_t::hop(grund_t* gr)
 			}
 			convoihandle_t c = cnv->self;
 			while(  c.is_bound()  ) {
+				c->allow_other_convoy_to_depart(haltestelle_t::get_stoppable_halt(cnv->get_schedule()->get_current_entry().pos, c->get_owner(), get_waytype()));
 				if(c->get_schedule()->get_current_entry().is_reverse_convoy()) {
 					c->reverse_vehicles_on_user_request();
 				}
@@ -2042,6 +2043,10 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 						snprintf( states_text, states_text_size, translator::translate("Waiting for schedule. %i left!"), time_remain);
 					}
 				}
+				else if(  cnv->is_waiting_for_departure_allowance()  ) {
+					// the convoy is waiting for departure allowance granted by another convoy.
+					tstrncpy( states_text, translator::translate("Waiting for departure allowance!"), lengthof(states_text) );
+				}
 				else if(  cnv->is_waiting_for_coupling()  ) {
 					// the convoy is waiting for coupling.
 					convoihandle_t c = cnv->self;
@@ -2387,7 +2392,7 @@ bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 			if(  rs->get_desc()->get_min_speed()>0  &&  rs->get_desc()->get_min_speed()>kmh_to_speed(get_desc()->get_topspeed())  ) {
 				return false;
 			}
-			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & (1<<get_owner_nr()) ) == 0  ) {
+			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
 				// private road
 				return false;
 			}
@@ -2507,6 +2512,12 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 
 	// eventually shift position to take care of overtaking
 	if(cnv) {
+		// first we set reversing images
+		if(  cnv->is_reversed()  ) {
+			xoff -= tile_raster_scale_x( env_t::driveleft_base_offsets[dir][0], raster_width );
+			yoff -= tile_raster_scale_y( env_t::driveleft_base_offsets[dir][1], raster_width );				
+		}
+
 		if(  welt->lookup(get_pos()) && welt->lookup(get_pos())->get_weg(get_waytype())  ) {
 		xoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),true,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
 		yoff += vehicle_offset_defined_by_way(dir,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset(),false,welt->lookup(get_pos())->get_weg(get_waytype())->get_vehicle_offset_mode(), raster_width);
@@ -2530,6 +2541,34 @@ bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_dire
 	if(  cnv->get_schedule_target()!=koord3d::invalid  ) {
 		// destination is a waypoint!
 		return true;
+	}
+
+	// check, if there is another choose signal or end_of_choose on the route
+	for(  uint32 idx=index+1;  idx<cnv->get_route()->get_count();  idx++  ) {
+		koord3d temp_pos = cnv->get_route()->at(idx);
+		grund_t *gr = welt->lookup(temp_pos);
+		if(  gr==0  ) {
+			return false;
+		}
+		weg_t *way = gr->get_weg(get_waytype());
+		if(  way==0  ) {
+			return false;
+		}
+		if(  way->has_sign()  ) {
+			roadsign_t *rs = gr->find<roadsign_t>();
+			// check end of choose
+			if(  rs  &&  rs->get_desc()->get_wtyp()==get_waytype()  ) {
+				if(  (rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA ) ) {	
+					return true;
+				}
+			}
+			// check next choose sign
+			if(  rs  &&  idx<cnv->get_route()->get_count()-1  ) {
+				if(  rs->is_free_route(ribi_type(temp_pos, cnv->get_route()->at(idx+1))) ) {
+					return true;
+				}
+			}
+		}
 	}
 
 	// are we heading to a target?
@@ -2677,15 +2716,20 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 
 		// When overtaking_mode changes from inverted_mode to others, no cars blocking must work as the convoi is on traffic lane. Otherwise, no_cars_blocking cannot recognize vehicles on the traffic lane of the next tile.
 		//next_lane = -1 does NOT mean that the vehicle must go traffic lane on the next tile.
+		// Skip this traffic-lane-forcing computation entirely while a road vehicle is departing by
+		// physically reversing in the opposite direction: it was deliberately placed on the
+		// overtaking lane in vorfahren(), and this logic has no notion of that intent.
 		const strasse_t* current_str = (strasse_t*)(welt->lookup(get_pos())->get_weg(road_wt));
-		if(  current_str  &&  current_str->get_overtaking_mode()==inverted_mode  ) {
-			if(  str->get_overtaking_mode()<inverted_mode  ) {
+		if(  !cnv->is_reversing_lane_hold()  ) {
+			if(  current_str  &&  current_str->get_overtaking_mode()==inverted_mode  ) {
+				if(  str->get_overtaking_mode()<inverted_mode  ) {
+					next_lane = -1;
+				}
+			}
+
+			if(  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
 				next_lane = -1;
 			}
-		}
-
-		if(  current_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  ) {
-			next_lane = -1;
 		}
 
 		vehicle_base_t *obj = NULL;
@@ -2766,7 +2810,6 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 							if(  test_index-route_index==0  ) this_direction = get_90direction();
 							if(  test_index-route_index==1  ) this_direction = get_next_90direction();
 							if(  ribi_t::reverse_single(this_direction) == other_direction  ) {
-								//printf("%s: crash avoid. (%d,%d)\n", cnv->get_name(), get_pos().x, get_pos().y);
 								cnv->set_tiles_overtaking(0);
 							}
 						}
@@ -3208,6 +3251,18 @@ overtaker_t* road_vehicle_t::get_overtaker()
 	return cnv;
 }
 
+bool road_vehicle_t::can_return_to_traffic_lane()
+{
+	const grund_t* gr = welt->lookup(get_pos());
+	strasse_t* str = gr ? (strasse_t*)gr->get_weg(road_wt) : NULL;
+	if(  !str  ||  str->get_overtaking_mode() > oneway_mode  ) {
+		// the same restriction the tiles_overtaking==1 branch of enter_tile() has.
+		return false;
+	}
+	return cnv->get_lane_affinity() != 1  &&  other_lane_blocked() == NULL  &&  !str->is_reserved_by_others(this, false, pos_prev, pos_next);
+}
+
+
 vehicle_base_t* road_vehicle_t::other_lane_blocked(const bool only_search_top, sint8 offset) const{
 	// This function calculate whether the convoi can change lane.
 	// only_search_top == false: check whether there's no car in -1 ~ +1 section.
@@ -3325,6 +3380,25 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 	}
 	if(  leading  ){
 		cnv->update_tiles_overtaking();
+		// The lane forced by a physical reversal in vorfahren() has to last while the convoy is still
+		// in the stop it reversed in: on a stop longer than one tile it is otherwise merging back
+		// into the traffic lane inside the station, i.e. jumping sideways between platform tiles.
+		// The test is on pos_next, not on the tile entered: the lane may be changed on the tile
+		// right behind the halt, so the countdown - and with it the lane-change safety check below -
+		// has to be released already when entering the last tile of the halt. (vorfahren() arms the
+		// hold after it has re-placed its vehicles, so no repositioning enter_tile() consumes it.)
+		if(  cnv->is_reversing_lane_hold()  ) {
+			// both tiles must belong to the same halt: the entered one, so that the hold ends as soon
+			// as the convoy is out on the road (the next tile may well be the following stop of the
+			// route, which must not re-arm anything), and pos_next, so that it ends one tile early.
+			const grund_t* gr_next = welt->lookup(pos_next);
+			if(  cnv->is_overtaking()  &&  gr_next  &&  gr->get_halt().is_bound()  &&  gr->get_halt()==gr_next->get_halt()  ) {
+				cnv->set_tiles_overtaking( cnv->calc_reversing_lane_tiles() );
+			}
+			else {
+				cnv->set_reversing_lane_hold(false);
+			}
+		}
 		if(  next_lane==1  ) {
 			cnv->set_tiles_overtaking(3);
 			next_lane = 0;
@@ -3653,7 +3727,7 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 				// below speed limit
 				return false;
 			}
-			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & (1<<get_owner_nr()) ) == 0  ) {
+			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
 				// private road
 				return false;
 			}
@@ -3692,6 +3766,16 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 		if(  sch->can_reserve(cnv->self)  ) {
 			return true;
 		}
+		// Tile reserved by another convoy: allow it into the A* queue if the approach
+		// direction is compatible with a non-conflicting opposite-bend co-reservation.
+		// check_transit_tile (called when expanding FROM this tile) will then validate
+		// the exact entry+exit corner_set before any conflicting transit is queued.
+		if(  prev != koord3d::invalid  ) {
+			const ribi_t::ribi entry = ribi_t::backward(ribi_type(prev, bd->get_pos()));
+			if(  sch->can_co_reserve_approach(entry)  ) {
+				return true;
+			}
+		}
 		if(  coupling  ) {
 			// see if the blocking vehicle is waiting for coupling.
 			for(  uint8 pos=1;  pos<(volatile uint8)bd->get_top();  pos++  ) {
@@ -3712,6 +3796,25 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 	}
 
 	return true;
+}
+
+
+// Called by intern_calc_route_chooseable when both the entry and exit directions
+// through tile 'gr' are known.  Returns false only during choose-area routing
+// when the tile is reserved by a different convoy and this specific transit
+// (corner_set = backward(ribi_from) | exit) would conflict with that reservation.
+// Non-conflicting opposite bends (NE+SW, NW+SE) return true.
+bool rail_vehicle_t::check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_from, ribi_t::ribi exit) const
+{
+	if(  !target_halt.is_bound()  ||  ribi_from == ribi_t::none  ) {
+		return true;
+	}
+	schiene_t const* const sch = obj_cast<schiene_t>(gr->get_weg(get_waytype()));
+	if(  !sch  ||  !sch->is_reserved()  ||  sch->can_reserve(cnv->self)  ) {
+		return true;
+	}
+	const ribi_t::ribi corner_set = ribi_t::backward(ribi_from) | exit;
+	return sch->can_co_reserve_with(corner_set);
 }
 
 
@@ -4208,6 +4311,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 	// parse to next signal; if needed recurse, since we allow cascading
 	uint16 next_signal, next_crossing;
 
+	// Where we were told to stop before this check began. can_enter_tile() re-checks a priority
+	// signal on every tile while the convoy is next to it, so we get here again after
+	// can_enter_tile() has already requested the crossing behind the signal and moved the stop
+	// point past it -- and the recursive is_signal_clear() below overwrites next_stop_index, so
+	// afterwards there is no way to tell that apart. Remember it now.
+	const uint16 stop_index_before = cnv->get_next_stop_index();
+
 	if(  block_reserver( cnv->get_route(), next_block+1, next_signal, next_crossing, 0, true, false )  ) {
 		if(  next_signal == route_t::INVALID_INDEX  ||  cnv->get_route()->at(next_signal) == cnv->get_route()->back()  ) {
 			// ok, end of route => we can go
@@ -4221,7 +4331,13 @@ bool rail_vehicle_t::is_priority_signal_clear(signal_t *sig, uint16 next_block, 
 			// ok, the next signal is clear
 			sig->set_state( roadsign_t::STATE_GREEN );
 			// Only shorten next_stop_index when a crossing requires an earlier stop.
-			if(  next_crossing < cnv->get_next_stop_index() - 1  ) {
+			// A crossing that already lay behind stop_index_before-1 is one can_enter_tile()
+			// has requested and moved us past; braking for it again would undo that advance on
+			// every re-check and hold the convoy inside the brake countdown all the way over
+			// the crossing. Reached from can_enter_tile()'s block_reserver path this changes
+			// nothing: there stop_index_before-1 is next_block, and block_reserver() starts at
+			// next_block+1, so next_crossing is always beyond it.
+			if(  next_crossing+1 >= stop_index_before  &&  next_crossing < cnv->get_next_stop_index() - 1  ) {
 				cnv->set_next_stop_index( next_crossing );
 			}
 			return true;
@@ -4328,8 +4444,8 @@ bool rail_vehicle_t::is_next_tile_already_reserved(uint16 index)
 		// no way
 		return false;
 	}
-	// if the next tile is reserved by us, ok!
-	return cnv->self == w->get_reserved_convoi();
+	// if the next tile is reserved by us (primary or co-reserved), ok!
+	return w->is_reserved_by(cnv->self);
 }
 
 
@@ -4634,15 +4750,22 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 					next_signal_index = i;
 				}
 			}
-			if(  !sch1->reserve( cnv->self, ribi_type( route->at(max(1u,i)-1u), route->at(min(route->get_count()-1u,i+1u)) ) )  ) {
-				success = false;
-			}
-			if (gr->has_two_ways()) {
-				// we may need to reserve the other way as well
-				if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
-					// the other way is reservable too => try to reserve it
-					if (!sch0->reserve(cnv->self, ribi_type(route->at(max(1u, i) - 1u), route->at(min(route->get_count() - 1u, i + 1u))))) {
-						success = false;
+			{
+				// corner_set = entry_border | exit_border; correctly identifies which corner of the
+				// tile a turning train occupies, enabling safe co-reservation of opposite corners.
+				const ribi_t::ribi corner_set =
+					ribi_t::backward(ribi_type(route->at(max(1u,i)-1u), pos))
+					| ribi_type(pos, route->at(min(route->get_count()-1u,i+1u)));
+				if(  !sch1->reserve( cnv->self, corner_set )  ) {
+					success = false;
+				}
+				if (gr->has_two_ways()) {
+					// we may need to reserve the other way as well
+					if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
+						// the other way is reservable too => try to reserve it
+						if (!sch0->reserve(cnv->self, corner_set)) {
+							success = false;
+						}
 					}
 				}
 			}
@@ -4832,7 +4955,9 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				grund_t* grn = welt->lookup(route->at(h));
 				schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
 				if(  schn  ) {
-					schn->reserve( cnv->self, ribi_type(route->at(max(1u,h)-1u), route->at(min(route->get_count()-1u,h+1u))) );
+					schn->reserve( cnv->self,
+					ribi_t::backward(ribi_type(route->at(max(1u,h)-1u), route->at(h)))
+					| ribi_type(route->at(h), route->at(min(route->get_count()-1u,h+1u))) );
 				}
 			}
 			return true;
@@ -4861,6 +4986,7 @@ void rail_vehicle_t::leave_tile()
 			if(sch0) {
 				// first, we check other vehicles on the same tile (e.g. uncoupling here)
 				convoihandle_t other_convoy;
+				ribi_t::ribi other_convoy_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
 					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
@@ -4869,11 +4995,20 @@ void rail_vehicle_t::leave_tile()
 					}
 					// other convoy exist!
 					other_convoy = v->get_convoi()->self;
+					const uint16 current_stop = v->get_route_index();
+					other_convoy_dir =
+					ribi_t::backward(ribi_type(other_convoy->get_route()->at(max(2u,current_stop)-2u), get_pos()))
+					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count()-1u,current_stop)));
 				}
-				sch0->unreserve(this);
+				// Use convoy handle so co-reserved convoys are correctly identified:
+				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
+				// unreserve(vehicle_t*) always cleared the primary slot regardless of which
+				// convoy this vehicle belongs to — causing spurious promotion/clearing bugs.
+				const convoihandle_t self_cnv = cnv ? cnv->get_most_parent_convoi() : convoihandle_t();
+				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
-					sch0->reserve(other_convoy,ribi_t::none);
+					sch0->reserve(other_convoy->get_most_parent_convoi(),other_convoy_dir);
 				}
 				// tell next signal?
 				// and switch to red
@@ -4891,7 +5026,7 @@ void rail_vehicle_t::leave_tile()
 					// we may need to reserve the other way as well
 					if (schiene_t* sch1 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch0))) {
 						// the other way is reservable too => unreserve it
-						sch1->unreserve(this);
+						sch1->unreserve(self_cnv);
 					}
 				}
 			}
@@ -5022,7 +5157,7 @@ bool water_vehicle_t::check_next_tile(const grund_t *bd,const bool) const
 				// below speed limit
 				return false;
 			}
-			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & (1<<get_owner_nr()) ) == 0  ) {
+			if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
 				// private road
 				return false;
 			}
@@ -5072,6 +5207,49 @@ bool water_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, u
 			if(!cr->request_crossing(this)) {
 				restart_speed = 0;
 				return false;
+			}
+		}
+
+		// TRY_COUPLING: wait 1 tile before the stop until the waiting convoy is present.
+		if(  cnv  &&  cnv != (convoi_t*)1  ) {
+			schedule_t *sched = cnv->get_schedule();
+			if(  sched  &&  sched->get_current_entry().is_try_coupling()  &&  !cnv->get_convoi_coupling_in_progress().is_bound()  ) {
+				const route_t *route = cnv->get_route();
+				if(  !route->empty()  &&  gr->get_pos() == route->back()  ) {
+					// about to enter the coupling destination tile; block until waiting convoy arrives
+					// Water convoys may be uncoupled and waiting anywhere reachable in the same
+					// body of water at this halt, not necessarily on this exact tile, so search the
+					// halt's loading convoy list instead of the tile's objects.
+					bool found_waiting = false;
+					halthandle_t halt = haltestelle_t::get_stoppable_halt(gr->get_pos(), cnv->get_owner(), water_wt);
+					if(  halt.is_bound()  ) {
+						if(  !cnv->is_waiting()  ||  halt->get_loading_convois().get_count()==0  ) {
+							// we check coupling target in step. return false
+							restart_speed = 0;
+							return false;
+						}
+						FOR(  vector_tpl<convoihandle_t>, const cc, halt->get_loading_convois()  ) {
+							if(  !cc.is_bound()  ||  !cnv->can_start_coupling(cc.get_rep())  ||  !cc->is_loading()  ) {
+								continue;
+							}
+							if(  cc->get_convoi_coupling_in_progress().is_bound()  &&  cc->get_convoi_coupling_in_progress()!=cnv->self  ) {
+								continue;
+							}
+							if(  !cnv->is_same_waterway(cc)  ) {
+								continue;
+							}
+							dbg->message("water_vehicle_t::can_enter_tile()","%s finds coupling target %s", cnv->get_name(), cc->get_name());
+							found_waiting = true;
+							cc->set_convoi_coupling_in_progress(cnv->self);
+							cnv->self->set_convoi_coupling_in_progress(cc);
+							break;
+						}
+					}
+					if(  !found_waiting  ) {
+						restart_speed = 0;
+						return false;
+					}
+				}
 			}
 		}
 	}
@@ -5604,6 +5782,32 @@ bool air_vehicle_t::block_reserver( uint32 start, uint32 end, bool reserve ) con
 	const route_t *route = cnv->get_route();
 	if(route->empty()) {
 		return false;
+	}
+
+	if(  reserve  &&  route_index<takeoff  ) {
+		// Make sure the taxiway between our current position and the runway is
+		// clear of other convois' aircraft before granting the reservation.
+		// Without this, reservations re-acquired after loading a savegame (or
+		// granted purely by call order) could let a convoi further from the
+		// runway "overtake" one that is still on the taxiway ahead of it.
+		uint32 from = min( route_index, start );
+		uint32 to = max( route_index, start );
+		for(  uint32 i=from;  i<=to  &&  i<route->get_count();  i++  ) {
+			grund_t *gr = welt->lookup(route->at(i));
+			if(  !gr  ) {
+				continue;
+			}
+			for(  uint8 j=1;  j<gr->get_top();  j++  ) {
+				obj_t *obj = gr->obj_bei(j);
+				if(  obj  &&  obj->get_typ()==obj_t::air_vehicle  ) {
+					air_vehicle_t *other = (air_vehicle_t *)obj;
+					if(  other!=this  &&  other->get_convoi()!=cnv  &&  other->is_on_ground()  ) {
+						// taxiway not clear yet - do not grab the runway ahead of them
+						return false;
+					}
+				}
+			}
+		}
 	}
 
 	for(  uint32 i=start;  success  &&  i<end  &&  i<route->get_count();  i++) {

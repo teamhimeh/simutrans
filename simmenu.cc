@@ -680,6 +680,12 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 	tabfileobj_t contents;
 	menuconf.read(contents);
 
+	// pak-specific icon size overrides the theme default; width is always equal
+	// to height, so only icon_height is read (icon_width in menuconf.tab, if present, is ignored).
+	// once set here, later theme (re)loads must not reset it back to the theme's icon_width
+	env_t::iconsize.h = env_t::iconsize.w = contents.get_int_clamped("icon_height", env_t::iconsize.h, 0, 64);
+	env_t::iconsize_set_by_pak = true;
+
 	// structure to hold information for iterating through different tool types
 	struct tool_class_info_t {
 		const char* type;
@@ -1442,8 +1448,12 @@ const char *two_click_tool_t::move(player_t *player, uint16 buttonstate, koord3d
 
 	if(  start == pos  ) {
 		if(tool_build_way_t* t = dynamic_cast<tool_build_way_t*>(this)) {
-			// This is tool_build_way_t. The mode selection window should not be called.
-			t->init( player, true );
+			// With ctrl held, dragging back onto the start tile is kept as a pending
+			// one-tile way build instead of being cancelled/restarted.
+			if(  !is_ctrl_pressed()  ) {
+				// This is tool_build_way_t. The mode selection window should not be called.
+				t->init( player, true );
+			}
 		} else if(tool_build_bridge_t* tb = dynamic_cast<tool_build_bridge_t*>(this)) {
 			// This is tool_build_bridge_t. The mode selection window should not be called.
 			tb->init( player, true );

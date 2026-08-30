@@ -185,7 +185,7 @@ void obj_t::rdwr(loadsave_t *file)
 	file->rdwr_byte(byte);
 	yoff = (sint8)(((sint16)byte*OBJECT_OFFSET_STEPS)/16);
 	byte = owner_n;
-	file->rdwr_byte(byte);
+	file->rdwr_player_nr(byte);
 	owner_n = byte;
 }
 

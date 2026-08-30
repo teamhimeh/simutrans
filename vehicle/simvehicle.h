@@ -562,6 +562,11 @@ public:
 	virtual vehicle_base_t* other_lane_blocked(const bool only_search_top = false, sint8 offset = 0) const;
 	virtual vehicle_base_t* other_lane_blocked_offset() const { return other_lane_blocked(false,1); }
 
+	// Is the traffic lane free on the tile this vehicle is standing on? Same test as the
+	// tiles_overtaking==1 branch of enter_tile(), for callers that have to decide about the lane
+	// without a tile entry to hook on - see convoi_t::vorfahren().
+	bool can_return_to_traffic_lane();
+
 	void refresh();
 
 	void unreserve_all_tiles();
@@ -581,6 +586,7 @@ protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE { return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid); }
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE { return check_next_tile(bd, need_electric, false, false, koord3d::invalid); }
 	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd, false, false, false, koord3d::invalid); }
+	bool check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_from, ribi_t::ribi exit) const OVERRIDE;
 	void enter_tile(grund_t*) OVERRIDE;
 
 	bool is_pre_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);

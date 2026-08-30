@@ -1515,6 +1515,45 @@ void haltestelle_t::new_month()
 			}
 		}
 	}
+
+}
+
+
+void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
+{
+	const sint32 base = welt->get_settings().get_base_revenue_from_halt();
+	if(  base <= 0  ||  boarded_pax == 0  ) {
+		return;
+	}
+	if(  is_overcrowded( goods_manager_t::passengers->get_index() )  ) {
+		return;
+	}
+	// Sum level contributions only from buildings that can handle passengers
+	// (enabled == NOT_ENABLED means all goods; enabled & PAX means explicitly passenger-capable).
+	// Buildings that only handle post or freight are excluded.
+	sint32 capacity_factor = 0;
+	FOR(slist_tpl<tile_t>, const& t, tiles) {
+		if(  gebaeude_t* const gb = t.grund->find<gebaeude_t>()  ) {
+			const building_desc_t *desc = gb->get_tile()->get_desc();
+			if(  desc  ) {
+				const uint8 enabled = desc->get_enabled();
+				if(  enabled == NOT_ENABLED  ||  (enabled & PAX)  ) {
+					sint32 lv = (sint32)desc->get_level() - 3;
+					if(  lv > 0  ) { capacity_factor += min(lv / 2 + 1, 2); }
+				}
+			}
+		}
+		// we set max value of revenue
+		if(  capacity_factor>=50  ) {
+			capacity_factor = 50;
+			break;
+		}
+	}
+	if(  capacity_factor > 0  ) {
+		sint64 revenue = (sint64)base * capacity_factor * (sint64)boarded_pax / 10000;
+		owner->book_revenue( revenue, get_basis_pos(), ignore_wt, goods_manager_t::passengers->get_index() );
+		financial_history[0][HALT_REVENUE] += revenue;
+	}
 }
 
 
@@ -1582,6 +1621,13 @@ bool haltestelle_t::reroute_goods(sint16 &units_remaining)
 				fabrik_t::update_transit( &goods, false);
 				ware = warray->erase(ware);
 			}
+			else if(  try_foot_transit(goods)  ) {
+				// The (re-)routed next hop is a walking connection. No vehicle ever fetches
+				// ware bound for a foot-only leg, so it must be walked immediately here rather
+				// than left queued forever. try_foot_transit() has already forwarded it to the
+				// next halt's own waiting queue, so drop our (now stale) copy of it.
+				ware = warray->erase(ware);
+			}
 			else {
 				warray->update_index(ware);
 				ware++;
@@ -1637,13 +1683,13 @@ void haltestelle_t::reconnect_factories()
 }
 
 
-void haltestelle_t::set_permissions(uint16 perms)
+void haltestelle_t::set_permissions(uint64 perms)
 {
 	if(  !owner  ||  owner->is_public_service()  ) {
-		permissions = 0xFFFF;
+		permissions = ~(uint64)0;
 	}
 	else {
-		permissions = perms | (1 << owner->get_player_nr());
+		permissions = perms | ((uint64)1 << owner->get_player_nr());
 	}
 	if(  rebuilt_schedule_registration()  ) {
 		welt->set_schedule_counter();
@@ -1966,6 +2012,117 @@ sint32 haltestelle_t::rebuild_connections()
 			(consecutive_halts[i].get_count() != max_consecutive_halts_schedule[i]  ||
 			force_transfer_search);
 	}
+
+	// Add foot-path connections: pax can walk between overlapping nearby stops.
+	// Only for the pax category, never for mail or goods.
+	// Scan tiles within coverage area directly rather than iterating all halts.
+	if(  welt->get_settings().is_transit_by_foot()  &&  is_enabled(goods_manager_t::INDEX_PAS)  ) {
+		const uint16 cov = welt->get_settings().get_station_coverage();
+
+		// Per-candidate tracking: for each nearby halt, keep the tile pair that
+		// minimises Manhattan walk distance + height difference (= total walk cost).
+		struct foot_candidate_t {
+			halthandle_t halt;
+			uint16 walk_d;  // Manhattan 2D distance of best tile pair
+			uint16 z_diff;  // height difference of best tile pair
+		};
+		vector_tpl<foot_candidate_t> candidates;
+
+		for(  auto const &my_tile : tiles  ) {
+			const koord3d my_pos3d = my_tile.grund->get_pos();
+			const koord    my_pos  = my_pos3d.get_2d();
+
+			for(  sint16 dy = -(sint16)cov;  dy <= (sint16)cov;  dy++  ) {
+				for(  sint16 dx = -(sint16)cov;  dx <= (sint16)cov;  dx++  ) {
+					// Eligibility: Chebyshev distance (square coverage area).
+					if(  max( abs(dx), abs(dy) ) > (sint16)cov  ) { continue; }
+
+					const planquadrat_t *plan = welt->access( my_pos + koord(dx, dy) );
+					if(  !plan  ) { continue; }
+
+					for(  uint8 i = 0;  i < plan->get_boden_count();  i++  ) {
+						const grund_t *gr = plan->get_boden_bei(i);
+						const halthandle_t other_halt = gr->get_halt();
+						if(  !other_halt.is_bound()  ||  other_halt == self  ) { continue; }
+						if(  !other_halt->is_enabled(goods_manager_t::INDEX_PAS)  ) { continue; }
+
+						const uint16 walk_d = (uint16)( abs(dx) + abs(dy) );
+						const uint16 z_diff = (uint16)abs( my_pos3d.z - gr->get_pos().z );
+
+						// Update or insert candidate entry for this halt.
+						bool found = false;
+						for(  uint32 ci = 0;  ci < candidates.get_count();  ci++  ) {
+							if(  candidates[ci].halt == other_halt  ) {
+								if(  walk_d + z_diff < candidates[ci].walk_d + candidates[ci].z_diff  ) {
+									candidates[ci].walk_d = walk_d;
+									candidates[ci].z_diff = z_diff;
+								}
+								found = true;
+								break;
+							}
+						}
+						if(  !found  ) {
+							foot_candidate_t fc;
+							fc.halt   = other_halt;
+							fc.walk_d = walk_d;
+							fc.z_diff = z_diff;
+							candidates.append(fc);
+						}
+					}
+				}
+			}
+		}
+
+		// Returns true if a (non-foot) connection is actually served by at least one convoy right
+		// now. A line with zero convoys (all sold/removed but the line itself kept) offers no real
+		// transport, so it must not keep blocking the walking fallback between two close halts.
+		auto real_connection_is_active = [](const connection_t &c) -> bool {
+			if(  std::holds_alternative<linehandle_t>(c.best_weight_traveler)  ) {
+				const linehandle_t line = std::get<linehandle_t>(c.best_weight_traveler);
+				return line.is_bound()  &&  line->count_convoys() > 0;
+			}
+			if(  std::holds_alternative<convoihandle_t>(c.best_weight_traveler)  ) {
+				return std::get<convoihandle_t>(c.best_weight_traveler).is_bound();
+			}
+			return false;
+		};
+
+		// Build connections for all candidates found in the coverage area.
+		const uint32 base_rc = welt->get_settings().get_foot_path_weight();
+		const uint32 base_jt = welt->get_settings().get_foot_path_time_ticks();
+		const bool time_based = welt->get_settings().get_time_based_routing_enabled(goods_manager_t::INDEX_PAS);
+		for(  uint32 ci = 0;  ci < candidates.get_count();  ci++  ) {
+			const foot_candidate_t &fc = candidates[ci];
+			const uint32 dist = (uint32)(fc.walk_d > 0 ? fc.walk_d : 1u) + fc.z_diff;
+			const uint32 aggregate_weight = time_based ? base_jt * dist : base_rc * dist;
+			connection_t foot_conn(fc.halt, aggregate_weight, linehandle_t());
+			foot_conn.is_foot_path = true;
+			connection_t *const existing = staged_all_links[goods_manager_t::INDEX_PAS].connections.insert_unique_ordered(
+				foot_conn, connection_t::compare);
+			if(  existing  &&  !existing->is_foot_path  &&  !real_connection_is_active(*existing)  ) {
+				// The existing "real" connection is actually served by no convoy right now
+				// (e.g. all convoys on that line were sold) - fall back to walking.
+				existing->weight              = aggregate_weight;
+				existing->is_foot_path         = true;
+				existing->best_weight_traveler = linehandle_t();
+			}
+			// Never let a walking leg overwrite an already-known, actively-served vehicle
+			// connection between this pair of halts, even if the walk cost looks cheaper.
+			else if(  existing  &&  existing->is_foot_path  &&  aggregate_weight < existing->weight  ) {
+				existing->weight = aggregate_weight;
+			}
+		}
+
+		// Any halt with foot connections must be a transfer point so Dijkstra will explore
+		// it as an intermediate hop, even if it carries only one vehicle line.
+		FOR(vector_tpl<connection_t>, const& c, staged_all_links[goods_manager_t::INDEX_PAS].connections) {
+			if(  c.is_foot_path  ) {
+				staged_all_links[goods_manager_t::INDEX_PAS].is_transfer = true;
+				break;
+			}
+		}
+	}
+
 	return connections_searched;
 }
 
@@ -2023,6 +2180,30 @@ void haltestelle_t::rebuild_linked_connections()
 			}
 		}
 	}
+	// Also include foot-adjacent halts so their reverse foot connections are rebuilt too.
+	if(  welt->get_settings().is_transit_by_foot()  &&  is_enabled(goods_manager_t::INDEX_PAS)  ) {
+		const uint16 cov = welt->get_settings().get_station_coverage();
+		for(  auto const& other : alle_haltestellen  ) {
+			if(  !other.is_bound()  ||  other == self  ) { continue; }
+			if(  !other->is_enabled(goods_manager_t::INDEX_PAS)  ) { continue; }
+			bool overlaps = false;
+			for(  auto const& my_tile : tiles  ) {
+				const koord my_pos = my_tile.grund->get_pos().get_2d();
+				for(  auto const& other_tile : other->get_tiles()  ) {
+					const koord other_pos = other_tile.grund->get_pos().get_2d();
+					if(  max( abs(my_pos.x - other_pos.x), abs(my_pos.y - other_pos.y) ) <= (sint16)cov  ) {
+						overlaps = true;
+						break;
+					}
+				}
+				if(  overlaps  ) { break; }
+			}
+			if(  overlaps  ) {
+				all.append_unique(other);
+			}
+		}
+	}
+
 	FOR(vector_tpl<halthandle_t>, h, all) {
 		if(h.is_bound()) {
 			h->rebuild_connections();
@@ -2045,8 +2226,8 @@ void haltestelle_t::fill_connected_component(uint8 catg_idx, uint16 comp)
 			continue;
 		}
 		c.halt->fill_connected_component(catg_idx, comp);
-		// cache the is_transfer value
-		c.is_transfer = c.halt->is_transfer(catg_idx);
+		// cache the is_transfer value; foot connections always act as transfer so Dijkstra explores them
+		c.is_transfer = c.is_foot_path ? true : c.halt->is_transfer(catg_idx);
 	}
 }
 
@@ -2234,10 +2415,29 @@ uint8 haltestelle_t::last_search_ware_catg_idx = 255;
  * if USE_ROUTE_SLIST_TPL is defined, the list template will be used.
  * However, this is about 50% slower.
  */
-int haltestelle_t::search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware )
+int haltestelle_t::search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware, const koord start_pos )
 {
 	const uint8 ware_catg_idx = ware.get_desc()->get_catg_index();
 	const uint8 ware_idx = ware.get_desc()->get_index();
+
+	// Walking cost setup: only for passengers when transit_by_foot is enabled.
+	// Origin walking cost penalises start halts that are farther from the passenger's building.
+	// Destination walking cost penalises end halts that are farther from the destination tile.
+	const bool use_walk_cost = (start_pos != koord::invalid)
+	                           && welt->get_settings().is_transit_by_foot()
+	                           && welt->get_settings().is_walk_cost_to_halt()
+	                           && ware_catg_idx == goods_manager_t::INDEX_PAS;
+	const bool tbgr_walk = use_walk_cost && welt->get_settings().get_time_based_routing_enabled(ware_catg_idx);
+	const uint32 walk_factor = tbgr_walk
+	                           ? welt->get_settings().get_foot_path_time_ticks()
+	                           : welt->get_settings().get_foot_path_weight();
+	const koord dest_pos = use_walk_cost ? ware.get_zielpos() : koord::invalid;
+
+	// Returns Manhattan walking cost between two 2D positions; 0 when walking disabled.
+	auto compute_walk_weight = [&](const koord& from, const koord& to) -> uint32 {
+		if(!use_walk_cost) return 0;
+		return koord_distance(from, to) * walk_factor;
+	};
 
 	// since also the factory halt list is added to the ground, we can use just this ...
 	const planquadrat_t *const plan = welt->access( ware.get_zielpos() );
@@ -2245,6 +2445,9 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 	// but we can only use a subset of these
 	static vector_tpl<halthandle_t> end_halts(16);
 	end_halts.clear();
+	// parallel walking costs from each end halt to dest_pos (0 when use_walk_cost is false)
+	static vector_tpl<uint32> end_halt_walk_costs(16);
+	end_halt_walk_costs.clear();
 	// target halts are in these connected components
 	// we start from halts only in the same components
 	static vector_tpl<uint16> end_conn_comp(16);
@@ -2271,6 +2474,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 					}
 				}
 				end_halts.append(halt);
+				end_halt_walk_costs.append( compute_walk_weight(halt->get_init_pos(), dest_pos) );
 
 				// check connected component of target halt
 				uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
@@ -2292,7 +2496,8 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 		// we already set getoff stop (because this goods is dummy!)
 		// e.g. called by route_search_frame_t
 		halthandle_t halt = ware.get_ziel();
-				end_halts.append(halt);
+		end_halts.append(halt);
+		end_halt_walk_costs.append( compute_walk_weight(halt->get_init_pos(), dest_pos) );
 
 		// check connected component of target halt
 		uint16 endhalt_conn_comp = halt->all_links[ware_catg_idx].catg_connected_component;
@@ -2355,17 +2560,32 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 			// this start halt will not lead to any target
 			continue;
 		}
-		open_list.insert( route_node_t(start_halt, 0) );
+		// Walking distance from origin building to this start halt.
+		// Using max(1u, ...) so best_weight never equals 0 (which is the closed-list sentinel).
+		// When use_walk_cost is false the walk weight is 0, giving best_weight=1 — negligible
+		// compared to typical connection weights and preserves backward-compatible behaviour.
+		const uint32 origin_walk_w = max(1u, compute_walk_weight(start_pos, start_halt->get_init_pos()));
+		open_list.insert( route_node_t(start_halt, origin_walk_w) );
 
 		halt_data_t & start_data = halt_data[ start_halt.get_id() ];
-		start_data.best_weight = UINT32_MAX;
-		start_data.destination = 0;
-		start_data.depth       = 0;
-		start_data.overcrowded = false; // start halt overcrowding is handled by routines calling this one
-		start_data.transfer    = halthandle_t();
+		start_data.best_weight    = origin_walk_w;
+		start_data.destination    = 0;
+		start_data.depth          = 0;
+		start_data.overcrowded    = false; // start halt overcrowding is handled by routines calling this one
+		start_data.transfer       = halthandle_t();
+		start_data.arrived_by_foot = false;
 
 		markers[ start_halt.get_id() ] = current_marker;
 	}
+
+	// Look up pre-computed destination walking cost for a given halt id (0 for non-end halts).
+	auto get_dest_walk_cost = [&](uint32 halt_id) -> uint32 {
+		if(!use_walk_cost) return 0;
+		for(uint32 i = 0; i < end_halts.get_count(); i++) {
+			if(end_halts[i].get_id() == halt_id) return end_halt_walk_costs[i];
+		}
+		return 0u;
+	};
 
 	// here the normal routing with overcrowded stops is done
 	while (!open_list.empty())
@@ -2446,6 +2666,19 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 			// (if not, we were just under construction, and will be fine after 16 steps)
 			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
+			// Prohibited foot-path patterns:
+			// - no two consecutive walking legs, a real vehicle must be boarded in between
+			// - the first hop out of the origin halt must be a real vehicle connection
+			// - the last hop into a destination halt must be a real vehicle connection
+			// halt_data[] is a static array reused across searches: its .destination field is
+			// only valid for halts already touched (markers[]==current_marker) in THIS search -
+			// otherwise it is a stale leftover from a previous, unrelated search's destination set.
+			if(  current_conn.is_foot_path  &&
+			     (  current_halt_data.arrived_by_foot  ||  current_halt_data.depth == 0  ||
+			        (  markers[ reachable_halt_id ]==current_marker  &&  halt_data[ reachable_halt_id ].destination  )  )  ) {
+				continue;
+			}
+
 			if(  markers[ reachable_halt_id ]!=current_marker  ) {
 				// Case : not processed before
 
@@ -2454,17 +2687,19 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 				if(  current_conn.halt.is_bound()  &&  current_conn.is_transfer  &&  allocation_pointer<max_hops  ) {
 					// Case : transfer halt
+					// Use WEIGHT_MIN as lower bound on any destination's additional walk cost for pruning.
 					const uint32 total_weight = current_halt_data.best_weight + current_conn.weight;
 
 					if(  total_weight < best_destination_weight  ) {
 						const bool overcrowded_transfer = no_routing_over_overcrowding  &&  ( current_halt_data.overcrowded  ||  current_conn.halt->is_overcrowded( ware_idx ) );
 
-						halt_data[ reachable_halt_id ].best_weight = total_weight;
-						halt_data[ reachable_halt_id ].destination = 0;
-						halt_data[ reachable_halt_id ].depth       = current_halt_data.depth + 1u;
-						halt_data[ reachable_halt_id ].transfer    = current_node.halt;
-						halt_data[ reachable_halt_id ].overcrowded = overcrowded_transfer;
-						overcrowded_nodes                         += overcrowded_transfer;
+						halt_data[ reachable_halt_id ].best_weight    = total_weight;
+						halt_data[ reachable_halt_id ].destination    = 0;
+						halt_data[ reachable_halt_id ].depth          = current_halt_data.depth + 1u;
+						halt_data[ reachable_halt_id ].transfer       = current_node.halt;
+						halt_data[ reachable_halt_id ].overcrowded    = overcrowded_transfer;
+						halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
+						overcrowded_nodes                             += overcrowded_transfer;
 
 						allocation_pointer++;
 						// as the next halt is not a destination add WEIGHT_MIN
@@ -2489,28 +2724,36 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 				uint32 total_weight = current_halt_data.best_weight + current_conn.weight;
 
-				if(  total_weight<halt_data[ reachable_halt_id ].best_weight  &&  total_weight<best_destination_weight  &&  allocation_pointer<max_hops  ) {
+				// For end halts, include walking cost from the halt to dest_pos in pruning and
+				// priority so that closer destination halts are preferred even if transit is equal.
+				const uint32 dest_walk = get_dest_walk_cost(reachable_halt_id);
+				const uint32 effective_weight = total_weight + dest_walk;
+
+				if(  total_weight<halt_data[ reachable_halt_id ].best_weight  &&  effective_weight<best_destination_weight  &&  allocation_pointer<max_hops  ) {
 					// new weight is lower than lowest weight --> create new node and update halt data
 					const bool overcrowded_transfer = no_routing_over_overcrowding  &&  ( current_halt_data.overcrowded  ||  ( !halt_data[reachable_halt_id].destination  &&  current_conn.halt->is_overcrowded( ware_idx ) ) );
 
-					halt_data[ reachable_halt_id ].best_weight = total_weight;
+					halt_data[ reachable_halt_id ].best_weight    = total_weight;
 					// no need to update destination, as halt nature (as destination or transfer) will not change
-					halt_data[ reachable_halt_id ].depth       = current_halt_data.depth + 1u;
-					halt_data[ reachable_halt_id ].transfer    = current_node.halt;
-					halt_data[ reachable_halt_id ].overcrowded = overcrowded_transfer;
-					overcrowded_nodes                         += overcrowded_transfer;
+					halt_data[ reachable_halt_id ].depth          = current_halt_data.depth + 1u;
+					halt_data[ reachable_halt_id ].transfer       = current_node.halt;
+					halt_data[ reachable_halt_id ].overcrowded    = overcrowded_transfer;
+					halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
+					overcrowded_nodes                             += overcrowded_transfer;
 
 					if(  halt_data[reachable_halt_id].destination  ) {
-						best_destination_weight = total_weight;
+						// Use walk-adjusted weight for pruning so routes to nearer end halts win.
+						best_destination_weight = effective_weight;
+						open_list.insert( route_node_t(current_conn.halt, effective_weight) );
 					}
 					else {
 						// as the next halt is not a destination add WEIGHT_MIN
 						// TODO: (TBGR) use estimated time. Should include waiting time
 						total_weight += WEIGHT_MIN;
+						open_list.insert( route_node_t(current_conn.halt, total_weight) );
 					}
 
 					allocation_pointer++;
-					open_list.insert( route_node_t(current_conn.halt, total_weight) );
 				}
 			} // else if not in closed list
 		} // for each connection entry
@@ -2637,10 +2880,11 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		open_list.insert( route_node_t(self, 0) );
 
 		halt_data_t & start_data = halt_data[ self.get_id() ];
-		start_data.best_weight = 0;
-		start_data.destination = 0;
-		start_data.depth       = 0;
-		start_data.transfer    = halthandle_t();
+		start_data.best_weight    = 0;
+		start_data.destination    = 0;
+		start_data.depth          = 0;
+		start_data.transfer       = halthandle_t();
+		start_data.arrived_by_foot = false;
 
 		markers[ self.get_id() ] = current_marker;
 	}
@@ -2699,6 +2943,24 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 		FOR(vector_tpl<connection_t>, const& current_conn, current_node.halt->all_links[ware_catg_idx].connections) {
 			const uint32 reachable_halt_id = current_conn.halt.get_id();
 
+			// Prohibited foot-path patterns (mirrors search_route()):
+			// - no two consecutive walking legs, a real vehicle must be boarded in between
+			// - the last hop into a destination halt must be a real vehicle connection
+			// Note: unlike search_route(), there is no "first hop out of the origin must be
+			// real" rule here - this function is re-entered from whatever halt the ware is
+			// currently sitting at (every transfer stop when TBGR is off, via liefere_an()),
+			// so depth==0 means "resume from here", not "leave the true trip origin".
+			// Blocking foot legs at depth==0 would incorrectly forbid a legitimate mid-journey
+			// walk to the next transfer halt right after getting off a real vehicle.
+			// halt_data[] is a static array reused across searches: its .destination field is
+			// only valid for halts already touched (markers[]==current_marker) in THIS search -
+			// otherwise it is a stale leftover from a previous, unrelated search's destination set.
+			if(  current_conn.is_foot_path  &&
+			     (  current_halt_data.arrived_by_foot  ||
+			        (  markers[ reachable_halt_id ]==current_marker  &&  halt_data[ reachable_halt_id ].destination  )  )  ) {
+				continue;
+			}
+
 			const uint32 total_weight = current_weight + current_conn.weight;
 
 			if(  !current_conn.halt.is_bound()  ) {
@@ -2717,6 +2979,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 				halt_data[ reachable_halt_id ].destination = false; // reset necessary if this was set by search_route
 				halt_data[ reachable_halt_id ].depth       = current_halt_data.depth + 1u;
 				halt_data[ reachable_halt_id ].transfer    = current_node.halt;
+				halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
 
 				if(  current_conn.is_transfer  &&  allocation_pointer<max_hops  ) {
 					// Case : transfer halt
@@ -2732,6 +2995,7 @@ void haltestelle_t::search_route_resumable(  ware_t &ware   )
 
 					halt_data[ reachable_halt_id ].best_weight = total_weight;
 					halt_data[ reachable_halt_id ].transfer    = current_node.halt;
+					halt_data[ reachable_halt_id ].arrived_by_foot = current_conn.is_foot_path;
 
 					// for transfer/destination nodes create new node
 					if ( (halt_data[ reachable_halt_id ].destination  ||  current_conn.is_transfer )  &&  allocation_pointer<max_hops ) {
@@ -3118,11 +3382,37 @@ std::shared_ptr<halt_waiting_goods_t> haltestelle_t::add_goods_to_halt(halt_wait
 
 
 
+bool haltestelle_t::is_foot_path_connection(halthandle_t dest, uint8 catg_index) const
+{
+	for(  auto const& conn : all_links[catg_index].connections  ) {
+		if(  conn.halt == dest  ) {
+			return conn.is_foot_path;
+		}
+	}
+	return false;
+}
+
+
+bool haltestelle_t::try_foot_transit(ware_t &ware, uint8 foot_steps)
+{
+	if(  foot_steps >= 1  ) { return false; }
+	if(  !welt->get_settings().is_transit_by_foot()  ) { return false; }
+	const halthandle_t next = ware.get_zwischenziel();
+	if(  !next.is_bound()  ||  next == self  ) { return false; }
+	if(  !is_foot_path_connection(next, ware.get_desc()->get_catg_index())  ) { return false; }
+	// Walk pax to the next halt. Pop the foot hop from transit list so next halt
+	// routes from its own position rather than re-entering liefere_an with stale state.
+	ware.pop_first_transit_halts();
+	next->starte_mit_route(ware, foot_steps + 1);
+	return true;
+}
+
+
 /* same as liefere an, but there will be no route calculated,
  * since it hase be calculated just before
  * (execption: route contains us as intermediate stop)
  */
-uint32 haltestelle_t::starte_mit_route(ware_t ware)
+uint32 haltestelle_t::starte_mit_route(ware_t ware, uint8 foot_steps)
 {
 	if(ware.get_ziel()==self) {
 		if(  ware.to_factory  ) {
@@ -3146,6 +3436,11 @@ uint32 haltestelle_t::starte_mit_route(ware_t ware)
 	// passt das zu bereits wartender ware ?
 	if(vereinige_waren(ware)) {
 		// dann sind wir schon fertig;
+		return ware.menge;
+	}
+
+	// If the next hop is a foot-path, walk passengers immediately — no vehicle needed.
+	if(  try_foot_transit(ware, foot_steps)  ) {
 		return ware.menge;
 	}
 
@@ -3210,7 +3505,12 @@ dbg->warning("haltestelle_t::liefere_an()","%d %s delivered to %s have no longer
 			return ware.menge;
 		}
 	}
-	
+
+	// If the (re-)routed next hop is a foot-path, teleport immediately.
+	if(  try_foot_transit(ware)  ) {
+		return ware.menge;
+	}
+
 	// add to internal storage
 	add_goods_to_halt(halt_waiting_goods_t(ware, welt->get_ticks()));
 
@@ -3390,7 +3690,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 	// change owner of halt
 	player_t* const prev_owner = owner;
 	owner = player;
-	set_permissions(0xFFFF);
+	set_permissions(~(uint64)0);
 	rebuild_connections();
 	rebuild_linked_connections();
 	rebuild_connected_components();
@@ -3482,7 +3782,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 bool haltestelle_t::is_connection_allowed(const player_t* player) const {
 	return !player
 	       ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)
-	       ||  (permissions & (1 << player->get_player_nr())) != 0;
+	       ||  (permissions & ((uint64)1 << player->get_player_nr())) != 0;
 }
 
 // merge stop
@@ -3493,7 +3793,7 @@ void haltestelle_t::merge_halt( halthandle_t halt_merged )
 	}
 
 	// After merging, allow everyone who could stop at either halt to continue doing so
-	const uint16 merged_perms = halt_merged->get_permissions();
+	const uint64 merged_perms = halt_merged->get_permissions();
 
 	halt_merged->change_owner( owner, false );
 
@@ -3602,7 +3902,7 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 	// access based on the all-company flag rather than relying solely on per-slot bitmask bits that
 	// would be cleared by remove_player() when a company is removed.
 	flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
-	set_permissions(0xFFFF);
+	set_permissions(~(uint64)0);
 
 	// set name to name of first public stop
 	if(  !joining.empty()  ) {
@@ -3903,7 +4203,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	if(file->is_version_less(99, 8)) {
 		init_pos.rdwr( file );
 	}
-	file->rdwr_long(owner_n);
+	file->rdwr_player_nr(owner_n);
 
 	if(file->is_version_less(88, 6)) {
 		bool dummy;
@@ -4045,9 +4345,21 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->is_version_atleast(111, 1)  ) {
-		for (int j = 0; j<MAX_HALT_COST; j++) {
+		// read/write original 8 stats
+		for (int j = 0; j<8; j++) {
 			for (size_t k = MAX_MONTHS; k-- != 0;) {
 				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		// HALT_REVENUE added in OTRP version 59
+		if(  file->get_OTRP_version() >= 59  ) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][HALT_REVENUE]);
+			}
+		}
+		else {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				financial_history[k][HALT_REVENUE] = 0;
 			}
 		}
 	}
@@ -4060,6 +4372,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][HALT_WALKED] = 0;
+			financial_history[k][HALT_REVENUE] = 0;
 		}
 	}
 
@@ -4134,7 +4447,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	if(  file->get_OTRP_version()>=42  ) {
 		uint8 temp_flags=flags;
-		if(  file->is_saving() && (get_permissions()|~(1U<<(uint16)get_owner()->get_player_nr()))>0 && file->get_OTRP_version()<57  ) {
+		if(  file->is_saving() && (get_permissions() & ~((uint64)1<<get_owner()->get_player_nr())) && file->get_OTRP_version()<57  ) {
 			// for old version saving.
 			// we only has "all connection" flag.
 			temp_flags|=HS_ALLOW_OTHER_PLAYER_CONNECTION;
@@ -4146,30 +4459,39 @@ void haltestelle_t::rdwr(loadsave_t *file)
 
 	}
 
-	if(  file->get_OTRP_version() >= 57  ||  file->is_version_atleast(124, 5)  ) {
-		file->rdwr_short(permissions);
+	if(  file->get_OTRP_version() >= 59  ) {
+		// full 64-bit permissions
+		file->rdwr_longlong((sint64&)permissions);
 		if(  file->is_loading()  ) {
 			set_permissions(permissions);
+		}
+	}
+	else if(  file->get_OTRP_version() >= 57  ||  file->is_version_atleast(124, 5)  ) {
+		// OTRP v57 / standard 124.5+ used uint16
+		uint16 short_perms = (uint16)(permissions & 0xFFFF);
+		file->rdwr_short(short_perms);
+		if(  file->is_loading()  ) {
+			set_permissions((uint64)short_perms);
 		}
 	}
 	else if(  file->is_loading()  ) {
 		// Migrate from the old HS_ALLOW_OTHER_PLAYER_CONNECTION flag:
 		// If it was set, all players were allowed; otherwise only the owner.
 		if(  !owner  ||  owner->is_public_service()  ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)  ) {
-			set_permissions(0xFFFF);
+			set_permissions(~(uint64)0);
 		}
 		else {
-			set_permissions(owner ? (1 << owner->get_player_nr()) : 0xFFFF);
+			set_permissions(owner ? ((uint64)1 << owner->get_player_nr()) : ~(uint64)0);
 		}
 	}
 	else if(  file->is_saving()  ) {
 		// Migrate from the old HS_ALLOW_OTHER_PLAYER_CONNECTION flag:
 		// If it was set, all players were allowed; otherwise only the owner.
 		if(  !owner  ||  owner->is_public_service()  ||  (flags & HS_ALLOW_OTHER_PLAYER_CONNECTION)  ) {
-			set_permissions(0xFFFF);
+			set_permissions(~(uint64)0);
 		}
 		else {
-			set_permissions(owner ? (1 << owner->get_player_nr()) : 0xFFFF);
+			set_permissions(owner ? ((uint64)1 << owner->get_player_nr()) : ~(uint64)0);
 		}
 	}
 }
@@ -4352,7 +4674,7 @@ void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 	uint16 player_count = 0;
 	if(  show_allowed_players  ) {
 		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
-			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
+			if(  (permissions & ((uint64)1<<i))  &&  welt->get_player(i)  ) {
 				player_count++;
 			}
 		}
@@ -4375,7 +4697,7 @@ void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 	if(  show_allowed_players  &&  player_count > 1  ) {
 		sint16 x = xpos - (player_count * 17 - get_tile_raster_width()) / 2;
 		for(  uint16 i = 0;  i < PLAYER_UNOWNED;  i++  ) {
-			if(  (permissions & (1<<i))  &&  welt->get_player(i)  ) {
+			if(  (permissions & ((uint64)1<<i))  &&  welt->get_player(i)  ) {
 				const PIXVAL color = color_idx_to_rgb( welt->get_player(i)->get_player_color1() + 4 );
 				display_fillbox_wh_clip_rgb( x, ypos - D_WAITINGBAR_WIDTH, 16, D_WAITINGBAR_WIDTH, color, players_dirty );
 				x += 17;
@@ -4600,7 +4922,7 @@ bool haltestelle_t::rem_grund(grund_t *gr)
 	// first tile => remove name from this tile ...
 	char buf[256];
 	const char* station_name_to_transfer = NULL;
-	if (i == tiles.begin() && i->grund->get_name()) {
+	if (i == tiles.begin()) {
 		tstrncpy(buf, get_name(), lengthof(buf));
 		station_name_to_transfer = buf;
 		set_name(NULL);
@@ -5150,17 +5472,17 @@ void haltestelle_t::toggle_other_player_connection_allowed() {
 		// Switch to per-player mode; keep all currently permitted so the user
 		// can selectively restrict from this point.
 		flags &= ~HS_ALLOW_OTHER_PLAYER_CONNECTION;
-		uint16 allow_player_byte=0;
+		uint64 allow_player_byte=0;
 		for(uint8 i=0; i<MAX_PLAYER_COUNT; i++){
 			if(  welt->get_player(i)  ){
-				allow_player_byte|=(1<<i);
+				allow_player_byte|=(uint64)1<<i;
 			}
 		}
 		set_permissions(allow_player_byte);
 	}
 	else {
 		flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
-		set_permissions(0xFFFF);
+		set_permissions(~(uint64)0);
 	}
 }
 

@@ -51,7 +51,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// only active with lines
 	button_t bt_promote_to_line;
-	gui_combobox_t line_selector, departure_slot_group_selector, next_line_selector;
+	gui_combobox_t line_selector, departure_slot_group_selector, next_line_selector, allow_depart_line_selector;
 	gui_label_buf_t lb_waitlevel;
 	gui_fill_t sp_schedule_settings,sp_load_settings,sp_departure_settings,sp_coupling_settings,sp_reverse_settings,sp_road_settings,sp_schedule_reverse_settings,sp_schedule_coupling_settings;
 
@@ -62,11 +62,14 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	gui_label_t lb_wait, lb_load, lb_departure_slot_group, lb_max_load;
 	gui_numberinput_t numimp_load, numimp_wait_load, numimp_max_load;
+	// waiting time expressed directly in units of 1/spacing_shift_divisor of a month (linear, like spacing_shift)
+	gui_numberinput_t numimp_wait_load_divisor;
 	
 	// for advanced settings
 	// coupling, load/unload only, temp schedule, departure time, max_speed
 	button_t bt_extract_schedule_settings, bt_extract_loading_settings, bt_extract_driving_settings;
 	button_t bt_find_parent, bt_wait_for_child, bt_reset_coupling; // convoy coupling
+	button_t bt_wait_for_other_convoy, bt_wait_allow_convoy_depart; // wait for departure allowance granted by another convoy
 	button_t bt_no_go_no_users;
 	button_t bt_wait_full_load;
 	button_t bt_no_use_electric;
@@ -77,15 +80,17 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	button_t bt_reverse_default;
 	button_t bt_up, bt_down;
 
-	gui_numberinput_t numimp_spacing, numimp_spacing_shift, 
+	gui_numberinput_t numimp_spacing, numimp_spacing_shift,
 		numimp_delay_tolerance, numimp_max_speed, numimp_max_speed_kmh_of_convoi , numimp_tbgr_waiting_time, numimp_length_coupling_done;
 	gui_numberinput_t numimp_balance_speed_kmh_of_convoi;
-	gui_label_t lb_spacing, lb_spacing_shift, lb_title1, lb_title2, lb_max_speed, lb_tbgr_waiting_time, lb_next_line, lb_length_coupling_done;
-	gui_label_t lb_wait_load_time;
+
+	// single packed h:m:s input for wait_load_time, spacing_shift and delay_tolerance, encoded as
+	// hours*10000 + minutes*100 + seconds; minutes/seconds may be typed up to 99 and are normalized
+	// (carried into the next larger unit) by update_labels().
+	gui_numberinput_t numimp_wait_load_hms, numimp_spacing_shift_hms, numimp_delay_tolerance_hms;
+	gui_label_t lb_spacing, lb_title1, lb_title2, lb_max_speed, lb_tbgr_waiting_time, lb_next_line, lb_length_coupling_done;
 
 	char lb_spacing_str[20];
-	char lb_spacing_shift_str[15];
-	char lb_wait_load_time_str[25];
 
 	schedule_gui_stats_t* stats;
 	gui_scrollpane_t scrolly;
@@ -103,7 +108,11 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// changes the waiting/loading levels if allowed
 	void update_selection();
-	
+
+	// recalculates the packed h:m:s input fields (and the wait_load divisor field) from the
+	// current schedule entry's raw values
+	void update_labels();
+
 	// void extract_advanced_settings(bool yesno);
 	void extract_schedule_settings(bool yesno);
 	void extract_loading_settings(bool yesno);
@@ -127,6 +136,7 @@ public:
 	// for updating info ...
 	void init_line_selector();
 	void init_next_line_selector();
+	void init_allow_depart_line_selector();
 	void init_departure_slot_group_selector();
 
 	bool infowin_event(event_t const*) OVERRIDE;

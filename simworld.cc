@@ -25,6 +25,7 @@
 #include "display/simimg.h"
 #include "siminteraction.h"
 #include "simintr.h"
+#include "simline.h"
 #include "simlinemgmt.h"
 #include "simloadingscreen.h"
 #include "simmenu.h"
@@ -541,6 +542,28 @@ void karte_t::rem_convoi(convoihandle_t const cnv)
 }
 
 
+void karte_t::recalc_distance_new_records(sint32 old_tile_length, sint32 new_tile_length)
+{
+	FOR(vector_tpl<convoihandle_t>, const cnv, convoi_array) {
+		for (size_t k = 0; k < MAX_MONTHS; k++) {
+			const sint64 old_value = cnv->get_finance_history(k, convoi_t::CONVOI_DISTANCE_METERS);
+			cnv->set_finance_history( k, convoi_t::CONVOI_DISTANCE_METERS, old_value * new_tile_length / old_tile_length );
+		}
+	}
+
+	for (uint8 i = 0; i < PLAYER_UNOWNED; i++) {
+		if (player_t* pl = players[i]) {
+			FOR(vector_tpl<linehandle_t>, const line, pl->simlinemgmt.get_line_list()) {
+				for (size_t k = 0; k < MAX_MONTHS; k++) {
+					const sint64 old_value = line->get_finance_history(k, LINE_DISTANCE_METERS);
+					line->set_finance_history( k, LINE_DISTANCE_METERS, old_value * new_tile_length / old_tile_length );
+				}
+			}
+		}
+	}
+}
+
+
 void karte_t::load_convoy_templates()
 {
 	convoi_template_load(env_t::pak_dir, env_t::default_settings.get_with_private_paks(), convoy_templates);
@@ -652,6 +675,9 @@ void karte_t::init_tiles()
 		for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
 			finance_history_decade[decade][cost_type] = 0;
 		}
+	}
+	for (int cost_type=0; cost_type<MAX_WORLD_COST; cost_type++) {
+		finance_history_decade_acc[cost_type] = 0;
 	}
 	last_month_bev = 0;
 
@@ -1186,6 +1212,8 @@ sint8 *humidity;
 void karte_t::init(settings_t* const sets, sint8 const* const h_field)
 {
 	humidity = NULL;
+
+	step_year_count=0;
 
 	clear_random_mode( 7 );
 	mute_sound(true);
@@ -3328,6 +3356,9 @@ DBG_MESSAGE( "karte_t::rotate90()", "called" );
 	// assume we can save this rotation
 	nosave_warning = nosave = false;
 
+	// cached routes reference koord3d positions that become invalid after rotation
+	route_cache.clear();
+
 	//announce current target rotation
 	settings.rotate90();
 
@@ -4026,6 +4057,26 @@ void karte_t::new_month()
 }
 
 
+// Flow-type fields accumulate over the decade; snapshot/ratio fields just mirror year[0].
+// Order must match karte_t::player_cost enum.
+static const bool decade_flow_field[karte_t::MAX_WORLD_COST] = {
+	false, // WORLD_CITIZENS
+	true,  // WORLD_GROWTH
+	false, // WORLD_TOWNS
+	false, // WORLD_FACTORIES
+	false, // WORLD_CONVOIS
+	false, // WORLD_CITYCARS
+	false, // WORLD_PAS_RATIO
+	true,  // WORLD_PAS_GENERATED
+	false, // WORLD_MAIL_RATIO
+	true,  // WORLD_MAIL_GENERATED
+	false, // WORLD_GOODS_RATIO
+	true,  // WORLD_TRANSPORTED_GOODS
+	false  // WORLD_HALTS
+};
+static_assert(sizeof(decade_flow_field)/sizeof(bool) == karte_t::MAX_WORLD_COST,
+              "decade_flow_field must have one entry per MAX_WORLD_COST");
+
 void karte_t::new_year()
 {
 	last_year = current_month/12;
@@ -4037,16 +4088,28 @@ void karte_t::new_year()
 		}
 	}
 
-	// record decade snapshot at 0, 10, 20, ... years after map start
+	// Decade history update.
+	// At a decade boundary, decade[0] already holds the complete 10-year total
+	// (set by update_history() called earlier in new_month()), so we just shift
+	// and reset the accumulator for the new decade.
+	// At non-boundary years, add the just-completed year[1] to the accumulator
+	// for flow fields; update_history() will keep decade[0] live.
+	bool const is_decade_boundary = (last_year - settings.get_starting_year() - step_year_count) % 10 == 0;
 	for(  int hist=0;  hist<karte_t::MAX_WORLD_COST;  hist++  ) {
-		if(  (last_year - settings.get_starting_year()) % 10 == 0  ) {
-			// we record the old dates values once in 10 years.
+		if(  is_decade_boundary  ) {
 			for( int d=MAX_WORLD_HISTORY_DECADES-1; d>0; d--  ) {
 				finance_history_decade[d][hist] = finance_history_decade[d-1][hist];
 			}
+			if(  decade_flow_field[hist]  ) {
+				finance_history_decade_acc[hist] = 0;
+				finance_history_decade[0][hist] = 0;
+			}
 		}
-		// the 0 values of history_decade is the last year's values.
-		finance_history_decade[0][hist] = finance_history_year[1][hist];
+		else {
+			if(  decade_flow_field[hist]  ) {
+				finance_history_decade_acc[hist] += finance_history_year[1][hist];
+			}
+		}
 	}
 
 DBG_MESSAGE("karte_t::new_year()","speedbonus for %d %i, %i, %i, %i, %i, %i, %i, %i", last_year,
@@ -4586,6 +4649,17 @@ void karte_t::update_history()
 	}
 	finance_history_month[0][WORLD_TRANSPORTED_GOODS] = transported;
 	finance_history_year[0][WORLD_TRANSPORTED_GOODS] = transported_year;
+
+	// Keep decade[0] live: flow fields = accumulated completed years + current year;
+	// snapshot/ratio fields mirror year[0].
+	for(  int hist=0;  hist<MAX_WORLD_COST;  hist++  ) {
+		if(  decade_flow_field[hist]  ) {
+			finance_history_decade[0][hist] = finance_history_decade_acc[hist] + finance_history_year[0][hist];
+		}
+		else {
+			finance_history_decade[0][hist] = finance_history_year[0][hist];
+		}
+	}
 }
 
 
@@ -4916,7 +4990,9 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "start");
 
 	rdwr_gamestate(file, ls);
 
-	for(int i=0; i<MAX_PLAYER_COUNT; i++) {
+	// old format (OTRP < 59) only supports player slots 0..14
+	const int save_player_count = (file->is_saving() && file->get_OTRP_version() < 59) ? 15 : MAX_PLAYER_COUNT;
+	for(int i=0; i<save_player_count; i++) {
 		// **** REMOVE IF SOON! *********
 		if(file->is_version_less(101, 0)) {
 			if(  i<8  ) {
@@ -4977,6 +5053,11 @@ DBG_MESSAGE("karte_t::save(loadsave_t *file)", "saved messages");
 				file->rdwr_longlong(finance_history_decade[decade][cost_type]);
 			}
 		}
+	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
 	}
 
 	// finally a possible scenario
@@ -5601,9 +5682,27 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 		}
 	}
 	else {
-		// we set first decades values
-		for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
-			finance_history_decade[0][cost_type] = finance_history_year[1][cost_type];
+		// initialize decade history from year history for old saves
+		for (int decade = 0; decade<MAX_WORLD_HISTORY_DECADES; decade++) {
+			for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+				finance_history_decade[decade][cost_type] = 0;
+			}
+		}
+	}
+	if(  file->get_OTRP_version() >=58  ) {
+		file->rdwr_long(step_year_count);
+	} else {
+		step_year_count=0;
+	}
+	// Reconstruct the decade flow accumulator from year history.
+	// decade_acc = sum of year[1..k] where k = completed years in current decade.
+	const int years_in_decade = (last_year - settings.get_starting_year() - step_year_count) % 10;
+	for (int cost_type = 0; cost_type<MAX_WORLD_COST; cost_type++) {
+		finance_history_decade_acc[cost_type] = 0;
+		if(  decade_flow_field[cost_type]  ) {
+			for (int y = 1; y <= years_in_decade && y < MAX_WORLD_HISTORY_YEARS; y++) {
+				finance_history_decade_acc[cost_type] += finance_history_year[y][cost_type];
+			}
 		}
 	}
 
@@ -5825,7 +5924,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 		// Update minimap for new world
 		minimap_t::get_instance()->init();
 
-		ls->set_max( get_size().y*2+256 );
+		ls->set_max( get_size().y*2+256+8*MAX_PLAYER_COUNT );
 		init_tiles();
 
 		// reinit pointer with new pointer object and old values
@@ -7042,6 +7141,8 @@ void karte_t::step_year()
 	DBG_MESSAGE("karte_t::step_year()","called");
 	current_month += 12;
 	last_year ++;
+	// we need to record how many times this tool called
+	step_year_count ++;
 	reset_timer();
 	recalc_average_speed();
 	koord::locality_factor = settings.get_locality_factor( last_year );
@@ -7160,7 +7261,7 @@ void karte_t::remove_player(uint8 player_nr)
 		// Clear removed player's bit from all halt permissions
 		for(  halthandle_t const& h : haltestelle_t::get_alle_haltestellen()  ) {
 			if(  h.is_bound()  &&  !h->is_allow_other_player_connection()  ) {
-				h->set_permissions( h->get_permissions() & ~(1 << player_nr) );
+				h->set_permissions( h->get_permissions() & ~((uint64)1 << player_nr) );
 			}
 		}
 		nwc_chg_player_t::company_removed(player_nr);
@@ -7256,11 +7357,11 @@ void karte_t::stop(bool exit_game)
 
 			// remove passwords before transfer on the server and set default client mask
 			// they will be restored in karte_t::laden
-			uint16 unlocked_players = 0;
+			uint64 unlocked_players = (uint64)0;
 			for (int i = 0; i < PLAYER_UNOWNED; i++) {
 				player_t* player = world->get_player(i);
 				if (player == NULL || player->access_password_hash().empty()) {
-					unlocked_players |= (1 << i);
+					unlocked_players |= ((uint64)1 << i);
 				}
 				else {
 					player->access_password_hash().clear();
@@ -8000,7 +8101,7 @@ bool karte_t::is_player_password_set(uint8 player_nr) const
 	}
 	if (env_t::networkmode  &&  !env_t::server) {
 		// client: local hashes are not authoritative, use the state reported by the server
-		return (player_password_set_bits & (1<<player_nr)) != 0;
+		return (player_password_set_bits & ((uint64)1<<player_nr)) != 0;
 	}
 	player_t *player = get_player(player_nr);
 	return player  &&  player->is_password_hash();

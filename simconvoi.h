@@ -64,6 +64,7 @@ public:
 		CONVOI_MAXSPEED,           // average max. possible speed
 		CONVOI_WAYTOLL,			   // waytoll
 		CONVOI_TONKILO,			   // the amount of transported ware integrated by transported distance.
+		CONVOI_DISTANCE_METERS,       // total distance traveled this month, in meters (CONVOI_DISTANCE * settings_t::tile_length)
 		MAX_CONVOI_COST            // Total number of cost items
 	};
 
@@ -343,6 +344,14 @@ private:
 
 	bool coupling_done;
 
+	/**
+	 * True while this convoy is blocked at its current stop, waiting for
+	 * another convoy (of the schedule entry's allow_depart_line) to grant
+	 * it departure allowance.
+	 */
+	bool waiting_for_departure_allowance_by_other_convoy;
+
+	bool waiting_for_departure_make_another_convoy_depart;
 
 	/**
 	 * Time when convoi arrived at the current stop
@@ -411,6 +420,7 @@ private:
 	bool reversing_needed;// Whether this convoy's vehicles will be arranged in reverse order.
 	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
 	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
+	bool reversing_lane_hold;// lane was deliberately forced by a physical reversal in vorfahren(); protects it from the CAN_START/WAITING_FOR_CLEARANCE stale-lane safety reset until the next tile is entered.
 
 	bool unloading_done;//unload once in stop
 
@@ -584,6 +594,12 @@ public:
 	void set_reversed(bool yesno) { reversed = yesno; }
 	bool is_reversing_needed() const { return reversing_needed; }
 	void set_reversing_needed(bool yesno) { reversing_needed = yesno; }
+	bool is_reversing_lane_hold() const { return reversing_lane_hold; }
+	void set_reversing_lane_hold(bool yesno) { reversing_lane_hold = yesno; }
+	// number of tiles a road convoy has to stay on the lane it was forced onto by a physical
+	// reversal: its own length plus one, so the lane-change safety check in
+	// road_vehicle_t::enter_tile() runs once the whole convoy has cleared the tile it departed from.
+	sint8 calc_reversing_lane_tiles() const;
 	// Reorder the vehicle array
 	// Can be executed even with a vehicle array that does not belong to convoy for UI
 	
@@ -1002,6 +1018,7 @@ public:
 	* return a specified element from the financial history
 	*/
 	sint64 get_finance_history(int month, int cost_type) const { return financial_history[month][cost_type]; }
+	void set_finance_history(int month, int cost_type, sint64 value) { financial_history[month][cost_type] = value; }
 	sint64 get_stat_converted(int month, int cost_type) const;
 
 	/**
@@ -1152,10 +1169,12 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
-	convoihandle_t uncouple_convoi();
+	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;
+	// true if self or any coupling child is currently blocked waiting for departure allowance by another convoy.
+	bool is_waiting_for_departure_allowance() const;
 	void set_convoi_coupling_in_progress(convoihandle_t);
 	convoihandle_t get_convoi_coupling_in_progress() const { return convoi_coupling_in_progress; }
 	void unset_convoi_coupling_in_progress();
@@ -1163,8 +1182,24 @@ public:
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
 
+	// Whether this convoy can reach other_cnv's position by water (same river, same sea,
+	// or a sea connected to a river etc.) - used to find valid TRY_COUPLING partners at a
+	// halt without relying on both convoys occupying the exact same tile.
+	bool is_same_waterway(convoihandle_t other_cnv) const;
+
 	bool is_coupling_done() const { return coupling_done; }
 	void set_coupling_done(bool tf) { coupling_done = tf; }
+
+	bool is_waiting_for_departure_allowance_by_other_convoy() const { return waiting_for_departure_allowance_by_other_convoy; }
+	void set_waiting_for_departure_allowance_by_other_convoy(bool tf) { waiting_for_departure_allowance_by_other_convoy = tf; }
+	bool is_waiting_for_departure_make_another_convoy_depart() const { return waiting_for_departure_make_another_convoy_depart; }
+	void set_waiting_for_departure_make_another_convoy_depart(bool tf) { waiting_for_departure_make_another_convoy_depart = tf; }
+	/**
+	 * Grant departure allowance to one waiting convoy of the given line, if any,
+	 * that is currently loading at halt. Only one convoy is released per call.
+	 */
+	bool allow_other_convoy_to_depart(halthandle_t halt) const;
+
 
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 	uint32 get_arrived_time() const { return arrived_time; }
