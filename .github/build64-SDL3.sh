@@ -1,10 +1,17 @@
 #!/bin/sh
 set -e
 
-# libbrotli static is broken in MinGW for freetype2
+# Prefer the static Brotli archives required by the static Freetype build.
+# Older MSYS2 packages used *-static.a; current packages install the static
+# archive directly as *.a alongside the DLL import archive.
 for f in libbrotlidec libbrotlienc libbrotlicommon; do
-	mv "/mingw64/lib/$f.dll.a" "/mingw64/lib/$f.dll._"
-	cp "/mingw64/lib/$f-static.a" "/mingw64/lib/$f.a"
+	if [ -f "/mingw64/lib/$f.dll.a" ]; then
+		mv "/mingw64/lib/$f.dll.a" "/mingw64/lib/$f.dll._"
+	fi
+	if [ -f "/mingw64/lib/$f-static.a" ]; then
+		cp "/mingw64/lib/$f-static.a" "/mingw64/lib/$f.a"
+	fi
+	test -f "/mingw64/lib/$f.a"
 done
 
 echo "BACKEND = sdl3" >config.default
