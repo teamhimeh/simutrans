@@ -34,7 +34,7 @@ class money_frame_t : public gui_frame_t, private action_listener_t
 {
 	friend class money_frame_label_t;
 private:
-	const sint64 balance_divisor = env_t::show_yen?10:1000;
+	sint64 get_balance_divisor() const { return env_t::show_yen?10:1000;}
 
 	cbuffer_t money_frame_title;
 

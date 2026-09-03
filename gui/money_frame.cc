@@ -540,8 +540,8 @@ void money_frame_t::update_labels()
 		write_money.enable();
 		write_money_cents.enable();
 		send_money_button.enable();
-		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor <= 2000000000){
-			write_money.set_limits(0, welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor);
+		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor() <= 2000000000){
+			write_money.set_limits(0, welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor());
 		}
 		else{
 			write_money.set_limits(0, 2000000000);
@@ -662,8 +662,8 @@ bool money_frame_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 			}
 		}
 
-		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor <= 2000000000 && write_money.get_value() >= welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor){
-			write_money.set_value(welt->get_active_player()->get_finance()->get_account_balance()/balance_divisor);
+		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor() <= 2000000000 && write_money.get_value() >= welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor()){
+			write_money.set_value(welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor());
 		}
 	}
 	return false;
