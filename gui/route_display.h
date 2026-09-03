@@ -41,7 +41,9 @@ private:
  * Overlay that shows the whole route of a schedule (every leg between
  * consecutive stops) on the map and minimap. The route itself is computed
  * by karte_t::step_schedule_route() - which only runs from karte_t::step(),
- * never from sync_step() - so the tiles appear a game step after show().
+ * never from sync_step() - one stop-to-stop leg per game step, so the tiles
+ * fill in progressively rather than appearing all at once. route_ready()
+ * only turns true once every leg has been computed.
  *
  * Air schedules are not supported: air_vehicle_t finds its route on its own
  * and calc_route() returns nothing for air_wt, so callers must not offer the

@@ -736,7 +736,7 @@ void schedule_list_gui_t::draw(scr_coord pos, scr_size size)
 	else {
 		show_route_cache(is_route_cache_show);
 		bt_show_route_cache.pressed = is_route_cache_show;
-		bt_show_route_cache.enable( line.is_bound()  &&  line->count_convoys()>0 );
+		bt_show_route_cache.enable(  welt->get_settings().is_using_route_cache()  &&  line.is_bound()  &&  line->count_convoys()>0 );
 	}
 }
 
@@ -1012,19 +1012,26 @@ void schedule_list_gui_t::hide_route_display(void *owner)
 }
 
 
+// clears the ground highlight flags for every tile currently in route_cache_route
+void schedule_list_gui_t::clear_route_tile_flags(route_t &r)
+{
+	for(  uint32 i=0;  i<r.get_count();  i++  ) {
+		if(  grund_t* const gr = welt->lookup(r.at(i))  ) {
+			for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+				obj_t *obj = gr->obj_bei(idx);
+				obj->clear_flag( obj_t::convoy_way );
+			}
+			gr->set_flag( grund_t::dirty );
+		}
+	}
+}
+
+
 void schedule_list_gui_t::show_route_cache(bool const yesno)
 {
 	if(  !yesno  ||  !line.is_bound()  ) {
 		if(  !route_cache_route.empty()  ) {
-			for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
-				if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
-					for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
-						obj_t *obj = gr->obj_bei(idx);
-						obj->clear_flag( obj_t::convoy_way );
-					}
-					gr->set_flag( grund_t::dirty );
-				}
-			}
+			clear_route_tile_flags(route_cache_route);
 			route_cache_route.clear();
 			minimap_t::get_instance()->clear_highlighted_route();
 		}
@@ -1032,9 +1039,9 @@ void schedule_list_gui_t::show_route_cache(bool const yesno)
 		return;
 	}
 
-	// prefer the cached route (if enabled and populated); otherwise fall back
-	// to the live routes of the line's own convoys, so the route is still
-	// visible even when route caching is turned off (the default)
+	// this only reads already-computed data (the route cache, or a running
+	// convoy's current route) - no pathfinding here, so it is cheap enough
+	// to redo every draw() call
 	vector_tpl<koord3d> tiles;
 	if(  welt->get_settings().is_using_route_cache()  ) {
 		welt->get_route_cache().get_route_tiles_for_line(line, tiles);
@@ -1052,22 +1059,13 @@ void schedule_list_gui_t::show_route_cache(bool const yesno)
 
 	route_display_t::activate(this, &schedule_list_gui_t::hide_route_display);
 
-	// tile count unchanged => assume the cached route is the same and skip the redraw
+	// tile count unchanged => assume the route is the same and skip the redraw
 	if(  tiles.get_count() == route_cache_route.get_count()  ) {
 		return;
 	}
 
-	// clear previously marked tiles before marking the new set
 	if(  !route_cache_route.empty()  ) {
-		for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
-			if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
-				for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
-					obj_t *obj = gr->obj_bei(idx);
-					obj->clear_flag( obj_t::convoy_way );
-				}
-				gr->set_flag( grund_t::dirty );
-			}
-		}
+		clear_route_tile_flags(route_cache_route);
 		route_cache_route.clear();
 	}
 
