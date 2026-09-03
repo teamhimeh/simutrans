@@ -19,13 +19,14 @@ const char *format_route_time_hours( uint32 ticks )
 {
 	static char buf[64];
 	const uint32 month_ticks = rd_welt->ticks_per_world_month;
+	const uint32 divisor = rd_welt->get_settings().get_spacing_shift_divisor();
 	// one in-game "day" == one world month of ticks (see halt_info.cc)
-	const double hours = month_ticks ? (double)ticks * 24.0 / (double)month_ticks : 0.0;
-	if(  hours >= 24.0  ) {
-		sprintf( buf, "%.1f h (%.1f d)", hours, hours / 24.0 );
+	uint32 time_divided = ticks * month_ticks / divisor;
+	if(  time_divided >= divisor  ) {
+		sprintf( buf, "%u (%i d)", time_divided, time_divided/divisor );
 	}
 	else {
-		sprintf( buf, "%.1f h", hours );
+		sprintf( buf, "%u ", time_divided );
 	}
 	return buf;
 }
