@@ -14,6 +14,7 @@
 #include "components/gui_action_creator.h"
 #include "components/gui_button.h"
 #include "components/gui_container.h"
+#include "components/gui_label.h"
 
 class roadsign_t;
 
@@ -68,6 +69,8 @@ class onewaysign_info_t : public obj_infowin_t, public action_listener_t
 
 		// clickable junction diagram
 		gui_oneway_diagram_t diagram;
+
+		gui_label_t lb_diagram;
 
 		// copy / paste the detailed-oneway turn matrix between signs
 		button_t bt_copy;

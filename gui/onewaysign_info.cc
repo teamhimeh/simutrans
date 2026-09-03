@@ -111,7 +111,6 @@ scr_size gui_oneway_diagram_t::get_min_size() const
 	return scr_size(s, s);
 }
 
-
 void gui_oneway_diagram_t::draw( scr_coord offset )
 {
 	if(  sign == NULL  ) {
@@ -268,37 +267,46 @@ onewaysign_info_t::onewaysign_info_t(roadsign_t* s, koord3d first_intersection) 
 		}
 		add_component(&bt_detailed_oneway);
 
-		// Clickable junction diagram: an arrow per allowed/forbidden turn.
 		const bool detail_active = is_multi_way && sign->is_detailed_oneway();
-		diagram.init(sign);
-		diagram.set_active(detail_active);
-		diagram.add_listener(this);
-		add_component(&diagram);
-
-		new_component<gui_label_t>(translator::translate("Click an arrow to toggle whether that turn is allowed"));
-
-		// 4x5 grid: one row per entry direction (N, E, S, W), with label + 4 exit checkboxes.
-		// The grid is always present; buttons are inert when detailed_oneway is off.
-		add_table(5, 4);
+		add_table(2,1);
 		{
-			for(  int row = 0;  row < 4;  row++  ) {
-				ribi_t::ribi entry = ribi_t::nesw[row];
-				ribi_t::ribi allowed = sign->get_detailed_oneway_out_ribi(entry);
-				new_component<gui_label_t>(translator::translate(from_label[row]));
-				for(  int col = 0;  col < 4;  col++  ) {
-					ribi_t::ribi exit_r = ribi_t::nesw[col];
-					char tooltip[32];
-					sprintf(tooltip, "%s->%s", translator::translate(from_label[row]), exit_label[col]);
-					bt_exit[row][col].init(button_t::square_state, exit_label[col]);
-					bt_exit[row][col].set_tooltip(tooltip);
-					bt_exit[row][col].add_listener(this);
-					bt_exit[row][col].pressed = (allowed & exit_r) != 0;
-					if(  !detail_active  ) {
-						bt_exit[row][col].disable();
+			// 4x5 grid: one row per entry direction (N, E, S, W), with label + 4 exit checkboxes.
+			// The grid is always present; buttons are inert when detailed_oneway is off.
+			add_table(5, 4);
+			{
+				lb_diagram.set_text(translator::translate("allowed direction"));
+				lb_diagram.set_tooltip(translator::translate("Click an arrow to toggle whether that turn is allowed"));
+				add_component(&lb_diagram,5);
+				for(  int row = 0;  row < 4;  row++  ) {
+					ribi_t::ribi entry = ribi_t::nesw[row];
+					ribi_t::ribi allowed = sign->get_detailed_oneway_out_ribi(entry);
+					new_component<gui_label_t>(translator::translate(from_label[row]));
+					for(  int col = 0;  col < 4;  col++  ) {
+						ribi_t::ribi exit_r = ribi_t::nesw[col];
+						char tooltip[32];
+						sprintf(tooltip, "%s->%s", translator::translate(from_label[row]), exit_label[col]);
+						bt_exit[row][col].init(button_t::square_state, exit_label[col]);
+						bt_exit[row][col].set_tooltip(tooltip);
+						bt_exit[row][col].add_listener(this);
+						bt_exit[row][col].pressed = (allowed & exit_r) != 0;
+						if(  !detail_active  ) {
+							bt_exit[row][col].disable();
+						}
+						add_component(&bt_exit[row][col]);
 					}
-					add_component(&bt_exit[row][col]);
 				}
 			}
+			end_table();
+		
+			add_table(1,0);
+			{
+				// Clickable junction diagram: an arrow per allowed/forbidden turn.
+				diagram.init(sign);
+				diagram.set_active(detail_active);
+				diagram.add_listener(this);
+				add_component(&diagram);
+			}
+			end_table();
 		}
 		end_table();
 
