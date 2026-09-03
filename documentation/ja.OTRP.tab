@@ -375,6 +375,8 @@ Wait allow other convoy depart
 他編成を発車させるまで待機
 Waiting until make another convoy depart
 他の編成に発車許可を出すまで待機します(通過駅には付与できません)
+Select Line Allow Departure
+発車許可を出す路線を指定
 #------円表記------
 $
  円
