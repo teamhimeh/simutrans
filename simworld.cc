@@ -7453,7 +7453,8 @@ const char* karte_t::call_work(tool_t *tool, player_t *player, koord3d pos, bool
 		nwc_tool_t *nwc = new nwc_tool_t(player, tool, pos, get_steps(), get_map_counter(), false);
 		network_send_server(nwc);
 		suspended = true;
-		// reset tool
+		// reset tool; clear ctrl/shift so init() does not open dialogs triggered by the queued click
+		tool->flags &= ~(tool_t::WFL_CTRL | tool_t::WFL_SHIFT);
 		tool->init(player);
 	}
 	return err;
