@@ -5917,6 +5917,18 @@ bool air_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, uin
 		return false;
 	}
 
+	if( leading ) {
+		// taxiway crossing a ground way: ask permission like any other vehicle
+		weg_t *w = gr->get_weg(air_wt);
+		if( w && w->is_crossing() ) {
+			crossing_t* cr = gr->find<crossing_t>();
+			if( !cr->request_crossing(this) ) {
+				restart_speed = 0;
+				return false;
+			}
+		}
+	}
+
 	if(  cnv->is_reversed()  ) {
 		ribi_t::ribi next_dir = ribi_type(cnv->get_route()->at(min(route_index+1,cnv->get_route()->get_count()-1)) - cnv->get_route()->at(route_index));
 		if( (next_dir & get_direction())==0 || route_index>=takeoff ) {
