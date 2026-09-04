@@ -4946,6 +4946,82 @@ uint32 convoi_t::get_average_kmh() const
 }
 
 
+// braking taper for the last tiles of a leg, taken from the old
+// gui_departure_board_t::calc_ticks_until_arrival()
+static void accumulate_leg_ticks( uint32 &delta_t, sint32 tiles, uint32 kmh_average )
+{
+	if(  tiles > 1  &&  kmh_average > 25   ) { tiles--; delta_t += 3276; } // (1 << (8+12)) / kmh_to_speed(25)
+	if(  tiles > 1  &&  kmh_average > 50   ) { tiles--; delta_t += 1638; }
+	if(  tiles > 1  &&  kmh_average > 100  ) { tiles--; delta_t += 819;  }
+	if(  tiles > 0  ) {
+		delta_t += (uint32)( ( (sint64)tiles << (8+12) ) / kmh_to_speed( max( kmh_average, 1u ) ) );
+	}
+}
+
+
+uint32 convoi_t::calc_ticks_until_arrival( convoihandle_t cnv, const vector_tpl<koord3d> *route_tiles, bool add_stop_time )
+{
+	if(  !cnv.is_bound()  ) {
+		return 0;
+	}
+
+	uint32 kmh = cnv->get_average_kmh();
+	if(  kmh == 0  ) {
+		// never ran (e.g. a fresh line): fall back to the top speed
+		kmh = speed_to_kmh( cnv->get_min_top_speed() );
+	}
+	const uint32 kmh_average = max( (kmh * 900) / 1024u, 1u );
+
+	uint32 delta_t = 0;
+
+	if(  route_tiles == NULL  ) {
+		// original behaviour: time to the end of the convoy's current route
+		sint32 delta_tiles = cnv->get_route()->get_count() - cnv->front()->get_route_index();
+		accumulate_leg_ticks( delta_t, delta_tiles, kmh_average );
+		if(  cnv->get_state() != convoi_t::DRIVING  ) {
+			delta_t += kmh_average * 25; // extra time for acceleration
+		}
+		return delta_t;
+	}
+
+	// arbitrary route: sum the legs and add an estimated dwell at each halt
+	uint32 stop_ticks = 0;
+	if(  add_stop_time  ) {
+		for(  uint8 i = 0;  i < cnv->get_vehicle_count();  i++  ) {
+			stop_ticks = max( stop_ticks, cnv->get_vehikel(i)->get_desc()->get_loading_time() );
+		}
+		if(  stop_ticks == 0  ) {
+			stop_ticks = 2000; // WTT_LOADING default
+		}
+	}
+
+	sint32 run_tiles = 0;
+	halthandle_t prev_halt;
+	const uint32 n = route_tiles->get_count();
+	for(  uint32 i = 0;  i < n;  i++  ) {
+		const koord3d pos = (*route_tiles)[i];
+		if(  pos == koord3d::invalid  ) {
+			// gap between two legs that could not be connected
+			accumulate_leg_ticks( delta_t, run_tiles, kmh_average );
+			run_tiles = 0;
+			prev_halt = halthandle_t();
+			continue;
+		}
+		const halthandle_t halt = haltestelle_t::get_halt( pos, cnv->get_owner() );
+		if(  halt.is_bound()  &&  halt != prev_halt  ) {
+			// arrived at a (new) halt: finish the leg, brake, and dwell
+			accumulate_leg_ticks( delta_t, run_tiles, kmh_average );
+			run_tiles = 0;
+			delta_t += stop_ticks;
+		}
+		prev_halt = halt;
+		run_tiles++;
+	}
+	accumulate_leg_ticks( delta_t, run_tiles, kmh_average );
+	return delta_t;
+}
+
+
 /**
  * Schedule convois for self destruction. Will be executed
  * upon next sync step
