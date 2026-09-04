@@ -93,6 +93,13 @@ private:
 	uint8 flags;
 
 	/**
+	* 0=no, 1=horizontal, 2=vertical: set on ribi==all tiles where two diagonal
+	* ways cross, so a close-diagonal image (half-tile bowtie pattern) can be used
+	* instead of the normal switch image. @see check_diagonal
+	*/
+	uint8 close_diagonal_state : 2;
+
+	/**
 	* max speed; could not be taken for desc, since other object may modify the speed
 	*/
 	uint16 max_speed;
@@ -151,6 +158,7 @@ public:
 		image_flat,
 		image_slope,
 		image_diagonal,
+		image_close_diagonal,
 		image_switch,
 		image_ex
 	};
@@ -293,6 +301,9 @@ public:
 	inline bool is_crossing() const {return flags&HAS_CROSSING; }
 	inline bool is_diagonal() const {return flags&IS_DIAGONAL; }
 	inline bool is_snow() const {return flags&IS_SNOW; }
+
+	inline void set_close_diagonal(uint8 n) { close_diagonal_state = n&3; }
+	inline uint8 is_close_diagonal() const { return close_diagonal_state; }
 
 	// this is needed during a change from crossing to tram track
 	void clear_crossing() { flags &= ~HAS_CROSSING; }

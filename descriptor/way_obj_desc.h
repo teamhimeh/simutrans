@@ -38,6 +38,11 @@ private:
 	 */
 	uint8 own_wtyp;
 
+	// cached at load time in way_obj_reader_t::register_obj(), so callers don't
+	// have to re-walk the image lists on every query
+	bool diagonals;
+	bool close_diagonals;
+
 public:
 
 	bool is_overhead_line() const { return (waytype_t)own_wtyp == overheadlines_wt; }
@@ -179,17 +184,22 @@ public:
 		return get_child<image_list_t>(7)->get_image_id(ribi / 3 - 1);
 	}
 
-	bool has_diagonal_image() const {
-		if (get_child<image_list_t>(4)->get_image(0)) {
-			// has diagonal fontimage
-			return true;
-		}
-		if (get_child<image_list_t>(5)->get_image(0)) {
-			// or diagonal back image
-			return true;
-		}
-		return false;
+	// "close" diagonal images share the same image lists as the regular
+	// diagonals (indices 4/5, right after the four normal bend images)
+	image_id get_front_close_diagonal_image_id(uint8 nr) const
+	{
+		return get_child<image_list_t>(6)->get_image_id(4 + nr);
 	}
+
+	image_id get_back_close_diagonal_image_id(uint8 nr) const
+	{
+		return get_child<image_list_t>(7)->get_image_id(4 + nr);
+	}
+
+	// quick query functions, cached in diagonals/close_diagonals
+	// @see way_obj_reader_t::register_obj
+	bool has_diagonal_image() const { return diagonals; }
+	bool has_close_diagonal_image() const { return close_diagonals; }
 
 	bool has_switch_image() const {
 		return get_child<image_list_t>(2)->get_image_id(16) != IMG_EMPTY
