@@ -48,6 +48,10 @@ protected:
 	// [0]=xoff [1]=yoff
 	static sint8 overtaking_base_offsets[8][2];
 
+	// convoy run to the last steps of the tile, so we need some offset to draw in same position. 
+	static uint8 stop_steps_offset[8];
+	uint8 steps_offset;
+
 	/**
 	 * Actual travel direction in screen coordinates
 	 */
