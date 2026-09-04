@@ -99,6 +99,7 @@
 #include "bauer/hausbauer.h"
 #include "bauer/vehikelbauer.h"
 
+#include "descriptor/building_desc.h"
 #include "descriptor/ground_desc.h"
 #include "descriptor/intro_dates.h"
 
@@ -4824,7 +4825,7 @@ bool karte_t::is_water(koord k, koord dim) const
 }
 
 
-bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const
+bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl, const building_desc_t *desc) const
 {
 	if(k.x < 0  ||  k.y < 0  ||  k.x+w > get_size().x || k.y+h > get_size().y) {
 		return false;
@@ -4854,9 +4855,17 @@ bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_b
 					test_climate = water_climate;
 				}
 			}
+			// is there an elevated way/bridge above that this building would be too tall to fit under?
+			bool blocked_above = false;
+			if(  desc  &&  desc->get_height_clearance() > 0  ) {
+				for(  uint8 z = 1;  z <= desc->get_height_clearance()  &&  !blocked_above;  z++  ) {
+					blocked_above = lookup( gr->get_pos() + koord3d(0,0,z) ) != NULL;
+				}
+			}
+
 			if( (platz_max_h != max_height  &&  platz_base_h != gr->get_hoehe())  ||  !gr->ist_natur()  ||  gr->kann_alle_obj_entfernen(NULL) != NULL  ||
 			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup( gr->get_pos()+koord3d(0,0,1) ) ||
-			     (slope_t::max_diff(slope)==2 && lookup( gr->get_pos()+koord3d(0,0,2) )) ))  ) {
+			     (slope_t::max_diff(slope)==2 && lookup( gr->get_pos()+koord3d(0,0,2) )) ))  ||  blocked_above  ) {
 				if(  last_y  ) {
 					*last_y = k_check.y;
 				}
