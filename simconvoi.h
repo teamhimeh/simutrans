@@ -1145,6 +1145,17 @@ public:
 	// just a guess of the speed
 	uint32 get_average_kmh() const;
 
+	/**
+	 * Rough estimate (in ticks == ms) of the travel time for a route driven by @p cnv.
+	 * - route_tiles == NULL: the remaining tiles of the convoy's current route
+	 *   (used by the halt departure board); @p add_stop_time is ignored.
+	 * - route_tiles != NULL: the given tiles (koord3d::invalid entries are leg
+	 *   separators and skipped). When @p add_stop_time is set, an estimated dwell
+	 *   time is added for every halt the route passes through - the longest
+	 *   loading time among the convoy's vehicles, or a default when unknown.
+	 */
+	static uint32 calc_ticks_until_arrival( convoihandle_t cnv, const vector_tpl<koord3d> *route_tiles = NULL, bool add_stop_time = false );
+
 	// Overtaking for convois
 	virtual bool can_overtake(overtaker_t *other_overtaker, sint32 other_speed, sint16 steps_other) OVERRIDE;
 

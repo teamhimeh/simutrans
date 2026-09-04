@@ -177,15 +177,90 @@ public:
 
 
 convoi_stops_list_t::convoi_stops_list_t(convoihandle_t cnv_)
-{	
+{
 	set_table_layout(1,0);
 	this->cnv = cnv_;
 	this->player = cnv_->get_owner();
+	is_whole_route_show = false;
+	last_route_schedule_count = 0xFFFFFFFFu;
+	bt_show_whole_route.init(button_t::roundbox_state | button_t::flexible, "Show Whole Route");
+	bt_show_whole_route.set_tooltip("Show the whole route of this schedule on the map and minimap.");
+	bt_show_whole_route.add_listener(this);
 	if( !cnv_.is_bound() ) {
 		return;
 	}
+	if(  cnv_->get_schedule()->get_waytype() == air_wt  ) {
+		bt_show_whole_route.disable();
+	}
 	update_schedule();
 	add_listener(this);
+}
+
+
+convoi_stops_list_t::~convoi_stops_list_t()
+{
+	route_overlay.hide();
+}
+
+
+void convoi_stops_list_t::hide_whole_route_overlay(void *win)
+{
+	convoi_stops_list_t *self = static_cast<convoi_stops_list_t *>(win);
+	self->is_whole_route_show = false;
+	self->route_overlay.hide();
+	self->bt_show_whole_route.pressed = false;
+}
+
+
+void convoi_stops_list_t::update_whole_route_overlay()
+{
+	const bool air = !cnv.is_bound()  ||  cnv->get_schedule()->get_waytype() == air_wt;
+	bt_show_whole_route.enable( !air );
+	bt_show_whole_route.pressed = is_whole_route_show && !air;
+	if(  air  ) {
+		is_whole_route_show = false;
+	}
+	if(  !is_whole_route_show  ) {
+		if(  route_overlay.is_shown()  ) {
+			route_overlay.hide();
+		}
+		last_route_schedule_count = 0xFFFFFFFFu;
+		return;
+	}
+	// only (re)issue the request when first shown or when the schedule changed
+	if(  route_overlay.is_shown()  &&  cnv->get_schedule()->get_count() == last_route_schedule_count  ) {
+		return;
+	}
+	last_route_schedule_count = cnv->get_schedule()->get_count();
+	route_overlay.show( cnv->get_schedule(), cnv->get_owner(),
+		(uint16)speed_to_kmh( cnv->get_min_top_speed() ), cnv->get_use_electric(),
+		this, &convoi_stops_list_t::hide_whole_route_overlay );
+}
+
+
+void convoi_stops_list_t::update_route_time_label()
+{
+	lb_route_time.buf().clear();
+	if(  is_whole_route_show  ) {
+		if(  !route_overlay.route_ready()  ||  !cnv.is_bound()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else if(  !welt->is_schedule_route_complete()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT_STRONG );
+			lb_route_time.buf().append( translator::translate("NO ROUTE!") );
+		}
+		else if(  welt->get_schedule_route().empty()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			const uint32 ticks = convoi_t::calc_ticks_until_arrival( cnv, &welt->get_schedule_route(), true );
+			lb_route_time.buf().printf( "%s: %s", translator::translate("Route time"), format_route_time_hours( ticks ) );
+		}
+	}
+	lb_route_time.update();
 }
 
 
@@ -194,6 +269,10 @@ void convoi_stops_list_t::update_schedule()
 {
 	remove_all();
 	entries.clear();
+	add_table(2,1);
+	add_component(&bt_show_whole_route);
+	add_component(&lb_route_time);
+	end_table();
 	gui_schedule = cnv->get_schedule()->copy();
 	static cbuffer_t buf;
 	if (gui_schedule->empty()) {
@@ -214,11 +293,21 @@ void convoi_stops_list_t::draw(scr_coord offset)
 	if(  !cnv->get_schedule()->matches(world(),gui_schedule) || !entries[ cnv->get_schedule()->get_current_stop() ]->is_active()  ) {
 		update_schedule();
 	}
+	update_whole_route_overlay();
+	route_overlay.poll();
+	update_route_time_label();
 	gui_aligned_container_t::draw(offset);
 }
 
 bool convoi_stops_list_t::action_triggered(gui_action_creator_t *comp, value_t p)
 {
+	if(  comp == &bt_show_whole_route  ) {
+		is_whole_route_show = !is_whole_route_show
+			&&  cnv.is_bound()  &&  cnv->get_schedule()->get_waytype() != air_wt;
+		last_route_schedule_count = 0xFFFFFFFFu;
+		update_whole_route_overlay();
+		return true;
+	}
 	update_schedule();
 	// has to be one of the entries
 	call_listeners(p);

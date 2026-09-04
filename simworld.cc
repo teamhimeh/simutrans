@@ -4483,6 +4483,12 @@ void karte_t::step()
 		}
 	}
 
+	// client-local: incrementally compute the route of a schedule for the
+	// "show route" overlay, one stop-to-stop leg per step. Must stay here in
+	// step() (never sync_step()): it runs calc_route() and only happens when
+	// a local schedule editor asked for it.
+	step_schedule_route();
+
 	DBG_DEBUG4("karte_t::step", "end");
 }
 
@@ -8106,3 +8112,215 @@ bool karte_t::is_player_password_set(uint8 player_nr) const
 	player_t *player = get_player(player_nr);
 	return player  &&  player->is_password_hash();
 }
+
+
+/* Route of the schedule shown by a schedule editor. Kept file local like the
+ * deferred move above: this is client local display state that must never end
+ * up in a savegame.
+ */
+static vector_tpl<koord3d> schedule_route;   ///< koord3d::invalid separates legs without a route
+static uint8  schedule_route_player_nr = PLAYER_UNOWNED;
+static uint32 schedule_route_owner = 0;      ///< component owning the overlay, 0 = nobody
+static bool   schedule_route_complete = true; ///< false if any required leg had no route (the final wrap-around leg skipped for next_line schedules does not count)
+
+static schedule_t *schedule_route_request = NULL; ///< pending, belongs to schedule_route_owner
+static uint8  schedule_route_request_player_nr = PLAYER_UNOWNED;
+static uint16 schedule_route_request_speed = 0;
+static bool   schedule_route_request_electric = false;
+
+/* Incremental computation state: step_schedule_route() paths one stop-to-stop
+ * leg of schedule_route_progress per call instead of the whole schedule's
+ * circuit at once, so a long schedule's cost is spread across several game
+ * steps rather than spiking a single one.
+ */
+static schedule_t     *schedule_route_progress = NULL;      ///< schedule being routed leg by leg, owned
+static vehicle_desc_t *schedule_route_test_desc = NULL;     ///< owned; must outlive schedule_route_test_driver
+static vehicle_t       *schedule_route_test_driver = NULL;  ///< owned throwaway vehicle, or NULL if none possible for this waytype
+static uint16  schedule_route_progress_speed = 0;
+static uint8   schedule_route_next_leg = 0;                 ///< next schedule entry index whose outgoing leg still needs computing
+
+
+const vector_tpl<koord3d> &karte_t::get_schedule_route() const { return schedule_route; }
+bool karte_t::is_schedule_route_complete() const { return schedule_route_complete; }
+uint32 karte_t::get_schedule_route_owner() const { return schedule_route_owner; }
+uint8 karte_t::get_schedule_route_player_nr() const { return schedule_route_player_nr; }
+bool karte_t::is_schedule_route_active() const { return schedule_route_owner != 0  ||  schedule_route_request != NULL; }
+bool karte_t::is_schedule_route_pending() const { return schedule_route_request != NULL  ||  schedule_route_progress != NULL; }
+
+
+void karte_t::request_schedule_route(schedule_t *schedule, player_t *pl, uint32 owner, uint16 speed_kmh, bool needs_electrification)
+{
+	if(  schedule == NULL  ||  pl == NULL  ||  owner == 0  ) {
+		return;
+	}
+	// a newer request always replaces a pending one, and takes over the overlay
+	// right away: whatever is shown belongs to an older schedule from now on
+	delete schedule_route_request;
+	schedule_route_request = schedule->copy();
+	schedule_route_request_player_nr = pl->get_player_nr();
+	schedule_route_request_speed = speed_kmh;
+	schedule_route_request_electric = needs_electrification;
+	schedule_route_owner = owner;
+	if(  !schedule_route.empty()  ) {
+		schedule_route.clear();
+		set_dirty();
+	}
+}
+
+
+void karte_t::clear_schedule_route(uint32 owner)
+{
+	// an editor that no longer owns the overlay must not drop a newer one
+	if(  owner != 0  &&  owner != schedule_route_owner  ) {
+		return;
+	}
+	// dropping the pending request is what keeps an outdated result from arriving
+	delete schedule_route_request;
+	schedule_route_request = NULL;
+	schedule_route_owner = 0;
+	schedule_route_complete = true;
+	// also abandon an incremental computation in progress for this overlay
+	if(  schedule_route_test_driver  ) {
+		schedule_route_test_driver->set_pos( koord3d::invalid );
+		delete schedule_route_test_driver;
+		schedule_route_test_driver = NULL;
+	}
+	delete schedule_route_test_desc;
+	schedule_route_test_desc = NULL;
+	delete schedule_route_progress;
+	schedule_route_progress = NULL;
+	if(  !schedule_route.empty()  ) {
+		schedule_route.clear();
+		set_dirty();
+	}
+}
+
+
+void karte_t::step_schedule_route()
+{
+	// a fresh request always supersedes whatever incremental computation was
+	// still running for the previous one, so its next leg cannot land in
+	// schedule_route mixed in with the new schedule's tiles
+	if(  schedule_route_request != NULL  ) {
+		schedule_t *new_schedule = schedule_route_request;
+		const uint16 new_speed   = schedule_route_request_speed;
+		const bool   new_electric = schedule_route_request_electric;
+		player_t    *pl          = get_player( schedule_route_request_player_nr );
+		schedule_route_request = NULL;
+
+		if(  pl == NULL  ) {
+			// unresolvable request: drop it silently, leaving whatever was
+			// already shown (if anything) untouched, same as before
+			delete new_schedule;
+		}
+		else {
+			if(  schedule_route_test_driver  ) {
+				// it was built on a real tile, and the destructor of a rail vehicle
+				// would release the reservation of whoever holds that tile: take it
+				// off the map first
+				schedule_route_test_driver->set_pos( koord3d::invalid );
+				delete schedule_route_test_driver;
+				schedule_route_test_driver = NULL;
+			}
+			delete schedule_route_test_desc;
+			schedule_route_test_desc = NULL;
+			delete schedule_route_progress;
+			schedule_route_progress = new_schedule;
+
+			schedule_route.clear();
+			schedule_route_complete = true;
+			schedule_route_next_leg = 0;
+			schedule_route_player_nr = pl->get_player_nr();
+			schedule_route_progress_speed = new_speed;
+
+			// A throw away vehicle to query the ways; it is never put on the map. It
+			// carries the owner (private ways depend on it), the speed of the convoi
+			// driving this schedule, and whether that convoi needs catenary.
+			// the vehicle keeps a pointer to its descriptor, so the descriptor must
+			// outlive it: both are kept alive across step_schedule_route() calls
+			// until every leg of this schedule has been routed
+			const waytype_t wt = schedule_route_progress->get_waytype();
+			schedule_route_test_desc = new vehicle_desc_t( (uint8)wt, new_speed, new_electric ? vehicle_desc_t::electric : vehicle_desc_t::diesel );
+			switch(  wt  ) {
+				case road_wt:
+				case track_wt:
+				case tram_wt:
+				case monorail_wt:
+				case maglev_wt:
+				case narrowgauge_wt:
+				case water_wt:
+					schedule_route_test_driver = vehicle_builder_t::build( koord3d(), pl, NULL, schedule_route_test_desc );
+					schedule_route_test_driver->set_flag( obj_t::not_on_map );
+					// no convoi to ask, so the restriction is set on the vehicle itself
+					schedule_route_test_driver->set_leading(true);
+					break;
+
+				default:
+					// air_wt routes are found by air_vehicle_t itself, not by calc_route
+					break;
+			}
+			set_dirty();
+		}
+	}
+
+	if(  schedule_route_progress == NULL  ) {
+		return;
+	}
+
+	const schedule_t *schedule = schedule_route_progress;
+	const uint8 count = schedule->get_count();
+
+	// nothing left to compute: no driver possible for this waytype (e.g. air),
+	// a degenerate schedule, or every leg has already been routed
+	if(  schedule_route_test_driver == NULL  ||  count <= 1  ||  schedule_route_next_leg >= count  ) {
+		if(  schedule_route_test_driver  ) {
+			schedule_route_test_driver->set_pos( koord3d::invalid );
+			delete schedule_route_test_driver;
+			schedule_route_test_driver = NULL;
+		}
+		delete schedule_route_test_desc;
+		schedule_route_test_desc = NULL;
+		delete schedule_route_progress;
+		schedule_route_progress = NULL;
+		return;
+	}
+
+	// compute exactly one stop-to-stop leg this step, instead of pathfinding
+	// the whole schedule's circuit in a single burst
+	const uint8 i = schedule_route_next_leg++;
+	if(  !(  schedule->get_next_line().is_bound()  &&  i==count-1  )  ) {
+		const koord3d start  = schedule->at(i).pos;
+		const koord3d target = schedule->at((i+1) % count).pos;
+		if(  start != target  ) {
+			route_t leg;
+			if(  leg.calc_route( this, start, target, schedule_route_test_driver, schedule_route_progress_speed, 1 ) == route_t::no_route  ) {
+				// a required leg has no route: the whole route is incomplete
+				schedule_route_complete = false;
+				// mark the gap, so that the display does not connect across it
+				if(  !schedule_route.empty()  &&  schedule_route.back() != koord3d::invalid  ) {
+					schedule_route.append( koord3d::invalid );
+				}
+			}
+			else {
+				for(  koord3d const& pos : leg.get_route()  ) {
+					if(  schedule_route.empty()  ||  schedule_route.back() != pos  ) {
+						schedule_route.append( pos );
+					}
+				}
+			}
+		}
+	}
+
+	if(  schedule_route_next_leg >= count  ) {
+		// finished: release the throwaway vehicle/descriptor and the owned schedule copy
+		schedule_route_test_driver->set_pos( koord3d::invalid );
+		delete schedule_route_test_driver;
+		schedule_route_test_driver = NULL;
+		delete schedule_route_test_desc;
+		schedule_route_test_desc = NULL;
+		delete schedule_route_progress;
+		schedule_route_progress = NULL;
+	}
+	set_dirty();
+}
+
