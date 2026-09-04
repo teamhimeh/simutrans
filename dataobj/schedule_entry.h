@@ -212,7 +212,7 @@ public:
 	bool is_wait_allow_convoy_departure() const { return (stop_flags&WAIT_ALLOW_DEPARTURE)>0; }
 	void set_wait_allow_convoy_departure(bool y) { y ? stop_flags |= WAIT_ALLOW_DEPARTURE : stop_flags &= ~WAIT_ALLOW_DEPARTURE; }
 	bool is_drive_without_reservation() const {return (stop_flags&WITHOUT_RESERVATION)>0;}
-	void set_drive_without_reservation(bool y) { y? stop_flags |= WITHOUT_RESERVATION : stop_flags &=~WITHOUT_RESERVATION;}
+	void set_drive_without_reservation(bool y) { y? stop_flags |= WITHOUT_RESERVATION : stop_flags &= ~WITHOUT_RESERVATION;}
 
 	void set_spacing(uint16 a, uint16 b, uint16 c) {
 		spacing = a;

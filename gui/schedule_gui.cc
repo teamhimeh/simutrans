@@ -912,11 +912,11 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_drive_without_reservation.init(button_t::square_automatic, "Without Reservation");
 		bt_drive_without_reservation.set_tooltip("Drive without reservation until next signal");
 		bt_drive_without_reservation.add_listener(this);
-		add_component(&bt_drive_without_reservation,2);
+		add_component(&bt_drive_without_reservation);
 		bt_all_without_reservation.init(button_t::roundbox, "apply for all");
 		bt_all_without_reservation.set_tooltip("apply driving with reservation setting for all stops");
 		bt_all_without_reservation.add_listener(this);
-		add_component(&bt_all_without_reservation);
+		add_component(&bt_all_without_reservation,2);
 
 	}
 	end_table();
@@ -1428,7 +1428,7 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	}
 	else if(comp == &bt_drive_without_reservation) {
 		if(!schedule->empty()) {
-			schedule->at(schedule->get_current_stop()).set_drive_without_reservation(!bt_drive_without_reservation.pressed);
+			schedule->at(schedule->get_current_stop()).set_drive_without_reservation(!schedule->at(schedule->get_current_stop()).is_drive_without_reservation());
 			update_selection();
 		}
 	}

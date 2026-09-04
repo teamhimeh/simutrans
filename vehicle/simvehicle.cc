@@ -4487,10 +4487,22 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	if(  gr_current  ) {
 		if(weg_t* w = gr_current->get_weg(get_waytype())) {
 			if(w->has_signal()) {
+				dbg->message("rail_vehicle_t::can_enter_tile()","we find signal at %s, so drive without reservation should be false", gr_current->get_pos().get_str());
 				cnv->set_drive_without_reservation(false);
+				cnv->set_next_stop_index(route_index-2);
 			}
 		}
 	}
+	if(  gr  ) {
+		if(weg_t* w = gr->get_weg(get_waytype())) {
+			if(w->has_signal()) {
+				dbg->message("rail_vehicle_t::can_enter_tile()","we find signal at %s, so drive without reservation should be false", gr->get_pos().get_str());
+				cnv->set_drive_without_reservation(false);
+				cnv->set_next_stop_index(route_index-1);
+			}
+		}
+	}
+	dbg->message("rail_vehicle_t::can_enter_tile()","we enter %s %s reservation, %i",gr->get_pos().get_str(),cnv->is_drive_without_reservation()?"without":"with",cnv->get_next_stop_index());
 
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
 		// reserve first block at the start until the next signal
@@ -4515,16 +4527,14 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 
 				if (!(w->has_signal()  ||  gr_current->get_crossing())) {
 					// free track => reserve up to next signal
+					if(  cnv->is_drive_without_reservation()  ) {
+						// we ignore signal, ok!
+						// cnv->set_next_stop_index(next_crossing < next_signal ? next_crossing : next_signal);
+						return true;
+					}
 					if (!block_reserver(cnv->get_route(), max(route_index, 1) - 1, next_signal, next_crossing, 0, true, false)) {
-						if(  cnv->is_drive_without_reservation()  ) {
-							// we ignore signal, ok!
-							// cnv->set_next_stop_index(next_crossing < next_signal ? next_crossing : next_signal);
-							return true;
-						}
-						else {
-							restart_speed = 0;
-							return false;
-						}
+						restart_speed = 0;
+						return false;
 					}
 					if(  next_signal>cnv->get_route()->get_count()-1  ) {
 						// no signal until next stop, go!
@@ -4600,7 +4610,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	}
 
 	// signal disappeared, train passes the tile of former signal
-	if(  next_block+1 < route_index  ) {
+	if(  next_block+1 < route_index  &&  !cnv->is_drive_without_reservation()  ) {
 		// we need to reserve the next block even if there is no signal present anymore
 		bool ok = block_reserver( cnv->get_route(), route_index, next_signal, next_crossing, 0, true, false );
 		if (ok) {
@@ -4657,7 +4667,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 			else if(  !sch1->has_signal()  ) {
 				// can reserve: find next place to do something and drive on
-				if(  block_pos == cnv->get_route()->back()  ) {
+				if(  block_pos == cnv->get_route()->back()  ||  cnv->is_drive_without_reservation()  ) {
 					// is also last tile => go on ...
 					cnv->set_next_stop_index( route_t::INVALID_INDEX );
 					return true;
@@ -4821,10 +4831,12 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			if(next_crossing_index==route_t::INVALID_INDEX  &&  gr->get_crossing()) {
 				next_crossing_index = i;
 			}
-			for(uint8 i_stop=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i_stop))&&i_stop!=cnv->get_schedule()->get_current_stop()-1; i_stop++) {
+			for(uint8 i_stop=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i_stop%cnv->get_schedule()->get_count()))&&i_stop!=cnv->get_schedule()->get_current_stop()-1; i_stop++) {
 				i_stop %= cnv->get_schedule()->get_count();
-				if(  cnv->get_schedule()->at(i_stop).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i_stop).pos  ) {
-					break;
+				if(  cnv->get_schedule()->at(i_stop).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i_stop).pos && !sch1->has_signal()  ) {
+					dbg->message("rail_vehicle_t::block_reserver()","reservation break because we reach waypoint without reservation, %s, %i",pos.get_str(),i);
+					next_signal_index = i;
+					count --;
 				}
 			}
 		}
@@ -4894,6 +4906,7 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 		}
 	}
 	cnv->set_next_reservation_index( i );
+	dbg->message("rail_vehicle_t::block_reserver()","we reserve to %i",i);
 
 	return true;
 }
