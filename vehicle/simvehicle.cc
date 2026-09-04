@@ -4487,7 +4487,6 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	if(  gr_current  ) {
 		if(weg_t* w = gr_current->get_weg(get_waytype())) {
 			if(w->has_signal()) {
-				dbg->message("rail_vehicle_t::can_enter_tile()","we find signal at %s, so drive without reservation should be false", gr_current->get_pos().get_str());
 				cnv->set_drive_without_reservation(false);
 				cnv->set_next_stop_index(route_index-2);
 			}
@@ -4496,13 +4495,11 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	if(  gr  ) {
 		if(weg_t* w = gr->get_weg(get_waytype())) {
 			if(w->has_signal()) {
-				dbg->message("rail_vehicle_t::can_enter_tile()","we find signal at %s, so drive without reservation should be false", gr->get_pos().get_str());
 				cnv->set_drive_without_reservation(false);
 				cnv->set_next_stop_index(route_index-1);
 			}
 		}
 	}
-	dbg->message("rail_vehicle_t::can_enter_tile()","we enter %s %s reservation, %i",gr->get_pos().get_str(),cnv->is_drive_without_reservation()?"without":"with",cnv->get_next_stop_index());
 
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
 		// reserve first block at the start until the next signal
