@@ -4484,19 +4484,21 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	uint8 next_c_steps;
 	grund_t* gr_current = welt->lookup(get_pos());
 	// reset driving without reservation
-	if(  gr_current  ) {
-		if(weg_t* w = gr_current->get_weg(get_waytype())) {
-			if(w->has_signal()) {
-				cnv->set_drive_without_reservation(false);
-				cnv->set_next_stop_index(route_index-2);
+	if(  cnv->is_drive_without_reservation()  ) {
+		if(  gr_current  ) {
+			if(weg_t* w = gr_current->get_weg(get_waytype())) {
+				if(w->has_signal()) {
+					cnv->set_drive_without_reservation(false);
+					cnv->set_next_stop_index(route_index-2);
+				}
 			}
 		}
-	}
-	if(  gr  ) {
-		if(weg_t* w = gr->get_weg(get_waytype())) {
-			if(w->has_signal()) {
-				cnv->set_drive_without_reservation(false);
-				cnv->set_next_stop_index(route_index-1);
+		if(  gr  ) {
+			if(weg_t* w = gr->get_weg(get_waytype())) {
+				if(w->has_signal()) {
+					cnv->set_drive_without_reservation(false);
+					cnv->set_next_stop_index(route_index-1);
+				}
 			}
 		}
 	}
