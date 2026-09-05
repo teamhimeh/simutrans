@@ -968,6 +968,23 @@ void vehicle_t::initialise_journey(uint16 start_route_index, bool recalc)
 	}
 }
 
+
+void vehicle_t::clamp_route_index()
+{
+	if(  cnv == NULL  ) {
+		return;
+	}
+	const uint32 count = cnv->get_route()->get_count();
+	if(  route_index > count  ) {
+		route_index = (uint16)count;
+	}
+	if(  route_index >= count  ) {
+		// nothing left to drive to on this (stub) route
+		check_for_finish = true;
+	}
+}
+
+
 sint8 vehicle_t::vehicle_offset_defined_by_way(ribi_t::dir d, const sint8 offset, const bool is_x, const bool reverse, const sint16 raster_width)
 {
 	sint8 offset_value;
@@ -1124,8 +1141,11 @@ grund_t* vehicle_t::hop_check()
 			}
 
 			// Check detailed_oneway restriction on current tile: may block a specific exit direction.
+			// Only honour a single_way sign that governs this vehicle's own waytype -- a sign
+			// on a tile shared with another waytype (e.g. a road sign where tram track crosses)
+			// must not force this convoi to reroute.
 			const roadsign_t *rs_cur = bd->find<roadsign_t>();
-			if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
+			if(  rs_cur  &&  rs_cur->get_governed_waytype() == wt  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
 				route_t const& r = *cnv->get_route();
 				if(  route_index >= 1 && route_index < cnv->get_route()->get_count()-1  ) {
 					const ribi_t::ribi entry_ribi = ribi_type(r.at(route_index - 1), r.at(route_index));
@@ -1914,8 +1934,10 @@ ribi_t::ribi vehicle_t::get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const
 	if(  !gr  ) {
 		return ribi_t::none;
 	}
+	// Only a single_way sign that governs this vehicle's own waytype restricts it;
+	// a sign belonging to another waytype sharing the tile must be ignored.
 	const roadsign_t *rs = gr->find<roadsign_t>();
-	if(  !rs || !rs->get_desc()->is_single_way() || !rs->is_detailed_oneway()  ) {
+	if(  !rs || rs->get_governed_waytype() != get_waytype() || !rs->get_desc()->is_single_way() || !rs->is_detailed_oneway()  ) {
 		return get_ribi(gr);
 	}
 	ribi_t::ribi ribi = gr->get_weg_ribi_unmasked(get_waytype());

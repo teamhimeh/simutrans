@@ -1524,17 +1524,21 @@ bool check_pos_win(event_t *ev)
 	// click in main menu?
 	const scr_coord_val menu_click_extra = get_main_menu_scrollbar_extra();
 	scr_coord menuoffset((env_t::menupos == MENU_RIGHT) * (display_get_width() - env_t::iconsize.w - menu_click_extra), (env_t::menupos == MENU_BOTTOM) * (display_get_height() - env_t::iconsize.h - menu_click_extra) - D_TITLEBAR_HEIGHT);
-	if (!tool_t::toolbar_tool.empty()  &&
-		tool_t::toolbar_tool[0]->get_tool_selector()  &&
-		tool_t::toolbar_tool[0]->get_tool_selector()->is_hit(x-menuoffset.x, y-menuoffset.y)  &&
-		y > menuoffset.y+D_TITLEBAR_HEIGHT  &&
+	tool_selector_t *menu_selector = tool_t::toolbar_tool.empty() ? NULL : tool_t::toolbar_tool[0]->get_tool_selector();
+	// while a drag (classic icon-drag or scrollbar) is in progress, keep routing
+	// events here regardless of is_hit()/the y-threshold below - mouse capture,
+	// so a fast/off-axis drag doesn't lose tracking short of the scrollbar's end
+	// (see tool_selector_t::is_being_dragged())
+	if(  menu_selector  &&
+		( menu_selector->is_being_dragged()  ||
+		  (menu_selector->is_hit(x-menuoffset.x, y-menuoffset.y)  &&  y > menuoffset.y+D_TITLEBAR_HEIGHT) )  &&
 		ev->ev_class != EVENT_KEYBOARD) {
 
 		event_t wev = *ev;
 		wev.move_origin(menuoffset);
 
 		inside_event_handling = tool_t::toolbar_tool[0];
-		tool_t::toolbar_tool[0]->get_tool_selector()->infowin_event( &wev );
+		menu_selector->infowin_event( &wev );
 		inside_event_handling = NULL;
 
 		// swallow event

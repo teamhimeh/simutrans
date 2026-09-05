@@ -493,10 +493,22 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_bar.set_base(cnv->get_route()->get_count()-1);
 	cnv_route_index = cnv->front()->get_route_index() - 1;
 
-	// show route update
-	show_route(is_route_show);
-	route_show_button.pressed = is_route_show;
-	route_show_button.enable();
+	// show route update - while a whole-schedule route overlay is requested or
+	// shown (e.g. from the Stops tab or a schedule editor), the convoy route
+	// must not be drawn and its button is disabled
+	if(  welt->is_schedule_route_active()  ) {
+		if(  is_route_show  ) {
+			is_route_show = false;
+			show_route(false);
+		}
+		route_show_button.pressed = false;
+		route_show_button.disable();
+	}
+	else {
+		show_route(is_route_show);
+		route_show_button.pressed = is_route_show;
+		route_show_button.enable();
+	}
 
 	// update layout before rendering so upper section width matches current window size
 	set_windowsize(size);

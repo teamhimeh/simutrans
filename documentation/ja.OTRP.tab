@@ -371,6 +371,12 @@ Waiting for departure allowance!
 発車許可待ち
 Wait for other convoy
 他編成の到着を待機
+Wait allow other convoy depart
+他編成を発車させるまで待機
+Waiting until make another convoy depart
+他の編成に発車許可を出すまで待機します(通過駅には付与できません)
+Select Line Allow Departure
+発車許可を出す路線を指定
 #------円表記------
 $
  円
@@ -625,6 +631,14 @@ allow_elevated_way_over_others_halt
 他社駅直上に高架線を建設可(allow_elevated_way_over_others_halt)
 Detailed oneway
 通行可能な方向の詳細設定
+Copy oneway detail
+通行方向の詳細設定をコピー
+Paste oneway detail
+通行方向の詳細設定を貼り付け
+Click an arrow to toggle whether that turn is allowed
+矢印をクリックすると、その進行方向の可否を切り替えます
+allowed direction
+通行可能な方向
 transit_by_foot
 徒歩乗り換え許可(transit_by_foot)
 foot_path_weight
@@ -637,6 +651,8 @@ penalty_wait_for_two_month
 停滞中に課税する(penalty_wait_for_two_month)
 base_revenue_from_halt
 駅からの収入を得る(base_revenue_from_halt)
+tile_length
+直線1タイルの長さ(tile_length) (m)
 #------通知設定------
 New Year
 新年
@@ -690,6 +706,8 @@ Electrified
 %sは異なる会社か\n異なる属性の車両を\n連結しているため\n入庫できません.\n
 Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
+Distance (m)
+走行距離 (m)
 #------その他の翻訳------
 v%d (current version)
 v%d (現在のバージョン)

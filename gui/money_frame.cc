@@ -31,6 +31,13 @@ static vector_tpl<sint32> bFilterStates;
 
 #define BUTTONSPACE max(D_BUTTON_HEIGHT, LINESPACE)
 
+/// number of data rows of the finance table, see cell_to_buttons/cell_to_moneylabel
+#define MONEY_FRAME_ROWS (12)
+
+/// index of the first of the three revenue breakdown buttons in cost_type_name/cost_type.
+/// They are sub-entries of the revenue row and are laid out narrower and right aligned.
+#define FIRST_REVENUE_BREAKDOWN_BUTTON (13)
+
 static const char *cost_type_name[MAX_PLAYER_COST_BUTTON] =
 {
 	"Transported",
@@ -45,7 +52,10 @@ static const char *cost_type_name[MAX_PLAYER_COST_BUTTON] =
 	"Cash",
 	"Assets",
 	"Margin (%)",
-	"Net Wealth"
+	"Net Wealth",
+	"Passagiere",
+	"Post",
+	"Fracht"
 };
 
 
@@ -63,7 +73,10 @@ static const uint8 cost_type_color[MAX_PLAYER_COST_BUTTON] =
 	COL_CASH,
 	COL_VEHICLE_ASSETS,
 	COL_MARGIN,
-	COL_WEALTH
+	COL_WEALTH,
+	COL_REVENUE_PAS,
+	COL_REVENUE_MAIL,
+	COL_REVENUE_GOOD
 };
 
 
@@ -82,19 +95,25 @@ static const uint8 cost_type[3*MAX_PLAYER_COST_BUTTON] =
 	ATV_NON_FINANCIAL_ASSETS,       TT_ALL, MONEY,   // value of all vehicles and buildings
 	ATV_PROFIT_MARGIN,              TT_ALL, PERCENT,
 	ATC_NETWEALTH,                  TT_MAX, MONEY,   // Total Cash + Assets
+	ATV_REVENUE_PASSENGER,          TT_ALL, MONEY,   // Income from carrying passengers
+	ATV_REVENUE_MAIL,               TT_ALL, MONEY,   // Income from carrying mail
+	ATV_REVENUE_GOOD,               TT_ALL, MONEY,   // Income from carrying all other goods
 };
 
 static const sint8 cell_to_buttons[] =
 {
-	0,  -1,  -1,  -1,  -1,
-	1,  -1,  -1,  -1,  -1,
-	2,  -1,  -1,  -1,  -1,
-	3,  -1,  -1,  -1,  -1,
-	4,  -1,  -1,  -1,  -1,
-	5,  -1,  -1,   9,  -1,
-	6,  -1,  -1,  10,  -1,
-	7,  -1,  -1,  11,  -1,
-	8,  -1,  -1,  12,  -1
+	 0,  -1,  -1,  -1,  -1,
+	 1,  -1,  -1,  -1,  -1,
+	13,  -1,  -1,  -1,  -1,
+	14,  -1,  -1,  -1,  -1,
+	15,  -1,  -1,  -1,  -1,
+	 2,  -1,  -1,  -1,  -1,
+	 3,  -1,  -1,  -1,  -1,
+	 4,  -1,  -1,  -1,  -1,
+	 5,  -1,  -1,   9,  -1,
+	 6,  -1,  -1,  10,  -1,
+	 7,  -1,  -1,  11,  -1,
+	 8,  -1,  -1,  12,  -1
 };
 
 
@@ -122,13 +141,22 @@ static const uint16 label_type[] =
 	TT_MAX, ATC_CASH,                       0, MONEY,
 	TT_ALL, ATV_NON_FINANCIAL_ASSETS,       0, MONEY,
 	TT_ALL, ATV_PROFIT_MARGIN,              0, PERCENT,
-	TT_MAX, ATC_NETWEALTH,                  0, MONEY
+	TT_MAX, ATC_NETWEALTH,                  0, MONEY,
+	TT_ALL, ATV_REVENUE_PASSENGER,          0, MONEY,
+	TT_ALL, ATV_REVENUE_PASSENGER,          1, MONEY,
+	TT_ALL, ATV_REVENUE_MAIL,               0, MONEY,
+	TT_ALL, ATV_REVENUE_MAIL,               1, MONEY,
+	TT_ALL, ATV_REVENUE_GOOD,               0, MONEY,
+	TT_ALL, ATV_REVENUE_GOOD,               1, MONEY
 };
 
 static const sint8 cell_to_moneylabel[] =
 {
 	-1,   0,   1,  -1,  -1,
 	-1,   2,   3,  -1,  -1,
+	-1,  22,  23,  -1,  -1,
+	-1,  24,  25,  -1,  -1,
+	-1,  26,  27,  -1,  -1,
 	-1,   4,   5,  -1,  -1,
 	-1,   6,   7,  -1,  -1,
 	-1,   8,   9,  -1,  -1,
@@ -339,11 +367,22 @@ money_frame_t::money_frame_t(player_t *player) :
 		send_money_player_num.add_listener( this );
 		add_component(&send_money_player_num);
 
-		write_money.set_width( 100 );
+		add_table(3,0);
+		{
+		write_money.set_width( 120 );
 		write_money.set_value( 0 );
 		write_money.set_increment_mode(1);
 		write_money.add_listener(this);
 		add_component(&write_money);
+		new_component<gui_label_t>(".");
+		write_money_cents.set_width(10);
+		write_money_cents.set_value(0);
+		write_money_cents.set_increment_mode(1);
+		write_money_cents.add_listener(this);
+		write_money_cents.set_limits(0,99);
+		add_component(&write_money_cents);
+		}
+		end_table();
 
 		add_component(&send_money_button);
 		send_money_button.init(button_t::roundbox, "");
@@ -369,7 +408,7 @@ money_frame_t::money_frame_t(player_t *player) :
 		uint8 k = 0;
 		current->set_table_layout(1,0);
 
-		current->add_table(5,10);
+		current->add_table(5,MONEY_FRAME_ROWS+1);
 
 		// first row: some labels
 		current->new_component<gui_empty_t>();
@@ -379,7 +418,7 @@ money_frame_t::money_frame_t(player_t *player) :
 		current->new_component<gui_empty_t>();
 
 		// all other rows: mix of buttons and money-labels
-		for(uint8 r = 0; r < 9; r++) {
+		for(uint8 r = 0; r < MONEY_FRAME_ROWS; r++) {
 			for(uint8 c = 0; c < 5; c++, k++) {
 				sint8 cost = cell_to_buttons[k];
 				sint8 l = cell_to_moneylabel[k];
@@ -391,11 +430,18 @@ money_frame_t::money_frame_t(player_t *player) :
 					sint16 curve = i == 0
 					? chart.add_curve(  color_idx_to_rgb(cost_type_color[cost]), *chart_table_year,  MAX_PLAYER_COST_BUTTON, cost, MAX_PLAYER_HISTORY_YEARS,  curve_type, false, true, curve_precision)
 					: mchart.add_curve( color_idx_to_rgb(cost_type_color[cost]), *chart_table_month, MAX_PLAYER_COST_BUTTON, cost, MAX_PLAYER_HISTORY_MONTHS, curve_type, false, true, curve_precision);
+					// the revenue breakdown is a sub-entry of the revenue row above it: keep those
+					// buttons at their own width and push them to the right of the column
+					const bool breakdown = cost >= FIRST_REVENUE_BREAKDOWN_BUTTON;
+					if (breakdown) {
+						current->add_table(2,1);
+						current->new_component<gui_fill_t>();
+					}
 					// add button
 					button_t *b;
 					if (i == 0) {
 						b = current->new_component<button_t>();
-						b->init(button_t::box_state_automatic | button_t::flexible, cost_type_name[cost]);
+						b->init(breakdown ? button_t::box_state_automatic : button_t::box_state_automatic | button_t::flexible, cost_type_name[cost]);
 						b->background_color = color_idx_to_rgb(cost_type_color[cost]);
 						b->pressed = false;
 						buttons[cost] = b;
@@ -405,17 +451,20 @@ money_frame_t::money_frame_t(player_t *player) :
 						current->add_component(b);
 					}
 					button_to_chart.append(b, current_chart, curve);
+					if (breakdown) {
+						current->end_table();
+					}
 				}
 				else if (l >= 0) {
 					// money_frame_label_t(uint8 tt, uint8 t, uint8 lt, uint8 i, bool mon)
 					money_labels.append( current->new_component<money_frame_label_t>(label_type[4*l], label_type[4*l+1], label_type[4*l+3], label_type[4*l+2], i==1) );
 				}
 				else {
-					if (r >= 2  &&  r<=4  &&  c == 4) {
+					if (r >= 5  &&  r<=7  &&  c == 4) {
 						switch(r) {
-							case 2: current->new_component<gui_label_t>("This Month", SYSCOL_TEXT_HIGHLIGHT); break;
-							case 3: current->add_component(&maintenance_money); break;
-							case 4: current->new_component<gui_label_t>("This Year", SYSCOL_TEXT_HIGHLIGHT);
+							case 5: current->new_component<gui_label_t>("This Month", SYSCOL_TEXT_HIGHLIGHT); break;
+							case 6: current->add_component(&maintenance_money); break;
+							case 7: current->new_component<gui_label_t>("This Year", SYSCOL_TEXT_HIGHLIGHT);
 						}
 					}
 					else {
@@ -523,20 +572,25 @@ void money_frame_t::update_labels()
 	// update send_money button
 	send_money_button.disable();
 	write_money.disable();
+	write_money_cents.disable();
+	write_money_cents.set_visible(!env_t::show_yen);
 	if(  player == welt->get_active_player()  ){
 		write_money.enable();
+		write_money_cents.enable();
 		send_money_button.enable();
-		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/1000 <= 2000000000){
-			write_money.set_limits(0, welt->get_active_player()->get_finance()->get_account_balance()/1000);
+		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor() <= 2000000000){
+			write_money.set_limits(0, welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor());
 		}
 		else{
 			write_money.set_limits(0, 2000000000);
 		}
-		money_to_string(send_money_format_str, (double)write_money.get_value(), false);
+		double write_money_float = env_t::show_yen?(double)write_money.get_value()*.01:(double)write_money.get_value()+(double)write_money_cents.get_value()*.01;
+		money_to_string(send_money_format_str, write_money_float, true);
 	}
 	else{
 		send_money_player_num.set_selection(player->get_player_nr());
 		write_money.set_value(0);
+		write_money_cents.set_value(0);
 		sprintf(send_money_format_str, "0");
 	}
 
@@ -632,7 +686,7 @@ bool money_frame_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 		return true;
 	}
 	if(  comp == &send_money_button  ){
-		sint64 chech_send_money_value = (sint64)write_money.get_value() * 100;
+		sint64 chech_send_money_value = env_t::show_yen?(sint64)write_money.get_value():(sint64)write_money.get_value() * 100+(sint64)write_money_cents.get_value();
 		if(welt->get_active_player_nr() == 1 || player->get_finance()->get_account_balance()>chech_send_money_value){
 			if ( welt->get_player(viewable_players[send_money_player_num.get_selection()]) ){
 				bool suspended = false;
@@ -641,11 +695,13 @@ bool money_frame_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 				buf.printf( "%lld", chech_send_money_value );
 				tmp_tool->set_default_param( buf );
 				welt->call_work(tmp_tool, player, koord3d(0,0,viewable_players[send_money_player_num.get_selection()]), suspended);
+				write_money.set_value(0);
+				write_money_cents.set_value(0);
 			}
 		}
 
-		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/1000 <= 2000000000 && write_money.get_value() >= welt->get_active_player()->get_finance()->get_account_balance()/1000){
-			write_money.set_value(welt->get_active_player()->get_finance()->get_account_balance()/1000);
+		if(welt->get_active_player_nr() != 1 && welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor() <= 2000000000 && write_money.get_value() >= welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor()){
+			write_money.set_value(welt->get_active_player()->get_finance()->get_account_balance()/get_balance_divisor());
 		}
 	}
 	return false;

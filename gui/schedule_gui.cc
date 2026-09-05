@@ -382,6 +382,7 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 
 schedule_gui_t::~schedule_gui_t()
 {
+	route_overlay.hide();
 	if(  player  ) {
 		update_tool( false );
 		// hide schedule on minimap (may not current, but for safe)
@@ -962,6 +963,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	add_component(&bt_remove);
 	end_table();
 
+	// whole-route overlay toggle (not available for air, which routes itself)
+	bt_show_line_route.init(button_t::roundbox_state | button_t::flexible, "Show Line Route");
+	bt_show_line_route.set_tooltip("Show the whole route of this schedule on the map and minimap.");
+	bt_show_line_route.add_listener(this);
+	bt_show_line_route.pressed = false;
+	is_line_route_show = false;
+	last_route_schedule_count = 0xFFFFFFFFu;
+	if(  schedule->get_waytype() == air_wt  ) {
+		bt_show_line_route.disable();
+	}
+	add_table(2,1);
+	add_component(&bt_show_line_route);
+	add_component(&lb_route_time);
+	end_table();
+
 	scrolly.set_show_scroll_x(true);
 	scrolly.set_scroll_amount_y(LINESPACE+1);
 	add_component(&scrolly);
@@ -1476,6 +1492,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_return) {
 		schedule->add_return_way();
 	}
+	else if(comp == &bt_show_line_route) {
+		is_line_route_show = !is_line_route_show  &&  schedule->get_waytype() != air_wt;
+		last_route_schedule_count = 0xFFFFFFFFu; // force a fresh request
+		update_line_route_overlay();
+		should_set_schedule_tool = false;
+	}
 	else if(comp == &line_selector) {
 		uint32 selection = p.i;
 		dbg->message("schedule_gui_t::action_triggered()","set_line_selection %p, %i",comp,selection);
@@ -1880,7 +1902,7 @@ void schedule_gui_t::init_allow_depart_line_selector()
 	const linehandle_t allow_depart_line = schedule->at(current_stop).get_allow_depart_line();
 
 	int offset = 1;
-	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
+	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("Select Line Allow Departure"), SYSCOL_TEXT ) ;
 
 	halthandle_t h = haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()==tram_wt?track_wt:schedule->get_waytype());
 	
@@ -1965,8 +1987,96 @@ void schedule_gui_t::init_departure_slot_group_selector()
 	// departure_slot_group_selector.sort( offset );
 }
 
+void schedule_gui_t::hide_line_route_overlay(void *win)
+{
+	schedule_gui_t *sg = static_cast<schedule_gui_t *>(win);
+	sg->is_line_route_show = false;
+	sg->route_overlay.hide();
+	sg->bt_show_line_route.pressed = false;
+}
+
+
+convoihandle_t schedule_gui_t::get_route_reference_convoi() const
+{
+	if(  cnv.is_bound()  ) {
+		return cnv;
+	}
+	if(  new_line.is_bound()  &&  new_line->count_convoys() > 0  ) {
+		return new_line->get_convoy( 0 );
+	}
+	return convoihandle_t();
+}
+
+
+void schedule_gui_t::update_line_route_overlay()
+{
+	const bool air = schedule->get_waytype() == air_wt;
+	bt_show_line_route.enable( !air );
+	bt_show_line_route.pressed = is_line_route_show && !air;
+	if(  air  ) {
+		is_line_route_show = false;
+	}
+	if(  !is_line_route_show  ) {
+		if(  route_overlay.is_shown()  ) {
+			route_overlay.hide();
+		}
+		last_route_schedule_count = 0xFFFFFFFFu;
+		return;
+	}
+
+	// only (re)issue the request when first shown or when the schedule changed,
+	// otherwise every frame would wipe the pending result before step() runs
+	if(  route_overlay.is_shown()  &&  schedule->get_count() == last_route_schedule_count  ) {
+		return;
+	}
+	last_route_schedule_count = schedule->get_count();
+
+	// derive the driving speed and catenary need from a convoy running this
+	// schedule, if there is one; otherwise fall back to a plain estimate
+	uint16 speed_kmh = 60;
+	bool   electric  = false;
+	convoihandle_t ref = get_route_reference_convoi();
+	if(  ref.is_bound()  ) {
+		speed_kmh = (uint16)speed_to_kmh( ref->get_min_top_speed() );
+		electric  = ref->get_use_electric();
+	}
+	route_overlay.show( schedule, player, speed_kmh, electric, this, &schedule_gui_t::hide_line_route_overlay );
+}
+
+
+void schedule_gui_t::update_route_time_label()
+{
+	lb_route_time.buf().clear();
+	if(  is_line_route_show  ) {
+		convoihandle_t ref = get_route_reference_convoi();
+		if(  !route_overlay.route_ready()  ||  !ref.is_bound()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else if(  !welt->is_schedule_route_complete()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT_STRONG );
+			lb_route_time.buf().append( translator::translate("NO ROUTE!") );
+		}
+		else if(  welt->get_schedule_route().empty()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			const uint32 ticks = convoi_t::calc_ticks_until_arrival( ref, &welt->get_schedule_route(), true );
+			lb_route_time.buf().printf( "%s: %s, %u %s", translator::translate("Route time"), format_route_time_hours( ticks ), welt->get_schedule_route_count(), translator::translate("tiles") );
+		}
+	}
+	lb_route_time.update();
+}
+
+
 void schedule_gui_t::draw(scr_coord pos, scr_size size)
 {
+	update_line_route_overlay();
+	route_overlay.poll();
+	update_route_time_label();
+
 	if(  player->simlinemgmt.get_line_count()!=old_line_count  ||  last_schedule_count!=schedule->get_count()  ) {
 		// lines added or deleted
 		init_line_selector();

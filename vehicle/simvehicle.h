@@ -352,6 +352,14 @@ public:
 	 */
 	void initialise_journey( uint16 start_route_index, bool recalc );
 
+	/**
+	 * Emergency clamp of route_index into the current (possibly just-shortened or
+	 * stub) route. Used when a mid-drive reroute fails: route_t::calc_route() then
+	 * leaves a 1-tile [start] route while the vehicles still carry their old, larger
+	 * route_index, which would make route_t::at() run off the end.
+	 */
+	void clamp_route_index();
+
 	vehicle_t();
 	vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player);
 
