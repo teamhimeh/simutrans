@@ -760,14 +760,18 @@ public:
 	bool existiert_in_welt() const;
 
 	koord get_init_pos() const { return init_pos; }
+	// manually set init_pos; pos must be a tile belonging to this halt
+	bool set_init_pos(koord pos);
 	koord get_basis_pos() const;
 	koord3d get_basis_pos3d() const;
 
 public:
-	void recalc_basis_pos();
-
 	// returns ground closest to this coordinate
 	grund_t *get_ground_closest_to( const koord here ) const;
+
+	// returns the tile closest to the level-weighted center of all tiles,
+	// or NULL if there is no building on any tile
+	grund_t *get_level_weighted_center() const;
 
 	/**
 	 * return the closest square that belongs to this halt
