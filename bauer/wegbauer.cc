@@ -941,7 +941,6 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 					}
 				}
 				ok = !to->is_water() && (w  ||  other_way_ok)  &&  to->find<leitung_t>()==NULL  &&  !fundament;
-				dbg->warning("case luft DEBUG2", "to=%d,%d zv=%d,%d w=%p other_way_ok=%d is_water=%d leitung=%p fundament=%d ok=%d", to->get_pos().x, to->get_pos().y, zv.x, zv.y, (const void*)w, other_way_ok, to->is_water(), (void*)to->find<leitung_t>(), fundament, ok);
 				// calculate costs
 				*costs = s.way_count_straight;
 			}
@@ -2175,7 +2174,6 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 		if(player_builder==welt->get_active_player()) {
 			news_img* const win = new news_img("Zu nah am Kartenrand");
 			create_win( win, w_time_delete, magic_none);
-			destroy_win( win );
 			return false;
 		}
 	}
