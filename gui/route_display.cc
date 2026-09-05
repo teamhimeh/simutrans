@@ -21,7 +21,7 @@ const char *format_route_time_hours( uint32 ticks )
 	uint64 const ticks_per_month = (uint64)rd_welt->ticks_per_world_month;
 	uint64 const divisor = (uint64)world()->get_settings().get_spacing_shift_divisor();
 	uint64 ticks_write = (uint64)ticks*divisor/ticks_per_month;
-	if(  ticks_write >= divisor  ) {
+	if(  ticks_write >= divisor  &&  divisor>0  ) {
 		sprintf( buf, "%llu (%i d)", ticks_write, ticks_write/divisor );
 	}
 	else {
