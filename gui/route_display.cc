@@ -18,15 +18,14 @@ static karte_ptr_t rd_welt;
 const char *format_route_time_hours( uint32 ticks )
 {
 	static char buf[64];
-	const uint32 month_ticks = rd_welt->ticks_per_world_month;
-	const uint32 divisor = rd_welt->get_settings().get_spacing_shift_divisor();
-	// one in-game "day" == one world month of ticks (see halt_info.cc)
-	uint32 time_divided = ticks * month_ticks / divisor;
-	if(  time_divided >= divisor  ) {
-		sprintf( buf, "%u (%i d)", time_divided, time_divided/divisor );
+	uint64 const ticks_per_month = (uint64)rd_welt->ticks_per_world_month;
+	uint64 const divisor = (uint64)world()->get_settings().get_spacing_shift_divisor();
+	uint64 ticks_write = (uint64)ticks*divisor/ticks_per_month;
+	if(  ticks_write >= divisor  ) {
+		sprintf( buf, "%llu (%i d)", ticks_write, ticks/divisor );
 	}
 	else {
-		sprintf( buf, "%u ", time_divided );
+		sprintf( buf, "%llu ", ticks_write );
 	}
 	return buf;
 }

@@ -1430,6 +1430,7 @@ public:
 	bool is_schedule_route_complete() const;
 	uint32 get_schedule_route_owner() const;
 	uint8 get_schedule_route_player_nr() const;
+	uint32 get_schedule_route_count() const;
 	/// true while a schedule-route overlay is requested or shown; other route
 	/// overlays (convoy route, line route cache) must yield and disable then
 	bool is_schedule_route_active() const;
