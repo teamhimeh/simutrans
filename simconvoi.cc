@@ -1434,6 +1434,14 @@ bool convoi_t::drive_to()
 				state = NO_ROUTE;
 				get_owner()->report_vehicle_problem( self, ziel );
 			}
+			// route_t::calc_route() left a 1-tile [start] stub route; the vehicles still
+			// carry their previous, larger route_index. Clamp it so nothing over-runs
+			// route_t::at() while the convoy waits for a retry.
+			for(  convoihandle_t c = self;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+				for(  uint8 i = 0;  i < c->anz_vehikel;  i++  ) {
+					c->fahr[i]->clamp_route_index();
+				}
+			}
 			// wait 25s before next attempt
 			wait_lock = 25000;
 		}
@@ -6794,6 +6802,13 @@ void convoi_t::next_stop_button_pressed() {
 		convoihandle_t const temp_c = c->get_coupling_convoi();
 		if( !c->can_continue_coupling() || schedule->get_current_entry().is_uncouple_child() ) {
 			c->uncouple_convoi();
+		}
+		if(  c->is_loading()  ) {
+			c->push_goods_waiting_time_if_needed();
+			c->push_convoy_stopping_time();
+			c->set_coupling_done(false);
+			c->set_waiting_for_departure_allowance_by_other_convoy(false);
+			c->reset_departure_time();
 		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();

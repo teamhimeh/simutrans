@@ -47,6 +47,14 @@ private:
 
 	bool is_scrollbar_dragging;
 
+	// tool_icon_disp_start as of the previous draw() call; used to detect that
+	// scrolling (drag, wheel, or scrollbar-drag) moved which tools occupy the
+	// visible cells since then, so the whole icon area can be re-rendered rather
+	// than just the icons themselves (an icon that is now IMG_EMPTY at a cell is
+	// simply skipped when drawing, which would otherwise leave the previous
+	// frame's icon image behind on screen)
+	uint16 last_tool_icon_disp_start;
+
 	// window-relative rect of the scrollbar strip (drawn just outside the icon
 	// area: below it for single-row toolbars, beside it otherwise); valid
 	// whenever has_prev_next is true
@@ -97,6 +105,17 @@ public:
 	// to decide, before drawing, whether the main menubar needs to reserve space
 	// for a scrollbar strip
 	uint32 get_tool_count() const { return tools.get_count(); }
+
+	// true while actively dragging (classic icon-drag or the scrollbar strip).
+	// simwin.cc's main-menu dispatch normally requires is_hit() to be true for
+	// every single event, including the continued moves of an in-progress drag;
+	// a fast or slightly-off-axis drag easily strays outside the thin scrollbar
+	// strip (or past the window edge) for a frame, which would otherwise stop
+	// the drag from being tracked any further - it just freezes wherever the
+	// last successfully-delivered event left it, short of the true end. Callers
+	// should keep routing events here (mouse capture) while this is true,
+	// mirroring how simwin.cc already does it for window move/resize.
+	bool is_being_dragged() const { return is_dragging || is_scrollbar_dragging; }
 
 	bool has_title() const OVERRIDE { return toolbar_id!=0; }
 
