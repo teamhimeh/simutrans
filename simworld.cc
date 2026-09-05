@@ -8146,7 +8146,7 @@ uint32 karte_t::get_schedule_route_owner() const { return schedule_route_owner; 
 uint8 karte_t::get_schedule_route_player_nr() const { return schedule_route_player_nr; }
 bool karte_t::is_schedule_route_active() const { return schedule_route_owner != 0  ||  schedule_route_request != NULL; }
 bool karte_t::is_schedule_route_pending() const { return schedule_route_request != NULL  ||  schedule_route_progress != NULL; }
-
+uint32 karte_t::get_schedule_route_count() const { return schedule_route.get_count(); }
 
 void karte_t::request_schedule_route(schedule_t *schedule, player_t *pl, uint32 owner, uint16 speed_kmh, bool needs_electrification)
 {
