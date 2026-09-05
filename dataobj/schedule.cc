@@ -819,6 +819,10 @@ void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const&
 		str[cnt] = 'o';
 		cnt++;
 	}
+	if(  entry.is_drive_without_reservation()  ) {
+		str[cnt] = 'S';
+		cnt++;
+	}
 	// there are at least one attributes.
 	if(  cnt>1  ) {
 		str[cnt] = ']';

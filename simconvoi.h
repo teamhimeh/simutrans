@@ -446,6 +446,13 @@ private:
 	bool invalid_convoy;
 
 	/**
+	 *  driving without reservation
+	 *  for train (track, monorail_track,...)
+	 *  if reach the signal or stop, this flag reset
+	 */
+	bool drive_without_reservation;
+
+	/**
 	* Initialize all variables with default values.
 	* Each constructor must call this method first!
 	*/
@@ -964,6 +971,12 @@ public:
 	 */
 	bool is_invalid_convoy() const { return invalid_convoy; }
 	void set_invalid_convoy(bool y) { invalid_convoy = y; }
+
+	/**
+	 *  driving without reservation: for track
+	 */
+	bool is_drive_without_reservation() const {return drive_without_reservation;}
+	void set_drive_without_reservation(bool y=false) { drive_without_reservation=y; }
 
 	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable

@@ -203,6 +203,8 @@ void convoi_t::init(player_t *player)
 	max_balance_speed_convoi = 0;
 	unloading_done = false;
 	invalid_convoy = false;
+
+	drive_without_reservation = false;
 }
 
 
@@ -352,7 +354,7 @@ void convoi_t::reserve_route()
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
-		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
+		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < drive_without_reservation?front()->get_route_index():next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
@@ -1457,7 +1459,7 @@ bool convoi_t::drive_to()
 					reverse_convoy_coupling();
 					reversing_coupling_needed=reverse_here;
 					get_most_parent_convoi()->reversing_coupling_needed=reverse_here;
-					get_most_parent_convoi()->state=ROUTING_1;
+					get_most_parent_convoi()->state==ROUTING_1;
 					get_most_parent_convoi()->alte_richtung=get_most_parent_convoi()->front()->get_direction();
 					get_most_parent_convoi()->check_electrification();
 					return false;
@@ -1571,6 +1573,7 @@ bool convoi_t::drive_to()
  */
 void convoi_t::suche_neue_route()
 {
+	drive_without_reservation=false;
 	state = ROUTING_1;
 	wait_lock = 0;
 }
@@ -2057,6 +2060,8 @@ void convoi_t::start()
 		no_load = false;
 		unload_all = false;
 
+		drive_without_reservation = false;
+
 		state = ROUTING_1;
 
 		// recalc weight and image
@@ -2116,6 +2121,13 @@ void convoi_t::ziel_erreicht()
 	c = self;
 	while(  c.is_bound()  ) {
 		c->reset_departure_time();
+		c = c->get_coupling_convoi();
+	}
+
+	// reset driving without reservation
+	c = self;
+	while(  c.is_bound()  ) {
+		c->set_drive_without_reservation(c->get_schedule()->get_current_entry().is_drive_without_reservation());
 		c = c->get_coupling_convoi();
 	}
 
@@ -3132,19 +3144,35 @@ void convoi_t::clear_reserved_tile_if_not_matching_route()
 		reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
 		route.at(0).x, route.at(0).y, (int)route.at(0).z,
 		reserved_tiles.get_count(), route.get_count());
-	// reserved_tiles[i] corresponds to route[i+1]:
-	// route[0] (the departure stop) is never added to reserved_tiles by block_reserver
-	// because it starts from next_block+1 and target_rt from index 1, both skipping route[0].
-	// So reserved_tiles must cover route[1..end], i.e. at least route.get_count()-1 entries.
-	if( get_reserved_tiles().get_count() < route.get_count() - 1 ) {
+	// reserved_tiles may still begin with tiles of the *previous* route: leave_tile() removes only
+	// the tiles the convoy has already left, so the tiles the standing convoy occupies - and the
+	// departure tile route[0] itself - are still held. Those tiles are re-added to the route later,
+	// by insert_route_convoy_on(). So first find where the new route starts inside reserved_tiles
+	// instead of assuming that reserved_tiles[0] is route[1]; otherwise a reservation made by a
+	// longblock signal while the train was standing at the stop is always thrown away here.
+	uint32 offset = 0;
+	while(  offset < reserved_tiles.get_count()  &&  reserved_tiles[offset] != route.at(0)  ) {
+		offset++;
+	}
+	if(  offset < reserved_tiles.get_count()  ) {
+		// reserved_tiles[offset] is the departure tile => the next entry corresponds to route[1]
+		offset++;
+	}
+	else {
+		// the departure tile is not reserved (reservation starts beyond it) => reserved_tiles[0] is route[1]
+		offset = 0;
+	}
+	// reserved_tiles[offset+i] corresponds to route[i+1]:
+	// reserved_tiles must cover route[1..end], i.e. at least route.get_count()-1 entries after offset.
+	if( get_reserved_tiles().get_count() - offset < route.get_count() - 1u ) {
 		clear_reserved_tiles();
 		return;
 	}
-	// check reserved_tiles[i] == route[i+1]
-	for( uint16 i=0; i<min(get_route()->get_count()-1, get_reserved_tiles().get_count()); i++ ) {
-		if( route.at(i+1) != get_reserved_tiles()[i]  ) {
+	// check reserved_tiles[offset+i] == route[i+1]
+	for( uint32 i=0; i<min(get_route()->get_count()-1u, get_reserved_tiles().get_count()-offset); i++ ) {
+		if( route.at(i+1) != get_reserved_tiles()[offset+i]  ) {
 			dbg->warning("convoi_t::clear_reserved_tile_if_not_matching_route()","invalid reserved_tile found: %i,%i,%i vs %i,%i,%i",
-				reserved_tiles[i].x, reserved_tiles[i].y, (int)reserved_tiles[i].z,
+				reserved_tiles[offset+i].x, reserved_tiles[offset+i].y, (int)reserved_tiles[offset+i].z,
 				route.at(i+1).x, route.at(i+1).y, (int)route.at(i+1).z);
 			clear_reserved_tiles();
 			return;
@@ -3828,6 +3856,11 @@ void convoi_t::rdwr(loadsave_t *file)
 	} else {
 		waiting_for_departure_make_another_convoy_depart = false;
 		reversing_lane_hold = false;
+	}
+	if(  file->get_OTRP_version()>=61  ) {
+		file->rdwr_bool(drive_without_reservation);
+	} else {
+		drive_without_reservation=false;
 	}
 
 	if(  file->is_loading()  ) {
