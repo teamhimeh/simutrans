@@ -23,7 +23,7 @@
 
 #include "../dataobj/environment.h"
 
-#define MAX_PLAYER_COST_BUTTON (13)
+#define MAX_PLAYER_COST_BUTTON (16)
 
 class money_frame_label_t;
 
