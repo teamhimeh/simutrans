@@ -2064,7 +2064,7 @@ void schedule_gui_t::update_route_time_label()
 		else {
 			lb_route_time.set_color( SYSCOL_TEXT );
 			const uint32 ticks = convoi_t::calc_ticks_until_arrival( ref, &welt->get_schedule_route(), true );
-			lb_route_time.buf().printf( "%s: %s", translator::translate("Route time"), format_route_time_hours( ticks ) );
+			lb_route_time.buf().printf( "%s: %s, %u %s", translator::translate("Route time"), format_route_time_hours( ticks ), welt->get_schedule_route_count(), translator::translate("tiles") );
 		}
 	}
 	lb_route_time.update();
