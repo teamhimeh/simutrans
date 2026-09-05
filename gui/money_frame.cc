@@ -53,9 +53,9 @@ static const char *cost_type_name[MAX_PLAYER_COST_BUTTON] =
 	"Assets",
 	"Margin (%)",
 	"Net Wealth",
-	"passengers",
-	"mail",
-	"goods"
+	"Passagiere",
+	"Post",
+	"Fracht"
 };
 
 
