@@ -862,8 +862,8 @@ void bridge_builder_t::build_bridge(player_t *player, const koord3d start, const
 		bruecke->calc_image();
 		br->finish_rd();
 //DBG_MESSAGE("bool bridge_builder_t::build_bridge()","at (%i,%i)",pos.x,pos.y);
-		if(desc->get_pillar()>0) {
-			// make a new pillar here
+		if(desc->get_pillar()>0  &&  !gr->hat_weg(air_wt)) {
+			// make a new pillar here (never on airways)
 			if(desc->get_pillar()==1  ||  (pos.x*zv.x+pos.y*zv.y)%desc->get_pillar()==0) {
 //DBG_MESSAGE("bool bridge_builder_t::build_bridge()","h1=%i, h2=%i",pos.z,gr->get_pos().z);
 				while(height-->0) {
