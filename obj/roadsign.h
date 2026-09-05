@@ -105,6 +105,14 @@ public:
 	 */
 	waytype_t get_waytype() const OVERRIDE { return desc ? desc->get_wtyp() : invalid_wt; }
 
+	/**
+	 * Waytype of the way this sign actually sits on and governs.
+	 * Same as get_waytype(), except tram signs govern the track_wt way.
+	 * Use this to test whether a sign is relevant to a given vehicle/route
+	 * (compare against vehicle_t::get_waytype() / weg_t::get_waytype()).
+	 */
+	waytype_t get_governed_waytype() const { return get_waytype() != tram_wt ? get_waytype() : track_wt; }
+
 	roadsign_t(loadsave_t *file);
 	roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const roadsign_desc_t* desc, bool preview = false);
 

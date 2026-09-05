@@ -2008,6 +2008,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	tile_length = contents.get_int("tile_length", tile_length);
 
+	env_t::show_yen = contents.get_int("show_yen", env_t::show_yen);
+
 	citycar_max_look_forward = contents.get_int("citycar_max_look_forward", citycar_max_look_forward);
 	citycar_route_weight_crowded = contents.get_int("citycar_route_weight_crowded", citycar_route_weight_crowded);
 	citycar_route_weight_vacant = contents.get_int("citycar_route_weight_vacant", citycar_route_weight_vacant);

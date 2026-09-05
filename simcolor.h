@@ -89,6 +89,9 @@ typedef unsigned int FLAGGED_PIXVAL;
 
 // used in many dialogues graphs
 #define COL_REVENUE         142
+#define COL_REVENUE_PAS     COL_LIGHT_BLUE
+#define COL_REVENUE_MAIL    COL_LIGHT_ORANGE
+#define COL_REVENUE_GOOD    COL_LIGHT_BROWN
 #define COL_OPERATION       132
 #define COL_MAINTENANCE     COL_LIGHT_RED
 #define COL_TOLL            157

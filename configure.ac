@@ -32,6 +32,15 @@ AC_CHECK_LIB(pthreadGC2, pthread_mutex_destroy,
 	[AC_SUBST(bundlepthread, 0)] )
 
 # find OS and backend by libs ...
+AC_PATH_PROG(PKG_CONFIG, pkg-config)
+AC_CHECK_LIB(SDL3, SDL_Init,
+	[have_sdl3=yes],
+	[if test -n "$PKG_CONFIG" && $PKG_CONFIG --exists sdl3
+	 then
+		have_sdl3=yes
+	 else
+		have_sdl3=no
+	 fi])
 AC_CHECK_LIB(SDL2, SDL_GetRenderDriverInfo)
 AC_CHECK_LIB(SDL, SDL_Init)
 AC_CHECK_LIB(allegro, get_desktop_resolution)
@@ -133,6 +142,10 @@ elif test "$ac_cv_header_windows_h" == yes
 then
 	AC_SUBST(backend, gdi)
 	AC_MSG_WARN([Using GDI backend!])
+elif test "$have_sdl3" == yes
+then
+	AC_SUBST(backend, sdl3)
+	AC_MSG_WARN([Using SDL3 backend!])
 elif test "$ac_cv_lib_SDL2_SDL_GetRenderDriverInfo" == yes
 then
 	AC_SUBST(backend, sdl2)

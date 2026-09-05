@@ -235,6 +235,8 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			    && tdriver->check_transit_tile(gr, tmp->ribi_from, ribi_t::nesw[r])
 			) {
 				// Skip tiles where detailed_oneway forbids entry from this direction.
+				// Only a sign that governs the way this route runs on is relevant
+				// (a sign on a tile shared with another waytype must be ignored).
 				{
 					// direction-aware: `to` is entered via nesw[r], so the leg we're actually
 					// transiting is the one owning the backward bit (relevant when two
@@ -242,7 +244,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 					weg_t *w_to = to->get_weg(wegtyp, ribi_t::backward(ribi_t::nesw[r]));
 					if(  w_to  &&  w_to->has_sign()  ) {
 						const roadsign_t *rs = to->find<roadsign_t>();
-						if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+						if(  rs  &&  rs->get_governed_waytype() == w_to->get_waytype()  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
 							const ribi_t::ribi entry = ribi_t::nesw[r];
 							if(  !(rs->get_detailed_oneway_out_ribi(entry) & w_to->get_ribi_unmasked() & ~ribi_t::backward(entry))  ) {
 								continue;
@@ -475,9 +477,10 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 					continue;
 				}
 				// Do not enter a tile where detailed_oneway forbids entry from this direction.
+				// Only a sign that governs the way this route runs on is relevant.
 				if(  w  &&  w->has_sign()  ) {
 					const roadsign_t *rs = to->find<roadsign_t>();
-					if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+					if(  rs  &&  rs->get_governed_waytype() == w->get_waytype()  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
 						const ribi_t::ribi entry = next_ribi[r];
 						if(  !(rs->get_detailed_oneway_out_ribi(entry) & w->get_ribi_unmasked() & ~ribi_t::backward(entry))  ) {
 							continue;

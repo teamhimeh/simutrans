@@ -1014,35 +1014,8 @@ void gui_halt_detail_t::update_connections( halthandle_t h )
 // a sophisticated guess of a convois arrival time, taking into account the braking too and the current convoi state
 uint32 gui_departure_board_t::calc_ticks_until_arrival( convoihandle_t cnv )
 {
-	/* calculate the time needed:
-	 *   tiles << (8+12) / (kmh_to_speed(max_kmh) = ticks
-	 */
-	uint32 delta_t = 0;
-	sint32 delta_tiles = cnv->get_route()->get_count() - cnv->front()->get_route_index();
-	uint32 kmh_average = (cnv->get_average_kmh()*900 ) / 1024u;
-
-	// last braking tile
-	if(  delta_tiles > 1  &&  kmh_average > 25  ) {
-		delta_tiles --;
-		delta_t += 3276; // ( (1 << (8+12)) / kmh_to_speed(25) );
-	}
-	// second last braking tile
-	if(  delta_tiles > 1  &&  kmh_average > 50  ) {
-		delta_tiles --;
-		delta_t += 1638; // ( (1 << (8+12)) / kmh_to_speed(50) );
-	}
-	// third last braking tile
-	if(  delta_tiles > 1  &&  kmh_average > 100  ) {
-		delta_tiles --;
-		delta_t += 819; // ( (1 << (8+12)) / kmh_to_speed(100) );
-	}
-	// waiting at signal?
-	if(  cnv->get_state() != convoi_t::DRIVING  ) {
-		// extra time for acceleration
-		delta_t += kmh_average * 25;
-	}
-	delta_t += ( ((sint64)delta_tiles << (8+12) ) / kmh_to_speed( max(kmh_average,1) ) ); // avoid div. by 0
-	return delta_t;
+	// the estimate lives in convoi_t now, so it can also be used for whole routes
+	return convoi_t::calc_ticks_until_arrival( cnv );
 }
 
 

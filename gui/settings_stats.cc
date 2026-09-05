@@ -112,6 +112,7 @@ void settings_general_stats_t::init(settings_t const* const sets)
 		// which is not safe to do independently on each client in network mode
 		numinp.back()->disable();
 	}
+	INIT_BOOL( "show_yen", env_t::show_yen);
 
 	INIT_END
 	clear_dirty();
@@ -159,6 +160,8 @@ void settings_general_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->world_maximum_height );
 	READ_NUM_VALUE( sets->world_minimum_height );
 	READ_NUM_VALUE( sets->tile_length );
+
+	READ_BOOL_VALUE( env_t::show_yen );
 }
 
 void settings_display_stats_t::init(settings_t const* const)

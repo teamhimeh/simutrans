@@ -47,3 +47,43 @@ jobs:
         with:
           name: sim-WinGDI-OTRP${{ env.SUFFIX }}.exe
           path: ./sim-WinGDI-OTRP${{ env.SUFFIX }}.exe
+
+  winsdl3:
+    runs-on: windows-latest
+    steps:
+
+      - name: Setup MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: git zip unzip svn base-devel mingw-w64-x86_64-toolchain autoconf mingw-w64-x86_64-gcc mingw-w64-x86_64-freetype mingw-w64-x86_64-zstd mingw-w64-x86_64-libpng mingw-w64-x86_64-brotli mingw-w64-x86_64-sdl3 mingw-w64-x86_64-pkg-config
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: CI-Build SDL3
+        run: sh ./.github/build64-SDL3.sh
+        shell: msys2 {0}
+
+      - name: Set suffix for file naming
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "SUFFIX=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "SUFFIX=" >> $GITHUB_ENV
+          fi
+        shell: msys2 {0}
+
+      - name: Rename executable
+        run: |
+          if [ -n "${{ env.SUFFIX }}" ]; then
+            mv sim-WinSDL3-OTRP.exe sim-WinSDL3-OTRP${{ env.SUFFIX }}.exe
+          fi
+        shell: msys2 {0}
+
+      - name: Upload SDL3 executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-WinSDL3-OTRP${{ env.SUFFIX }}.exe
+          path: ./sim-WinSDL3-OTRP${{ env.SUFFIX }}.exe

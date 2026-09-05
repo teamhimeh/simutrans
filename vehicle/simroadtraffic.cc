@@ -583,7 +583,7 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 	{
 		const grund_t *gr_current = welt->lookup(get_pos());
 		const roadsign_t *rs_cur = gr_current ? gr_current->find<roadsign_t>() : NULL;
-		if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
+		if(  rs_cur  &&  rs_cur->get_governed_waytype() == road_wt  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
 			const ribi_t::ribi entry_ribi = ribi_type(pos_prev, get_pos());
 			if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & current_direction90)  ) {
 				// Allow U-turn: when find_destination routes the car back because all
@@ -1198,7 +1198,7 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 	ribi_t::ribi ribi = (weg->get_ribi() & (~ribi_t::backward(direction90)));
 	if(  direction90 != ribi_t::none  ) {
 		const roadsign_t *rs_sign = gr->find<roadsign_t>();
-		if(  rs_sign  &&  rs_sign->get_desc()->is_single_way()  &&  rs_sign->is_detailed_oneway()  ) {
+		if(  rs_sign  &&  rs_sign->get_governed_waytype() == road_wt  &&  rs_sign->get_desc()->is_single_way()  &&  rs_sign->is_detailed_oneway()  ) {
 			ribi = gr->get_weg_ribi_unmasked(road_wt) & rs_sign->get_detailed_oneway_out_ribi(direction90) & (~ribi_t::backward(direction90));
 		}
 	}
@@ -1256,7 +1256,7 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 				// is blocked, causing a U-turn from the far edge of the tile.
 				if(  w->has_sign()  ) {
 					const roadsign_t *rs_to = to->find<roadsign_t>();
-					if(  rs_to  &&  rs_to->get_desc()->is_single_way()  &&  rs_to->is_detailed_oneway()  ) {
+					if(  rs_to  &&  rs_to->get_governed_waytype() == road_wt  &&  rs_to->get_desc()->is_single_way()  &&  rs_to->is_detailed_oneway()  ) {
 						const ribi_t::ribi entry_at_to = ribi_t::nesw[r];
 						const ribi_t::ribi allowed = rs_to->get_detailed_oneway_out_ribi(entry_at_to)
 						                             & w->get_ribi_unmasked()
@@ -2018,7 +2018,7 @@ bool private_car_t::is_rerouting_needed() const{
 	// With ribi_maske=0 the normal ribi check above never catches this for 3-way junctions.
 	{
 		const roadsign_t *rs_n = gr_n ? gr_n->find<roadsign_t>() : NULL;
-		if(  rs_n  &&  rs_n->get_desc()->is_single_way()  &&  rs_n->is_detailed_oneway()  ) {
+		if(  rs_n  &&  rs_n->get_governed_waytype() == road_wt  &&  rs_n->get_desc()->is_single_way()  &&  rs_n->is_detailed_oneway()  ) {
 			const ribi_t::ribi entry_at_n = ribi_type(get_pos(), pos_next);
 			if(  !(rs_n->get_detailed_oneway_out_ribi(entry_at_n) & dir)  ) {
 				return true;

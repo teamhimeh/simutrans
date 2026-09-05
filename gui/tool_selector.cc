@@ -33,6 +33,7 @@ tool_selector_t::tool_selector_t(const char* title, const char *help_file, uint3
 	has_prev_next = false;
 	is_dragging = false;
 	is_scrollbar_dragging = false;
+	last_tool_icon_disp_start = 0;
 	offset = scr_coord( 0, 0 );
 	set_windowsize( scr_size(max(env_t::iconsize.w,MIN_WIDTH), D_TITLEBAR_HEIGHT) );
 	dirty = true;
@@ -111,6 +112,7 @@ void tool_selector_t::reset_tools()
 	tool_icon_disp_end = 0;
 	offset = scr_coord( 0, 0 );
 	is_scrollbar_dragging = false;
+	last_tool_icon_disp_start = 0;
 }
 
 
@@ -125,8 +127,9 @@ bool tool_selector_t::is_hit(int x, int y)
 		return true;
 	}
 
-	int dx = (x-offset.x)/env_t::iconsize.w;
-	int dy = (y-D_TITLEBAR_HEIGHT-offset.y)/env_t::iconsize.h;
+	const scr_coord icon_off = get_icon_area_offset();
+	int dx = (x-offset.x-icon_off.x)/env_t::iconsize.w;
+	int dy = (y-D_TITLEBAR_HEIGHT-offset.y-icon_off.y)/env_t::iconsize.h;
 
 	// either click in titlebar or on an icon
 	if(  x>=0   &&  y>=0  &&  ( (y<D_TITLEBAR_HEIGHT  &&  x<get_windowsize().w)  ||  (dx<tool_icon_width  &&  dy<tool_icon_height) )  ) {
@@ -141,12 +144,45 @@ bool tool_selector_t::is_hit(int x, int y)
 scr_rect tool_selector_t::get_scrollbar_rect() const
 {
 	const scr_size sz = get_windowsize();
+	const scr_coord icon_off = get_icon_area_offset();
 	if(  tool_icon_height == 1  ) {
-		return scr_rect( 0, D_TITLEBAR_HEIGHT + env_t::iconsize.h, sz.w, env_t::menu_scrollbar_thickness );
+		// icons pushed down (icon_off.y>0, MENU_BOTTOM main menu): scrollbar sits
+		// above them; otherwise (MENU_TOP, or any popup) it sits below as usual
+		const scr_coord_val y = icon_off.y>0 ? D_TITLEBAR_HEIGHT : D_TITLEBAR_HEIGHT + env_t::iconsize.h;
+		return scr_rect( 0, y, sz.w, env_t::menu_scrollbar_thickness );
 	}
 	else {
-		return scr_rect( tool_icon_width*env_t::iconsize.w, D_TITLEBAR_HEIGHT, env_t::menu_scrollbar_thickness, sz.h - D_TITLEBAR_HEIGHT );
+		// icons pushed right (icon_off.x>0, MENU_RIGHT main menu): scrollbar sits
+		// to their left; otherwise (MENU_LEFT, or any popup) it sits to their right
+		const scr_coord_val x = icon_off.x>0 ? 0 : tool_icon_width*env_t::iconsize.w;
+		// for a real popup toolbar window, sz.h includes its titlebar, so the track
+		// starts after it and is shorter by D_TITLEBAR_HEIGHT. But for the main
+		// menubar (toolbar_id==0), sz.h is the true content height with NO titlebar
+		// component: its pos is pre-shifted by -D_TITLEBAR_HEIGHT (see draw()) so
+		// that content, which is always placed at +D_TITLEBAR_HEIGHT, lands at the
+		// true window top; subtracting D_TITLEBAR_HEIGHT from the track height here
+		// too double-counts that shift, making the track (and so the drag's max
+		// reach) exactly D_TITLEBAR_HEIGHT pixels short of the window's true bottom
+		const scr_coord_val track_h = toolbar_id==0 ? sz.h : sz.h - D_TITLEBAR_HEIGHT;
+		return scr_rect( x, D_TITLEBAR_HEIGHT, env_t::menu_scrollbar_thickness, track_h );
 	}
+}
+
+
+// see header for rationale; (0,0) for anything but the main menubar with a
+// reserved scrollbar strip
+scr_coord tool_selector_t::get_icon_area_offset() const
+{
+	if(  toolbar_id != 0  ||  !has_prev_next  ) {
+		return scr_coord( 0, 0 );
+	}
+	if(  env_t::menupos == MENU_BOTTOM  ) {
+		return scr_coord( 0, env_t::menu_scrollbar_thickness );
+	}
+	if(  env_t::menupos == MENU_RIGHT  ) {
+		return scr_coord( env_t::menu_scrollbar_thickness, 0 );
+	}
+	return scr_coord( 0, 0 );
 }
 
 
@@ -320,8 +356,9 @@ bool tool_selector_t::infowin_event(const event_t *ev)
 		}
 
 		// No dragging => Next check tooltips
-		const int x = (ev->mx-offset.x) / env_t::iconsize.w;
-		const int y = (ev->my-offset.y-D_TITLEBAR_HEIGHT) / env_t::iconsize.h;
+		const scr_coord icon_off = get_icon_area_offset();
+		const int x = (ev->mx-offset.x-icon_off.x) / env_t::iconsize.w;
+		const int y = (ev->my-offset.y-D_TITLEBAR_HEIGHT-icon_off.y) / env_t::iconsize.h;
 
 		const int wz_idx = x+(tool_icon_width*y)+tool_icon_disp_start;
 		if( wz_idx>=0  &&  wz_idx < (int)tools.get_count()  ) {
@@ -412,7 +449,13 @@ void tool_selector_t::draw(scr_coord pos, scr_size sz)
 		if(env_t::menupos==MENU_TOP || env_t::menupos == MENU_BOTTOM) {
 			offset.y = 0;
 			allow_break = false;
-			tool_icon_width = (display_get_width() + env_t::iconsize.w - 1) / env_t::iconsize.w;
+			// floor, not ceiling: a ceiling-rounded column count includes one column
+			// that doesn't fully fit on screen. During a classic pixel-drag that's
+			// fine (it's meant to peek in/out via offset.x), but the scrollbar always
+			// lands on offset.x==0, so with a ceiling count the icon in that
+			// partial last column would render partly or fully off-screen - lost -
+			// whenever the scrollbar reached its own (correctly, floor-based) max
+			tool_icon_width = max( 1, display_get_width() / env_t::iconsize.w );
 			tool_icon_height = 1; // only single row for title bar
 			set_windowsize(sz);
 			// check for too large values (acter changing width etc.)
@@ -423,19 +466,38 @@ void tool_selector_t::draw(scr_coord pos, scr_size sz)
 			else {
 				scr_coord_val wx = (tools.get_count() - tool_icon_disp_start + 1) * env_t::iconsize.w + offset.x;
 				if (wx < display_get_width()) {
-					tool_icon_disp_start = tool_icon_disp_end < tool_icon_height ? 0 : tool_icon_disp_end - tool_icon_width;
+					// snap to the true last page: this used to compare
+					// tool_icon_disp_end against tool_icon_height, which is always 1
+					// for this (single-row) branch, so the condition was never
+					// meaningfully false and the snap target used a stale
+					// tool_icon_disp_end instead of the current tool_icon_width -
+					// disagreeing with the scrollbar's own max-position math
+					// (get_scroll_metrics) and making the scrollbar unable to reach
+					// the true end when disp_start landed near, but not exactly on,
+					// this snap point (e.g. with empty/separator slots near the tail)
+					tool_icon_disp_start = (uint16)max( 0, (int)tools.get_count() - (int)tool_icon_width );
 					offset.x = display_get_width() - (tools.get_count() - tool_icon_disp_start) * env_t::iconsize.w;
 				}
 			}
 			has_prev_next = (int)tools.get_count() * env_t::iconsize.w > sz.w;
+			// keep disp_end consistent with whatever disp_start ended up as above,
+			// regardless of which branch set it (reset-to-0, the end-snap, or left
+			// untouched from a scrollbar/wheel event handled earlier this frame)
+			tool_icon_disp_end = min( (uint32)tool_icon_disp_start + (uint32)tool_icon_width*tool_icon_height, (uint32)tools.get_count() );
 		}
 		else {
 			offset.x = 0;
 			allow_break = false;
 			tool_icon_width = 1;
-			// only single column for title bar
-			tool_icon_height = (display_get_height() - win_get_statusbar_height() + env_t::iconsize.h - 1) / env_t::iconsize.h;
-			set_windowsize(scr_size(env_t::iconsize.w + env_t::menu_scrollbar_thickness, display_get_height() - win_get_statusbar_height()));
+			// only single column for title bar; floor (not ceiling) for the same
+			// reason as tool_icon_width above - avoids a partial last row landing
+			// off-screen once the scrollbar (offset.y==0) reaches its own max
+			tool_icon_height = max( 1, (display_get_height() - win_get_statusbar_height()) / env_t::iconsize.h );
+			// sz already carries menu_scrollbar_thickness in its width iff the
+			// icons actually overflow (see get_main_menu_scrollbar_extra()); using
+			// it directly (rather than always reserving the thickness) keeps it
+			// consistent with the horizontal branch above and with win_display_flush
+			set_windowsize(sz);
 
 			if ( display_get_height() >= (int)tools.get_count() * env_t::iconsize.h  ) {
 				tool_icon_disp_start = 0;
@@ -444,24 +506,45 @@ void tool_selector_t::draw(scr_coord pos, scr_size sz)
 			else {
 				scr_coord_val hx = (tools.get_count() - tool_icon_disp_start + 1) * env_t::iconsize.h + offset.y;
 				if (hx < display_get_height()) {
-					tool_icon_disp_end = tools.get_count();
-					tool_icon_disp_start = tool_icon_disp_end < tool_icon_height ? 0 : tool_icon_disp_end - tool_icon_height;
+					// snap to the true last page (matches get_scroll_metrics's own
+					// max-position math, so it agrees with the scrollbar instead of
+					// fighting it near the end)
+					tool_icon_disp_start = (uint16)max( 0, (int)tools.get_count() - (int)tool_icon_height );
 					offset.y = display_get_height() - (tools.get_count() - tool_icon_disp_start) * env_t::iconsize.h;
 				}
 			}
 
 			has_prev_next = (int)tools.get_count() * env_t::iconsize.h > sz.h;
+			// keep disp_end consistent with whatever disp_start ended up as above,
+			// regardless of which branch set it (reset-to-0, the end-snap, or left
+			// untouched from a scrollbar/wheel event handled earlier this frame)
+			tool_icon_disp_end = min( (uint32)tool_icon_disp_start + (uint32)tool_icon_width*tool_icon_height, (uint32)tools.get_count() );
 		}
+	}
+
+	// (0,0) unless this is the main menubar with a reserved scrollbar strip
+	// on its inner side (MENU_BOTTOM/MENU_RIGHT); see get_icon_area_offset()
+	const scr_coord icon_off = get_icon_area_offset();
+
+	if(  tool_icon_disp_start != last_tool_icon_disp_start  ) {
+		// the visible tools shifted (drag, wheel, scrollbar-drag, or a window-resize
+		// auto-adjust) since the last draw: a cell may now show a different tool, and
+		// an IMG_EMPTY one is simply skipped below rather than redrawn, so without this
+		// the previous tool's icon would be left on screen at that cell. Re-render the
+		// whole icon+scrollbar area instead of relying on per-icon dirty marking.
+		mark_rect_dirty_wc( pos.x, pos.y+D_TITLEBAR_HEIGHT, pos.x+sz.w, pos.y+sz.h+D_TITLEBAR_HEIGHT );
+		dirty = true;
+		last_tool_icon_disp_start = tool_icon_disp_start;
 	}
 
 	for(  uint i = tool_icon_disp_start;  i < tool_icon_disp_end;  i++  ) {
 		const image_id icon_img = tools[i].tool->get_icon(player);
 #if COLOUR_DEPTH != 0
-		const scr_coord_val additional_xoffset = ( (i-tool_icon_disp_start)%(tool_icon_width+(offset.x!=0)) )*env_t::iconsize.w;
-		const scr_coord_val additional_yoffset = D_TITLEBAR_HEIGHT+( (i-tool_icon_disp_start)/(tool_icon_width+(offset.x!=0)) )*env_t::iconsize.h;
+		const scr_coord_val additional_xoffset = icon_off.x + ( (i-tool_icon_disp_start)%(tool_icon_width+(offset.x!=0)) )*env_t::iconsize.w;
+		const scr_coord_val additional_yoffset = icon_off.y + D_TITLEBAR_HEIGHT+( (i-tool_icon_disp_start)/(tool_icon_width+(offset.x!=0)) )*env_t::iconsize.h;
 #else
-		const scr_coord_val additional_xoffset = 0;
-		const scr_coord_val additional_yoffset = 0;
+		const scr_coord_val additional_xoffset = icon_off.x;
+		const scr_coord_val additional_yoffset = icon_off.y;
 #endif
 		const scr_coord draw_pos = pos + offset + scr_coord(additional_xoffset, additional_yoffset);
 		const char *param = tools[i].tool->get_default_param();
@@ -495,22 +578,22 @@ void tool_selector_t::draw(scr_coord pos, scr_size sz)
 	}
 	else if(  dirty  &&  (tool_icon_disp_end-tool_icon_disp_start < tool_icon_width*tool_icon_height)  ) {
 		// mark empty space empty
-		mark_rect_dirty_wc(pos.x, pos.y, pos.x + tool_icon_width*env_t::iconsize.w, pos.y + tool_icon_height*env_t::iconsize.h);
+		mark_rect_dirty_wc(pos.x+icon_off.x, pos.y+icon_off.y, pos.x+icon_off.x + tool_icon_width*env_t::iconsize.w, pos.y+icon_off.y + tool_icon_height*env_t::iconsize.h);
 	}
 
 	if(  offset.x != 0  &&  tool_icon_disp_start > 0  ) {
-		display_color_img(gui_theme_t::arrow_button_left_img[0], pos.x, pos.y + D_TITLEBAR_HEIGHT, 0, false, false);
+		display_color_img(gui_theme_t::arrow_button_left_img[0], pos.x+icon_off.x, pos.y+D_TITLEBAR_HEIGHT+icon_off.y, 0, false, false);
 	}
 	if(  offset.y != 0  &&  tool_icon_disp_start > 0  ) {
-		display_color_img(gui_theme_t::arrow_button_up_img[0], pos.x, pos.y + D_TITLEBAR_HEIGHT, 0, false, false);
+		display_color_img(gui_theme_t::arrow_button_up_img[0], pos.x+icon_off.x, pos.y+D_TITLEBAR_HEIGHT+icon_off.y, 0, false, false);
 	}
 	if(  tool_icon_height == 1  &&  (tool_icon_disp_start+tool_icon_width < tools.get_count()  ||  (-offset.x) < env_t::iconsize.w*tool_icon_width-get_windowsize().w)  ) {
-		display_color_img( gui_theme_t::arrow_button_right_img[0], pos.x+sz.w-D_ARROW_UP_WIDTH, pos.y+D_TITLEBAR_HEIGHT, 0, false, false );
+		display_color_img( gui_theme_t::arrow_button_right_img[0], pos.x+sz.w-D_ARROW_UP_WIDTH, pos.y+D_TITLEBAR_HEIGHT+icon_off.y, 0, false, false );
 	}
 	if(  tool_icon_width == 1  &&  (tool_icon_disp_start+tool_icon_height < tools.get_count()  ||  (-offset.y) < env_t::iconsize.h*tool_icon_height-get_windowsize().h)  ) {
 		// anchored to the icon column's own width, not sz.w, since sz.w may now
 		// include the extra scrollbar strip reserved beside a vertical toolbar
-		display_color_img(gui_theme_t::arrow_button_down_img[0], pos.x+tool_icon_width*env_t::iconsize.w-D_ARROW_DOWN_WIDTH, pos.y+D_TITLEBAR_HEIGHT+sz.h-D_ARROW_DOWN_HEIGHT, 0, false, false);
+		display_color_img(gui_theme_t::arrow_button_down_img[0], pos.x+icon_off.x+tool_icon_width*env_t::iconsize.w-D_ARROW_DOWN_WIDTH, pos.y+D_TITLEBAR_HEIGHT+sz.h-D_ARROW_DOWN_HEIGHT, 0, false, false);
 	}
 
 	// scrollbar strip, drawn just outside the icon area (below a single row,
@@ -544,8 +627,8 @@ void tool_selector_t::draw(scr_coord pos, scr_size sz)
 		const sint16 mx = get_mouse_x();
 		const sint16 my = get_mouse_y();
 		if(  is_hit(mx-pos.x, my-pos.y)  ) {
-			const sint16 xdiff = (mx - pos.x) / env_t::iconsize.w;
-			const sint16 ydiff = (my - pos.y-D_TITLEBAR_HEIGHT) / env_t::iconsize.h;
+			const sint16 xdiff = (mx - pos.x - icon_off.x) / env_t::iconsize.w;
+			const sint16 ydiff = (my - pos.y-D_TITLEBAR_HEIGHT-icon_off.y) / env_t::iconsize.h;
 			if(  xdiff>=0  &&  xdiff<tool_icon_width  &&  ydiff>=0  ) {
 				const int tipnr = xdiff+(tool_icon_width*ydiff)+tool_icon_disp_start;
 				if(  tipnr < (int)tool_icon_disp_end  ) {

@@ -28,6 +28,15 @@ line_management_gui_t::line_management_gui_t(linehandle_t line, player_t* player
 }
 
 
+convoihandle_t line_management_gui_t::get_route_reference_convoi() const
+{
+	if(  line.is_bound()  &&  line->count_convoys() > 0  ) {
+		return line->get_convoy( 0 );
+	}
+	return schedule_gui_t::get_route_reference_convoi();
+}
+
+
 line_management_gui_t::~line_management_gui_t()
 {
 	delete old_schedule; // since we pass a *copy* of the line's schedule to the base class
