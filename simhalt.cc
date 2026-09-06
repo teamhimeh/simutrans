@@ -2306,7 +2306,7 @@ public:
 	void insert(const T item)
 	{
 		node_count++;
-		uint16 weight = *item;
+		const uint32 weight = *item;
 
 		if (weight < WEIGHT_HEAP) {
 			if (weight < min_weight) {
