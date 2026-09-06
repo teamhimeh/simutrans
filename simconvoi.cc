@@ -813,11 +813,13 @@ void convoi_t::add_running_cost( const weg_t *weg )
 		// e.g. start from station (reset vehicles)
 		return;
 	}
-	jahresgewinn += base_sum_running_costs;
+	// scale the running cost of the vehicles with the setting (in [%])
+	sint64 const scaled_base_running_costs = (base_sum_running_costs * (sint64)welt->get_settings().get_running_cost_multiplier_vehicle()) / 100l;
+	jahresgewinn += scaled_base_running_costs;
 
 	if(  weg  &&  weg->get_owner()!=get_owner()  &&  weg->get_owner()!=NULL  ) {
 		// running on non-public way costs toll (since running costs are positive => invert)
-		sint64 toll = -(base_sum_running_costs*welt->get_settings().get_way_toll_runningcost_percentage())/100l;
+		sint64 toll = -(scaled_base_running_costs*welt->get_settings().get_way_toll_runningcost_percentage())/100l;
 		sint64 wayobj_toll = 0;
 		sint64 signal_toll = 0;
 		if(  welt->get_settings().get_way_toll_waycost_percentage()  ) {
@@ -849,7 +851,7 @@ void convoi_t::add_running_cost( const weg_t *weg )
 		book( -toll-wayobj_toll-signal_toll, CONVOI_PROFIT);
 
 	}
-	sint64 const sum_running_costs = base_sum_running_costs * (welt->get_settings().is_overloading_runningcost_increase()?(sint64) max(loading_level,100) : (sint64) 100)/ (sint64) 100;
+	sint64 const sum_running_costs = scaled_base_running_costs * (welt->get_settings().is_overloading_runningcost_increase()?(sint64) max(loading_level,100) : (sint64) 100)/ (sint64) 100;
 	get_owner()->book_running_costs( sum_running_costs, get_schedule()->get_waytype());
 
 	book( sum_running_costs, CONVOI_OPERATIONS );
