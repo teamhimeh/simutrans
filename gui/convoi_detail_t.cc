@@ -377,8 +377,11 @@ void convoi_detail_t::update_labels()
 		const bool carrying = cnv->is_carrying_convoys();
 		if(  shipped  ) {
 			convoihandle_t carrier = cnv->get_shipping_carrier();
-			label_shipping.buf().printf( "%s %s", translator::translate("Aboard:"),
-				carrier.is_bound() ? carrier->get_name() : translator::translate("unknown") );
+			// the length is what this convoy costs the carrier, in the same car-length units
+			// the ferry's payload is given in, so the two can be compared directly
+			label_shipping.buf().printf( "%s %s (%s %u)", translator::translate("Aboard:"),
+				carrier.is_bound() ? carrier->get_name() : translator::translate("unknown"),
+				translator::translate("length:"), (unsigned)cnv->get_shipping_length() );
 			const halthandle_t dest = cnv->get_shipping_dest_halt();
 			if(  dest.is_bound()  ) {
 				label_shipping_list.buf().printf( "%s %s", translator::translate("Put ashore at:"), dest->get_name() );
@@ -389,10 +392,18 @@ void convoi_detail_t::update_labels()
 			}
 		}
 		else if(  carrying  ) {
-			label_shipping.buf().printf( "%s %u", translator::translate("Convoys aboard:"),
-				(unsigned)cnv->get_shipped_convois().get_count() );
-			// list what is aboard, with each convoy's own drop-off stop, so the player can see
-			// at a glance who is riding along and where they get off
+			// how much of the deck is taken, so the player can see at a glance whether another
+			// convoy would still fit
+			uint32 used = 0;
+			FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
+				if(  c.is_bound()  ) {
+					used += c->get_shipping_length();
+				}
+			}
+			label_shipping.buf().printf( "%s %u (%s %u)", translator::translate("Convoys aboard:"),
+				(unsigned)cnv->get_shipped_convois().get_count(),
+				translator::translate("length:"), (unsigned)used );
+			// list what is aboard, with each convoy's length and its own drop-off stop
 			bool first = true;
 			FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
 				if(  !c.is_bound()  ) {
@@ -403,11 +414,9 @@ void convoi_detail_t::update_labels()
 				}
 				first = false;
 				const halthandle_t d = c->get_shipping_dest_halt();
+				label_shipping_list.buf().printf( "%s (%u)", c->get_name(), (unsigned)c->get_shipping_length() );
 				if(  d.is_bound()  ) {
-					label_shipping_list.buf().printf( "%s (%s)", c->get_name(), d->get_name() );
-				}
-				else {
-					label_shipping_list.buf().printf( "%s", c->get_name() );
+					label_shipping_list.buf().printf( " %s %s", translator::translate("to"), d->get_name() );
 				}
 			}
 		}

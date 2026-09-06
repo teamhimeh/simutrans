@@ -4922,20 +4922,24 @@ sint32 convoi_t::get_capacity_left() const
 	// added once per shipping good instead of per vehicle.
 	const goods_desc_t *counted[16] = { NULL };
 	uint32 counted_num = 0;
+	const sint32 min_pct = (sint32)get_schedule()->get_current_entry().minimum_loading;
 	for( uint8 i=0; i<anz_vehikel; i++) {
 		const goods_desc_t *g = fahr[i]->get_cargo_type();
-		convoy_capacity_left += (sint32)fahr[i]->get_cargo_max()*(sint32)get_schedule()->get_current_entry().minimum_loading/100;
 		if(  goods_manager_t::is_shipping_goods( g )  ) {
+			// capacity and load both come from the helpers, once per good
 			bool seen = false;
 			for(  uint32 n = 0;  n < counted_num;  n++  ) {
 				seen |= (counted[n] == g);
 			}
 			if(  !seen  &&  counted_num < lengthof(counted)  ) {
 				counted[counted_num++] = g;
-				convoy_capacity_left -= (sint32)get_shipping_load_for_goods( g );
+				const uint32 cap = get_shipping_capacity_for_goods( g );
+				convoy_capacity_left += (sint32)cap * min_pct/100;
+				convoy_capacity_left -= (sint32)get_effective_shipping_load( g, cap );
 			}
 			continue;
 		}
+		convoy_capacity_left += (sint32)fahr[i]->get_cargo_max() * min_pct/100;
 		convoy_capacity_left -= fahr[i]->get_total_cargo();
 	}
 	return convoy_capacity_left;
@@ -5057,14 +5061,17 @@ void convoi_t::calc_loading()
 		const vehicle_t* v = fahr[i];
 		const goods_desc_t *g = v->get_cargo_type();
 		if(  goods_manager_t::is_shipping_goods( g )  ) {
-			fracht_max += v->get_cargo_max();
+			// capacity is summed per good inside the helper, so add both once per good rather
+			// than the capacity per vehicle and the load per good
 			bool seen = false;
 			for(  uint32 n = 0;  n < counted_num;  n++  ) {
 				seen |= (counted[n] == g);
 			}
 			if(  !seen  &&  counted_num < lengthof(counted)  ) {
 				counted[counted_num++] = g;
-				fracht_menge += (int)get_shipping_load_for_goods( g );
+				const uint32 cap = get_shipping_capacity_for_goods( g );
+				fracht_max   += (int)cap;
+				fracht_menge += (int)get_effective_shipping_load( g, cap );
 			}
 			continue;
 		}
@@ -7241,6 +7248,34 @@ uint32 convoi_t::get_shipping_load(waytype_t wt) const
 }
 
 
+uint32 convoi_t::get_shipping_capacity_for_goods(const goods_desc_t *g) const
+{
+	if(  g == NULL  ) {
+		return 0;
+	}
+	uint32 cap = 0;
+	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
+		if(  fahr[i]->get_cargo_type() == g  ) {
+			cap += fahr[i]->get_cargo_max();
+		}
+	}
+	return cap;
+}
+
+
+uint32 convoi_t::get_effective_shipping_load(const goods_desc_t *g, uint32 capacity) const
+{
+	const uint32 load = get_shipping_load_for_goods( g );
+	if(  capacity > load  &&  capacity - load < (uint32)SHIPPING_MIN_USABLE_LENGTH  ) {
+		// The gap that is left is shorter than any normal vehicle, so nothing can ever fill
+		// it. Reporting it as free would leave a ferry with minimum_loading 100% waiting at
+		// the quay for a convoy that cannot exist - so call it full instead.
+		return capacity;
+	}
+	return load;
+}
+
+
 uint32 convoi_t::get_shipping_load_for_goods(const goods_desc_t *g) const
 {
 	if(  g == NULL  ) {
@@ -7754,26 +7789,66 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 		candidates.append( c );
 	}
 
+	// Every rejection below is reported at debug level, because from the outside a convoy that
+	// simply never boards gives the player nothing to go on. Only convoys that actually asked
+	// to be shipped (START_SHIPPED) are reported, so this stays quiet in normal play.
+	uint32 asked_to_be_shipped = 0;
+
 	FOR(vector_tpl<convoihandle_t>, const c, candidates) {
-		if(  !c.is_bound()  ||  c == self  ||  c->is_coupled()  ) {
+		if(  !c.is_bound()  ||  c == self  ) {
 			continue;
 		}
 		if(  c->get_schedule() == NULL  ||  !c->get_schedule()->get_current_entry().is_start_shipped()  ) {
 			continue;
 		}
+		asked_to_be_shipped++;
+
+		if(  c->is_coupled()  ) {
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: not taking %s aboard - it is a coupled child, only the head of a chain boards",
+				get_name(), c->get_name());
+			continue;
+		}
 		if(  !can_ship( c )  ) {
+			const waytype_t cwt = c->front()->get_waytype();
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: cannot take %s aboard - waytype %d, shipping good %s, my capacity %u, in use %u, it needs %u",
+				get_name(), c->get_name(), (int)cwt,
+				goods_manager_t::get_shipping_goods(cwt) ? goods_manager_t::get_shipping_goods(cwt)->get_name() : "<none in this pakset>",
+				get_shipping_capacity(cwt), get_shipping_load(cwt), c->get_shipping_length());
 			continue;
 		}
 		const halthandle_t dest = c->get_shipping_target_halt();
-		if(  !dest.is_bound()  ||  dest == halt  ) {
+		if(  !dest.is_bound()  ) {
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: cannot take %s aboard - its next schedule entry is not a stop it can use",
+				get_name(), c->get_name());
+			continue;
+		}
+		if(  dest == halt  ) {
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: not taking %s aboard - its next stop is this same halt",
+				get_name(), c->get_name());
 			continue;
 		}
 		// Only take it if this trip really delivers it: we stop at dest, we unload there, and
 		// we get there without an UNLOAD_ALL stop or a return to this halt in between.
 		if(  !can_deliver_shipped_to( dest )  ) {
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: cannot take %s aboard - this trip does not deliver it to '%s' (not called at, no_unload there, or unload_all/return to here first)",
+				get_name(), c->get_name(), dest->get_name());
 			continue;
 		}
 		board_carrier( c, dest );
+	}
+
+	if(  asked_to_be_shipped == 0  ) {
+		// The commonest setup mistake by far: the dock and the land station are two separate
+		// halts, so the waiting convoy is queued at a different haltestelle_t than the one the
+		// carrier is loading at, and the carrier simply never sees it.
+		dbg->message("convoi_t::handle_shipping_at_halt()",
+			"%s: no convoy at '%s' is waiting to be shipped (%u convoys loading here). If a convoy is waiting nearby, check that the dock and its station are ONE joined halt.",
+			get_name(), halt->get_name(), (unsigned)candidates.get_count());
 	}
 }
 
@@ -7798,6 +7873,16 @@ bool convoi_t::try_start_shipping(halthandle_t halt)
 
 	if(  shipping_wait_since == 0  ) {
 		shipping_wait_since = welt->get_ticks();
+		// logged once per wait, so the player can confirm the flag really took effect and see
+		// which halt and which waytype a carrier has to serve to pick this convoy up
+		const halthandle_t dest = get_shipping_target_halt();
+		const waytype_t wt = front()->get_waytype();
+		dbg->message("convoi_t::try_start_shipping()",
+			"%s is waiting at '%s' to be shipped to '%s' (waytype %d, shipping good %s)",
+			get_name(), halt->get_name(),
+			dest.is_bound() ? dest->get_name() : "<next stop is not a usable halt>",
+			(int)wt,
+			goods_manager_t::get_shipping_goods(wt) ? goods_manager_t::get_shipping_goods(wt)->get_name() : "<none in this pakset>");
 		return true;
 	}
 

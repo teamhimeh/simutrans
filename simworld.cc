@@ -3709,6 +3709,17 @@ void karte_t::sync_step(uint32 delta_t, bool do_sync_step, bool display )
 
 		// change view due to following a convoi?
 		convoihandle_t follow_convoi = viewport->get_follow_convoi();
+		// Convoy shipping: a convoy aboard a carrier is not on the map at all, and its vehicles
+		// keep the stale position of the quay it left - following them would freeze the camera
+		// at the harbour. Follow the carrier instead, so the player keeps watching the convoy
+		// they asked to watch as it crosses. Once it is put ashore is_shipped() goes false and
+		// the camera returns to it on its own.
+		if(  follow_convoi.is_bound()  &&  follow_convoi->is_shipped()  ) {
+			const convoihandle_t carrier = follow_convoi->get_shipping_carrier();
+			if(  carrier.is_bound()  &&  carrier->get_vehicle_count() > 0  ) {
+				follow_convoi = carrier;
+			}
+		}
 		if(follow_convoi.is_bound()  &&  follow_convoi->get_vehicle_count()>0) {
 			vehicle_t const& v       = *follow_convoi->front();
 			koord3d   const  new_pos = v.get_pos();
