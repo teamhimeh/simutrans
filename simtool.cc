@@ -2053,7 +2053,12 @@ const char *tool_clear_reservation_t::work( player_t *, koord3d pos )
 				if( veh->get_convoi() ) {
 					convoihandle_t c = veh->get_convoi()->get_most_parent_convoi();
 					uint16 state = c->get_state();
-					if( state > convoi_t::EDIT_SCHEDULE ) {
+					// A convoy aboard a carrier holds no reservation and is not on the map, so
+					// it can normally not be reached from a tile at all. Guard anyway: the test
+					// below is an ordinal comparison and SHIPPED is > EDIT_SCHEDULE, so if a
+					// shipped vehicle ever were still on a tile (a transition, or a load bug)
+					// this would set it driving and a train would roll out of a ship.
+					if( state > convoi_t::EDIT_SCHEDULE  &&  state != convoi_t::SHIPPED  &&  !c->is_shipped() ) {
 						c->set_state(convoi_t::ROUTING_1);
 					}
 				}
@@ -10093,6 +10098,12 @@ bool tool_change_line_t::init( player_t *player )
 
 							for(  int j=initial-1;  j >= 0  &&  initial-destroyed > max_left  &&  new_sum_capacity < old_sum_capacity;  j--  ) {
 								convoihandle_t cnv = line->get_convoy(j);
+								// SHIPPED is ordinally above WAITING_FOR_CLEARANCE_ONE_MONTH, so
+								// without this guard the excess-capacity cleanup would happily
+								// self_destruct() convoys that are aboard a carrier.
+								if(  cnv->is_shipped()  ||  cnv->is_carrying_convoys()  ) {
+									continue;
+								}
 								if(  cnv->get_state() == convoi_t::INITIAL  ||  cnv->get_state() >= convoi_t::WAITING_FOR_CLEARANCE_ONE_MONTH  ) {
 									for(  int i=0;  i<cnv->get_vehicle_count();  i++  ) {
 										old_sum_capacity -= cnv->get_vehikel(i)->get_desc()->get_capacity();

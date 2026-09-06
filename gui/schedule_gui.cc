@@ -11,6 +11,7 @@
 #include "../simworld.h"
 #include "../simmenu.h"
 #include "../simconvoi.h"
+#include "../bauer/goods_manager.h"
 #include "../display/simgraph.h"
 #include "../display/viewport.h"
 #include "components/gui_divider.h"
@@ -906,6 +907,11 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_no_overtake.set_tooltip("Do not overtake other cars until this stop.");
 		bt_no_overtake.add_listener(this);
 		add_component(&bt_no_overtake);
+
+		bt_start_shipped.init(button_t::square_automatic, "Wait to be shipped");
+		bt_start_shipped.set_tooltip("Wait here until a carrier convoy takes this convoy to its next stop. The convoy will not depart on its own.");
+		bt_start_shipped.add_listener(this);
+		add_component(&bt_start_shipped);
 		add_component(&sp_road_settings);
 		add_component(&sp_road_settings);
 	}
@@ -1063,6 +1069,7 @@ void schedule_gui_t::update_selection()
 	numimp_max_load.set_value(100);
 	bt_max_load_all_stops.disable();
 	bt_no_overtake.disable();
+	bt_start_shipped.disable();
 	bt_max_speed_kmh_of_convoi.disable();
 	bt_no_go_no_users.disable();
 	numimp_max_speed_kmh_of_convoi.disable();
@@ -1088,6 +1095,9 @@ void schedule_gui_t::update_selection()
     
 		bt_no_overtake.enable();
 		bt_no_overtake.pressed = schedule->at(current_stop).is_no_overtake();
+
+		bt_start_shipped.enable();
+		bt_start_shipped.pressed = schedule->at(current_stop).is_start_shipped();
 
 		if(  current_stop!=0  &&  (!schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-1)  ) {
 			bt_up.enable();
@@ -1771,6 +1781,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
+	else if(comp == &bt_start_shipped) {
+		if (!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_start_shipped(bt_start_shipped.pressed);
+			update_selection();
+		}
+	}
 	else if(comp == &bt_pass_stop) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_pass_stop(!schedule->at(schedule->get_current_stop()).is_pass_stop());
@@ -2236,4 +2252,11 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	sp_coupling_settings.set_visible(coupling_waytype && yesno);
 	bt_no_overtake.set_visible(schedule->get_waytype()==road_wt && yesno); // only for road vehicle
 	sp_road_settings.set_visible(schedule->get_waytype()==road_wt && yesno);
+
+	// Convoy shipping needs no carrier-side flag: carrying is decided by the ship's capacity
+	// and its schedule. Only the carried side declares itself, and only where this pakset
+	// actually defines a shipping good, so the option never appears where it cannot work.
+	const bool is_shippable_waytype = schedule->get_waytype()!=air_wt
+		&&  goods_manager_t::get_shipping_goods(schedule->get_waytype())!=NULL;
+	bt_start_shipped.set_visible(is_shippable_waytype && yesno);
 }

@@ -6304,6 +6304,9 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				}
 			}
 			else {
+				// A SHIPPED convoy is aboard a carrier: it is on no tile and in no depot. It
+				// still joins the sync list (its sync_step does nothing at all in that state)
+				// so that its handle keeps working and it resumes normally when put ashore.
 				sync.add( cnv );
 			}
 		}
@@ -8288,7 +8291,18 @@ void karte_t::step_schedule_route()
 	// compute exactly one stop-to-stop leg this step, instead of pathfinding
 	// the whole schedule's circuit in a single burst
 	const uint8 i = schedule_route_next_leg++;
-	if(  !(  schedule->get_next_line().is_bound()  &&  i==count-1  )  ) {
+	if(  schedule->at(i).is_start_shipped()  ) {
+		// Convoy shipping: this leg is not driven at all - the convoy waits here and is
+		// carried to the next stop aboard another convoy. There is no way of its own waytype
+		// spanning the gap, so pathfinding it would burn a full search only to fail and then
+		// report the whole schedule as having no route. Just mark the gap so the overlay does
+		// not draw a line across it, and leave schedule_route_complete alone: nothing is
+		// broken here, this stretch is simply travelled by other means.
+		if(  !schedule_route.empty()  &&  schedule_route.back() != koord3d::invalid  ) {
+			schedule_route.append( koord3d::invalid );
+		}
+	}
+	else if(  !(  schedule->get_next_line().is_bound()  &&  i==count-1  )  ) {
 		const koord3d start  = schedule->at(i).pos;
 		const koord3d target = schedule->at((i+1) % count).pos;
 		if(  start != target  ) {
