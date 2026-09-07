@@ -8373,6 +8373,9 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 								if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
 									cost = t->get_desc()->get_maintenance();
 								}
+								if(  wayobj_t* wo = i.grund->get_wayobj(w->get_waytype())  ) {
+									cost += wo->get_desc()->get_maintenance();
+								}
 								workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
 							}
 						}
@@ -8416,6 +8419,9 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 						// tunnel cost overwrites way cost
 						if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
 							cost = t->get_desc()->get_maintenance();
+						}
+						if(  wayobj_t* wo = i.grund->get_wayobj(w->get_waytype())  ) {
+							cost += wo->get_desc()->get_maintenance();
 						}
 						workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
 					}
