@@ -1081,11 +1081,8 @@ void schedule_gui_t::update_selection()
 		const uint8 current_stop = schedule->get_current_stop();
 		bt_reverse_convoy.enable();
 		bt_reverse_convoy.pressed = schedule->at(current_stop).is_reverse_convoy();
-		// road convoys can turn around on the spot, so they never reverse their coupling order.
-		if(  schedule->get_waytype()!=road_wt  ) {
-			bt_reverse_coupling.enable();
-			bt_reverse_coupling.pressed = schedule->at(current_stop).is_reverse_convoi_coupling();
-		}
+		bt_reverse_coupling.enable();
+		bt_reverse_coupling.pressed = schedule->at(current_stop).is_reverse_convoi_coupling();
 		bt_uncouple_child.enable();
 		bt_uncouple_child.pressed = schedule->at(current_stop).is_uncouple_child();
     
@@ -2176,7 +2173,7 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	next_line_selector.set_visible(yesno);
 	sp_schedule_settings.set_visible(yesno);
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
-	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
+	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && schedule->get_waytype()!=road_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
 	bt_reverse_default.set_visible(show_reverse_settings&&yesno);
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
 	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt; // water convoy does not use electricity
@@ -2223,17 +2220,11 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 
 	const bool coupling_waytype = schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
-	// Road convoys can turn around on the spot, so reversing the parent/child order of a coupled
-	// road convoy is meaningless - the coupling order is always "drive up behind and become child".
-	const bool reverse_coupling_waytype = reversible_waytype  &&  schedule->get_waytype()!=road_wt;
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);
 	bt_reset_coupling.set_visible(coupling_waytype && yesno);
 	bt_reverse_convoy.set_visible(reversible_waytype  &&  yesno);
-	bt_reverse_coupling.set_visible(reverse_coupling_waytype  &&  yesno);
-	if(  !reverse_coupling_waytype  ) {
-		bt_reverse_coupling.disable();
-	}
+	bt_reverse_coupling.set_visible(coupling_waytype  &&  yesno);
 	sp_reverse_settings.set_visible(reversible_waytype && yesno);
 	bt_wait_coupling_done.set_visible(coupling_waytype && yesno);
 	bt_uncouple_child.set_visible(coupling_waytype && yesno);
