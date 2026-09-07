@@ -861,7 +861,7 @@ void depot_frame_t::layout(scr_size *size)
 	gui_frame_t::set_windowsize(win_size);
 	set_min_windowsize(scr_size(D_DEFAULT_WIDTH, MIN_TOTAL_HEIGHT));
 	const waytype_t wt = depot->get_waytype();
-	const bool should_show_child_convoi_selector = (wt != road_wt && wt != air_wt && wt != water_wt);
+	const bool should_show_child_convoi_selector = wt!=air_wt;
 
 	/*
 	 * DONE with layout planning - now build everything.

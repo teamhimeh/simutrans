@@ -2562,6 +2562,22 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 			xoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width)/5;
 			yoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][1], raster_width)/5;
 		}
+		
+		if(  !cnv->is_reversed()  ) {
+			return;
+		}
+		// Add offset when the vehicle is reversed.
+		sint32 steps_delta;
+		const sint8* rbo = welt->get_settings().get_reverse_base_offsets(dir);
+		steps_delta = raster_width*(VEHICLE_STEPS_PER_TILE / 2 - get_desc()->get_length_in_steps() + rbo[2]);
+		if(dx && dy) {
+			steps_delta &= 0xFFFFFC00;
+		}
+		else {
+			steps_delta = (steps_delta*diagonal_multiplier)>>10;
+		}
+		xoff += ((steps_delta*dx) >> 10) + tile_raster_scale_x(rbo[0],raster_width);
+		yoff += ((steps_delta*dy) >> 10) + tile_raster_scale_y(rbo[1],raster_width);
 	}
 }
 
