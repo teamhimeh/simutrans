@@ -2051,9 +2051,10 @@ const char *tool_clear_reservation_t::work( player_t *, koord3d pos )
 			if( typ >= obj_t::road_vehicle  &&  typ <= obj_t::air_vehicle ) {
 				vehicle_t *veh = dynamic_cast<vehicle_t *>(gr->obj_bei( i ));
 				if( veh->get_convoi() ) {
-					uint16 state = veh->get_convoi()->get_state();
+					convoihandle_t c = veh->get_convoi()->get_most_parent_convoi();
+					uint16 state = c->get_state();
 					if( state > convoi_t::EDIT_SCHEDULE ) {
-						veh->get_convoi()->set_state(convoi_t::ROUTING_1);
+						c->set_state(convoi_t::ROUTING_1);
 					}
 				}
 			}
