@@ -20,11 +20,6 @@ jobs:
             backend: sdl2
             sdl_package: libsdl2-dev
             distribute: true
-          - name: Ubuntu 26.04 / SDL3
-            os: ubuntu-26.04
-            backend: sdl3
-            sdl_package: libsdl3-dev
-            distribute: false
     
     steps:
     - uses: actions/checkout@v4

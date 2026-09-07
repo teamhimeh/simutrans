@@ -32,7 +32,7 @@ static vector_tpl<sint32> bFilterStates;
 #define BUTTONSPACE max(D_BUTTON_HEIGHT, LINESPACE)
 
 /// number of data rows of the finance table, see cell_to_buttons/cell_to_moneylabel
-#define MONEY_FRAME_ROWS (12)
+#define MONEY_FRAME_ROWS (MAX_PLAYER_COST_BUTTON-4)
 
 /// index of the first of the three revenue breakdown buttons in cost_type_name/cost_type.
 /// They are sub-entries of the revenue row and are laid out narrower and right aligned.
@@ -53,6 +53,9 @@ static const char *cost_type_name[MAX_PLAYER_COST_BUTTON] =
 	"Assets",
 	"Margin (%)",
 	"Net Wealth",
+	"Passagiere",
+	"Post",
+	"Fracht",
 	"Passagiere",
 	"Post",
 	"Fracht"
@@ -76,7 +79,10 @@ static const uint8 cost_type_color[MAX_PLAYER_COST_BUTTON] =
 	COL_WEALTH,
 	COL_REVENUE_PAS,
 	COL_REVENUE_MAIL,
-	COL_REVENUE_GOOD
+	COL_REVENUE_GOOD,
+	COL_TRANSPORTED_PAS,
+	COL_TRANSPORTED_MAIL,
+	COL_TRANSPORTED_GOOD
 };
 
 
@@ -98,11 +104,17 @@ static const uint8 cost_type[3*MAX_PLAYER_COST_BUTTON] =
 	ATV_REVENUE_PASSENGER,          TT_ALL, MONEY,   // Income from carrying passengers
 	ATV_REVENUE_MAIL,               TT_ALL, MONEY,   // Income from carrying mail
 	ATV_REVENUE_GOOD,               TT_ALL, MONEY,   // Income from carrying all other goods
+	ATV_TRANSPORTED_PASSENGER,		TT_ALL, STANDARD, // transported passengers
+	ATV_TRANSPORTED_MAIL,			TT_ALL, STANDARD, // transported mail
+	ATV_TRANSPORTED_GOOD,			TT_ALL, STANDARD, // transported goods
 };
 
 static const sint8 cell_to_buttons[] =
 {
 	 0,  -1,  -1,  -1,  -1,
+	16,  -1,  -1,  -1,  -1,
+	17,  -1,  -1,  -1,  -1,
+	18,  -1,  -1,  -1,  -1,
 	 1,  -1,  -1,  -1,  -1,
 	13,  -1,  -1,  -1,  -1,
 	14,  -1,  -1,  -1,  -1,
@@ -147,12 +159,21 @@ static const uint16 label_type[] =
 	TT_ALL, ATV_REVENUE_MAIL,               0, MONEY,
 	TT_ALL, ATV_REVENUE_MAIL,               1, MONEY,
 	TT_ALL, ATV_REVENUE_GOOD,               0, MONEY,
-	TT_ALL, ATV_REVENUE_GOOD,               1, MONEY
+	TT_ALL, ATV_REVENUE_GOOD,               1, MONEY,
+	TT_ALL, ATV_TRANSPORTED_PASSENGER,		0, STANDARD,
+	TT_ALL, ATV_TRANSPORTED_PASSENGER,		1, STANDARD,
+	TT_ALL, ATV_TRANSPORTED_MAIL,			0, STANDARD,
+	TT_ALL, ATV_TRANSPORTED_MAIL,			1, STANDARD,
+	TT_ALL, ATV_TRANSPORTED_GOOD,			0, STANDARD,
+	TT_ALL, ATV_TRANSPORTED_GOOD,			1, STANDARD,
 };
 
 static const sint8 cell_to_moneylabel[] =
 {
 	-1,   0,   1,  -1,  -1,
+	-1,  28,  29,  -1,  -1,
+	-1,  30,  31,  -1,  -1,
+	-1,  32,  33,  -1,  -1,
 	-1,   2,   3,  -1,  -1,
 	-1,  22,  23,  -1,  -1,
 	-1,  24,  25,  -1,  -1,
