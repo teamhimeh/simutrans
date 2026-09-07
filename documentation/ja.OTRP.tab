@@ -719,6 +719,8 @@ Rotate Building
 %s (%i,%i) は私有駅になりました．
 (%s) now public way.
 (%s) は公共化されました．
+(%s) now private way.
+(%s) は私有化されました．
 merge stop
 駅を統合
 Remove all waiting goods and pax
