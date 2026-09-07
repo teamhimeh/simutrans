@@ -3084,6 +3084,11 @@ void convoi_t::vorfahren()
 						set_requested_change_lane(true);
 					}
 				}
+				// The reversal flipped the lane of the whole chain, not just of this convoy: the
+				// coupled children stand on the same piece of road and now drive the other way too.
+				// They get no tile entry of their own here, so hand the new lane down right away -
+				// otherwise they keep being drawn on the lane they had before the reversal.
+				broadcast_lane_to_coupling_convois();
 			}
 		}
 		else {
@@ -5450,6 +5455,16 @@ PIXVAL convoi_t::get_status_color() const
 	}
 	// normal state
 	return SYSCOL_TEXT;
+}
+
+
+void convoi_t::broadcast_lane_to_coupling_convois()
+{
+	for(  convoihandle_t c = coupling_convoi;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+		if(  c->get_tiles_overtaking() != get_tiles_overtaking()  ) {
+			c->set_tiles_overtaking( get_tiles_overtaking() );
+		}
+	}
 }
 
 

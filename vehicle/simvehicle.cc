@@ -3908,14 +3908,9 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 				}
 			}
 		}
-		// Coupled convoys are one physical vehicle chain, but only the leading convoy runs the lane
-		// logic above (the front vehicles of the children are not 'leading'). Hand the resulting
-		// lane down, so the children are drawn on - and treated as being on - the same lane.
-		for(  convoihandle_t c = cnv->get_coupling_convoi();  c.is_bound();  c = c->get_coupling_convoi()  ) {
-			if(  c->get_tiles_overtaking() != cnv->get_tiles_overtaking()  ) {
-				c->set_tiles_overtaking( cnv->get_tiles_overtaking() );
-			}
-		}
+		// Only the leading convoy runs the lane logic above, so hand the resulting lane down to the
+		// convoys it tows.
+		cnv->broadcast_lane_to_coupling_convois();
 		pos_prev = gr->get_pos();
 	}
 }
