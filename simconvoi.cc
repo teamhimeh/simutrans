@@ -7331,6 +7331,18 @@ void convoi_t::withdraw_from_map_for_shipping()
 	while(  c.is_bound()  ) {
 		for(  uint8 i = 0;  i < c->anz_vehikel;  i++  ) {
 			vehicle_t *v = c->fahr[i];
+			// Road vehicles hold two reservations that leave_tile() does not touch: the tiles
+			// they have already reserved ahead of themselves, and a reserved position at the
+			// target halt used by choose roadsigns. Neither is refreshed while the convoy is
+			// aboard, so without this the halt position stays reserved for a convoy that is
+			// not even on the map and choose signs keep steering traffic away from it.
+			// Must happen before route.clear() below: unreserve_target_halt() walks the route
+			// backwards to find the positions it reserved.
+			if(  road_vehicle_t *rv = dynamic_cast<road_vehicle_t *>(v)  ) {
+				rv->unreserve_all_tiles();
+				rv->unreserve_target_halt();
+			}
+
 			grund_t *gr = welt->lookup( v->get_pos() );
 			if(  gr  ) {
 				// Repaint the tile we are about to vacate, or the vehicle stays painted on the
