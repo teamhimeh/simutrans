@@ -708,9 +708,9 @@ koord haltestelle_t::get_next_pos( koord start ) const
 
 
 
-/* Calculate and set basis position of this station
- * It is the avarage of all tiles' coordinate weighed by level of the building */
-void haltestelle_t::recalc_basis_pos()
+/* Returns the tile closest to the average of all tiles' coordinates weighed by
+ * level of the building, or NULL if no tile has a building on it */
+grund_t *haltestelle_t::get_level_weighted_center() const
 {
 	sint64 cent_x, cent_y;
 	cent_x = cent_y = 0;
@@ -725,27 +725,11 @@ void haltestelle_t::recalc_basis_pos()
 			level_sum += lv;
 		}
 	}
-	koord cent;
-	cent = koord((sint16)(cent_x/level_sum),(sint16)(cent_y/level_sum));
-
-	// save old name
-	plainstring name = get_name();
-	// clear name at old place (and the book-keeping)
-	set_name(NULL);
-
-	if ( level_sum > 0 ) {
-		grund_t *new_center = get_ground_closest_to( cent );
-		if(  new_center != tiles.front().grund  &&  new_center->get_text()==NULL  ) {
-			// move to new center, if there is not yet a name on it
-			tiles.remove( new_center );
-			tiles.insert( new_center );
-			init_pos = new_center->get_pos().get_2d();
-		}
+	if(  level_sum == 0  ) {
+		return NULL;
 	}
-	// .. and set name again (and do all the book-keeping)
-	set_name(name);
-
-	return;
+	koord cent = koord((sint16)(cent_x/level_sum),(sint16)(cent_y/level_sum));
+	return get_ground_closest_to( cent );
 }
 
 /**
@@ -801,9 +785,6 @@ DBG_DEBUG("haltestelle_t::remove()","remove last");
 		// all deleted?
 DBG_DEBUG("haltestelle_t::remove()","destroy");
 		haltestelle_t::destroy( halt );
-	}
-	else {
-		halt->recalc_basis_pos();
 	}
 
 	// if building was removed this is false!
@@ -3829,8 +3810,6 @@ void haltestelle_t::merge_halt( halthandle_t halt_merged )
 	// Allow everyone who could stop at either halt to continue doing so
 	set_permissions(merged_perms | permissions);
 
-	recalc_basis_pos();
-
 	// also rebuild our connections
 	recalc_station_type();
 	rebuild_connections();
@@ -4897,7 +4876,12 @@ bool haltestelle_t::add_grund(grund_t *gr, bool relink_factories)
 	if (  !grund_is_where_it_should_be || gr->get_halt() != self || !gr->is_halt()  ) {
 		dbg->error( "haltestelle_t::add_grund()", "no ground added to (%s)", gr->get_pos().get_str() );
 	}
-	init_pos = tiles.front().grund->get_pos().get_2d();
+	if(  init_pos == koord::invalid  ) {
+		// only pick a position automatically when this halt does not have one yet
+		// (e.g. brand new halt); once set, init_pos is only changed manually or
+		// when the tile it points to is removed
+		init_pos = tiles.front().grund->get_pos().get_2d();
+	}
 	welt->set_schedule_counter();
 
 	return true;
@@ -4928,10 +4912,24 @@ bool haltestelle_t::rem_grund(grund_t *gr)
 		set_name(NULL);
 	}
 
+	// only move init_pos automatically once the tile it points to is gone
+	bool const removed_init_pos_tile = ( gr->get_pos().get_2d() == init_pos );
+
 	// now remove tile from list
 	tiles.erase(i);
 	welt->set_schedule_counter();
-	init_pos = tiles.empty() ? koord::invalid : tiles.front().grund->get_pos().get_2d();
+	if(  removed_init_pos_tile  ) {
+		if(  tiles.empty()  ) {
+			init_pos = koord::invalid;
+		}
+		else {
+			// pick a sensible replacement: the tile closest to the (remaining)
+			// level-weighted center, falling back to the first tile if there
+			// is no building left to weigh
+			grund_t *new_center = get_level_weighted_center();
+			init_pos = ( new_center ? new_center : tiles.front().grund )->get_pos().get_2d();
+		}
+	}
 
 	// re-add name
 	if (station_name_to_transfer != NULL  &&  !tiles.empty()) {
@@ -5012,6 +5010,19 @@ bool haltestelle_t::rem_grund(grund_t *gr)
 	}
 
 	return true;
+}
+
+
+
+bool haltestelle_t::set_init_pos(koord pos)
+{
+	FOR(slist_tpl<tile_t>, const& i, tiles) {
+		if(  i.grund->get_pos().get_2d() == pos  ) {
+			init_pos = pos;
+			return true;
+		}
+	}
+	return false;
 }
 
 
