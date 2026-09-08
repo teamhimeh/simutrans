@@ -1273,20 +1273,11 @@ public:
 	/// total capacity of the vehicles offering space for this shipping good
 	uint32 get_shipping_capacity_for_goods(const goods_desc_t *g) const;
 
-	/**
-	 * Shipping space that is left over but too short for any convoy to use counts as filled,
-	 * so that a ferry with 4 units free does not sit at the quay forever waiting for a 100%
-	 * load that can never arrive. See SHIPPING_MIN_USABLE_LENGTH.
-	 */
-	uint32 get_effective_shipping_load(const goods_desc_t *g, uint32 capacity) const;
-
-	/**
-	 * Shortest run of shipping space worth holding a ferry for, in the same car-length units
-	 * as vehicle_desc_t::get_length() (a standard vehicle is 8, a tile is CARUNITS_PER_TILE).
-	 * Anything shorter than this cannot fit a normal vehicle, so it is treated as full rather
-	 * than as a gap still waiting to be filled.
-	 */
-	enum { SHIPPING_MIN_USABLE_LENGTH = 8 };
+	// NOTE on capacity: a convoy boards whenever ANY shipping space is left, even if it is
+	// longer than that space, so the load may exceed the capacity by up to one convoy. That
+	// overshoot is deliberate - it is what carries the loading level past minimum_loading and
+	// releases the ferry, and it removes the deadlock a strict "does it fit" test creates when
+	// the gap left over happens to match no waiting convoy.
 
 	/**
 	 * true if this trip actually delivers a carried convoy to `dest`: the carrier stops there,

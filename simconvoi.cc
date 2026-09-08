@@ -4935,7 +4935,7 @@ sint32 convoi_t::get_capacity_left() const
 				counted[counted_num++] = g;
 				const uint32 cap = get_shipping_capacity_for_goods( g );
 				convoy_capacity_left += (sint32)cap * min_pct/100;
-				convoy_capacity_left -= (sint32)get_effective_shipping_load( g, cap );
+				convoy_capacity_left -= (sint32)get_shipping_load_for_goods( g );
 			}
 			continue;
 		}
@@ -5071,7 +5071,7 @@ void convoi_t::calc_loading()
 				counted[counted_num++] = g;
 				const uint32 cap = get_shipping_capacity_for_goods( g );
 				fracht_max   += (int)cap;
-				fracht_menge += (int)get_effective_shipping_load( g, cap );
+				fracht_menge += (int)get_shipping_load_for_goods( g );
 			}
 			continue;
 		}
@@ -7263,19 +7263,6 @@ uint32 convoi_t::get_shipping_capacity_for_goods(const goods_desc_t *g) const
 }
 
 
-uint32 convoi_t::get_effective_shipping_load(const goods_desc_t *g, uint32 capacity) const
-{
-	const uint32 load = get_shipping_load_for_goods( g );
-	if(  capacity > load  &&  capacity - load < (uint32)SHIPPING_MIN_USABLE_LENGTH  ) {
-		// The gap that is left is shorter than any normal vehicle, so nothing can ever fill
-		// it. Reporting it as free would leave a ferry with minimum_loading 100% waiting at
-		// the quay for a convoy that cannot exist - so call it full instead.
-		return capacity;
-	}
-	return load;
-}
-
-
 uint32 convoi_t::get_shipping_load_for_goods(const goods_desc_t *g) const
 {
 	if(  g == NULL  ) {
@@ -7321,7 +7308,13 @@ bool convoi_t::can_ship(convoihandle_t c) const
 	if(  cap == 0  ) {
 		return false;
 	}
-	return get_shipping_load(wt) + c->get_shipping_length() <= cap;
+	// Any free space at all is enough to take one more convoy aboard, however long it is.
+	// Deliberately not "does it fit": refusing a convoy longer than the space left would leave
+	// a ferry holding a gap no arriving convoy happens to match, and it would never fill up.
+	// Overloading is bounded to a single convoy - once the load reaches capacity nothing more
+	// boards - and the overshoot is what makes the loading level cross minimum_loading, which
+	// is what lets the ferry depart.
+	return get_shipping_load(wt) < cap;
 }
 
 
@@ -7812,7 +7805,7 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 		if(  !can_ship( c )  ) {
 			const waytype_t cwt = c->front()->get_waytype();
 			dbg->message("convoi_t::handle_shipping_at_halt()",
-				"%s: cannot take %s aboard - waytype %d, shipping good %s, my capacity %u, in use %u, it needs %u",
+				"%s: cannot take %s aboard - waytype %d, shipping good %s, my capacity %u, already in use %u (its own length is %u; a convoy boards while ANY space is left, so a full deck is the usual reason)",
 				get_name(), c->get_name(), (int)cwt,
 				goods_manager_t::get_shipping_goods(cwt) ? goods_manager_t::get_shipping_goods(cwt)->get_name() : "<none in this pakset>",
 				get_shipping_capacity(cwt), get_shipping_load(cwt), c->get_shipping_length());
