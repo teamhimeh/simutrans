@@ -3709,6 +3709,17 @@ void karte_t::sync_step(uint32 delta_t, bool do_sync_step, bool display )
 
 		// change view due to following a convoi?
 		convoihandle_t follow_convoi = viewport->get_follow_convoi();
+		// Convoy shipping: a convoy aboard a carrier is not on the map at all, and its vehicles
+		// keep the stale position of the quay it left - following them would freeze the camera
+		// at the harbour. Follow the carrier instead, so the player keeps watching the convoy
+		// they asked to watch as it crosses. Once it is put ashore is_shipped() goes false and
+		// the camera returns to it on its own.
+		if(  follow_convoi.is_bound()  &&  follow_convoi->is_shipped()  ) {
+			const convoihandle_t carrier = follow_convoi->get_shipping_carrier();
+			if(  carrier.is_bound()  &&  carrier->get_vehicle_count() > 0  ) {
+				follow_convoi = carrier;
+			}
+		}
 		if(follow_convoi.is_bound()  &&  follow_convoi->get_vehicle_count()>0) {
 			vehicle_t const& v       = *follow_convoi->front();
 			koord3d   const  new_pos = v.get_pos();
@@ -6304,6 +6315,9 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				}
 			}
 			else {
+				// A SHIPPED convoy is aboard a carrier: it is on no tile and in no depot. It
+				// still joins the sync list (its sync_step does nothing at all in that state)
+				// so that its handle keeps working and it resumes normally when put ashore.
 				sync.add( cnv );
 			}
 		}
@@ -8288,7 +8302,18 @@ void karte_t::step_schedule_route()
 	// compute exactly one stop-to-stop leg this step, instead of pathfinding
 	// the whole schedule's circuit in a single burst
 	const uint8 i = schedule_route_next_leg++;
-	if(  !(  schedule->get_next_line().is_bound()  &&  i==count-1  )  ) {
+	if(  schedule->at(i).is_start_shipped()  ) {
+		// Convoy shipping: this leg is not driven at all - the convoy waits here and is
+		// carried to the next stop aboard another convoy. There is no way of its own waytype
+		// spanning the gap, so pathfinding it would burn a full search only to fail and then
+		// report the whole schedule as having no route. Just mark the gap so the overlay does
+		// not draw a line across it, and leave schedule_route_complete alone: nothing is
+		// broken here, this stretch is simply travelled by other means.
+		if(  !schedule_route.empty()  &&  schedule_route.back() != koord3d::invalid  ) {
+			schedule_route.append( koord3d::invalid );
+		}
+	}
+	else if(  !(  schedule->get_next_line().is_bound()  &&  i==count-1  )  ) {
 		const koord3d start  = schedule->at(i).pos;
 		const koord3d target = schedule->at((i+1) % count).pos;
 		if(  start != target  ) {

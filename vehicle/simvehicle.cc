@@ -1604,7 +1604,15 @@ void vehicle_t::calc_image()
 	const bool is_reversed = (cnv==NULL  ||  cnv==(convoi_t *)1) ? false : cnv->is_reversed();
 	const bool is_no_electric = (cnv==NULL  ||  cnv==(convoi_t *)1) ? false : !cnv->get_use_electric();
 	if (fracht.empty()) {
-		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),NULL,is_reversed,is_no_electric));
+		// Convoy shipping: a carrier vehicle holds no real cargo for the convoys it carries -
+		// they are tracked as convoy handles, not as ware_t - so ask the convoy directly and
+		// show the loaded image while something is aboard.
+		const goods_desc_t *carried = NULL;
+		if(  cnv != NULL  &&  cnv != (convoi_t *)1  &&  goods_manager_t::is_shipping_goods( desc->get_freight_type() )
+		  &&  cnv->is_carrying_for_goods( desc->get_freight_type() )  ) {
+			carried = desc->get_freight_type();
+		}
+		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),carried,is_reversed,is_no_electric));
 	}
 	else {
 		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()), fracht.front().get_desc(),is_reversed,is_no_electric));
@@ -2042,6 +2050,15 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 			case convoi_t::SUSPENSION:
 			case convoi_t::SUSPENSION_LOADING:
 				tstrncpy( states_text, translator::translate("suspended"), lengthof(states_text));
+				break;
+
+			case convoi_t::SHIPPED:
+				if(  cnv->get_shipping_carrier().is_bound()  ) {
+					snprintf( states_text, lengthof(states_text), "%s (%s)", translator::translate("aboard"), cnv->get_shipping_carrier()->get_name() );
+				}
+				else {
+					tstrncpy( states_text, translator::translate("aboard"), lengthof(states_text));
+				}
 				break;
 
 			case convoi_t::WAITING_FOR_CLEARANCE_ONE_MONTH:
@@ -4100,7 +4117,10 @@ void rail_vehicle_t::set_convoi(convoi_t *c)
 				// set default next stop index
 				c->set_next_stop_index( max(route_index,1)-1 );
 				// need to reserve new route?
-				if(  !check_for_finish  &&  c->get_state()!=convoi_t::SELF_DESTRUCT  &&  (c->get_state()==convoi_t::DRIVING  ||  c->get_state()>=convoi_t::LEAVING_DEPOT)  ) {
+				// SHIPPED is ordinally above LEAVING_DEPOT. Without excluding it, a rail convoy
+				// aboard a carrier would re-reserve the block it left behind - and this runs on
+				// every save/load, so the stale reservation would come back every time.
+				if(  !check_for_finish  &&  c->get_state()!=convoi_t::SELF_DESTRUCT  &&  c->get_state()!=convoi_t::SHIPPED  &&  (c->get_state()==convoi_t::DRIVING  ||  c->get_state()>=convoi_t::LEAVING_DEPOT)  ) {
 					sint32 num_index = cnv==(convoi_t *)1 ? 1001 : 0; // only during loadtype: cnv==1 indicates, that the convoi did reserve a stop
 					uint16 next_signal, next_crossing;
 					cnv = c;

@@ -36,6 +36,7 @@ class vehicle_desc_t;
 class schedule_t;
 class cbuffer_t;
 class signal_t;
+class goods_desc_t;
 
 // A struct to represent the directly reachable halts
 struct convoi_reachable_halt_t {
@@ -94,6 +95,12 @@ public:
 		WAITING_FOR_LEAVING_DEPOT,
 		SUSPENSION,
 		SUSPENSION_LOADING,
+		// The convoy is aboard another convoy (see "convoy shipping" below). It is not on the
+		// map, holds no way reservation and is not sync-stepped.
+		// NOTE: SHIPPED must stay the last real state. Several places compare states ordinally
+		// (e.g. `state > EDIT_SCHEDULE`, `state >= LEAVING_DEPOT`); those sites explicitly
+		// exclude SHIPPED, and appending here keeps `is_waiting()`'s range check correct.
+		SHIPPED,
 		MAX_STATES
 	};
 
@@ -251,6 +258,26 @@ private:
 	* a convoy that pulls me.
 	*/
 	convoihandle_t parent_convoi;
+
+	/**
+	* Convoy shipping: the convoys this convoy currently carries aboard.
+	* Only the most-parent convoy of each coupled chain is listed here; the rest of a
+	* chain is reached through coupling_convoi, exactly as betrete_depot() does.
+	* Only a most-parent convoy ever carries; a coupled child never does.
+	*/
+	vector_tpl<convoihandle_t> shipped_convois;
+
+	/**
+	* Convoy shipping: the convoy that carries me, if I am SHIPPED.
+	* Only set on the most-parent convoy of a shipped chain.
+	*/
+	convoihandle_t carrier_convoi;
+
+	/**
+	* Convoy shipping: ticks at which this convoy began waiting for a carrier, so that a
+	* convoy nobody ever comes to fetch can eventually be reported instead of hanging forever.
+	*/
+	uint32 shipping_wait_since;
 
 	/**
 	* a convoy that is coupling now.
@@ -1198,6 +1225,146 @@ public:
 
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
+
+	/* ---------------------------------------------------------------------------
+	 * Convoy shipping: carrying whole convoys of another waytype aboard a convoy.
+	 *
+	 * A "carrier" is a water convoy with vehicles whose freight type is one of the
+	 * shipping goods (see shipping_goods_t). A "shipped" convoy leaves the map
+	 * entirely while aboard: it holds no way reservation, occupies no tile, is not
+	 * sync-stepped, and keeps its coupling chain intact.
+	 * --------------------------------------------------------------------------- */
+
+	bool is_shipped() const { return state==SHIPPED; }
+
+	/// true if this convoy currently has at least one convoy aboard
+	bool is_carrying_convoys() const { return !shipped_convois.empty(); }
+
+	const vector_tpl<convoihandle_t> &get_shipped_convois() const { return shipped_convois; }
+
+	/// the raw carrier link. Only ever set on the head of a shipped chain - callers that just
+	/// want "who is carrying me" should use get_shipping_carrier() instead.
+	convoihandle_t get_carrier_convoi() const { return carrier_convoi; }
+
+	/**
+	 * The convoy carrying me, resolved through the coupling chain, or an unbound handle.
+	 * A carried chain keeps its coupling and every convoy in it is SHIPPED, but only the head
+	 * holds the link to the carrier - so anything asking on behalf of a coupled child has to
+	 * walk up to the head first.
+	 */
+	convoihandle_t get_shipping_carrier() const { return get_most_parent_convoi()->carrier_convoi; }
+
+	/**
+	 * The halt where I am to be put ashore, or an unbound handle.
+	 *
+	 * Deliberately derived, never stored. board_carrier() advances my schedule to the
+	 * destination entry, so my own current schedule entry already *is* the drop-off point -
+	 * and a schedule holds a position, not a halt. Storing a halthandle would drift out of
+	 * sync with that position the moment halts merge, split or are rebuilt: the handle would
+	 * go stale even though the position still has a perfectly usable station, and the convoy
+	 * would be "rescued" to a depot for no reason. Resolving the position afresh on every
+	 * call, the way the rest of the code does, cannot drift.
+	 */
+	halthandle_t get_shipping_dest_halt() const;
+
+	/// total shipping capacity of this convoy for the given waytype, in convoy length units
+	uint32 get_shipping_capacity(waytype_t wt) const;
+
+	/// shipping capacity for `wt` currently taken up by the convoys aboard
+	uint32 get_shipping_load(waytype_t wt) const;
+
+	/// as get_shipping_load(), but keyed on the shipping good itself (rail and tram share one)
+	uint32 get_shipping_load_for_goods(const goods_desc_t *g) const;
+
+	/// total capacity of the vehicles offering space for this shipping good
+	uint32 get_shipping_capacity_for_goods(const goods_desc_t *g) const;
+
+	// NOTE on capacity: a convoy boards whenever ANY shipping space is left, even if it is
+	// longer than that space, so the load may exceed the capacity by up to one convoy. That
+	// overshoot is deliberate - it is what carries the loading level past minimum_loading and
+	// releases the ferry, and it removes the deadlock a strict "does it fit" test creates when
+	// the gap left over happens to match no waiting convoy.
+
+	/**
+	 * true if this trip actually delivers a carried convoy to `dest`: the carrier stops there,
+	 * unloads there, and gets there without first putting everything ashore (UNLOAD_ALL) or
+	 * returning to the stop it is at now. Re-evaluated at every stop, so editing the carrier's
+	 * schedule (or its line's) while convoys are aboard strands nobody silently.
+	 */
+	bool can_deliver_shipped_to(halthandle_t dest) const;
+
+	/// true if any vehicle of this convoy offers space for carrying convoys
+	bool has_shipping_capacity() const;
+
+	/// the halt a convoy with START_SHIPPED needs to be carried to (its next scheduled halt)
+	halthandle_t get_shipping_target_halt() const;
+
+	/// length this convoy (including its coupled children) occupies aboard a carrier
+	uint32 get_shipping_length() const;
+
+	/// total weight of this convoy and its coupled children, as it rides aboard a carrier
+	sint64 get_shipping_weight() const;
+
+	/// combined weight of everything this convoy is carrying aboard
+	sint64 get_carried_weight() const;
+
+	/// true if this convoy is a carrier that could in principle take `c` aboard right now
+	bool can_ship(convoihandle_t c) const;
+
+	/**
+	 * true if at least one convoy aboard occupies space of the shipping good `g`.
+	 * Used to give carrier vehicles their loaded image without inventing fake cargo.
+	 */
+	bool is_carrying_for_goods(const goods_desc_t *g) const;
+
+	/// mark the carrier's vehicles for an image update after boarding/disembarking
+	void recalc_shipping_images();
+
+	/**
+	 * Charge the convoys we carry for one tile of the ride, booked as CONVOI_WAYTOLL against
+	 * them and as toll received by us - the carrier is the "way" they are travelling on.
+	 * Called from add_running_cost(), so it accrues per tile like the way toll does.
+	 */
+	void book_shipping_toll();
+
+	/**
+	 * Take `c` (a most-parent convoy, together with its coupled children) aboard this
+	 * carrier, to be put ashore at `dest`. Removes `c` from the map and releases every
+	 * reservation it holds. Returns false if it does not fit or the state is wrong.
+	 */
+	bool board_carrier(convoihandle_t c, halthandle_t dest);
+
+	/**
+	 * Put `c` ashore at `halt`, on a tile of its own waytype. Returns false when there is
+	 * no usable tile, in which case `c` simply stays aboard and we retry at a later stop.
+	 */
+	bool disembark_convoy(convoihandle_t c, halthandle_t halt);
+
+	/// called on the carrier when it has stopped at `halt`: drop off and pick up convoys
+	void handle_shipping_at_halt(halthandle_t halt);
+
+	/// called on a convoy standing at `halt` with START_SHIPPED set: look for a carrier
+	bool try_start_shipping(halthandle_t halt);
+
+	/// true while this convoy is waiting at a stop for a carrier that has not arrived yet
+	bool is_waiting_for_carrier() const;
+
+	/**
+	 * Last resort for every convoy still aboard: put it in a depot, or destroy it if there
+	 * is none. Used when the carrier is destroyed, enters a depot, or can no longer reach
+	 * the drop-off halt. Never leaves a convoy in a half-shipped state.
+	 */
+	void disembark_all_forced();
+
+	/**
+	 * Send this convoy straight to the nearest suitable depot without a route search.
+	 * send_to_depot_immediately() cannot be used for a shipped convoy: it route-searches
+	 * from get_pos(), and a land convoy in the middle of the sea can never find a route.
+	 */
+	bool teleport_to_nearest_depot(bool announce = true);
+
+	/// release every way reservation held by this convoy and take it off the map
+	void withdraw_from_map_for_shipping();
 
 	// Whether this convoy can reach other_cnv's position by water (same river, same sea,
 	// or a sea connected to a river etc.) - used to find valid TRY_COUPLING partners at a
