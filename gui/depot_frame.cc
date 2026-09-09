@@ -861,7 +861,7 @@ void depot_frame_t::layout(scr_size *size)
 	gui_frame_t::set_windowsize(win_size);
 	set_min_windowsize(scr_size(D_DEFAULT_WIDTH, MIN_TOTAL_HEIGHT));
 	const waytype_t wt = depot->get_waytype();
-	const bool should_show_child_convoi_selector = (wt != road_wt && wt != air_wt && wt != water_wt);
+	const bool should_show_child_convoi_selector = wt!=air_wt;
 
 	/*
 	 * DONE with layout planning - now build everything.
@@ -1179,7 +1179,14 @@ void depot_frame_t::add_to_vehicle_list(const vehicle_desc_t *info, bool is_seco
 	// Only filter when required and never filter engines
 	if (depot->selected_filter > 0 && info->get_capacity() > 0) {
 		if (depot->selected_filter == VEHICLE_FILTER_RELEVANT) {
-			if(freight->get_catg_index() >= 3) {
+			// Convoy shipping: the SHIPPING_* dummy goods are never produced or consumed, so
+			// they can never appear in the world's goods list and a vehicle offering space for
+			// carrying convoys would always be filtered out here. They are relevant whenever
+			// the pakset defines them at all - which is exactly what is_shipping_goods() says.
+			if(  goods_manager_t::is_shipping_goods( freight )  ) {
+				// keep it
+			}
+			else if(freight->get_catg_index() >= 3) {
 				bool found = false;
 				FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 					if (freight->get_catg_index() == i->get_catg_index()) {

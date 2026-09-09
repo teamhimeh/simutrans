@@ -1604,7 +1604,15 @@ void vehicle_t::calc_image()
 	const bool is_reversed = (cnv==NULL  ||  cnv==(convoi_t *)1) ? false : cnv->is_reversed();
 	const bool is_no_electric = (cnv==NULL  ||  cnv==(convoi_t *)1) ? false : !cnv->get_use_electric();
 	if (fracht.empty()) {
-		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),NULL,is_reversed,is_no_electric));
+		// Convoy shipping: a carrier vehicle holds no real cargo for the convoys it carries -
+		// they are tracked as convoy handles, not as ware_t - so ask the convoy directly and
+		// show the loaded image while something is aboard.
+		const goods_desc_t *carried = NULL;
+		if(  cnv != NULL  &&  cnv != (convoi_t *)1  &&  goods_manager_t::is_shipping_goods( desc->get_freight_type() )
+		  &&  cnv->is_carrying_for_goods( desc->get_freight_type() )  ) {
+			carried = desc->get_freight_type();
+		}
+		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),carried,is_reversed,is_no_electric));
 	}
 	else {
 		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()), fracht.front().get_desc(),is_reversed,is_no_electric));
@@ -2044,6 +2052,15 @@ void vehicle_t::display_after(int xpos, int ypos, bool is_global) const
 				tstrncpy( states_text, translator::translate("suspended"), lengthof(states_text));
 				break;
 
+			case convoi_t::SHIPPED:
+				if(  cnv->get_shipping_carrier().is_bound()  ) {
+					snprintf( states_text, lengthof(states_text), "%s (%s)", translator::translate("aboard"), cnv->get_shipping_carrier()->get_name() );
+				}
+				else {
+					tstrncpy( states_text, translator::translate("aboard"), lengthof(states_text));
+				}
+				break;
+
 			case convoi_t::WAITING_FOR_CLEARANCE_ONE_MONTH:
 			case convoi_t::WAITING_FOR_CLEARANCE:
 			case convoi_t::CAN_START:
@@ -2398,7 +2415,7 @@ bool road_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 }
 
 
-bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric) const
+bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric, bool, bool coupling) const
 {
 	strasse_t *str=(strasse_t *)bd->get_weg(road_wt);
 	if(str==NULL  ||  str->get_max_speed()==0) {
@@ -2418,13 +2435,22 @@ bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 				// private road
 				return false;
 			}
-			// do not search further for a free stop beyond here
-			if(target_halt.is_bound()  &&  cnv->is_waiting()  &&  rs->get_desc()->get_flags()&roadsign_desc_t::END_OF_CHOOSE_AREA) {
+			// do not search further for a free stop beyond here.
+			// A guide signal searches for a coupling partner, so its area is bounded by the
+			// end-of-guide flag instead of the end-of-choose flag of an ordinary choose search.
+			if(  target_halt.is_bound()  &&  cnv->is_waiting()  &&  (rs->get_desc()->get_flags()&roadsign_desc_t::END_OF_CHOOSE_AREA)
+			  &&  (coupling ? rs->is_flag_end_of_guide() : true)  ) {
 				return false;
 			}
 		}
 	}
 	return true;
+}
+
+
+bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric) const
+{
+	return check_next_tile(bd, need_electric, true, false);
 }
 
 
@@ -2553,6 +2579,22 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 			xoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][0], raster_width)/5;
 			yoff -= tile_raster_scale_x(overtaking_base_offsets[ribi_t::get_dir(get_direction())][1], raster_width)/5;
 		}
+		
+		if(  !cnv->is_reversed()  ) {
+			return;
+		}
+		// Add offset when the vehicle is reversed.
+		sint32 steps_delta;
+		const sint8* rbo = welt->get_settings().get_reverse_base_offsets(dir);
+		steps_delta = raster_width*(VEHICLE_STEPS_PER_TILE / 2 - get_desc()->get_length_in_steps() + rbo[2]);
+		if(dx && dy) {
+			steps_delta &= 0xFFFFFC00;
+		}
+		else {
+			steps_delta = (steps_delta*diagonal_multiplier)>>10;
+		}
+		xoff += ((steps_delta*dx) >> 10) + tile_raster_scale_x(rbo[0],raster_width);
+		yoff += ((steps_delta*dy) >> 10) + tile_raster_scale_y(rbo[1],raster_width);
 	}
 }
 
@@ -2684,6 +2726,21 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			return false;
 		}
 
+		// TRY_COUPLING: look for a convoy waiting to be coupled with on the remaining route.
+		// Once found, the coupling point (index/steps) makes us stop exactly behind it; the lane
+		// is adopted when that tile is entered (see enter_tile()).
+		// is_seeking_coupling_partner() also keeps every convoy that is NOT looking for a partner out
+		// of can_couple(): its give-up path releases convoi_coupling_in_progress, and that claim may
+		// well have been made on this convoy by somebody else - most notably by the very convoy that
+		// is waiting to couple with it.
+		if(  is_seeking_coupling_partner()  ) {
+			uint16 next_coupling = route_t::INVALID_INDEX;
+			uint8 next_c_steps = 0;
+			if(  can_couple( cnv->get_route(), route_index, next_coupling, next_c_steps )  &&  next_coupling!=route_t::INVALID_INDEX  ) {
+				cnv->set_next_coupling( next_coupling, next_c_steps );
+			}
+		}
+
 		// first: check roadsigns
 		const roadsign_t *rs = NULL;
 		if(  str->has_sign()  ) {
@@ -2710,7 +2767,19 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						if(  second_check_count  ) {
 							return false;
 						}
-						if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based() )  ) {
+						if(  is_on_coupling_approach()  ) {
+							// Our route already leads to the convoy we are going to couple with -
+							// including when this very guide signal set it up a moment ago. A choose
+							// signal must not send us to some other free platform instead.
+						}
+						else if(  rs->is_guide_signal()  &&  is_seeking_coupling_partner()  ) {
+							// guide signal: do not enter the coupling area before the convoy we
+							// want to couple with is waiting there.
+							if(  !guide_route( restart_speed, direction90, route_index )  ) {
+								return false;
+							}
+						}
+						else if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based() )  ) {
 							return false;
 						}
 					}
@@ -2767,6 +2836,10 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		ribi_t::ribi next_90direction = calc_direction(pos_next, next);
 
 		obj = no_cars_blocking( gr, cnv, curr_direction, next_direction, next_90direction, NULL, next_lane );
+		if(  obj  &&  is_coupling_partner(obj)  ) {
+			// we are on our way to couple with this convoy - drive up to it instead of stopping short.
+			obj = NULL;
+		}
 
 		// If the next tile is an intersection, we have to refer the reservation.
 		// However, if we are already in an intersection, we ignore it to avoid stuck.
@@ -2781,17 +2854,27 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			// since reserve function modifies variables of the instance...
 			strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
 			if(  !s  ||  !s->reserve(this, overtaking_on_tile, get_pos(), next)  ) {
-				if(  obj  &&  obj->is_stuck()  ) {
-					// because the blocking vehicle is stuck too...
-					restart_speed = 0;
-					cnv->reset_waiting();
-				} else {
-					restart_speed =  cnv->get_akt_speed()*3/4;
+				// A convoy waiting to be coupled with holds the junction it stands on. That
+				// reservation must not lock us out, exactly like its vehicles must not block us -
+				// we are going to stop right behind it anyway.
+				if(  s  &&  is_coupling_partner( s->get_reserver(this, overtaking_on_tile, get_pos(), next) )  ) {
+					// drive on without a reservation of our own.
 				}
-				return false;
+				else {
+					if(  obj  &&  obj->is_stuck()  ) {
+						// because the blocking vehicle is stuck too...
+						restart_speed = 0;
+						cnv->reset_waiting();
+					} else {
+						restart_speed =  cnv->get_akt_speed()*3/4;
+					}
+					return false;
+				}
 			}
-			// now we succeeded in reserving the road. register it.
-			reserving_tiles.append(gr->get_pos());
+			else {
+				// now we succeeded in reserving the road. register it.
+				reserving_tiles.append(gr->get_pos());
+			}
 		}
 
 		// do not block intersections
@@ -2917,6 +3000,9 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 					obj = no_cars_blocking( gr, cnv, curr_direction, next_90direction, ribi_t::none, NULL, lane_of_the_tile );
 				}
 			}
+			if(  obj  &&  is_coupling_partner(obj)  ) {
+				obj = NULL;
+			}
 
 			// check roadsigns
 			if(  str->has_sign()  ) {
@@ -2927,7 +3013,15 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						if(  second_check_count  ) {
 							return false;
 						}
-						if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based() )  ) {
+						if(  is_on_coupling_approach()  ) {
+							// see above: keep the route that leads to our coupling partner.
+						}
+						else if(  rs->is_guide_signal()  &&  is_seeking_coupling_partner()  ) {
+							if(  !guide_route( restart_speed, curr_90direction, test_index )  ) {
+								return false;
+							}
+						}
+						else if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based() )  ) {
 							return false;
 						}
 					}
@@ -2949,17 +3043,25 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				// since reserve function modifies variables of the instance...
 				strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
 				if(  !s  ||  !s->reserve(this, overtaking_on_tile, r.at(test_index - 1u), next)  ) {
-					if(  obj  &&  obj->is_stuck()  ) {
-						// because the blocking vehicle is stuck too...
-						restart_speed = 0;
-						cnv->reset_waiting();
-					} else {
-						restart_speed =  cnv->get_akt_speed()*3/4;
+					// see above: the convoy we are going to couple with may hold this junction.
+					if(  s  &&  is_coupling_partner( s->get_reserver(this, overtaking_on_tile, r.at(test_index - 1u), next) )  ) {
+						// drive on without a reservation of our own.
 					}
-					return false;
+					else {
+						if(  obj  &&  obj->is_stuck()  ) {
+							// because the blocking vehicle is stuck too...
+							restart_speed = 0;
+							cnv->reset_waiting();
+						} else {
+							restart_speed =  cnv->get_akt_speed()*3/4;
+						}
+						return false;
+					}
 				}
-				// now we succeeded in reserving the road. register it.
-				reserving_tiles.append(gr->get_pos());
+				else {
+					// now we succeeded in reserving the road. register it.
+					reserving_tiles.append(gr->get_pos());
+				}
 			}
 
 			// check for blocking intersection
@@ -3268,6 +3370,328 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 }
 
 
+// How many tiles before the end of the route a road convoy starts looking for its coupling partner.
+#define COUPLING_SEARCH_TILES 32u
+
+
+// true if c is one of the convoys of the coupling chain that root belongs to.
+static bool is_coupling_chain_member(convoihandle_t root, const convoi_t* c)
+{
+	if(  !root.is_bound()  ||  !c  ) {
+		return false;
+	}
+	for(  convoihandle_t h = root->get_most_parent_convoi();  h.is_bound();  h = h->get_coupling_convoi()  ) {
+		if(  h.get_rep() == c  ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
+bool road_vehicle_t::is_coupling_partner(const vehicle_base_t* v) const
+{
+	if(  !v  ||  !cnv  ||  cnv==(convoi_t*)1  ||  cnv->get_next_coupling_index()==route_t::INVALID_INDEX  ) {
+		// we are not approaching a coupling point, so nothing may be ignored.
+		return false;
+	}
+	convoihandle_t cc = cnv->get_convoi_coupling_in_progress();
+	if(  !cc.is_bound()  ) {
+		return false;
+	}
+	if(  !cc->is_loading()  ) {
+		// the partner left in the meantime - it is an ordinary obstacle again.
+		return false;
+	}
+	road_vehicle_t const* const at = obj_cast<road_vehicle_t>(v);
+	// the partner may already be a chain of coupled convoys. Any of them is our target.
+	return at  &&  is_coupling_chain_member(cc, at->get_convoi());
+}
+
+
+bool road_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps)
+{
+	// first, does the current schedule entry require coupling?
+	// Since the current schedule entry can be a waypoint, we proceed to a genuine stop point.
+	sint16 idx = cnv->get_schedule()->get_current_stop();
+	bool stop_found = false;
+	do {
+		if(  !cnv->is_waypoint(cnv->get_schedule()->at(idx))  ) {
+			stop_found = true;
+			break;
+		}
+		idx = (idx+1)%cnv->get_schedule()->get_count();
+	} while(  idx!=cnv->get_schedule()->get_current_stop()  );
+	if(  !stop_found  ||  !cnv->get_schedule()->at(idx).is_try_coupling()  ) {
+		// all schedule entries are waypoints or the next stop point is not a coupling point.
+		cnv->unset_convoi_coupling_in_progress();
+		return false;
+	}
+	// start_index can be invalid.
+	if(  start_index>=route->get_count()  ) {
+		cnv->unset_convoi_coupling_in_progress();
+		return false;
+	}
+	// The partner is waiting at the destination halt, i.e. at the very end of the route. Looking for
+	// it on every tile of a long approach would only cost time, so start once we are close enough to
+	// cover the halt and any chain of convoys already standing in it.
+	if(  route->get_count() > start_index + COUPLING_SEARCH_TILES  ) {
+		return false;
+	}
+
+	coupling_index = route_t::INVALID_INDEX;
+	for(  uint16 i=start_index;  i<route->get_count();  i++  ) {
+		grund_t *gr = welt->lookup(route->at(i));
+		strasse_t *str = gr ? (strasse_t *)gr->get_weg(road_wt) : NULL;
+		if(  !str  ) {
+			// ground or road does not exist!?
+			cnv->unset_convoi_coupling_in_progress();
+			return false;
+		}
+		// direction in which we enter this tile
+		const ribi_t::ribi dir = i>0 ? ribi_type(route->at(i-1), route->at(i)) : get_direction();
+		const bool is_diagonal_way = ribi_t::is_bend(str->get_ribi_unmasked());
+		const sint16 tile_length = is_diagonal_way ? diagonal_vehicle_steps_per_tile : VEHICLE_STEPS_PER_TILE;
+
+		// (1) find the coupling target on this tile.
+		// Road convoys never reverse to couple - a road vehicle can turn around on the spot - so
+		// only the tail of the waiting coupling chain, standing in our own driving direction,
+		// is a valid partner. We then simply drive up behind it.
+		convoihandle_t coupling_target;
+		sint16 c_step = -VEHICLE_STEPS_PER_TILE;
+		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+			road_vehicle_t* const v = obj_cast<road_vehicle_t>(gr->obj_bei(pos));
+			if(  !is_valid_coupling_partner( v, dir )  ) {
+				continue;
+			}
+			// our nose stops where the tail of the target vehicle is.
+			const sint16 temp_car_step = (sint16)((sint16)v->get_steps() - (sint16)v->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT);
+			if(  coupling_target.is_bound()  &&  c_step<temp_car_step  ) {
+				// a target further back was already found - that one is the real target.
+				continue;
+			}
+			c_step = temp_car_step;
+			coupling_target = v->get_convoi()->self;
+		}
+
+		if(  coupling_target.is_bound()  ) {
+			// (2) is the way to the target free? Only vehicles on the lane the target waits on
+			// matter - we change to that lane right before coupling (see enter_tile()).
+			const bool target_lane = coupling_target->is_overtaking();
+			sint16 other_step = VEHICLE_STEPS_PER_TILE;
+			for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+				road_vehicle_t* const at = obj_cast<road_vehicle_t>(gr->obj_bei(pos));
+				if(  !at  ||  !at->get_convoi()  ) {
+					continue;
+				}
+				if(  is_coupling_chain_member(cnv->self, at->get_convoi())  ||  is_coupling_chain_member(coupling_target, at->get_convoi())  ) {
+					// ourselves (or a convoy we tow) and the target chain itself
+					continue;
+				}
+				if(  at->get_convoi()->is_overtaking() != target_lane  ) {
+					// on the other lane, so not between us and the target.
+					continue;
+				}
+				// the point at which we would have to stop behind this vehicle
+				const sint16 temp_car_step = ((at->get_direction()&dir)==0)
+					? (sint16)(tile_length - (sint16)at->get_steps() - 1)
+					: (sint16)((sint16)at->get_steps() - (sint16)at->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT);
+				other_step = (sint16)min(other_step, temp_car_step);
+			}
+			if(  other_step<c_step  ) {
+				// There is another vehicle in front of the target: wait for clearance. This is a
+				// transient blockage, so a partner claimed at a guide signal is kept - dropping it
+				// would let a choose signal route us away from a coupling that is still going to
+				// happen.
+				return false;
+			}
+
+			// ok! we found the real coupling target and the way to it is free.
+			coupling_target->set_convoi_coupling_in_progress(cnv->self);
+			cnv->set_convoi_coupling_in_progress(coupling_target);
+			coupling_index = i;
+			// the target vehicle may overlap the previous tile - then the coupling point does, too.
+			while(  c_step<0  &&  coupling_index>start_index  ) {
+				coupling_index--;
+				grund_t* gr_coupling = welt->lookup(route->at(coupling_index));
+				weg_t* w_coupling = gr_coupling ? gr_coupling->get_weg(road_wt) : NULL;
+				c_step += (sint16)(w_coupling && ribi_t::is_bend(w_coupling->get_ribi_unmasked()) ? diagonal_vehicle_steps_per_tile : VEHICLE_STEPS_PER_TILE);
+			}
+			if(  c_step<0  ) {
+				// The coupling point lies on a tile we have already entered - it can no longer be
+				// reached by stopping on a tile boundary. Couple at the first tile we still enter;
+				// the two convoys become one chain right away, so the small overlap is harmless.
+				c_step = 0;
+			}
+			coupling_steps = (uint8)c_step;
+			return true;
+		}
+	}
+	cnv->unset_convoi_coupling_in_progress();
+	return false;
+}
+
+
+bool road_vehicle_t::is_seeking_coupling_partner() const
+{
+	if(  !cnv  ||  cnv==(convoi_t*)1  ||  cnv->is_coupling_done()  ||  cnv->get_next_coupling_index()!=route_t::INVALID_INDEX  ) {
+		return false;
+	}
+	schedule_t* schedule = cnv->get_schedule();
+	if(  !schedule  ||  schedule->empty()  ) {
+		return false;
+	}
+	// the current schedule entry can be a waypoint, so proceed to the next genuine stop point.
+	sint16 idx = schedule->get_current_stop();
+	do {
+		if(  !cnv->is_waypoint(schedule->at(idx))  ) {
+			return schedule->at(idx).is_try_coupling();
+		}
+		idx = (idx+1)%schedule->get_count();
+	} while(  idx!=schedule->get_current_stop()  );
+	// all schedule entries are waypoints.
+	return false;
+}
+
+
+bool road_vehicle_t::is_on_coupling_approach() const
+{
+	if(  !cnv  ||  cnv==(convoi_t*)1  ) {
+		return false;
+	}
+	if(  cnv->get_next_coupling_index()!=route_t::INVALID_INDEX  ) {
+		// the coupling point is fixed, the route leads to it.
+		return true;
+	}
+	// A guide signal claimed a partner and pointed the route at it; can_couple() fixes the coupling
+	// point once we are close enough.
+	return cnv->get_convoi_coupling_in_progress().is_bound()  &&  is_seeking_coupling_partner();
+}
+
+
+bool road_vehicle_t::is_valid_coupling_partner(const road_vehicle_t* v, ribi_t::ribi dir) const
+{
+	if(  !v  ||  !v->get_convoi()  ||  !cnv  ||  cnv==(convoi_t*)1  ) {
+		return false;
+	}
+	if(  !cnv->can_start_coupling(v->get_convoi())  ||  !v->get_convoi()->is_loading()  ) {
+		return false;
+	}
+	// Road convoys couple behind the tail of the waiting chain, driving in the same direction:
+	// a road vehicle can turn around on the spot, so reversing to couple is never needed.
+	if(  (dir & v->get_direction()) == 0  ) {
+		return false;
+	}
+	if(  v!=v->get_convoi()->back()  ||  v->get_convoi()->get_coupling_convoi().is_bound()  ) {
+		return false;
+	}
+	// Road vehicles do not reserve tiles, so this claim is the only thing that stops two convoys
+	// from starting the same coupling - it has to hold on both sides.
+	if(  v->get_convoi()->get_convoi_coupling_in_progress().is_bound()  &&  v->get_convoi()->get_convoi_coupling_in_progress()!=cnv->self  ) {
+		return false;
+	}
+	if(  cnv->get_convoi_coupling_in_progress().is_bound()  &&  cnv->get_convoi_coupling_in_progress()!=v->get_convoi()->self  ) {
+		// we already claimed a different partner, e.g. at a guide signal.
+		return false;
+	}
+	return true;
+}
+
+
+// this routine is called by find_route(), to determine if gr holds a convoy we may couple with.
+// It must accept exactly what can_couple() accepts: a tile that passes here but is then rejected by
+// can_couple() would leave the convoy with a route to a partner it can never reach.
+bool road_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_gr) const
+{
+	if(  !gr  ||  !prev_gr  ||  !gr->get_weg(get_waytype())  ) {
+		// tile or road does not exist.
+		return false;
+	}
+	if(  !gr->is_halt()  ||  gr->get_halt()!=target_halt  ) {
+		// This is not the target halt.
+		return false;
+	}
+	const ribi_t::ribi dir = ribi_type(gr->get_pos().get_2d()-prev_gr->get_pos().get_2d());
+	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+		if(  is_valid_coupling_partner( obj_cast<road_vehicle_t>(gr->obj_bei(pos)), dir )  ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
+bool road_vehicle_t::guide_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index)
+{
+	if(  cnv->get_schedule_target()!=koord3d::invalid  ) {
+		// destination is a waypoint!
+		return true;
+	}
+	// find_route() uses the shared route search array, so it must only run in a step. Stopping the
+	// convoy here puts it into WAITING_FOR_CLEARANCE; convoi_t::step() then calls us back with
+	// is_waiting() set, and the search is done there.
+	if(  !cnv->is_waiting()  ) {
+		restart_speed = -1;
+		return false;
+	}
+
+	route_t *rt = cnv->access_route();
+	if(  index>=rt->get_count()  ) {
+		return true;
+	}
+	target_halt = haltestelle_t::get_stoppable_halt( rt->back(), get_owner(), get_waytype() );
+	if(  !target_halt.is_bound()  ) {
+		// we are not heading for a halt, so there is nothing to couple with.
+		return true;
+	}
+
+	// Look for a convoy that is already waiting for us in the target halt. check_next_tile() bounds
+	// the search by the end-of-guide flag, is_coupling_target() decides what a valid partner is.
+	route_t target_rt;
+	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0 );
+	target_halt = halthandle_t();
+	if(  !route_found  ||  target_rt.get_count()<2  ) {
+		// the convoy to couple with has not arrived yet: wait at this guide signal.
+		restart_speed = 0;
+		return false;
+	}
+
+	// Which convoy did the search stop at? Determine it before touching our own route, so a failure
+	// here leaves us waiting at the signal instead of driving along a half-applied route.
+	const grund_t* const gr_target = welt->lookup( target_rt.back() );
+	const grund_t* const gr_prev = welt->lookup( target_rt.at(target_rt.get_count()-2) );
+	convoihandle_t partner;
+	if(  gr_target  &&  gr_prev  ) {
+		const ribi_t::ribi dir = ribi_type( gr_target->get_pos().get_2d() - gr_prev->get_pos().get_2d() );
+		for(  uint8 pos=1;  pos<(volatile uint8)gr_target->get_top();  pos++  ) {
+			road_vehicle_t* const v = obj_cast<road_vehicle_t>(gr_target->obj_bei(pos));
+			if(  is_valid_coupling_partner( v, dir )  ) {
+				partner = v->get_convoi()->self;
+				break;
+			}
+		}
+	}
+	if(  !partner.is_bound()  ) {
+		restart_speed = 0;
+		return false;
+	}
+
+	// Drive to the partner instead of to our own stop position, and claim it so that no second
+	// convoy starts the same coupling. The coupling point itself is left to can_couple(), which
+	// fixes it while we approach - it knows about vehicles standing in the way, which the route
+	// search does not.
+	convoihandle_t c = cnv->self;
+	while(  c.is_bound()  ) {
+		c->access_route()->remove_koord_from( index );
+		c->access_route()->append( &target_rt );
+		c = c->get_coupling_convoi();
+	}
+	partner->set_convoi_coupling_in_progress( cnv->self );
+	cnv->self->set_convoi_coupling_in_progress( partner );
+	return true;
+}
+
+
 overtaker_t* road_vehicle_t::get_overtaker()
 {
 	return cnv;
@@ -3484,6 +3908,26 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 				}
 			}
 		}
+		// Coupling: take over the lane the convoy we are going to couple with is standing on, so
+		// that we end up behind it and not beside it. route_index has already been incremented by
+		// hop(), so this fires on the tile before the coupling tile and on the coupling tile itself
+		// - the last two chances to change lane before the coupling actually happens.
+		// This must be the last lane decision of enter_tile(): it overrules the generic ones above.
+		if(  cnv->get_next_coupling_index()!=route_t::INVALID_INDEX  &&  route_index>=cnv->get_next_coupling_index()  ) {
+			convoihandle_t cc = cnv->get_convoi_coupling_in_progress();
+			if(  cc.is_bound()  &&  str  &&  str->get_overtaking_mode()!=prohibited_mode  ) {
+				if(  cc->is_overtaking()  ) {
+					// hold the passing lane until the whole convoy has come to a stand behind it.
+					cnv->set_tiles_overtaking( cnv->calc_reversing_lane_tiles() );
+				}
+				else {
+					cnv->set_tiles_overtaking( 0 );
+				}
+			}
+		}
+		// Only the leading convoy runs the lane logic above, so hand the resulting lane down to the
+		// convoys it tows.
+		cnv->broadcast_lane_to_coupling_convois();
 		pos_prev = gr->get_pos();
 	}
 }
@@ -3673,7 +4117,10 @@ void rail_vehicle_t::set_convoi(convoi_t *c)
 				// set default next stop index
 				c->set_next_stop_index( max(route_index,1)-1 );
 				// need to reserve new route?
-				if(  !check_for_finish  &&  c->get_state()!=convoi_t::SELF_DESTRUCT  &&  (c->get_state()==convoi_t::DRIVING  ||  c->get_state()>=convoi_t::LEAVING_DEPOT)  ) {
+				// SHIPPED is ordinally above LEAVING_DEPOT. Without excluding it, a rail convoy
+				// aboard a carrier would re-reserve the block it left behind - and this runs on
+				// every save/load, so the stale reservation would come back every time.
+				if(  !check_for_finish  &&  c->get_state()!=convoi_t::SELF_DESTRUCT  &&  c->get_state()!=convoi_t::SHIPPED  &&  (c->get_state()==convoi_t::DRIVING  ||  c->get_state()>=convoi_t::LEAVING_DEPOT)  ) {
 					sint32 num_index = cnv==(convoi_t *)1 ? 1001 : 0; // only during loadtype: cnv==1 indicates, that the convoi did reserve a stop
 					uint16 next_signal, next_crossing;
 					cnv = c;
