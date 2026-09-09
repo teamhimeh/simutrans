@@ -627,6 +627,12 @@ public:
 	// reversal: its own length plus one, so the lane-change safety check in
 	// road_vehicle_t::enter_tile() runs once the whole convoy has cleared the tile it departed from.
 	sint8 calc_reversing_lane_tiles() const;
+
+	// Coupled convoys are one physical vehicle chain, but the lane (tiles_overtaking) is stored per
+	// convoy and only the leading convoy ever decides it - the front vehicles of the children are
+	// not 'leading', so none of the lane logic runs for them. Hand the leading convoy's lane down,
+	// so the children are drawn on, and treated as being on, the same lane.
+	void broadcast_lane_to_coupling_convois();
 	// Reorder the vehicle array
 	// Can be executed even with a vehicle array that does not belong to convoy for UI
 	

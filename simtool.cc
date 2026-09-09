@@ -1842,7 +1842,10 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 		// maximum difference check with tiles to north, south east and west
 		const sint8 test_hgt = hgt+(new_slope!=0);
 
-		if(  gr1->get_typ()==grund_t::boden  ) {
+		// Foundations reaching this point carry a field (building tiles were rejected above),
+		// but their height may still be altered by this tool, so they have to obey the
+		// neighbour height difference limit just like plain ground.
+		if(  gr1->get_typ()==grund_t::boden  ||  gr1->get_typ()==grund_t::fundament  ) {
 			for(  sint16 i = 0 ;  i < 4 ;  i++  ) {
 				const koord neighbour = k + koord::nesw[i];
 
@@ -10799,13 +10802,20 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 's':
-		// set guide signal state for signal
+		// set guide signal state for signal or (road) choose sign
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_guide_signal(inst);
 				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
 				if(  signal_info_win  ) {
 					signal_info_win->update_data();
+				}
+			}
+			else if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				rs->set_guide_signal(inst);
+				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  sign_info_win  ) {
+					sign_info_win->update_data();
 				}
 			}
 		}

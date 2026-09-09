@@ -64,6 +64,10 @@ class onewaysign_info_t : public obj_infowin_t, public action_listener_t
 		// length-based choose button
 		button_t bt_length_based;
 
+		// guide-signal button (road choose signs only): a try-coupling convoy waits here until the
+		// convoy it wants to couple with is present in the target halt.
+		button_t bt_guide_signal;
+
 		// detailed_oneway toggle
 		button_t bt_detailed_oneway;
 

@@ -2189,7 +2189,7 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	next_line_selector.set_visible(yesno);
 	sp_schedule_settings.set_visible(yesno);
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
-	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
+	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && schedule->get_waytype()!=road_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
 	bt_reverse_default.set_visible(show_reverse_settings&&yesno);
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
 	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt; // water convoy does not use electricity
@@ -2234,16 +2234,13 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	allow_depart_line_selector.set_visible(yesno);
 	bt_wait_allow_convoy_depart.set_visible(yesno);
 
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt;
+	const bool coupling_waytype = schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);
 	bt_reset_coupling.set_visible(coupling_waytype && yesno);
 	bt_reverse_convoy.set_visible(reversible_waytype  &&  yesno);
-	bt_reverse_coupling.set_visible(reversible_waytype  &&  yesno);
-	if(  !reversible_waytype  ) {
-		bt_reverse_coupling.disable();
-	}
+	bt_reverse_coupling.set_visible(coupling_waytype  &&  yesno);
 	sp_reverse_settings.set_visible(reversible_waytype && yesno);
 	bt_wait_coupling_done.set_visible(coupling_waytype && yesno);
 	bt_uncouple_child.set_visible(coupling_waytype && yesno);
