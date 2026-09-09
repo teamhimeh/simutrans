@@ -3470,8 +3470,13 @@ bool road_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			if(  !is_valid_coupling_partner( v, dir )  ) {
 				continue;
 			}
-			// our nose stops where the tail of the target vehicle is.
-			const sint16 temp_car_step = (sint16)((sint16)v->get_steps() - (sint16)v->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT);
+			// Our nose stops at the end of the target vehicle we meet: at its tail when it drives
+			// our way, at its nose when it faces us. get_steps() is measured along the vehicle's
+			// own direction of travel, so a head-on target has to be mirrored within the tile.
+			const bool same_direction = (dir & v->get_direction()) != 0;
+			const sint16 temp_car_step = same_direction
+				? (sint16)((sint16)v->get_steps() - (sint16)v->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT)
+				: (sint16)(tile_length - (sint16)v->get_steps() - 1);
 			if(  coupling_target.is_bound()  &&  c_step<temp_car_step  ) {
 				// a target further back was already found - that one is the real target.
 				continue;
@@ -3583,12 +3588,27 @@ bool road_vehicle_t::is_valid_coupling_partner(const road_vehicle_t* v, ribi_t::
 	if(  !cnv->can_start_coupling(v->get_convoi())  ||  !v->get_convoi()->is_loading()  ) {
 		return false;
 	}
-	// Road convoys couple behind the tail of the waiting chain, driving in the same direction:
-	// a road vehicle can turn around on the spot, so reversing to couple is never needed.
-	if(  (dir & v->get_direction()) == 0  ) {
-		return false;
+	// We couple to one END of the waiting chain, and which end depends on how it is facing.
+	// Driving the same way we come up behind its last vehicle; meeting it head-on we stop nose to
+	// nose with its first one and ziel_erreicht() reverses the chain so that convoy becomes the
+	// tail before we are coupled behind it. A convoy standing across our path is no partner, and
+	// neither is a vehicle in the middle of a chain.
+	// A waiting convoy faces whichever way it happened to arrive - or, after being put ashore by a
+	// carrier, whichever way disembark_convoy() pointed it - so both ends have to be accepted here.
+	if(  (dir & v->get_direction()) != 0  ) {
+		// same direction: couple behind the tail, which is a convoy without a child
+		if(  v!=v->get_convoi()->back()  ||  v->get_convoi()->get_coupling_convoi().is_bound()  ) {
+			return false;
+		}
 	}
-	if(  v!=v->get_convoi()->back()  ||  v->get_convoi()->get_coupling_convoi().is_bound()  ) {
+	else if(  (ribi_t::backward(dir) & v->get_direction()) != 0  ) {
+		// head-on: couple in front of the head of the chain, which is a convoy that is not a child
+		if(  v!=v->get_convoi()->front()  ||  v->get_convoi()->is_coupled()  ) {
+			return false;
+		}
+	}
+	else {
+		// standing across our path
 		return false;
 	}
 	// Road vehicles do not reserve tiles, so this claim is the only thing that stops two convoys
@@ -3921,8 +3941,14 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 		// This must be the last lane decision of enter_tile(): it overrules the generic ones above.
 		if(  cnv->get_next_coupling_index()!=route_t::INVALID_INDEX  &&  route_index>=cnv->get_next_coupling_index()  ) {
 			convoihandle_t cc = cnv->get_convoi_coupling_in_progress();
-			if(  cc.is_bound()  &&  str  &&  str->get_overtaking_mode()!=prohibited_mode  ) {
-				if(  cc->is_overtaking()  ) {
+			if(  cc.is_bound()  &&  cc->get_vehicle_count()>0  &&  str  &&  str->get_overtaking_mode()!=prohibited_mode  ) {
+				// We have to end up on the same physical strip of road as the partner. Facing the
+				// same way that means the same overtaking state; meeting it head-on it means the
+				// opposite one, because the traffic lane of one direction is the passing lane of
+				// the other.
+				const bool same_direction = (get_direction() & cc->front()->get_direction()) != 0;
+				const bool want_passing_lane = same_direction ? cc->is_overtaking() : !cc->is_overtaking();
+				if(  want_passing_lane  ) {
 					// hold the passing lane until the whole convoy has come to a stand behind it.
 					cnv->set_tiles_overtaking( cnv->calc_reversing_lane_tiles() );
 				}
