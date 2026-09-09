@@ -262,6 +262,9 @@ settings_t::settings_t() :
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
 	way_toll_waycost_percentage = 0;
+	maintenance_cost_multiplier_way = 100;
+	maintenance_cost_multiplier_overhead = 100;
+	running_cost_multiplier_vehicle = 100;
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
@@ -1238,6 +1241,16 @@ void settings_t::rdwr(loadsave_t *file)
 				}
 			}
 		}
+		if(  file->get_OTRP_version() >= 61  ) {
+			file->rdwr_long( maintenance_cost_multiplier_way );
+			file->rdwr_long( maintenance_cost_multiplier_overhead );
+			file->rdwr_long( running_cost_multiplier_vehicle );
+		}
+		else if(  file->is_loading()  ) {
+			maintenance_cost_multiplier_way = 100;
+			maintenance_cost_multiplier_overhead = 100;
+			running_cost_multiplier_vehicle = 100;
+		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
@@ -1885,6 +1898,9 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	way_toll_runningcost_percentage = contents.get_int_clamped("toll_runningcost_percentage", way_toll_runningcost_percentage, 0, 100 );
 	way_toll_waycost_percentage     = contents.get_int_clamped("toll_waycost_percentage",     way_toll_waycost_percentage,     0, 100 );
+	maintenance_cost_multiplier_way      = contents.get_int_clamped("maintenance_cost_multiplier_way",      maintenance_cost_multiplier_way,      1, 250 );
+	maintenance_cost_multiplier_overhead = contents.get_int_clamped("maintenance_cost_multiplier_overhead", maintenance_cost_multiplier_overhead, 1, 250 );
+	running_cost_multiplier_vehicle      = contents.get_int_clamped("running_cost_multiplier_vehicle",      running_cost_multiplier_vehicle,      1, 250 );
 
 	/* now the cost section */
 	cst_multiply_dock        = contents.get_int64("cost_multiply_dock",        cst_multiply_dock       /(-100) ) * -100;
