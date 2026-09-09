@@ -996,6 +996,12 @@ void convoi_t::calc_acceleration(uint32 delta_t)
 				// max speed of schedule is enforced.
 				speed_limit = min( speed_limit, kmh_to_speed(c->get_schedule()->get_max_speed()) );
 			}
+			if(  c->is_carrying_convoys()  &&  recalc_data  ) {
+				// Convoy shipping: what we carry rides with us, so it weighs on the engine
+				// exactly as cargo does. Without this a fully laden ferry accelerates like an
+				// empty one.
+				sum_gesamtweight += (uint32)c->get_carried_weight();
+			}
 			if(  c->get_max_speed_kmh_of_convoi()>0  ) {
 				// max speed of convoi is enforced.
 				speed_limit = min( speed_limit, kmh_to_speed(c->get_max_speed_kmh_of_convoi()) );
@@ -6871,6 +6877,12 @@ void convoi_t::calc_sum_friction_weight() {
 			const sint64 total_vehicle_weight = v->get_total_weight();
 			sum_friction_weight += v->get_frictionfactor() * total_vehicle_weight;
 		}
+		if(  c->is_carrying_convoys()  ) {
+			// Convoy shipping: carried convoys add their weight here too, at the friction of
+			// the carrier vehicle they are riding on rather than their own - a train on a
+			// ferry deck is dragged through water, not along rails.
+			sum_friction_weight += (sint64)c->front()->get_frictionfactor() * c->get_carried_weight();
+		}
 		c->reset_recalc_friction_weight();
 		c = c->get_coupling_convoi();
 	}
@@ -7248,6 +7260,34 @@ uint32 convoi_t::get_shipping_load(waytype_t wt) const
 }
 
 
+sint64 convoi_t::get_shipping_weight() const
+{
+	// the whole coupled chain rides together, so it weighs what the whole chain weighs -
+	// including the cargo the carried convoys have aboard, which rides along too
+	sint64 w = 0;
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		for(  uint8 i = 0;  i < c->anz_vehikel;  i++  ) {
+			w += (sint64)c->fahr[i]->get_total_weight();
+		}
+		c = c->get_coupling_convoi();
+	}
+	return w;
+}
+
+
+sint64 convoi_t::get_carried_weight() const
+{
+	sint64 w = 0;
+	FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
+		if(  c.is_bound()  ) {
+			w += c->get_shipping_weight();
+		}
+	}
+	return w;
+}
+
+
 uint32 convoi_t::get_shipping_capacity_for_goods(const goods_desc_t *g) const
 {
 	if(  g == NULL  ) {
@@ -7516,6 +7556,8 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 	// the carried convoys show up in our goods list and count towards our loading level
 	freight_info_resort = true;
 	calc_loading();
+	// and they weigh on us from now on - calc_loading() sets recalc_data, this covers friction
+	must_recalc_friction_weight();
 
 	dbg->message("convoi_t::board_carrier()","%s took %s aboard, to be put ashore at %s",
 		get_name(), c->get_name(), dest->get_name());
@@ -7562,8 +7604,12 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 		}
 		weg_t *w = gr->get_weg( wt );
 		if(  w == NULL  ) {
-			// no way of the convoy's waytype here
-			continue;
+			// Ships travel on open water, which carries no way object at all - so for water
+			// convoys a plain water tile of the halt is a perfectly good place to be set down.
+			// Every other waytype needs a real way here.
+			if(  !(wt == water_wt  &&  gr->is_water())  ) {
+				continue;
+			}
 		}
 		// the halt must really be usable by this convoy's owner - the carrier's owner is
 		// irrelevant, and access may have been revoked while the convoy was aboard
@@ -7574,7 +7620,7 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 			// tile object list would overflow
 			continue;
 		}
-		if(  schiene_t *sch = obj_cast<schiene_t>(w)  ) {
+		if(  schiene_t *sch = (w ? obj_cast<schiene_t>(w) : NULL)  ) {
 			// Rail-like ways are block reserved and schiene_t::reserve() grants its second
 			// slot only on a four-way tile with non-crossing directions - which a platform
 			// never is. So unlike road and water, only one convoy fits on a rail tile.
@@ -7688,6 +7734,8 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	recalc_shipping_images();
 	freight_info_resort = true;
 	calc_loading();
+	// we just got lighter by everything that walked off
+	must_recalc_friction_weight();
 	c->freight_info_resort = true;
 
 	dbg->message("convoi_t::disembark_convoy()","%s put %s ashore at %s (%s)",

@@ -1296,6 +1296,12 @@ public:
 	/// length this convoy (including its coupled children) occupies aboard a carrier
 	uint32 get_shipping_length() const;
 
+	/// total weight of this convoy and its coupled children, as it rides aboard a carrier
+	sint64 get_shipping_weight() const;
+
+	/// combined weight of everything this convoy is carrying aboard
+	sint64 get_carried_weight() const;
+
 	/// true if this convoy is a carrier that could in principle take `c` aboard right now
 	bool can_ship(convoihandle_t c) const;
 
