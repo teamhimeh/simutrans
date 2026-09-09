@@ -2246,7 +2246,7 @@ uint32 vehicle_t::get_total_weight() const {
 uint32 vehicle_t::calc_full_load_weight(const vehicle_desc_t* desc) {
 	uint32 weight_per_unit = 0;
 	// use heaviest goods which can be loaded on this vehicle
-	for(uint8 i=0; i<goods_manager_t::get_count(); i++) {
+	for(uint32 i=0; i<goods_manager_t::get_count(); i++) {
 		const goods_desc_t* gd = goods_manager_t::get_info(i);
 		if(  gd->is_interchangeable(desc->get_freight_type())  &&  weight_per_unit<gd->get_weight_per_unit()  ) {
 			weight_per_unit = gd->get_weight_per_unit();
