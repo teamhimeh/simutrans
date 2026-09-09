@@ -1448,8 +1448,10 @@ bool convoi_t::drive_to()
 		else {
 			// if change direction at waypoint, we must reverse coupling here!
 			grund_t *gr=welt->lookup(start);
-			if(  env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&front()->get_waytype()!=road_wt&&!reverse_coupling_done&&state!=INITIAL&&!(gr  &&  gr->get_depot())  ) {
-				const bool reverse_here=(world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&((route.get_count()<2) ? false : ((ribi_type(route.at(0), route.at(1)) & front()->get_direction()) == 0 ? true : false));
+			if(  env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!reverse_coupling_done&&state!=INITIAL&&!(gr  &&  gr->get_depot())  ) {
+				// A road convoy turns around on the spot rather than reversing, so its coupling order
+				// follows the schedule (reversing_coupling_needed) alone - never the driving direction.
+				const bool reverse_here=front()->get_waytype()!=road_wt&&(world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&((route.get_count()<2) ? false : ((ribi_type(route.at(0), route.at(1)) & front()->get_direction()) == 0 ? true : false));
 				if( reversing_coupling_needed^reverse_here )
 				{
 					// we need reverse here!
@@ -2163,6 +2165,10 @@ void convoi_t::ziel_erreicht()
 	}
 	halthandle_t halt = haltestelle_t::get_stoppable_halt(schedule->get_current_entry().pos,owner,front()->get_waytype());
 
+	// Road convoys claim their coupling partner while approaching, and that claim - not a scan of
+	// the tiles below - decides who they couple with.
+	const bool is_road_convoy = front()->get_waytype()==road_wt;
+
 	// check for coupling
 	if(  next_coupling_index!=route_t::INVALID_INDEX  &&  next_coupling_index<=v->get_route_index()  ) {
 		const uint16 route_index = v->get_route_index();
@@ -2186,6 +2192,12 @@ void convoi_t::ziel_erreicht()
 			for(  uint8 pos=1;  pos<(volatile uint8)g->get_top();  pos++  ) {
 				vehicle_t* const v = dynamic_cast<vehicle_t*>(g->obj_bei(pos));
 				if(  !v  ||  !can_start_coupling(v->get_convoi())  ||  !v->get_convoi()->is_loading()  ) {
+					continue;
+				}
+				if(  is_road_convoy  &&  v->get_convoi()->self != get_convoi_coupling_in_progress()  ) {
+					// Road convoys pick their partner while approaching (road_vehicle_t::can_couple()),
+					// which also decided the lane we changed to. Only that partner is valid here -
+					// another convoy on this tile may well be standing on the other lane.
 					continue;
 				}
 				if(  v->get_convoi()->self != get_convoi_coupling_in_progress()  ) {
@@ -2233,6 +2245,7 @@ void convoi_t::ziel_erreicht()
 		}
 		// convoy to couple with is not found!
 		set_next_coupling(route_t::INVALID_INDEX, 0);
+		unset_convoi_coupling_in_progress();
 	}
 
 	// Water vehicle TRY_COUPLING: couple at stop without signal-based route reservation.
@@ -2856,7 +2869,7 @@ void convoi_t::vorfahren()
 				need_reverse_each_convoy = c->go_same_direction_check_for_middle_convoys(get_route());
 			}
 		}
-		if (c->reversing_needed^((world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&!need_reverse_each_convoy)){
+		if (c->reversing_needed^((world()->get_settings().is_default_reverse()||get_schedule()->is_reverse_default())&&env_t::reversible_waytype(front()->get_waytype())&&front()->get_waytype()!=water_wt&&front()->get_waytype()!=road_wt&&!need_reverse_each_convoy)){
 			c->reverse_vehicles_at_halt_if_needed();
 		}
 		// reset uncouple done flag
@@ -3071,6 +3084,11 @@ void convoi_t::vorfahren()
 						set_requested_change_lane(true);
 					}
 				}
+				// The reversal flipped the lane of the whole chain, not just of this convoy: the
+				// coupled children stand on the same piece of road and now drive the other way too.
+				// They get no tile entry of their own here, so hand the new lane down right away -
+				// otherwise they keep being drawn on the lane they had before the reversal.
+				broadcast_lane_to_coupling_convois();
 			}
 		}
 		else {
@@ -4658,8 +4676,8 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if (  coupling_convoi.is_bound()  &&  !is_coupled()  &&  !is_waiting_for_coupling()  &&  !reverse_coupling_done  )
 	{
 		bool should_reverse_coupling_done = false;
-		// Water vehicles do not use direction-based coupling reversal; only explicit REVERSE_COUPLING flag applies.
-		if(  front()->get_waytype() != water_wt
+		// Water and road vehicles do not use direction-based coupling reversal; only explicit REVERSE_COUPLING flag applies.
+		if(  front()->get_waytype() != water_wt  &&  front()->get_waytype() != road_wt
 		  &&  (world()->get_settings().is_default_reverse() || get_schedule()->is_reverse_default())  ) {
 			// the direction of the waiting vehicle is same? opposite?
 			route_t r;
@@ -5437,6 +5455,16 @@ PIXVAL convoi_t::get_status_color() const
 	}
 	// normal state
 	return SYSCOL_TEXT;
+}
+
+
+void convoi_t::broadcast_lane_to_coupling_convois()
+{
+	for(  convoihandle_t c = coupling_convoi;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+		if(  c->get_tiles_overtaking() != get_tiles_overtaking()  ) {
+			c->set_tiles_overtaking( get_tiles_overtaking() );
+		}
+	}
 }
 
 

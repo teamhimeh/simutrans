@@ -242,6 +242,24 @@ uint8 calc_reservation_flag(ribi_t::ribi dir_in, ribi_t::ribi dir_out) {
 	else { return 0; }
 }
 
+vehicle_base_t* strasse_t::get_reserver(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next) const {
+	ribi_t::ribi dir_in = ribi_type(get_pos(), pos_prev);
+	ribi_t::ribi dir_out = ribi_type(get_pos(), pos_next);
+	uint8 reservation_flag = calc_reservation_flag(dir_in, dir_out);
+	if(  reservation_flag==0  ) {
+		return NULL;
+	}
+	if(  (welt->get_settings().is_drive_left()  &&  !is_overtaking)  ||  (!welt->get_settings().is_drive_left()  &&  is_overtaking)  ) {
+		reservation_flag = (~reservation_flag)&0x0F;
+	}
+	for(uint8 i=0; i<4; i++) {
+		if(  (reservation_flag&(1<<i))!=0  &&  reserved_by[i]  &&  reserved_by[i]!=r  ) {
+			return reserved_by[i];
+		}
+	}
+	return NULL;
+}
+
 bool strasse_t::is_reserved_by_others(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next) {
 	ribi_t::ribi dir_in = ribi_type(get_pos(), pos_prev);
 	ribi_t::ribi dir_out = ribi_type(get_pos(), pos_next);
