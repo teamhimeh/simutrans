@@ -340,6 +340,11 @@ private:
 	sint32 way_toll_runningcost_percentage;
 	sint32 way_toll_waycost_percentage;
 
+	// multipliers [%] applied on the pakset values of maintenance and running costs
+	sint32 maintenance_cost_multiplier_way;
+	sint32 maintenance_cost_multiplier_overhead;
+	sint32 running_cost_multiplier_vehicle;
+
 	// true if transformers are allowed to built underground
 	bool allow_underground_transformers;
 
@@ -765,6 +770,10 @@ public:
 
 	sint32 get_way_toll_runningcost_percentage() const { return way_toll_runningcost_percentage; }
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
+
+	sint32 get_maintenance_cost_multiplier_way() const { return maintenance_cost_multiplier_way; }
+	sint32 get_maintenance_cost_multiplier_overhead() const { return maintenance_cost_multiplier_overhead; }
+	sint32 get_running_cost_multiplier_vehicle() const { return running_cost_multiplier_vehicle; }
 
 	sint32 get_bonus_basefactor() const { return bonus_basefactor; }
 

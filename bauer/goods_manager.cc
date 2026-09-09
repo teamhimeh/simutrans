@@ -4,6 +4,7 @@
  */
 
 #include "../simdebug.h"
+#include "../macros.h"
 #include "../descriptor/goods_desc.h"
 #include "../descriptor/spezial_obj_tpl.h"
 #include "../simware.h"
@@ -17,6 +18,8 @@ stringhashtable_tpl<const goods_desc_t *> goods_manager_t::desc_table;
 vector_tpl<goods_desc_t *> goods_manager_t::goods;
 
 uint8 goods_manager_t::max_catg_index = 0;
+
+const goods_desc_t *goods_manager_t::shipping_goods[16] = { NULL };
 
 const goods_desc_t *goods_manager_t::passengers = NULL;
 const goods_desc_t *goods_manager_t::mail = NULL;
@@ -101,9 +104,63 @@ bool goods_manager_t::successfully_loaded()
 	// however, some place do need the dummy ...
 	ware_t::index_to_desc[2] = NULL;
 
+	// Convoy shipping: resolve the dummy goods once, by name, so that nothing on a hot path
+	// ever has to compare strings. A pakset that defines none of them simply cannot ship
+	// convoys - every entry stays NULL and get_shipping_capacity() returns 0 everywhere.
+	{
+		struct { waytype_t wt; const char *name; } const shipping_names[] = {
+			{ road_wt,        "SHIPPING_ROAD"        },
+			{ track_wt,       "SHIPPING_TRACK"       },
+			// trams share the rail dummy good, as they share the rail loading gauge
+			{ tram_wt,        "SHIPPING_TRACK"       },
+			{ monorail_wt,    "SHIPPING_MONORAIL"    },
+			{ maglev_wt,      "SHIPPING_MAGLEV"      },
+			{ narrowgauge_wt, "SHIPPING_NARROWGAUGE" },
+			{ water_wt,       "SHIPPING_WATER"       }
+		};
+		for(  uint32 i = 0;  i < lengthof(shipping_names);  i++  ) {
+			// Deliberately NOT get_info(): that never returns NULL - it falls back to the
+			// "None" good and logs a warning. Storing "None" here would be actively harmful,
+			// because every vehicle without freight (every locomotive, for one) has "None" as
+			// its freight type and would then be counted as shipping capacity.
+			const goods_desc_t *g = desc_table.get( shipping_names[i].name );
+			if(  g == none  ) {
+				g = NULL;
+			}
+			shipping_goods[ shipping_names[i].wt ] = g;
+			if(  g  ) {
+				DBG_MESSAGE("goods_manager_t::successfully_loaded()","shipping good '%s' registered for waytype %i", shipping_names[i].name, (int)shipping_names[i].wt );
+			}
+		}
+	}
+
 	DBG_MESSAGE("goods_manager_t::successfully_loaded()","total goods %i, different kind of categories %i", goods.get_count(), max_catg_index );
 
 	return true;
+}
+
+
+const goods_desc_t *goods_manager_t::get_shipping_goods(waytype_t wt)
+{
+	// air_wt (16) and everything above is deliberately out of range: aircraft are never shipped.
+	if(  wt <= ignore_wt  ||  (uint32)wt >= lengthof(shipping_goods)  ) {
+		return NULL;
+	}
+	return shipping_goods[wt];
+}
+
+
+bool goods_manager_t::is_shipping_goods(const goods_desc_t *desc)
+{
+	if(  desc == NULL  ) {
+		return false;
+	}
+	for(  uint32 i = 0;  i < lengthof(shipping_goods);  i++  ) {
+		if(  shipping_goods[i] == desc  ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 
