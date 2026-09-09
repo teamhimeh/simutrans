@@ -53,6 +53,7 @@ include("tests/test_reroute_reservation")
 include("tests/test_remove_house")
 include("tests/test_pillar")
 include("tests/test_crossing_reservation")
+include("tests/test_diagonal_two_waytypes")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -327,6 +328,7 @@ all_tests <- [
 	test_crossing_four_way_ns_sequential_prohibited,
 	test_crossing_four_way_ne_ne_sequential_prohibited,
 	test_crossing_four_way_ne_se_sequential_prohibited,
+	test_diagonal_two_waytypes_rail_and_air,
 ]
 
 

@@ -16,6 +16,8 @@
 #include "../simworld.h"
 #include "../simware.h"
 #include "simwin.h"
+#include "convoi_info_t.h"
+#include "../simhalt.h"
 #include "depot_picker.h"
 
 #include "../dataobj/translator.h"
@@ -211,6 +213,18 @@ void convoi_detail_t::init(convoihandle_t cnv)
 
 	add_component(&label_length);
 
+	// convoy shipping: only shown while this convoy actually carries or is carried
+	add_table(2,1);
+	{
+		add_component(&label_shipping);
+		show_carrier_button.init(button_t::roundbox, "Show carrier");
+		show_carrier_button.set_tooltip(translator::translate("Open the window of the convoy that is carrying this one."));
+		show_carrier_button.add_listener(this);
+		add_component(&show_carrier_button);
+	}
+	end_table();
+	add_component(&label_shipping_list);
+
 	set_table_layout(1,0);
 	add_table(4,1);
 	{
@@ -356,6 +370,63 @@ void convoi_detail_t::update_labels()
 		label_length.buf().printf( "%s %i %s %.4f", translator::translate( "Vehicle count:" ), cnv->get_vehicle_count(), translator::translate( "Station tiles:" ), (double)(cnv->get_length()) / CARUNITS_PER_TILE );
 	}
 	label_length.update();
+
+	// ---- convoy shipping ----
+	{
+		const bool shipped  = cnv->is_shipped();
+		const bool carrying = cnv->is_carrying_convoys();
+		if(  shipped  ) {
+			convoihandle_t carrier = cnv->get_shipping_carrier();
+			// the length is what this convoy costs the carrier, in the same car-length units
+			// the ferry's payload is given in, so the two can be compared directly
+			label_shipping.buf().printf( "%s %s (%s %u)", translator::translate("Aboard:"),
+				carrier.is_bound() ? carrier->get_name() : translator::translate("unknown"),
+				translator::translate("length:"), (unsigned)cnv->get_shipping_length() );
+			const halthandle_t dest = cnv->get_shipping_dest_halt();
+			if(  dest.is_bound()  ) {
+				label_shipping_list.buf().printf( "%s %s", translator::translate("Put ashore at:"), dest->get_name() );
+			}
+			else {
+				// the drop-off halt is gone; the carrier will rescue it at its next stop
+				label_shipping_list.buf().printf( "%s", translator::translate("Transfer stop no longer exists") );
+			}
+		}
+		else if(  carrying  ) {
+			// how much of the deck is taken, so the player can see at a glance whether another
+			// convoy would still fit
+			uint32 used = 0;
+			FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
+				if(  c.is_bound()  ) {
+					used += c->get_shipping_length();
+				}
+			}
+			label_shipping.buf().printf( "%s %u (%s %u)", translator::translate("Convoys aboard:"),
+				(unsigned)cnv->get_shipped_convois().get_count(),
+				translator::translate("length:"), (unsigned)used );
+			// list what is aboard, with each convoy's length and its own drop-off stop
+			bool first = true;
+			FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
+				if(  !c.is_bound()  ) {
+					continue;
+				}
+				if(  !first  ) {
+					label_shipping_list.buf().append( ", " );
+				}
+				first = false;
+				const halthandle_t d = c->get_shipping_dest_halt();
+				label_shipping_list.buf().printf( "%s (%u)", c->get_name(), (unsigned)c->get_shipping_length() );
+				if(  d.is_bound()  ) {
+					label_shipping_list.buf().printf( " %s %s", translator::translate("to"), d->get_name() );
+				}
+			}
+		}
+		label_shipping.update();
+		label_shipping_list.update();
+		label_shipping.set_visible( shipped || carrying );
+		label_shipping_list.set_visible( shipped || carrying );
+		show_carrier_button.set_visible( shipped && cnv->get_shipping_carrier().is_bound() );
+	}
+
 	label_resale.buf().printf("%s ", translator::translate("Restwert:"));
 	label_resale.buf().append_money( cnv->calc_restwert() / 100.0 );
 	label_resale.update();
@@ -445,6 +516,13 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 				create_win(new depot_picker_t(cnv, true), w_info, magic_depot_picker);
 			} else {
 				cnv->call_convoi_tool( 'y', NULL );
+			}
+			return true;
+		}
+		else if(comp==&show_carrier_button) {
+			convoihandle_t carrier = cnv->get_shipping_carrier();
+			if(  carrier.is_bound()  ) {
+				create_win( new convoi_info_t(carrier), w_info, magic_convoi_info+carrier.get_id() );
 			}
 			return true;
 		}

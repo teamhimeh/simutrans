@@ -140,6 +140,9 @@ public:
 	bool unreserve(vehicle_base_t* r);
 	void unreserve_all();
 	bool is_reserved_by_others(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next);
+	// The first vehicle whose reservation conflicts with the given transit, or NULL if there is none.
+	// Lets a caller decide that a particular blocker is acceptable after reserve() refused.
+	vehicle_base_t* get_reserver(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next) const;
 	
 	uint8 get_street_flag() const { return street_flags; }
 	void set_street_flag(uint8 s) { street_flags = s; }

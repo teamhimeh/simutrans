@@ -820,6 +820,10 @@ void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const&
 		cnt++;
 	}
 	if(  entry.is_drive_without_reservation()  ) {
+		str[cnt] = 'N';
+		cnt++;
+	}
+	if(  entry.is_start_shipped()  ) {
 		str[cnt] = 'S';
 		cnt++;
 	}

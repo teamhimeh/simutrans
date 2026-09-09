@@ -1100,6 +1100,18 @@ void weg_t::check_diagonal()
 	}
 
 	grund_t *from = welt->lookup(get_pos());
+
+	// sibling way of a different type on this same tile, disjoint bend => always diagonal,
+	// regardless of what the neighbouring tiles look like (the two bends must always be
+	// drawn through opposite corners so they don't visually overlap)
+	if(  from->has_two_ways()  ) {
+		weg_t *other = from->get_weg_nr(0)==this ? from->get_weg_nr(1) : from->get_weg_nr(0);
+		if(  other  &&  other->get_waytype()!=get_waytype()  &&  ribi_t::are_disjoint_bends(ribi, other->get_ribi_unmasked())  ) {
+			flags |= IS_DIAGONAL;
+			return;
+		}
+	}
+
 	grund_t *to;
 
 	ribi_t::ribi r1 = ribi_t::none;
