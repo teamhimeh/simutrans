@@ -66,7 +66,14 @@ public:
 		TEMP_UNLOAD_ALL   = 1U << 18,// unload all only for goods routing
 		BALANCE_SPEED_KMH_OF_CONVOI= 1U<<19,// Overwrite balance speed of convoy here.
 		WAIT_FOR_OTHER_CONVOY= 1U<<20,// The convoy waits here until another convoy (of allow_depart_line) grants departure.
-		WAIT_ALLOW_DEPARTURE = 1U<<21 // Wait until make other convoy depart. (only allow_departure_line exist)
+		WAIT_ALLOW_DEPARTURE = 1U<<21,// Wait until make other convoy depart. (only allow_departure_line exist)
+		WITHOUT_RESERVATION  = 1U<<22,// drive without reservation
+		// Convoy shipping needs only this one flag. Whether a convoy can carry others, which
+		// waytypes it can carry and where it will call are all already known - from its
+		// vehicles' shipping capacity and from its schedule - so a carrier needs no flag of
+		// its own. Only the carried convoy has to declare itself, because otherwise it would
+		// simply drive off. (NO_LOAD on a carrier's entry doubles as "do not pick up here".)
+		START_SHIPPED     = 1U<<23 // This convoy waits here to be taken aboard a carrier convoy.
 	};
 
 	/**
@@ -210,7 +217,11 @@ public:
 	void set_allow_depart_line(linehandle_t l) { allow_depart_line = l; }
 	bool is_wait_allow_convoy_departure() const { return (stop_flags&WAIT_ALLOW_DEPARTURE)>0; }
 	void set_wait_allow_convoy_departure(bool y) { y ? stop_flags |= WAIT_ALLOW_DEPARTURE : stop_flags &= ~WAIT_ALLOW_DEPARTURE; }
-
+	bool is_drive_without_reservation() const {return (stop_flags&WITHOUT_RESERVATION)>0;}
+	void set_drive_without_reservation(bool y) { y? stop_flags |= WITHOUT_RESERVATION : stop_flags &= ~WITHOUT_RESERVATION;}
+	// convoy shipping (a convoy carried aboard another convoy)
+	bool is_start_shipped() const { return (stop_flags&START_SHIPPED)>0; }
+	void set_start_shipped(bool y) { y ? stop_flags |= START_SHIPPED : stop_flags &= ~START_SHIPPED; }
 
 	void set_spacing(uint16 a, uint16 b, uint16 c) {
 		spacing = a;

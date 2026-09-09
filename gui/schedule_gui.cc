@@ -11,6 +11,7 @@
 #include "../simworld.h"
 #include "../simmenu.h"
 #include "../simconvoi.h"
+#include "../bauer/goods_manager.h"
 #include "../display/simgraph.h"
 #include "../display/viewport.h"
 #include "components/gui_divider.h"
@@ -906,8 +907,23 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_no_overtake.set_tooltip("Do not overtake other cars until this stop.");
 		bt_no_overtake.add_listener(this);
 		add_component(&bt_no_overtake);
+
+		bt_start_shipped.init(button_t::square_automatic, "Wait to be shipped");
+		bt_start_shipped.set_tooltip("Wait here until a carrier convoy takes this convoy to its next stop. The convoy will not depart on its own.");
+		bt_start_shipped.add_listener(this);
+		add_component(&bt_start_shipped);
 		add_component(&sp_road_settings);
 		add_component(&sp_road_settings);
+
+		bt_drive_without_reservation.init(button_t::square_automatic, "Without Reservation");
+		bt_drive_without_reservation.set_tooltip("Drive without reservation until next signal");
+		bt_drive_without_reservation.add_listener(this);
+		add_component(&bt_drive_without_reservation);
+		bt_all_without_reservation.init(button_t::roundbox, "apply for all");
+		bt_all_without_reservation.set_tooltip("apply driving with reservation setting for all stops");
+		bt_all_without_reservation.add_listener(this);
+		add_component(&bt_all_without_reservation);
+
 	}
 	end_table();
 
@@ -1063,11 +1079,14 @@ void schedule_gui_t::update_selection()
 	numimp_max_load.set_value(100);
 	bt_max_load_all_stops.disable();
 	bt_no_overtake.disable();
+	bt_start_shipped.disable();
 	bt_max_speed_kmh_of_convoi.disable();
 	bt_no_go_no_users.disable();
 	numimp_max_speed_kmh_of_convoi.disable();
 	bt_balance_speed_kmh_of_convoi.disable();
 	numimp_balance_speed_kmh_of_convoi.disable();
+	bt_drive_without_reservation.disable();
+	bt_all_without_reservation.disable();
 	bt_temp_load.disable();
 	bt_temp_unload.disable();
 	bt_temp_unload_all.disable();
@@ -1088,6 +1107,13 @@ void schedule_gui_t::update_selection()
     
 		bt_no_overtake.enable();
 		bt_no_overtake.pressed = schedule->at(current_stop).is_no_overtake();
+		
+		bt_start_shipped.enable();
+		bt_start_shipped.pressed = schedule->at(current_stop).is_start_shipped();
+
+		bt_drive_without_reservation.enable();
+		bt_drive_without_reservation.pressed = schedule->at(current_stop).is_drive_without_reservation();
+		bt_all_without_reservation.enable();
 
 		if(  current_stop!=0  &&  (!schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-1)  ) {
 			bt_up.enable();
@@ -1406,6 +1432,20 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(!bt_reverse_coupling.pressed);
 			if(  schedule->get_waytype()!=water_wt  &&  (bt_wait_for_child.pressed || bt_find_parent.pressed)  ) {
 				schedule->at(schedule->get_current_stop()).reset_coupling();
+			}
+			update_selection();
+		}
+	}
+	else if(comp == &bt_drive_without_reservation) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_drive_without_reservation(!schedule->at(schedule->get_current_stop()).is_drive_without_reservation());
+			update_selection();
+		}
+	}
+	else if(comp == &bt_all_without_reservation) {
+		if(!schedule->empty()) {
+			for(uint8 i=0; i<schedule->get_count(); i++) {
+				schedule->at(i).set_drive_without_reservation(bt_drive_without_reservation.pressed);
 			}
 			update_selection();
 		}
@@ -1768,6 +1808,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_no_overtake) {
 		if (!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_no_overtake(bt_no_overtake.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_start_shipped) {
+		if (!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_start_shipped(bt_start_shipped.pressed);
 			update_selection();
 		}
 	}
@@ -2220,6 +2266,7 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 
 	const bool coupling_waytype = schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
+	const bool track_waytype = schedule->get_waytype()!=road_wt && schedule->get_waytype()!=water_wt && schedule->get_waytype()!=air_wt;
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);
 	bt_reset_coupling.set_visible(coupling_waytype && yesno);
@@ -2233,4 +2280,13 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	sp_coupling_settings.set_visible(coupling_waytype && yesno);
 	bt_no_overtake.set_visible(schedule->get_waytype()==road_wt && yesno); // only for road vehicle
 	sp_road_settings.set_visible(schedule->get_waytype()==road_wt && yesno);
+	bt_drive_without_reservation.set_visible(track_waytype && yesno);
+	bt_all_without_reservation.set_visible(track_waytype && yesno);
+
+	// Convoy shipping needs no carrier-side flag: carrying is decided by the ship's capacity
+	// and its schedule. Only the carried side declares itself, and only where this pakset
+	// actually defines a shipping good, so the option never appears where it cannot work.
+	const bool is_shippable_waytype = schedule->get_waytype()!=air_wt
+		&&  goods_manager_t::get_shipping_goods(schedule->get_waytype())!=NULL;
+	bt_start_shipped.set_visible(is_shippable_waytype && yesno);
 }
