@@ -2443,9 +2443,10 @@ bool road_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 			}
 			// do not search further for a free stop beyond here.
 			// A guide signal searches for a coupling partner, so its area is bounded by the
-			// end-of-guide flag instead of the end-of-choose flag of an ordinary choose search.
+			// end-of-guide flag instead of the end-of-choose flag of an ordinary choose search -
+			// the same distinction rail_vehicle_t makes.
 			if(  target_halt.is_bound()  &&  cnv->is_waiting()  &&  (rs->get_desc()->get_flags()&roadsign_desc_t::END_OF_CHOOSE_AREA)
-			  &&  (coupling ? rs->is_flag_end_of_guide() : true)  ) {
+			  &&  (coupling ? rs->is_flag_end_of_guide() : rs->is_flag_end_of_choose())  ) {
 				return false;
 			}
 		}
@@ -2628,7 +2629,7 @@ bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_dire
 			roadsign_t *rs = gr->find<roadsign_t>();
 			// check end of choose
 			if(  rs  &&  rs->get_desc()->get_wtyp()==get_waytype()  ) {
-				if(  (rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA ) ) {	
+				if(  (rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA )  &&  rs->is_flag_end_of_choose()  ) {
 					return true;
 				}
 			}
@@ -2778,7 +2779,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 							// including when this very guide signal set it up a moment ago. A choose
 							// signal must not send us to some other free platform instead.
 						}
-						else if(  rs->is_guide_signal()  &&  is_seeking_coupling_partner()  ) {
+						else if(  rs->is_guide_signal()  &&  is_seeking_coupling_partner()  &&  is_in_guide_area( route_index )  ) {
 							// guide signal: do not enter the coupling area before the convoy we
 							// want to couple with is waiting there.
 							if(  !guide_route( restart_speed, direction90, route_index )  ) {
@@ -3022,8 +3023,8 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 						if(  is_on_coupling_approach()  ) {
 							// see above: keep the route that leads to our coupling partner.
 						}
-						else if(  rs->is_guide_signal()  &&  is_seeking_coupling_partner()  ) {
-							if(  !guide_route( restart_speed, curr_90direction, test_index )  ) {
+						else if(  rs->is_guide_signal()  &&  is_seeking_coupling_partner()  &&  is_in_guide_area( (uint16)test_index )  ) {
+							if(  !guide_route( restart_speed, curr_90direction, (uint16)test_index )  ) {
 								return false;
 							}
 						}
@@ -3644,6 +3645,42 @@ bool road_vehicle_t::is_coupling_target(const grund_t *gr, const grund_t *prev_g
 		}
 	}
 	return false;
+}
+
+
+// A guide signal only guides while the destination is inside its guide area. An end-of-choose sign
+// carrying the end-of-guide flag, or a second guide signal closer to the destination, ends that area
+// - beyond it this signal is an ordinary choose sign. rail_vehicle_t::is_choose_signal_clear() makes
+// the same check before it starts the coupling route search.
+bool road_vehicle_t::is_in_guide_area(uint16 index) const
+{
+	const route_t *rt = cnv->get_route();
+	for(  uint32 idx = index+1u;  idx < rt->get_count();  idx++  ) {
+		const grund_t *gr = welt->lookup( rt->at(idx) );
+		if(  !gr  ) {
+			return false;
+		}
+		const weg_t *way = gr->get_weg( get_waytype() );
+		if(  !way  ) {
+			return false;
+		}
+		if(  !way->has_sign()  ) {
+			continue;
+		}
+		const roadsign_t *rs = gr->find<roadsign_t>();
+		if(  !rs  ||  rs->get_desc()->get_wtyp()!=get_waytype()  ) {
+			continue;
+		}
+		if(  (rs->get_desc()->get_flags() & roadsign_desc_t::END_OF_CHOOSE_AREA)  &&  rs->is_flag_end_of_guide()  ) {
+			// the destination lies beyond the end of this guide area
+			return false;
+		}
+		if(  rs->is_guide_signal()  &&  idx+1u < rt->get_count()  &&  rs->is_free_route( ribi_type(rt->at(idx), rt->at(idx+1u)) )  ) {
+			// a guide signal closer to the destination takes over
+			return false;
+		}
+	}
+	return true;
 }
 
 
