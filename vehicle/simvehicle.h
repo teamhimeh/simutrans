@@ -515,6 +515,9 @@ private:
 	// true while this convoy is looking for a convoy to couple with at its next genuine stop
 	bool is_seeking_coupling_partner() const;
 
+	// true if the destination is still inside the guide area of the guide signal at route[index]
+	bool is_in_guide_area(uint16 index) const;
+
 	// true once the route leads to a convoy we are going to couple with, either because a coupling
 	// point is fixed or because a guide signal claimed a partner. Such a route must not be replaced
 	// by a choose signal.

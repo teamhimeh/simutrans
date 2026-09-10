@@ -7735,13 +7735,31 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	// it is thrown away and recomputed by drive_to() on departure anyway.
 	koord3d facing = target->get_pos();
 	{
+		// Point it the way it will drive off, i.e. at the neighbour closest to its next scheduled
+		// stop. Simply taking the first connected neighbour leaves the convoy facing at random,
+		// which is not only wrong to look at: a convoy waiting to be coupled with is matched on the
+		// direction it faces, so a randomly turned one is either not found at all or found as a
+		// head-on partner when a following convoy should have come up behind it.
+		koord next_stop = koord::invalid;
+		if(  c->get_schedule() != NULL  &&  !c->get_schedule()->empty()  ) {
+			next_stop = c->get_schedule()->get_next_entry().pos.get_2d();
+		}
 		const ribi_t::ribi way_ribi = target->get_weg_ribi( wt );
+		uint32 best_dist = 0xFFFFFFFFu;
 		for(  uint8 r = 0;  r < 4;  r++  ) {
 			const ribi_t::ribi d = ribi_t::nesw[r];
 			grund_t *to = NULL;
 			if(  (way_ribi & d)  &&  target->get_neighbour( to, wt, d )  &&  to  ) {
-				facing = to->get_pos();
-				break;
+				if(  next_stop == koord::invalid  ) {
+					// no next stop to aim at: any connected neighbour will do
+					facing = to->get_pos();
+					break;
+				}
+				const uint32 dist = (uint32)koord_distance( to->get_pos().get_2d(), next_stop );
+				if(  dist < best_dist  ) {
+					best_dist = dist;
+					facing = to->get_pos();
+				}
 			}
 		}
 	}
