@@ -160,7 +160,7 @@ void crossing_t::rdwr(loadsave_t *file)
 }
 
 
-void crossing_t::finish_rd()
+void crossing_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	grund_t *gr=welt->lookup(get_pos());
 	if(gr==NULL  ||  !gr->hat_weg(desc->get_waytype(0))  ||  !gr->hat_weg(desc->get_waytype(1))) {

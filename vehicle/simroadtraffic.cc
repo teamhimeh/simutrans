@@ -218,7 +218,7 @@ void road_user_t::rdwr(loadsave_t *file)
 	weg_next &= 65535;
 }
 
-void road_user_t::finish_rd()
+void road_user_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	calc_height(NULL);
 	calc_image();

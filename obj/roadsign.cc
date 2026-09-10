@@ -8,6 +8,7 @@
 
 #include "../simunits.h"
 #include "../simdebug.h"
+#include "../simversion.h"
 #include "simobj.h"
 #include "../display/simimg.h"
 #include "../player/simplay.h"
@@ -825,8 +826,18 @@ void roadsign_t::cleanup(player_t *player)
 }
 
 
-void roadsign_t::finish_rd()
+void roadsign_t::finish_rd(const uint8 loaded_OTRP_version)
 {
+	// Before OTRP v61 the end-of-choose flags of a road sign were never shown in the UI and road
+	// vehicles ignored them - they stopped at any END_OF_CHOOSE_AREA sign. Whatever is stored for
+	// such a sign is therefore meaningless, and now that road honours the flags an old sign whose
+	// bits happen to be unset would silently stop ending the choose area. Give it back the
+	// behaviour it had when it was saved.
+	if(  loaded_OTRP_version < 61  &&  desc  &&  desc->is_end_choose_signal()  &&  get_waytype()==road_wt  ) {
+		set_end_of_choose(true);
+		set_end_of_guide(true);
+	}
+
 	grund_t *gr=welt->lookup(get_pos());
 	if(  gr==NULL  ||  !gr->hat_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt)  ) {
 		dbg->error("roadsign_t::finish_rd","roadsing: way/ground missing at %i,%i => ignore", get_pos().x, get_pos().y );

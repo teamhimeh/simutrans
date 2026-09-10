@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include "../simversion.h"
 
 #include "../simdebug.h"
 #include "../simworld.h"
@@ -2605,7 +2606,7 @@ bool way_builder_t::build_tunnel_tile()
 				leitung_t *lt = new leitung_t(tunnel->get_pos(), player_builder);
 				lt->set_desc( wb );
 				tunnel->obj_add( lt );
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 			}
 			tunnel->calc_image();
 			cost -= tunnel_desc->get_price();
@@ -2771,7 +2772,7 @@ void way_builder_t::build_road()
 				str->set_owner(player_builder);
 				str->set_way_building(false);// show ribi
 				if (crossing_t* crossing = gr->get_crossing()) {
-					crossing->finish_rd();
+					crossing->finish_rd( OTRP_VERSION_MAJOR );
 				}
 			}
 			str->set_vehicle_offset(vehicle_offset);
@@ -2877,7 +2878,7 @@ void way_builder_t::build_track()
 					// respect speed limit of crossing
 					weg->count_sign();
 					if (crossing_t* crossing = gr->get_crossing()) {
-						crossing->finish_rd();
+						crossing->finish_rd( OTRP_VERSION_MAJOR );
 					}
 				}
 				weg->set_vehicle_offset(vehicle_offset);
@@ -2964,7 +2965,7 @@ void way_builder_t::build_powerline()
 			lt->set_desc(desc);
 			player_t::book_construction_costs(player_builder, -desc->get_price(), gr->get_pos().get_2d(), powerline_wt);
 			// this adds maintenance
-			lt->leitung_t::finish_rd();
+			lt->leitung_t::finish_rd( OTRP_VERSION_MAJOR );
 			minimap_t::get_instance()->calc_map_pixel( gr->get_pos().get_2d() );
 		}
 

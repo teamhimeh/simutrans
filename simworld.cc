@@ -2171,6 +2171,7 @@ karte_t::karte_t() :
 
 	// for new world just set load version to current savegame version
 	load_version = loadsave_t::int_version( env_t::savegame_version_str, NULL ).version;
+	load_otrp_version = OTRP_VERSION_MAJOR;
 
 	// standard prices
 	goods_manager_t::set_multiplier( 1000 );
@@ -5452,7 +5453,7 @@ void karte_t::plans_finish_rd( sint16 x_min, sint16 x_max, sint16 y_min, sint16 
 				for(  int n = 0;  n < gr->get_top();  n++  ) {
 					obj_t *obj = gr->obj_bei(n);
 					if(obj) {
-						obj->finish_rd();
+						obj->finish_rd( load_otrp_version );
 					}
 				}
 				if(  load_version<=111000  &&  gr->ist_natur()  ) {
@@ -5832,6 +5833,7 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 
 	// loading finished, reset savegame version to current
 	load_version = loadsave_t::int_version( env_t::savegame_version_str, NULL ).version;
+	load_otrp_version = OTRP_VERSION_MAJOR;
 
 	dbg->warning("karte_t::load()","loaded savegame from %i/%i, next month=%i, ticks=%i (per month=1<<%i)",last_month,last_year,next_month_ticks,ticks,karte_t::ticks_per_world_month_shift);
 }
@@ -5866,6 +5868,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 	if (file->is_loading()) {
 		// some functions (finish_rd) need to know what version was loaded
 		load_version = file->get_version_int();
+		load_otrp_version = file->get_OTRP_version();
 		loaded_rotation = settings.get_rotation();
 	}
 	else {

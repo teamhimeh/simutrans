@@ -3550,7 +3550,7 @@ void convoi_t::rdwr(loadsave_t *file)
 				}
 				// add to crossing
 				if(crossing_t *cr = gr->get_crossing()) {
-					cr->finish_rd();	// add crossing logic if needed (as finish_rd() was not yet processed
+					cr->finish_rd( file->get_OTRP_version() );	// add crossing logic if needed (as finish_rd() was not yet processed
 					cr->add_to_crossing(v);
 				}
 				if(  gr->get_top()>253  ) {
