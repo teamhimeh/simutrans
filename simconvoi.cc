@@ -7528,7 +7528,7 @@ bool convoi_t::can_deliver_shipped_to(halthandle_t dest) const
 			return true;
 		}
 
-		if(  h == current_halt  ) {
+		if(  !e.is_no_load()  &&  h == current_halt  ) {
 			// S -> ... -> S -> G: we are back where the convoy would board before ever having
 			// reached its destination, so this trip does not connect. Whatever happens on the
 			// next lap is the next lap's business - riding round to it would mean sitting
