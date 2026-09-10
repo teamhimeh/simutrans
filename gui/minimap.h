@@ -178,7 +178,7 @@ private:
 
 	static bool show_convoi;
 
-	bool is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_index);
+	bool is_matching_freight_catg(const vector_tpl<uint16> &goods_catg_index);
 
 	/// nonstatic, if we have someday many maps ...
 	void set_map_color(koord k, PIXVAL color);

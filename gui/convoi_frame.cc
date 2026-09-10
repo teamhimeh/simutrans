@@ -325,22 +325,45 @@ void convoi_frame_t::rdwr( loadsave_t *file )
 	file->rdwr_short( sort_mode );
 	file->rdwr_bool( sortreverse );
 	file->rdwr_long( filter_flags );
+	// The filter can hold one entry per good, which no longer fits into a byte since OTRP version 62.
 	if( file->is_saving() ) {
-		uint8 good_nr = waren_filter ? waren_filter->get_count() : 0;
-		file->rdwr_byte( good_nr );
+		uint32 good_nr = waren_filter ? waren_filter->get_count() : 0;
+		if(  file->get_OTRP_version() >= 62  ) {
+			uint16 n = (uint16)good_nr;
+			file->rdwr_short( n );
+		}
+		else {
+			// old format: the count has to fit into a byte, so drop the surplus entries
+			good_nr = min( good_nr, (uint32)255 );
+			uint8 n = (uint8)good_nr;
+			file->rdwr_byte( n );
+		}
 		if (good_nr > 0) {
+			uint32 written = 0;
 			FOR( slist_tpl<const goods_desc_t *>, const i, *waren_filter ) {
+				if(  written++ >= good_nr  ) {
+					break;
+				}
 				char *name = const_cast<char *>(i->get_name());
 				file->rdwr_str(name,256);
 			}
 		}
 	}
 	else {
-		uint8 good_nr;
-		file->rdwr_byte( good_nr );
+		uint32 good_nr;
+		if(  file->get_OTRP_version() >= 62  ) {
+			uint16 n;
+			file->rdwr_short( n );
+			good_nr = n;
+		}
+		else {
+			uint8 n;
+			file->rdwr_byte( n );
+			good_nr = n;
+		}
 		if( good_nr > 0 ) {
 			static slist_tpl<const goods_desc_t *>waren_filter_rd;
-			for( sint16 i = 0; i < good_nr; i++ ) {
+			for( uint32 i = 0; i < good_nr; i++ ) {
 				char name[256];
 				file->rdwr_str(name, lengthof(name));
 				if (const goods_desc_t *gd = goods_manager_t::get_info(name)) {
