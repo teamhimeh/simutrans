@@ -1066,7 +1066,7 @@ void gebaeude_t::rdwr(loadsave_t *file)
 }
 
 
-void gebaeude_t::finish_rd()
+void gebaeude_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	player_t::add_maintenance(get_owner(), tile->get_desc()->get_maintenance(welt), tile->get_desc()->get_finance_waytype());
 
