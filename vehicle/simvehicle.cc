@@ -1613,9 +1613,11 @@ void vehicle_t::calc_image()
 		// Convoy shipping: a carrier vehicle holds no real cargo for the convoys it carries -
 		// they are tracked as convoy handles, not as ware_t - so ask the convoy directly and
 		// show the loaded image while something is aboard.
+		// The deck fills from the front, so ask the convoy whether THIS car is loaded rather
+		// than whether the convoy is carrying anything at all - otherwise a single short
+		// convoy aboard would show every car of a long ferry as full.
 		const goods_desc_t *carried = NULL;
-		if(  cnv != NULL  &&  cnv != (convoi_t *)1  &&  goods_manager_t::is_shipping_goods( desc->get_freight_type() )
-		  &&  cnv->is_carrying_for_goods( desc->get_freight_type() )  ) {
+		if(  cnv != NULL  &&  cnv != (convoi_t *)1  &&  cnv->is_shipping_vehicle_loaded( this )  ) {
 			carried = desc->get_freight_type();
 		}
 		set_image(desc->get_image_id(ribi_t::get_dir(get_image_direction()),carried,is_reversed,is_no_electric));

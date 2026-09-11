@@ -8125,17 +8125,42 @@ void convoi_t::disembark_all_forced()
 }
 
 
-bool convoi_t::is_carrying_for_goods(const goods_desc_t *g) const
+sint64 convoi_t::get_shipping_running_cost(const goods_desc_t *g) const
 {
-	if(  g == NULL  ||  shipped_convois.empty()  ) {
+	if(  g == NULL  ) {
+		return 0;
+	}
+	sint64 cost = 0;
+	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
+		if(  fahr[i]->get_cargo_type() == g  ) {
+			// vehicle_desc_t::get_running_cost() is positive, unlike base_sum_running_costs
+			cost += (sint64)fahr[i]->get_desc()->get_running_cost();
+		}
+	}
+	return cost;
+}
+
+
+bool convoi_t::is_shipping_vehicle_loaded(const vehicle_t *v) const
+{
+	const goods_desc_t *g = v->get_cargo_type();
+	if(  !goods_manager_t::is_shipping_goods( g )  ) {
 		return false;
 	}
-	FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
-		if(  !c.is_bound()  ||  c->get_vehicle_count() == 0  ) {
-			continue;
+	const uint32 load = get_shipping_load_for_goods( g );
+	if(  load == 0  ) {
+		return false;
+	}
+	// The deck fills from the front, so this car is only drawn loaded once every car ahead of
+	// it offering the same shipping space is full. Without this every car of a long ferry
+	// would show its loaded image the moment a single short convoy came aboard.
+	uint32 before = 0;
+	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
+		if(  fahr[i] == v  ) {
+			return load > before;
 		}
-		if(  goods_manager_t::get_shipping_goods( c->front()->get_waytype() ) == g  ) {
-			return true;
+		if(  fahr[i]->get_cargo_type() == g  ) {
+			before += fahr[i]->get_cargo_max();
 		}
 	}
 	return false;
@@ -8145,7 +8170,7 @@ bool convoi_t::is_carrying_for_goods(const goods_desc_t *g) const
 void convoi_t::recalc_shipping_images()
 {
 	// A carrier holds no real cargo for the convoys it carries, so calc_image() has to be
-	// told to look again - see vehicle_t::calc_image(), which asks is_carrying_for_goods().
+	// told to look again - see vehicle_t::calc_image(), which asks is_shipping_vehicle_loaded().
 	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
 		if(  goods_manager_t::is_shipping_goods( fahr[i]->get_cargo_type() )  ) {
 			fahr[i]->mark_image_dirty( fahr[i]->get_image(), 0 );
@@ -8164,15 +8189,6 @@ void convoi_t::book_shipping_toll()
 	if(  pct == 0  ) {
 		return;
 	}
-	// Same shape as the way toll in add_running_cost(): base_sum_running_costs is accumulated
-	// by subtraction and is therefore negative, so negating gives a positive amount to charge.
-	// The base is deliberately the CARRIER's running cost, not the passenger's: a carried
-	// convoy has its engine off, so its own running cost says nothing about what the ride
-	// costs - what the ferry burns to move does.
-	const sint64 toll = -(base_sum_running_costs * pct) / 100l;
-	if(  toll == 0  ) {
-		return;
-	}
 	const waytype_t carrier_wt = get_schedule()->get_waytype();
 	FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
 		// no toll between a player's own convoys, exactly as a player pays no toll on their
@@ -8180,11 +8196,30 @@ void convoi_t::book_shipping_toll()
 		if(  !c.is_bound()  ||  c->get_owner() == get_owner()  ||  c->get_schedule() == NULL  ) {
 			continue;
 		}
-		get_owner()->book_toll_received( toll, carrier_wt );
-		c->get_owner()->book_toll_paid( -toll, c->get_schedule()->get_waytype() );
+		// The base is the running cost of just the vehicles that provide the space this convoy
+		// rides in - NOT base_sum_running_costs, which is the whole convoy including the hold,
+		// the engines and everything else. A ship that is mostly cargo hold with one small car
+		// deck must charge for the car deck, and a carrier with both a road deck and a rail
+		// deck charges each waytype from its own deck.
+		// The carrier's cost is the right base rather than the passenger's, because a carried
+		// convoy has its engine off: what the deck costs to move is what the ride costs.
+		const goods_desc_t *g = goods_manager_t::get_shipping_goods( c->front()->get_waytype() );
+		const sint64 base = get_shipping_running_cost( g );
+		if(  base <= 0  ) {
+			continue;
+		}
+		// get_running_cost() is positive, unlike base_sum_running_costs which is accumulated
+		// by subtraction - so no negation here, unlike the way toll in add_running_cost()
+		const sint64 toll = (base * pct) / 100l;
+		const sint64 toll_convoy = toll * (sint64)c->get_length() / 16l;
+		if(  toll_convoy==0  ) {
+			continue;
+		}
+		get_owner()->book_toll_received( toll_convoy, carrier_wt );
+		c->get_owner()->book_toll_paid( -toll_convoy, c->get_schedule()->get_waytype() );
 		// booked against the carried convoy, so the cost shows up on the convoy that incurred
 		// it - and only against the chain head, which is what shipped_convois holds
-		c->book( -toll, CONVOI_WAYTOLL );
-		c->book( -toll, CONVOI_PROFIT );
+		c->book( -toll_convoy, CONVOI_WAYTOLL );
+		c->book( -toll_convoy, CONVOI_PROFIT );
 	}
 }
