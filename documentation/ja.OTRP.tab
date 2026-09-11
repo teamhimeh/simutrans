@@ -428,6 +428,44 @@ Reverse coupling order
 編成連結順序を反転します(この編成を先頭の編成にして運航継続します)
 Reverse coupling
 編成連結順序反転
+#------航送------
+%s has entered a depot.
+%sは車庫に入庫しました
+%s was lost: no depot could be found for it.
+%sは入庫先が見つからなかったため除去されました
+%s was lost with its carrier: no depot could be found for it.
+%sは入庫先が見つからなかったため除去されました
+%s was put ashore at %s: it can no longer reach its transfer stop and there is no depot for it.
+%sは到達可能な駅や車庫が見つからなかったため%sに下船しました。
+%s was sent to a depot: %s can no longer reach its transfer stop.
+%sは車庫に転送されました: %sは駅に到達できませんでした
+Aboard:
+航送中
+Convoys aboard:
+航送している編成一覧:
+Put ashore at:
+航送終了予定駅:
+Show carrier
+この編成を航送している編成を表示
+Open the window of the convoy that is carrying this one.
+同じ編成のウィンドウを開こうとしています
+Transfer stop no longer exists
+航送終了予定駅がみつかりません!
+Wait to be shipped
+航送開始待ち
+Wait here until a carrier convoy takes this convoy to its next stop. The convoy will not depart on its own.
+航送開始まで待機します。この編成は航送されるまで発車しません。
+aboard
+航送中
+#------無閉塞運行------
+Without Reservation
+無閉塞運行
+Drive without reservation until next signal
+この駅から次の信号まで無閉塞で運行します
+apply driving with reservation setting for all stops
+閉塞使用/無閉塞運行を全駅(中継点)に適用します
+apply for all
+全駅に適用
 #------乗降時間制御------
 Full Get on/off Time
 乗降時間制御(G)
