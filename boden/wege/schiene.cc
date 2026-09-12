@@ -27,8 +27,10 @@ schiene_t::schiene_t() : weg_t()
 {
 	reserved      = convoihandle_t();
 	reserved_dir  = ribi_t::none;
+	reserved_travel_dir  = ribi_t::none;
 	reserved2     = convoihandle_t();
 	reserved2_dir = ribi_t::none;
+	reserved2_travel_dir = ribi_t::none;
 
 	if (schiene_t::default_schiene) {
 		set_desc(schiene_t::default_schiene);
@@ -43,8 +45,10 @@ schiene_t::schiene_t(loadsave_t *file) : weg_t()
 {
 	reserved      = convoihandle_t();
 	reserved_dir  = ribi_t::none;
+	reserved_travel_dir  = ribi_t::none;
 	reserved2     = convoihandle_t();
 	reserved2_dir = ribi_t::none;
+	reserved2_travel_dir = ribi_t::none;
 	rdwr(file);
 }
 
@@ -94,8 +98,12 @@ void schiene_t::info(cbuffer_t & buf) const
 /**
  * true, if this rail can be reserved
  */
-bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir)
+bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir, ribi_t::ribi travel_dir)
 {
+	// only a plain heading is usable for the vehicle offset test
+	if(  !ribi_t::is_single(travel_dir)  ) {
+		travel_dir = ribi_t::none;
+	}
 	if(!cnv.is_bound()) {
 		return false;
 	}
@@ -109,6 +117,9 @@ bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir)
 			if(reserved_dir == ribi_t::none  &&  dir != ribi_t::none) {
 				reserved_dir = dir;
 			}
+			if(reserved_travel_dir == ribi_t::none) {
+				reserved_travel_dir = travel_dir;
+			}
 			if(schiene_t::show_reservations) {
 				set_flag( obj_t::dirty );
 			}
@@ -118,6 +129,9 @@ bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir)
 			// Same: restore direction only when not yet set.
 			if(reserved2_dir == ribi_t::none  &&  dir != ribi_t::none) {
 				reserved2_dir = dir;
+			}
+			if(reserved2_travel_dir == ribi_t::none) {
+				reserved2_travel_dir = travel_dir;
 			}
 			if(schiene_t::show_reservations) {
 				set_flag( obj_t::dirty );
@@ -130,13 +144,16 @@ bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir)
 	if(!reserved.is_bound()&&reserved2.is_bound()) {
 		reserved = reserved2;
 		reserved_dir = reserved2_dir;
+		reserved_travel_dir = reserved2_travel_dir;
 		reserved2 = convoihandle_t();
 		reserved2_dir=ribi_t::none;
+		reserved2_travel_dir=ribi_t::none;
 	}
 	if(!reserved.is_bound()) {
 		// fresh reservation
 		reserved     = cnv;
 		reserved_dir = dir;
+		reserved_travel_dir = travel_dir;
 		/* for threeway and fourway switches we may need to alter graphic, if
 		 * direction is a diagonal (i.e. on the switching part)
 		 * and there are switching graphics
@@ -154,10 +171,12 @@ bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir)
 		}
 		return true;
 	}
-	// tile is reserved by a different convoy — try co-reservation for non-crossing bends
-	if(!reserved2.is_bound()  &&  get_ribi_unmasked()==ribi_t::all  &&  can_co_reserve_dirs(reserved_dir, dir)) {
+	// tile is reserved by a different convoy — try co-reservation for non-crossing bends,
+	// or for two convoys passing each other on a way with a vehicle offset
+	if(!reserved2.is_bound()  &&  ((get_ribi_unmasked()==ribi_t::all  &&  can_co_reserve_dirs(reserved_dir, dir))  ||  can_co_reserve_offset(travel_dir))) {
 		reserved2     = cnv;
 		reserved2_dir = dir;
+		reserved2_travel_dir = travel_dir;
 		if(schiene_t::show_reservations) {
 			set_flag( obj_t::dirty );
 		}
@@ -194,8 +213,10 @@ bool schiene_t::unreserve(convoihandle_t c)
 			// promote co-reservation to primary slot (if any)
 			reserved      = reserved2;
 			reserved_dir  = reserved2_dir;
+			reserved_travel_dir  = reserved2_travel_dir;
 			reserved2     = convoihandle_t();
 			reserved2_dir = ribi_t::none;
+			reserved2_travel_dir = ribi_t::none;
 			if(schiene_t::show_reservations) {
 				set_flag( obj_t::dirty );
 			}
@@ -204,6 +225,7 @@ bool schiene_t::unreserve(convoihandle_t c)
 		if(reserved2.is_bound()  &&  reserved2 == c) {
 			reserved2     = convoihandle_t();
 			reserved2_dir = ribi_t::none;
+			reserved2_travel_dir = ribi_t::none;
 			if(schiene_t::show_reservations) {
 				set_flag( obj_t::dirty );
 			}
