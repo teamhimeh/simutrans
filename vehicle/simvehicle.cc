@@ -5342,9 +5342,23 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			if(next_crossing_index==route_t::INVALID_INDEX  &&  gr->get_crossing()) {
 				next_crossing_index = i;
 			}
-			for(uint8 i_stop=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i_stop%cnv->get_schedule()->get_count()))&&i_stop!=cnv->get_schedule()->get_current_stop()-1; i_stop++) {
-				i_stop %= cnv->get_schedule()->get_count();
-				if(  cnv->get_schedule()->at(i_stop).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i_stop).pos && !sch1->has_signal()  ) {
+			// scan the schedule entries ahead of us, as long as they are waypoints, and stop
+			// the reservation when this tile is a waypoint that must be driven without one.
+			// The scan must be bounded by the number of entries: the old formulation
+			// (i_stop != get_current_stop()-1) never terminated when every entry is a
+			// waypoint - get_current_stop() is uint8, so current_stop-1 is -1 for
+			// current_stop==0, and for current_stop==1 the value 0 was never seen because
+			// i_stop is taken modulo the count *inside* the body and then incremented.
+			const schedule_t* const reserve_schedule = cnv->get_schedule();
+			const uint8 reserve_entry_count = reserve_schedule ? reserve_schedule->get_count() : 0;
+			for(  uint8 i_offset=0;  i_offset<reserve_entry_count;  i_offset++  ) {
+				const uint8 i_stop = (uint8)((reserve_schedule->get_current_stop()+i_offset) % reserve_entry_count);
+				const schedule_entry_t& reserve_entry = reserve_schedule->at(i_stop);
+				if(  !cnv->is_waypoint(reserve_entry)  ) {
+					// a genuine stop point ends the run of waypoints
+					break;
+				}
+				if(  reserve_entry.is_drive_without_reservation()  &&  pos == reserve_entry.pos  &&  !sch1->has_signal()  ) {
 					dbg->message("rail_vehicle_t::block_reserver()","reservation break because we reach waypoint without reservation, %s, %i",pos.get_str(),i);
 					next_signal_index = i;
 					count --;
