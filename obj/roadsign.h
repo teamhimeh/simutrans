@@ -268,7 +268,7 @@ public:
 	// subtracts cost
 	void cleanup(player_t *player) OVERRIDE;
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// static routines from here
 private:

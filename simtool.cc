@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include "simversion.h"
 #include <string.h>
 #include <math.h>
 
@@ -1947,7 +1948,7 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 			if(  lt  ) {
 				// remove maintenance for existing powerline
 				player_t::add_maintenance(lt->get_owner(), -lt->get_desc()->get_maintenance(), powerline_wt);
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 			}
 
 			if(  gr1->ist_karten_boden()  ) {
@@ -2254,12 +2255,12 @@ const char *tool_transformer_t::work( player_t *player, koord3d pos )
 	if(fab && fab->get_desc()->is_electricity_producer()) {
 		pumpe_t *p = new pumpe_t(gr->get_pos(), player);
 		gr->obj_add( p );
-		p->finish_rd();
+		p->finish_rd( OTRP_VERSION_MAJOR );
 	}
 	else {
 		senke_t *s = new senke_t(gr->get_pos(), player);
 		gr->obj_add(s);
-		s->finish_rd();
+		s->finish_rd( OTRP_VERSION_MAJOR );
 	}
 
 	return NULL; // ok
@@ -6761,7 +6762,7 @@ const char *tool_build_roadsign_t::place_sign_intern( player_t *player, grund_t*
 					rs = new roadsign_t(player, gr->get_pos(), dir, desc);
 built_sign:
 					gr->obj_add(rs);
-					rs->finish_rd(); // to make them visible
+					rs->finish_rd( OTRP_VERSION_MAJOR ); // to make them visible
 					weg->count_sign();
 					player_t::book_construction_costs(player, -desc->get_price(), gr->get_pos().get_2d(), weg->get_waytype());
 				}
@@ -10882,7 +10883,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		case 'c':
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<roadsign_t>()  ) {
-				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+				if(  rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
 					rs->set_end_of_choose(inst);
 					end_of_choose_info_t* signal_info_win = (end_of_choose_info_t*)win_get_magic((ptrdiff_t)rs);
 					if(  signal_info_win  ) {
@@ -10895,7 +10896,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		case 'g':
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<roadsign_t>()  ) {
-				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+				if(  rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
 					rs->set_end_of_guide(inst);
 					end_of_choose_info_t* signal_info_win = (end_of_choose_info_t*)win_get_magic((ptrdiff_t)rs);
 					if(  signal_info_win  ) {

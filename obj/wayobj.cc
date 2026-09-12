@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include "../simversion.h"
 
 #include "../boden/grund.h"
 #include "../simworld.h"
@@ -188,7 +189,7 @@ const char *wayobj_t::is_deletable(const player_t *player)
 }
 
 
-void wayobj_t::finish_rd()
+void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	// (re)set dir
 	if(dir==dir_unknown) {
@@ -406,7 +407,7 @@ void wayobj_t::extend_wayobj(koord3d pos, player_t *owner, ribi_t::ribi dir, con
 		// nothing found => make a new one
 		wayobj_t *wo = new wayobj_t(pos,owner,dir,desc);
 		gr->obj_add(wo);
-		wo->finish_rd();
+		wo->finish_rd( OTRP_VERSION_MAJOR );
 		wo->calc_image();
 		wo->mark_image_dirty( wo->get_front_image_test(), 0 );
 		wo->set_flag(obj_t::dirty);

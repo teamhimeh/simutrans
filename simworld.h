@@ -1493,6 +1493,10 @@ public:
 	 */
 	uint32 load_version;
 
+	/// OTRP version of the savegame being loaded, so that finish_rd() of map objects can make
+	/// version dependent corrections. OTRP_VERSION_MAJOR while no savegame is being read.
+	uint8 load_otrp_version;
+
 	/**
 	 * Checks if the planquadrat (tile) at coordinate (x,y)
 	 * can be lowered at the specified height.

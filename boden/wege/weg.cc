@@ -1176,7 +1176,7 @@ void weg_t::new_month()
 
 
 // correct speed and maintenance
-void weg_t::finish_rd()
+void weg_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	player_t *player = get_owner();
 	if(  player  &&  desc  ) {

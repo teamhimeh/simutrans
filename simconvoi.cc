@@ -213,6 +213,8 @@ void convoi_t::init(player_t *player)
 	max_balance_speed_convoi = 0;
 	unloading_done = false;
 	invalid_convoy = false;
+
+	drive_without_reservation = false;
 }
 
 
@@ -362,7 +364,7 @@ void convoi_t::reserve_route()
 		// reservation is controlled by next_reservation_index.
 		// Start one step back so the rear car's current tile is also reserved with
 		// the correct ribi direction (individual loading only uses ribi_t::none).
-		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
+		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < drive_without_reservation?front()->get_route_index():next_reservation_index  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
@@ -1516,7 +1518,7 @@ bool convoi_t::drive_to()
 					reverse_convoy_coupling();
 					reversing_coupling_needed=reverse_here;
 					get_most_parent_convoi()->reversing_coupling_needed=reverse_here;
-					get_most_parent_convoi()->state=ROUTING_1;
+					get_most_parent_convoi()->state==ROUTING_1;
 					get_most_parent_convoi()->alte_richtung=get_most_parent_convoi()->front()->get_direction();
 					get_most_parent_convoi()->check_electrification();
 					return false;
@@ -1630,6 +1632,7 @@ bool convoi_t::drive_to()
  */
 void convoi_t::suche_neue_route()
 {
+	drive_without_reservation=false;
 	state = ROUTING_1;
 	wait_lock = 0;
 }
@@ -2144,6 +2147,8 @@ void convoi_t::start()
 		no_load = false;
 		unload_all = false;
 
+		drive_without_reservation = false;
+
 		state = ROUTING_1;
 
 		// recalc weight and image
@@ -2203,6 +2208,13 @@ void convoi_t::ziel_erreicht()
 	c = self;
 	while(  c.is_bound()  ) {
 		c->reset_departure_time();
+		c = c->get_coupling_convoi();
+	}
+
+	// reset driving without reservation
+	c = self;
+	while(  c.is_bound()  ) {
+		c->set_drive_without_reservation(c->get_schedule()->get_current_entry().is_drive_without_reservation());
 		c = c->get_coupling_convoi();
 	}
 
@@ -3241,19 +3253,35 @@ void convoi_t::clear_reserved_tile_if_not_matching_route()
 		reserved_tiles[0].x, reserved_tiles[0].y, (int)reserved_tiles[0].z,
 		route.at(0).x, route.at(0).y, (int)route.at(0).z,
 		reserved_tiles.get_count(), route.get_count());
-	// reserved_tiles[i] corresponds to route[i+1]:
-	// route[0] (the departure stop) is never added to reserved_tiles by block_reserver
-	// because it starts from next_block+1 and target_rt from index 1, both skipping route[0].
-	// So reserved_tiles must cover route[1..end], i.e. at least route.get_count()-1 entries.
-	if( get_reserved_tiles().get_count() < route.get_count() - 1 ) {
+	// reserved_tiles may still begin with tiles of the *previous* route: leave_tile() removes only
+	// the tiles the convoy has already left, so the tiles the standing convoy occupies - and the
+	// departure tile route[0] itself - are still held. Those tiles are re-added to the route later,
+	// by insert_route_convoy_on(). So first find where the new route starts inside reserved_tiles
+	// instead of assuming that reserved_tiles[0] is route[1]; otherwise a reservation made by a
+	// longblock signal while the train was standing at the stop is always thrown away here.
+	uint32 offset = 0;
+	while(  offset < reserved_tiles.get_count()  &&  reserved_tiles[offset] != route.at(0)  ) {
+		offset++;
+	}
+	if(  offset < reserved_tiles.get_count()  ) {
+		// reserved_tiles[offset] is the departure tile => the next entry corresponds to route[1]
+		offset++;
+	}
+	else {
+		// the departure tile is not reserved (reservation starts beyond it) => reserved_tiles[0] is route[1]
+		offset = 0;
+	}
+	// reserved_tiles[offset+i] corresponds to route[i+1]:
+	// reserved_tiles must cover route[1..end], i.e. at least route.get_count()-1 entries after offset.
+	if( get_reserved_tiles().get_count() - offset < route.get_count() - 1u ) {
 		clear_reserved_tiles();
 		return;
 	}
-	// check reserved_tiles[i] == route[i+1]
-	for( uint16 i=0; i<min(get_route()->get_count()-1, get_reserved_tiles().get_count()); i++ ) {
-		if( route.at(i+1) != get_reserved_tiles()[i]  ) {
+	// check reserved_tiles[offset+i] == route[i+1]
+	for( uint32 i=0; i<min(get_route()->get_count()-1u, get_reserved_tiles().get_count()-offset); i++ ) {
+		if( route.at(i+1) != get_reserved_tiles()[offset+i]  ) {
 			dbg->warning("convoi_t::clear_reserved_tile_if_not_matching_route()","invalid reserved_tile found: %i,%i,%i vs %i,%i,%i",
-				reserved_tiles[i].x, reserved_tiles[i].y, (int)reserved_tiles[i].z,
+				reserved_tiles[offset+i].x, reserved_tiles[offset+i].y, (int)reserved_tiles[offset+i].z,
 				route.at(i+1).x, route.at(i+1).y, (int)route.at(i+1).z);
 			clear_reserved_tiles();
 			return;
@@ -3528,7 +3556,7 @@ void convoi_t::rdwr(loadsave_t *file)
 				}
 				// add to crossing
 				if(crossing_t *cr = gr->get_crossing()) {
-					cr->finish_rd();	// add crossing logic if needed (as finish_rd() was not yet processed
+					cr->finish_rd( file->get_OTRP_version() );	// add crossing logic if needed (as finish_rd() was not yet processed
 					cr->add_to_crossing(v);
 				}
 				if(  gr->get_top()>253  ) {
@@ -3946,6 +3974,11 @@ void convoi_t::rdwr(loadsave_t *file)
 	} else {
 		waiting_for_departure_make_another_convoy_depart = false;
 		reversing_lane_hold = false;
+	}
+	if(  file->get_OTRP_version()>=61  ) {
+		file->rdwr_bool(drive_without_reservation);
+	} else {
+		drive_without_reservation=false;
 	}
 
 	if(  file->get_OTRP_version()>=61  ) {
@@ -7505,7 +7538,7 @@ bool convoi_t::can_deliver_shipped_to(halthandle_t dest) const
 			return true;
 		}
 
-		if(  h == current_halt  ) {
+		if(  !e.is_no_load()  &&  h == current_halt  ) {
 			// S -> ... -> S -> G: we are back where the convoy would board before ever having
 			// reached its destination, so this trip does not connect. Whatever happens on the
 			// next lap is the next lap's business - riding round to it would mean sitting
@@ -7712,13 +7745,31 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	// it is thrown away and recomputed by drive_to() on departure anyway.
 	koord3d facing = target->get_pos();
 	{
+		// Point it the way it will drive off, i.e. at the neighbour closest to its next scheduled
+		// stop. Simply taking the first connected neighbour leaves the convoy facing at random,
+		// which is not only wrong to look at: a convoy waiting to be coupled with is matched on the
+		// direction it faces, so a randomly turned one is either not found at all or found as a
+		// head-on partner when a following convoy should have come up behind it.
+		koord next_stop = koord::invalid;
+		if(  c->get_schedule() != NULL  &&  !c->get_schedule()->empty()  ) {
+			next_stop = c->get_schedule()->get_next_entry().pos.get_2d();
+		}
 		const ribi_t::ribi way_ribi = target->get_weg_ribi( wt );
+		uint32 best_dist = 0xFFFFFFFFu;
 		for(  uint8 r = 0;  r < 4;  r++  ) {
 			const ribi_t::ribi d = ribi_t::nesw[r];
 			grund_t *to = NULL;
 			if(  (way_ribi & d)  &&  target->get_neighbour( to, wt, d )  &&  to  ) {
-				facing = to->get_pos();
-				break;
+				if(  next_stop == koord::invalid  ) {
+					// no next stop to aim at: any connected neighbour will do
+					facing = to->get_pos();
+					break;
+				}
+				const uint32 dist = (uint32)koord_distance( to->get_pos().get_2d(), next_stop );
+				if(  dist < best_dist  ) {
+					best_dist = dist;
+					facing = to->get_pos();
+				}
 			}
 		}
 	}
@@ -8084,17 +8135,42 @@ void convoi_t::disembark_all_forced()
 }
 
 
-bool convoi_t::is_carrying_for_goods(const goods_desc_t *g) const
+sint64 convoi_t::get_shipping_running_cost(const goods_desc_t *g) const
 {
-	if(  g == NULL  ||  shipped_convois.empty()  ) {
+	if(  g == NULL  ) {
+		return 0;
+	}
+	sint64 cost = 0;
+	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
+		if(  fahr[i]->get_cargo_type() == g  ) {
+			// vehicle_desc_t::get_running_cost() is positive, unlike base_sum_running_costs
+			cost += (sint64)fahr[i]->get_desc()->get_running_cost();
+		}
+	}
+	return cost;
+}
+
+
+bool convoi_t::is_shipping_vehicle_loaded(const vehicle_t *v) const
+{
+	const goods_desc_t *g = v->get_cargo_type();
+	if(  !goods_manager_t::is_shipping_goods( g )  ) {
 		return false;
 	}
-	FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
-		if(  !c.is_bound()  ||  c->get_vehicle_count() == 0  ) {
-			continue;
+	const uint32 load = get_shipping_load_for_goods( g );
+	if(  load == 0  ) {
+		return false;
+	}
+	// The deck fills from the front, so this car is only drawn loaded once every car ahead of
+	// it offering the same shipping space is full. Without this every car of a long ferry
+	// would show its loaded image the moment a single short convoy came aboard.
+	uint32 before = 0;
+	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
+		if(  fahr[i] == v  ) {
+			return load > before;
 		}
-		if(  goods_manager_t::get_shipping_goods( c->front()->get_waytype() ) == g  ) {
-			return true;
+		if(  fahr[i]->get_cargo_type() == g  ) {
+			before += fahr[i]->get_cargo_max();
 		}
 	}
 	return false;
@@ -8104,7 +8180,7 @@ bool convoi_t::is_carrying_for_goods(const goods_desc_t *g) const
 void convoi_t::recalc_shipping_images()
 {
 	// A carrier holds no real cargo for the convoys it carries, so calc_image() has to be
-	// told to look again - see vehicle_t::calc_image(), which asks is_carrying_for_goods().
+	// told to look again - see vehicle_t::calc_image(), which asks is_shipping_vehicle_loaded().
 	for(  uint8 i = 0;  i < anz_vehikel;  i++  ) {
 		if(  goods_manager_t::is_shipping_goods( fahr[i]->get_cargo_type() )  ) {
 			fahr[i]->mark_image_dirty( fahr[i]->get_image(), 0 );
@@ -8123,15 +8199,6 @@ void convoi_t::book_shipping_toll()
 	if(  pct == 0  ) {
 		return;
 	}
-	// Same shape as the way toll in add_running_cost(): base_sum_running_costs is accumulated
-	// by subtraction and is therefore negative, so negating gives a positive amount to charge.
-	// The base is deliberately the CARRIER's running cost, not the passenger's: a carried
-	// convoy has its engine off, so its own running cost says nothing about what the ride
-	// costs - what the ferry burns to move does.
-	const sint64 toll = -(base_sum_running_costs * pct) / 100l;
-	if(  toll == 0  ) {
-		return;
-	}
 	const waytype_t carrier_wt = get_schedule()->get_waytype();
 	FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
 		// no toll between a player's own convoys, exactly as a player pays no toll on their
@@ -8139,11 +8206,30 @@ void convoi_t::book_shipping_toll()
 		if(  !c.is_bound()  ||  c->get_owner() == get_owner()  ||  c->get_schedule() == NULL  ) {
 			continue;
 		}
-		get_owner()->book_toll_received( toll, carrier_wt );
-		c->get_owner()->book_toll_paid( -toll, c->get_schedule()->get_waytype() );
+		// The base is the running cost of just the vehicles that provide the space this convoy
+		// rides in - NOT base_sum_running_costs, which is the whole convoy including the hold,
+		// the engines and everything else. A ship that is mostly cargo hold with one small car
+		// deck must charge for the car deck, and a carrier with both a road deck and a rail
+		// deck charges each waytype from its own deck.
+		// The carrier's cost is the right base rather than the passenger's, because a carried
+		// convoy has its engine off: what the deck costs to move is what the ride costs.
+		const goods_desc_t *g = goods_manager_t::get_shipping_goods( c->front()->get_waytype() );
+		const sint64 base = get_shipping_running_cost( g );
+		if(  base <= 0  ) {
+			continue;
+		}
+		// get_running_cost() is positive, unlike base_sum_running_costs which is accumulated
+		// by subtraction - so no negation here, unlike the way toll in add_running_cost()
+		const sint64 toll = (base * pct) / 100l;
+		const sint64 toll_convoy = toll * (sint64)c->get_length() / 16l;
+		if(  toll_convoy==0  ) {
+			continue;
+		}
+		get_owner()->book_toll_received( toll_convoy, carrier_wt );
+		c->get_owner()->book_toll_paid( -toll_convoy, c->get_schedule()->get_waytype() );
 		// booked against the carried convoy, so the cost shows up on the convoy that incurred
 		// it - and only against the chain head, which is what shipped_convois holds
-		c->book( -toll, CONVOI_WAYTOLL );
-		c->book( -toll, CONVOI_PROFIT );
+		c->book( -toll_convoy, CONVOI_WAYTOLL );
+		c->book( -toll_convoy, CONVOI_PROFIT );
 	}
 }

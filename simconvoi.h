@@ -473,6 +473,13 @@ private:
 	bool invalid_convoy;
 
 	/**
+	 *  driving without reservation
+	 *  for train (track, monorail_track,...)
+	 *  if reach the signal or stop, this flag reset
+	 */
+	bool drive_without_reservation;
+
+	/**
 	* Initialize all variables with default values.
 	* Each constructor must call this method first!
 	*/
@@ -999,6 +1006,12 @@ public:
 	void set_invalid_convoy(bool y) { invalid_convoy = y; }
 
 	/**
+	 *  driving without reservation: for track
+	 */
+	bool is_drive_without_reservation() const {return drive_without_reservation;}
+	void set_drive_without_reservation(bool y=false) { drive_without_reservation=y; }
+
+	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
 	* vehicles.
 	*/
@@ -1311,11 +1324,15 @@ public:
 	/// true if this convoy is a carrier that could in principle take `c` aboard right now
 	bool can_ship(convoihandle_t c) const;
 
+	/// summed running cost of just the vehicles offering space for this shipping good
+	sint64 get_shipping_running_cost(const goods_desc_t *g) const;
+
 	/**
-	 * true if at least one convoy aboard occupies space of the shipping good `g`.
-	 * Used to give carrier vehicles their loaded image without inventing fake cargo.
+	 * true if `v` - a vehicle of this convoy offering shipping space - should be drawn with
+	 * its loaded image. The deck fills from the front, so a car only looks loaded once every
+	 * car ahead of it carrying the same shipping good is full.
 	 */
-	bool is_carrying_for_goods(const goods_desc_t *g) const;
+	bool is_shipping_vehicle_loaded(const vehicle_t *v) const;
 
 	/// mark the carrier's vehicles for an image update after boarding/disembarking
 	void recalc_shipping_images();

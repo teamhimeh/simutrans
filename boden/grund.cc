@@ -4,6 +4,7 @@
  */
 
 #include <string.h>
+#include "../simversion.h"
 
 #include "../simcolor.h"
 #include "../simconst.h"
@@ -459,7 +460,7 @@ void grund_t::rdwr(loadsave_t *file)
 		const bool disjoint_diagonal = ribi_t::are_disjoint_bends(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
 		if(w1->needs_crossing(w2->get_desc())  &&  !disjoint_diagonal){
 			if (crossing_t* cr = get_crossing()) {
-				cr->finish_rd();
+				cr->finish_rd( file->get_OTRP_version() );
 			}
 			else {
 				const crossing_desc_t* cr_desc = crossing_logic_t::get_crossing(w1->get_waytype(), w2->get_waytype(), w1->get_max_speed(), w2->get_max_speed(), 0);
@@ -472,7 +473,7 @@ void grund_t::rdwr(loadsave_t *file)
 				}
 				cr = new crossing_t(w1->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(get_weg(cr_desc->get_waytype(1))->get_ribi_unmasked()));
 				objlist.add(cr);
-				cr->finish_rd(); // or else not multithred safe!
+				cr->finish_rd( file->get_OTRP_version() ); // or else not multithred safe!
 			}
 		}
 		else {
@@ -2079,7 +2080,7 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 				crossing_t *cr = new crossing_t(obj_bei(0)->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(get_weg(cr_desc->get_waytype(1))->get_ribi_unmasked()) );
 				objlist.add( cr );
 				crossing_logic_t::add(cr, crossing_logic_t::CROSSING_INVALID);
-				cr->finish_rd();
+				cr->finish_rd( OTRP_VERSION_MAJOR );
 			}
 		}
 
