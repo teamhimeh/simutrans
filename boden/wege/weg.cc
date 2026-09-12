@@ -326,7 +326,7 @@ void weg_t::info(cbuffer_t & buf) const
 		const strasse_t* str = (const strasse_t*) this;
 		assert(str);
 		// Display overtaking_info
-		switch (str->get_overtaking_mode()) {
+		switch (str->get_overtaking_mode_raw()) {
 			case halt_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("halt mode"));
 				break;
@@ -345,8 +345,14 @@ void weg_t::info(cbuffer_t & buf) const
 			case inverted_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("inverted"));
 				break;
+			case only_one_car_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("only one car"));
+				break;
+			case passing_lane_stop_only_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("passing lane stop only"));
+				break;
 			default:
-				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode());
+				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode_raw());
 				break;
 		}
 

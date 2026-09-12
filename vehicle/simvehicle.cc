@@ -2750,6 +2750,24 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 		}
 
+		// only_one_car_mode: the area of road behind this tile takes a single convoy at a time. The
+		// test is made when crossing the border into such an area - once inside, this convoy is the
+		// one holding it. Convoys check and hop one after the other within their own step, so two of
+		// them cannot both see an empty area and drive in.
+		if(  str->get_overtaking_mode_raw()==only_one_car_mode  ) {
+			const grund_t* gr_now = welt->lookup(get_pos());
+			const strasse_t* str_now = gr_now ? (const strasse_t*)gr_now->get_weg(road_wt) : NULL;
+			if(  !str_now  ||  str_now->get_overtaking_mode_raw()!=only_one_car_mode  ) {
+				if(  get_blocking_convoi_in_single_car_area(gr)  ) {
+					// somebody else is in there. Wait at the border, like at a block signal - this is
+					// a normal wait, not a traffic jam, so no stuck message.
+					restart_speed = 0;
+					cnv->reset_waiting();
+					return false;
+				}
+			}
+		}
+
 		// first: check roadsigns
 		const roadsign_t *rs = NULL;
 		if(  str->has_sign()  ) {
@@ -3240,6 +3258,21 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 			else {
 				// lane change is prohibited.
+				// The one exception is a passing-lane-stop-only road: a convoy whose route ends here
+				// may pull onto the passing lane to come to a stand beside the convoy standing in the
+				// traffic lane, so that both fit into the same stop.
+				if(  str->get_overtaking_mode_raw()==passing_lane_stop_only_mode  &&  !cnv->is_overtaking()
+				  &&  !cnv->get_schedule()->get_current_entry().is_no_overtake()  &&  test_index==route_index+1u  ) {
+					if(  road_vehicle_t const* const car = obj_cast<road_vehicle_t>(obj)  ) {
+						convoi_t* const ocnv = car->get_convoi();
+						const sint32 other_speed = ocnv->get_state()==convoi_t::LOADING ? 0 : ocnv->get_akt_speed();
+						if(  other_speed==0  &&  cnv->can_overtake( ocnv, 0, ocnv->get_length_in_steps()+ocnv->get_vehikel(0)->get_steps() )  ) {
+							// this vehicle changes lane. we have to unreserve tiles.
+							unreserve_all_tiles();
+							return true;
+						}
+					}
+				}
 				if(  obj->is_stuck()  ) {
 					// end of traffic jam, but no stuck message, because previous vehicle is stuck too
 					restart_speed = 0;
@@ -3267,7 +3300,10 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		}
 		// If this vehicle is on passing lane and the next tile prohibites overtaking, this vehicle must wait until traffic lane become safe.
 		// When condition changes, overtaking should be quitted once.
-		if(  (cnv->is_overtaking()  &&  str->get_overtaking_mode()==prohibited_mode)  ||  (cnv->is_overtaking()  &&  str->get_overtaking_mode()>oneway_mode  &&  str->get_overtaking_mode()<inverted_mode  &&  static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode()<=oneway_mode)  ) {
+		// A convoy holding the passing lane of a passing-lane-stop-only road to stop beside another
+		// one is exempt: the traffic lane it would be sent back to is precisely the one occupied by
+		// the convoy it is pulling up beside.
+		if(  !holds_passing_lane_to_stop(str)  &&  ((cnv->is_overtaking()  &&  str->get_overtaking_mode()==prohibited_mode)  ||  (cnv->is_overtaking()  &&  str->get_overtaking_mode()>oneway_mode  &&  str->get_overtaking_mode()<inverted_mode  &&  static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode()<=oneway_mode))  ) {
 			if(  vehicle_base_t* v = other_lane_blocked(false, offset)  ) {
 				if(  v->get_waytype() == road_wt  ) {
 					restart_speed = 0;
@@ -3415,6 +3451,89 @@ bool road_vehicle_t::is_coupling_partner(const vehicle_base_t* v) const
 	road_vehicle_t const* const at = obj_cast<road_vehicle_t>(v);
 	// the partner may already be a chain of coupled convoys. Any of them is our target.
 	return at  &&  is_coupling_chain_member(cc, at->get_convoi());
+}
+
+
+// only_one_car_mode makes a whole connected area of road behave like a single-track section: only
+// one convoy may be inside it at a time. The area is the set of tiles carrying that mode that are
+// reachable from the entry tile along the road, so it does not matter where a convoy entered it.
+convoi_t* road_vehicle_t::get_blocking_convoi_in_single_car_area(const grund_t* entry) const
+{
+	if(  !entry  ||  !cnv  ||  cnv==(convoi_t*)1  ) {
+		return NULL;
+	}
+	// A convoy never blocks itself, and neither do the convoys it is coupled to - they are one
+	// vehicle chain and are driving in as one.
+	const convoihandle_t own_chain = cnv->get_most_parent_convoi();
+
+	// A misconfigured map could mark half the road network with this mode. Stop expanding rather
+	// than walk it every time a convoy reaches the border; an area that large is not a single-car
+	// section any more.
+	const uint32 MAX_AREA_TILES = 256;
+	vector_tpl<koord3d> area(MAX_AREA_TILES);
+	area.append( entry->get_pos() );
+
+	for(  uint32 i=0;  i<area.get_count();  i++  ) {
+		grund_t* gr = welt->lookup( area[i] );
+		if(  !gr  ) {
+			continue;
+		}
+
+		// is somebody in here?
+		for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+			road_vehicle_t* const at = obj_cast<road_vehicle_t>( gr->obj_bei(pos) );
+			if(  !at  ||  !at->get_convoi()  ||  at->get_convoi()==(convoi_t*)1  ) {
+				continue;
+			}
+			convoi_t* const ocnv = at->get_convoi();
+			if(  ocnv->get_most_parent_convoi()==own_chain  ) {
+				continue;
+			}
+			// The convoy we are going to couple with is the one exception: it is waiting in there
+			// for us, so keeping us out would deadlock the coupling.
+			if(  is_coupling_partner(at)  ) {
+				continue;
+			}
+			if(  cnv->can_start_coupling(ocnv)  &&  ocnv->is_loading()  ) {
+				continue;
+			}
+			return ocnv;
+		}
+
+		// expand over the roads leaving this tile
+		for(  uint8 r=0;  r<4  &&  area.get_count()<MAX_AREA_TILES;  r++  ) {
+			grund_t* to = NULL;
+			if(  !gr->get_neighbour( to, road_wt, ribi_t::nesw[r] )  ||  !to  ) {
+				continue;
+			}
+			const strasse_t* str_to = (const strasse_t*)to->get_weg(road_wt);
+			if(  !str_to  ||  str_to->get_overtaking_mode_raw()!=only_one_car_mode  ) {
+				continue;
+			}
+			if(  !area.is_contained( to->get_pos() )  ) {
+				area.append( to->get_pos() );
+			}
+		}
+	}
+	return NULL;
+}
+
+
+bool road_vehicle_t::holds_passing_lane_to_stop(const strasse_t* str) const
+{
+	if(  !str  ||  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  ) {
+		return false;
+	}
+	if(  !cnv  ||  cnv==(convoi_t*)1  ||  !cnv->is_overtaking()  ||  cnv->get_route()->empty()  ) {
+		return false;
+	}
+	// can_overtake() only hands out the passing lane of such a road when the route ends inside the
+	// stretch of tiles the permission covers. route_index counts up by one per tile entered and
+	// tiles_overtaking counts down by one, so their sum is fixed and the test still identifies the
+	// permission while the convoy drives the last tiles up to its stop. A convoy departing again
+	// gets a fresh, longer route and fails it, so it is sent back to the traffic lane as on any
+	// other prohibited road.
+	return (uint32)route_index + (uint32)cnv->get_tiles_overtaking() >= cnv->get_route()->get_count();
 }
 
 
@@ -3813,8 +3932,10 @@ vehicle_base_t* road_vehicle_t::other_lane_blocked(const bool only_search_top, s
 			}
 
 			// this function cannot process vehicles on twoway and related mode road.
+			// passing_lane_stop_only roads are the exception: convoys do stand on their passing lane,
+			// so both lanes have to be inspected there.
 			const strasse_t* str = (strasse_t *)gr->get_weg(road_wt);
-			if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode)  ) {
+			if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode  &&  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode)  ) {
 				continue;
 			}
 
@@ -3968,7 +4089,15 @@ void road_vehicle_t::enter_tile(grund_t* gr)
 			grund_t* prev_gr = welt->lookup(pos_prev);
 			if(  prev_gr  ){
 				strasse_t* prev_str = (strasse_t*)prev_gr->get_weg(road_wt);
-				if(  str  &&  ((prev_str  &&  (prev_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  &&  str->get_overtaking_mode()<inverted_mode))  ||  str->get_overtaking_mode()==prohibited_mode)  ){
+				// On a passing-lane-stop-only road the convoy keeps the passing lane while it is
+				// driving up to the stop it was granted it for, and afterwards until the traffic lane
+				// is actually free again - it went there because somebody occupies that lane, and
+				// merging into them would be worse than staying put. can_enter_tile() makes it wait
+				// for that lane before it drives on, so the merge below always happens on a free one.
+				const bool keep_passing_lane = str  &&  str->get_overtaking_mode_raw()==passing_lane_stop_only_mode
+					&&  cnv->is_overtaking()
+					&&  (holds_passing_lane_to_stop(str)  ||  other_lane_blocked()!=NULL);
+				if(  str  &&  !keep_passing_lane  &&  ((prev_str  &&  (prev_str->get_overtaking_mode()<=oneway_mode  &&  str->get_overtaking_mode()>oneway_mode  &&  str->get_overtaking_mode()<inverted_mode))  ||  str->get_overtaking_mode()==prohibited_mode)  ){
 					cnv->set_tiles_overtaking(0);
 				}
 			}

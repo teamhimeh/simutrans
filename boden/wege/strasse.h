@@ -108,9 +108,16 @@ public:
 	* loading_only_mode = overtaking a loading convoy only
 	* prohibited_mode = overtaking is completely forbidden
 	* inverted_mode = vehicles can go only on passing lane
+	* only_one_car_mode = drives like prohibited_mode, only one convoy at a time in the connected area
+	* passing_lane_stop_only_mode = drives like prohibited_mode, but a convoy may stop on the passing lane
+	*
+	* The last two are restrictions on top of prohibited_mode and are mapped onto it here, so that
+	* the ordering comparisons all over the driving logic keep working. Everything that shows, saves
+	* or builds a mode has to use get_overtaking_mode_raw() instead.
 	* @author teamhimeH
 	*/
-	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; };
+	overtaking_mode_t get_overtaking_mode() const { return effective_overtaking_mode(overtaking_mode); };
+	overtaking_mode_t get_overtaking_mode_raw() const { return overtaking_mode; };
 	void set_overtaking_mode(overtaking_mode_t o) { overtaking_mode = o; };
 
 	void set_ribi_mask_oneway(ribi_t::ribi ribi) { ribi_mask_oneway = (uint8)ribi; }
