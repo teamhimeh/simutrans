@@ -8367,16 +8367,35 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 
 	// [mod : shingoushori] mod : changes this to a private transfer exchange stop 1/3
 	if( is_shift_pressed()  ){
-		// [mod : shingoushori] shortcut the process "// make way public if any suitable" for avoid complexity
 		if( halt.is_bound()  &&  (halt->get_owner() != player) /* !player_t::check_owner(halt->get_owner(), player)*/ ) {
-			// check funds
-			sint64 const workcost = -welt->scale_with_month_length(halt->calc_maintenance() * welt->get_settings().cst_make_public_months);
-			if(  player!=welt->get_public_player()  &&  !player->can_afford(workcost)  ) {
-				return NOTICE_INSUFFICIENT_FUNDS;
+			// check funds; is_ctrl_pressed == true : public undertaking mode : no cost spend
+			if(  !is_ctrl_pressed()  ) {
+				player_t *const prev_owner = halt->get_owner();
+				sint64 workcost = -welt->scale_with_month_length(halt->calc_maintenance() * welt->get_settings().cst_make_public_months);
+				// the ways of the previous owner are taken over as well
+				FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
+					for(  int j=0;  j<2;  j++  ) {
+						if(  weg_t *w=i.grund->get_weg_nr(j)  ) {
+							if(  w->get_owner()==prev_owner  ) {
+								sint64 cost = w->get_desc()->get_maintenance();
+								// tunnel cost overwrites way cost
+								if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
+									cost = t->get_desc()->get_maintenance();
+								}
+								if(  wayobj_t* wo = i.grund->get_wayobj(w->get_waytype())  ) {
+									cost += wo->get_desc()->get_maintenance();
+								}
+								workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
+							}
+						}
+					}
+				}
+				if(  player!=welt->get_public_player()  &&  !player->can_afford(workcost)  ) {
+					return NOTICE_INSUFFICIENT_FUNDS;
+				}
 			}
 
 			// change ownership
-			// is_ctrl_pressed == true : public undertaking mode : no cost spend
 			halt->make_private_and_join(player, is_ctrl_pressed() );
 		}
 		return NULL;
@@ -8409,6 +8428,9 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 						// tunnel cost overwrites way cost
 						if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
 							cost = t->get_desc()->get_maintenance();
+						}
+						if(  wayobj_t* wo = i.grund->get_wayobj(w->get_waytype())  ) {
+							cost += wo->get_desc()->get_maintenance();
 						}
 						workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
 					}
