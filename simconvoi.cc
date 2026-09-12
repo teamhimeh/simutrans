@@ -2773,7 +2773,10 @@ koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const
 	if(  !g  ) {
 		return koord3d::invalid;
 	}
-	const weg_t* w = g->get_weg(inspecting->front()->get_waytype());
+	// direction-aware: back_dir is already the local bit on g pointing toward the rest of the
+	// route/convoy, so it identifies which leg we're on when two same-waytype disjoint
+	// diagonal legs coexist on g
+	const weg_t* w = g->get_weg(inspecting->front()->get_waytype(), back_dir);
 	ribi_t::ribi weg_dir = w ? w->get_ribi_unmasked() : ribi_t::none;
 
 	for(  uint8 i = 0;  i < 4;  i++  ) {
@@ -2870,16 +2873,19 @@ bool convoi_t::insert_route_to_draw_diagonal()
 		return false;
 	}
 	const grund_t* g = welt->lookup(route.front());
-	const weg_t* w = g ? g->get_weg(front()->get_waytype()) : NULL;
+	ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());// direction which already added route
+	// direction-aware: back_dir is already the local bit on g pointing toward the rest of the
+	// route, so it identifies which leg we're on when two same-waytype disjoint diagonal legs
+	// coexist on g
+	const weg_t* w = g ? g->get_weg(front()->get_waytype(), back_dir) : NULL;
 	ribi_t::ribi weg_dir = w ? w->get_ribi_unmasked() : ribi_t::none;// way direction
-	ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());// direction which already added route 
 	if( !ribi_t::is_bend(weg_dir) || (weg_dir & back_dir)==0 ) {
-		//we do not insert because this tile is not bend tile or invalid tile 
+		//we do not insert because this tile is not bend tile or invalid tile
 		return false;
 	}
 	grund_t* gn_back;
 	g->get_neighbour(gn_back, front()->get_waytype(), weg_dir-back_dir);
-	if( gn_back && gn_back->get_weg(front()->get_waytype()) ) {
+	if( gn_back && gn_back->get_weg(front()->get_waytype(), ribi_t::backward(weg_dir-back_dir)) ) {
 		dbg->message("convoi_t::insert_route_to_draw_diagonal()","%s add (%i,%i) before (%i,%i)",get_name(),gn_back->get_pos().x,gn_back->get_pos().y,route.front().x,route.front().y);
 		route.insert(gn_back->get_pos());
 		return true;
@@ -4447,7 +4453,9 @@ uint32 convoi_t::calc_available_halt_length_in_vehicle_steps(koord3d front_vehic
 		// We are not on the valid halt tiles?
 		return 0;
 	}
-	const weg_t* way_first = gr->get_weg(waytype);
+	// direction-aware: resolve to the leg the vehicle is actually facing/standing on, relevant
+	// when two same-waytype disjoint diagonal legs coexist on this tile
+	const weg_t* way_first = gr->get_weg(waytype, front_vehicle_dir);
 	const ribi_t::ribi way_dir_first = way_first->get_ribi_unmasked();
 	halt_length += ribi_t::is_bend(way_dir_first) ? half_diagonal_tile_length : straight_tile_length;
 	// find the direction which the vehicle did not come from.
@@ -4462,7 +4470,9 @@ uint32 convoi_t::calc_available_halt_length_in_vehicle_steps(koord3d front_vehic
 
 	bool is_last_diagonal = false;
 	while(  gr  &&  haltestelle_t::get_stoppable_halt(gr->get_pos(), NULL, waytype)==halt  ) {
-		const weg_t* way = gr->get_weg(waytype);
+		// direction-aware: gr was reached via open_dir, so the leg actually being walked is the
+		// one owning the backward bit (relevant on a same-waytype disjoint-diagonal-leg tile)
+		const weg_t* way = gr->get_weg(waytype, ribi_t::backward(open_dir));
 		if(  !way  ) { break; }
 		if(  use_electric && !way->is_electrified()  ) { break; }
 		const ribi_t::ribi way_dir = way->get_ribi_unmasked();

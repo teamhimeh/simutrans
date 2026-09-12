@@ -338,6 +338,13 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	if (bd->has_two_ways() && !bd->hat_weg(wtyp)) {
 		return false;
 	}
+	// two same-waytype disjoint diagonal legs already coexist here and we're building that
+	// same waytype again (continuing/merging one of them): there is no "other" way to check
+	// a crossing against - both existing slots are already our own waytype, and no
+	// crossing_desc is ever defined for a waytype crossing itself.
+	if (bd->has_two_ways() && bd->get_weg_nr(0)->get_waytype()==wtyp && bd->get_weg_nr(1)->get_waytype()==wtyp) {
+		return true;
+	}
 	const weg_t *w = bd->get_weg_nr(0);
 	// index of our wtype at the tile (must exists due to triple-crossing-check above)
 	const uint8 iwtyp = w->get_waytype() != wtyp;
@@ -1258,6 +1265,7 @@ way_builder_t::way_builder_t(player_t* player) : next_gr(32)
 	keep_existing_city_roads = false;
 	keep_existing_faster_ways = false;
 	build_sidewalk = false;
+	straight_route_mode = false;
 
 	vehicle_offset = 0;
 }
@@ -2236,6 +2244,7 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 {
 	DBG_MESSAGE("way_builder_t::calc_straight_route()","from %d,%d,%d to %d,%d,%d",start.x,start.y,start.z, ziel.x,ziel.y,ziel.z );
+	straight_route_mode = true;
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
 		// these are straight anyway ...
 		intern_calc_route_runways(start, ziel);
@@ -2266,6 +2275,7 @@ bool way_builder_t::calc_route(const vector_tpl<koord3d> &start, const vector_tp
 #ifdef DEBUG_ROUTES
 uint32 ms = dr_time();
 #endif
+	straight_route_mode = false;
 	INT_CHECK("simbau 740");
 
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
@@ -2716,7 +2726,7 @@ void way_builder_t::build_road()
 		grund_t* gr = welt->lookup(route[i]);
 		sint64 cost = 0;
 
-		bool extend = gr->weg_erweitern(road_wt, route.get_short_ribi(i));
+		bool extend = gr->weg_erweitern(road_wt, route.get_short_ribi(i), desc, straight_route_mode);
 
 		// bridges/tunnels have their own track type and must not upgrade
 		if(gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden) {
@@ -2733,7 +2743,9 @@ void way_builder_t::build_road()
 		strasse_t * str;
 
 		if(extend) {
-			str = (strasse_t*)gr->get_weg(road_wt);
+			// disambiguate between two same-waytype disjoint diagonal legs, if present, using
+			// the ribi bit weg_erweitern() just added -- only the leg it actually extended has it
+			str = (strasse_t*)gr->get_weg(road_wt, route.get_short_ribi(i));
 
 			if(gr->get_typ()==grund_t::monorailboden && (bautyp&elevated_flag)==0) {
 				// To make changing of overtaking_mode easy, only update overtaking_mode and ribi_mask_oneway
@@ -2786,7 +2798,7 @@ void way_builder_t::build_road()
 			str->set_street_flag(street_flag);
 			str->set_gehweg(add_sidewalk);
 			str->set_vehicle_offset(vehicle_offset);
-			cost = -gr->neuen_weg_bauen(str, route.get_short_ribi(i), player_builder)-desc->get_price();
+			cost = -gr->neuen_weg_bauen(str, route.get_short_ribi(i), player_builder, straight_route_mode)-desc->get_price();
 
 			// into UNDO-list, so we can remove it later
 			if(player_builder!=NULL) {
@@ -2820,7 +2832,7 @@ void way_builder_t::build_track()
 				continue;
 			}
 
-			bool const extend = gr->weg_erweitern(desc->get_wtyp(), ribi);
+			bool const extend = gr->weg_erweitern(desc->get_wtyp(), ribi, desc, straight_route_mode);
 
 			// bridges/tunnels have their own track type and must not upgrade
 			if((gr->get_typ()==grund_t::brueckenboden ||  gr->get_typ()==grund_t::tunnelboden)  &&  gr->get_weg_nr(0)->get_waytype()==desc->get_wtyp()) {
@@ -2828,7 +2840,10 @@ void way_builder_t::build_track()
 			}
 
 			if(extend) {
-				weg_t* const weg = gr->get_weg(desc->get_wtyp());
+				// disambiguate between two same-waytype disjoint diagonal legs, if present,
+				// using the ribi bit weg_erweitern() just added -- only the leg it actually
+				// extended has it
+				weg_t* const weg = gr->get_weg(desc->get_wtyp(), ribi);
 				bool change_desc = true;
 
 				// do not touch fences, tram way etc. if there is already same way with different type
@@ -2887,7 +2902,7 @@ void way_builder_t::build_track()
 				weg_t* const sch = weg_t::alloc(desc->get_wtyp());
 				sch->set_desc(desc);
 
-				cost = -gr->neuen_weg_bauen(sch, ribi, player_builder)-desc->get_price();
+				cost = -gr->neuen_weg_bauen(sch, ribi, player_builder, straight_route_mode)-desc->get_price();
 				sch->set_vehicle_offset(vehicle_offset);
 
 				// connect canals to sea

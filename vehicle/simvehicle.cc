@@ -1950,8 +1950,19 @@ ribi_t::ribi vehicle_t::get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const
 	if(  !gr  ) {
 		return ribi_t::none;
 	}
-	// Only a single_way sign that governs this vehicle's own waytype restricts it;
-	// a sign belonging to another waytype sharing the tile must be ignored.
+	// two same-waytype disjoint diagonal legs coexist on gr: resolve to the specific leg we
+	// physically entered from (from_dir), not the ambiguous single-object waytype lookup used
+	// below (which would pick whichever of weg_nr(0)/weg_nr(1) happens to match the waytype).
+	if(  from_dir!=ribi_t::none  &&  gr->has_two_ways()  ) {
+		if(  weg_t *leg = gr->get_weg(get_waytype(), ribi_t::backward(from_dir))  ) {
+			const roadsign_t *rs = gr->find<roadsign_t>();
+			ribi_t::ribi ribi = leg->get_ribi_unmasked();
+			if(  rs  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
+				ribi &= rs->get_detailed_oneway_out_ribi(from_dir);
+			}
+			return ribi;
+		}
+	}
 	const roadsign_t *rs = gr->find<roadsign_t>();
 	if(  !rs || rs->get_governed_waytype() != get_waytype() || !rs->get_desc()->is_single_way() || !rs->is_detailed_oneway()  ) {
 		return get_ribi(gr);
@@ -4243,7 +4254,10 @@ bool rail_vehicle_t::calc_route(koord3d start, koord3d ziel, sint32 max_speed, r
 
 bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const
 {
-	schiene_t const* const sch = obj_cast<schiene_t>(bd->get_weg(get_waytype()));
+	// direction-aware: when two same-waytype disjoint diagonal legs coexist on bd, resolve to
+	// the specific leg entered from `prev` rather than the ambiguous single-object lookup
+	const ribi_t::ribi entry_bit = (prev!=koord3d::invalid) ? ribi_t::backward(ribi_type(prev, bd->get_pos())) : ribi_t::none;
+	schiene_t const* const sch = obj_cast<schiene_t>(bd->get_weg(get_waytype(), entry_bit));
 	if(  !sch  ) {
 		return false;
 	}
@@ -4295,7 +4309,7 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 				if(  coupling ? sig->is_guide_signal() : sig->is_choose_signal()  ) {
 					// signal only acts as choose-area boundary when facing our travel direction
 					const ribi_t::ribi approach = ribi_type(prev, bd->get_pos()); // we already check that prev is not invalid.
-					if(  approach == ribi_t::none  ||  !ribi_t::is_single(sig->get_dir()) || ((bd->get_weg(get_waytype())->get_ribi_unmasked() & ~sig->get_dir()) & ~ribi_t::backward(approach))  ) {
+					if(  approach == ribi_t::none  ||  !ribi_t::is_single(sig->get_dir()) || ((sch->get_ribi_unmasked() & ~sig->get_dir()) & ~ribi_t::backward(approach))  ) {
 						return false;
 					}
 				}
@@ -4349,7 +4363,9 @@ bool rail_vehicle_t::check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_fro
 	if(  !target_halt.is_bound()  ||  ribi_from == ribi_t::none  ) {
 		return true;
 	}
-	schiene_t const* const sch = obj_cast<schiene_t>(gr->get_weg(get_waytype()));
+	// direction-aware: pick the specific leg entered via ribi_from, matching the co-reservation
+	// corner_set computed below (relevant when two same-waytype disjoint diagonal legs coexist)
+	schiene_t const* const sch = obj_cast<schiene_t>(gr->get_weg(get_waytype(), ribi_t::backward(ribi_from)));
 	if(  !sch  ||  !sch->is_reserved()  ||  sch->can_reserve(cnv->self)  ) {
 		return true;
 	}
@@ -5018,7 +5034,9 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
 		// reserve first block at the start until the next signal
 		if (gr_current) {
-			if (weg_t* w = gr_current->get_weg(get_waytype())) {
+			// direction-aware: resolve to the leg we're actually facing/standing on, relevant
+			// when two same-waytype disjoint diagonal legs coexist on gr_current
+			if (weg_t* w = gr_current->get_weg(get_waytype(), get_direction())) {
 				// before start, we must check other cars
 				for(  uint8 pos=1;  pos<(volatile uint8)gr_current->get_top();  pos++  ) {
 					if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr_current->obj_bei(pos))  ) {
@@ -5094,7 +5112,11 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		return false;
 	}
 
-	schiene_t *w = (schiene_t *)gr->get_weg(get_waytype());
+	// direction-aware: resolve to the leg entered from the previous route tile, relevant when
+	// two same-waytype disjoint diagonal legs coexist on gr (harmless no-op otherwise, since
+	// get_weg() only consults the direction when both weg_nr slots share this waytype)
+	const ribi_t::ribi entry_bit = route_index>0 ? ribi_t::backward(ribi_type(cnv->get_route()->at(route_index-1), gr->get_pos())) : ribi_t::none;
+	schiene_t *w = (schiene_t *)gr->get_weg(get_waytype(), entry_bit);
 	if(w==NULL) {
 		return false;
 	}

@@ -281,9 +281,20 @@ void append_platform_length_string_if_needed(cbuffer_t & buf, const weg_t* weg) 
 	}
 	// proceed to the edge
 	while(true) {
-		gr->get_neighbour(gr, weg->get_waytype(), dir);
-		if(  !gr  ) { break; }
-		const weg_t* w = gr->get_weg(weg->get_waytype());
+		// NOTE: get_neighbour() only ever writes its output ('gr' here) on SUCCESS -- it never
+		// nulls it out on failure. The previous version of this loop aliased the same variable
+		// as both receiver and output (`gr->get_neighbour(gr, ...)`) and then checked `!gr`,
+		// which is never true on failure, causing an infinite loop whenever get_neighbour()
+		// legitimately returns false (e.g. entering a same-waytype disjoint-diagonal-leg tile
+		// where `dir` belongs to the OTHER leg). Check the return value directly instead.
+		grund_t *next;
+		if(  !gr->get_neighbour(next, weg->get_waytype(), dir)  ) {
+			break;
+		}
+		gr = next;
+		// direction-aware: gr was reached via dir, so the leg actually being walked is the one
+		// owning the backward bit (relevant on a same-waytype disjoint-diagonal-leg tile)
+		const weg_t* w = gr->get_weg(weg->get_waytype(), ribi_t::backward(dir));
 		const halthandle_t h = gr->get_halt();
 		if(  !w  ||  !h.is_bound()  ||  h.get_id()!=halt.get_id()   ||  gr->get_pos()==start_pos ) { break; }
 		// now, the halt and the way exist on the new tile.
@@ -319,6 +330,20 @@ void weg_t::info(cbuffer_t & buf) const
 	}
 	buf.printf("%s%u",    translator::translate("\nRibi (unmasked)"), get_ribi_unmasked());
 	buf.printf("%s%u\n",  translator::translate("\nRibi (masked)"),   get_ribi());
+
+	// two ways of the SAME waytype can share this tile as disjoint diagonal legs (each is its
+	// own separate way, not connected to the other) -- make that explicit here, since
+	// otherwise this info window looks identical to an ordinary single-way tile.
+	if(  g->has_two_ways()  ) {
+		weg_t *other = g->get_weg_nr(0)==this ? g->get_weg_nr(1) : g->get_weg_nr(0);
+		if(  other  &&  other->get_waytype()==get_waytype()  ) {
+			buf.printf("%s\n", translator::translate("This tile has a second, disconnected way of the same type:"));
+			buf.printf("  %s (%s%u, %s %u%s)\n",
+				translator::translate(other->get_desc()->get_name()),
+				translator::translate("Ribi (unmasked)"), other->get_ribi_unmasked(),
+				translator::translate("Max. speed:"), other->get_max_speed(), translator::translate("km/h"));
+		}
+	}
 
 	buf.printf("%s%i (%s %s)\n",	translator::translate("\nVehicle offset: "), get_vehicle_offset(), translator::translate("Offset mode:"), get_vehicle_offset_mode()?translator::translate("Direction"):translator::translate("Absolute"));
 	
