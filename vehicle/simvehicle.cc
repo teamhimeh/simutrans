@@ -4311,8 +4311,12 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 		// check_transit_tile (called when expanding FROM this tile) will then validate
 		// the exact entry+exit corner_set before any conflicting transit is queued.
 		if(  prev != koord3d::invalid  ) {
-			const ribi_t::ribi entry = ribi_t::backward(ribi_type(prev, bd->get_pos()));
-			if(  sch->can_co_reserve_approach(entry)  ) {
+			const ribi_t::ribi approach = ribi_type(prev, bd->get_pos());
+			if(  sch->can_co_reserve_approach(ribi_t::backward(approach))  ) {
+				return true;
+			}
+			// two convoys may pass each other on a way with a vehicle offset
+			if(  sch->can_co_reserve_offset(approach)  ) {
 				return true;
 			}
 		}
@@ -4353,8 +4357,9 @@ bool rail_vehicle_t::check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_fro
 	if(  !sch  ||  !sch->is_reserved()  ||  sch->can_reserve(cnv->self)  ) {
 		return true;
 	}
+	// ribi_from is the heading with which we enter the tile
 	const ribi_t::ribi corner_set = ribi_t::backward(ribi_from) | exit;
-	return sch->can_co_reserve_with(corner_set);
+	return sch->can_co_reserve_with(corner_set, ribi_from);
 }
 
 
@@ -5108,7 +5113,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	/* this should happen only before signals ...
 	 * but if it is already reserved, we can save lots of other checks later
 	 */
-	if(  !w->can_reserve(cnv->self)  ) {
+	if(  !w->can_reserve(cnv->self, ribi_t::none, ribi_type(get_pos(), gr->get_pos()))  ) {
 		restart_speed = 0;
 		return false;
 	}
@@ -5319,17 +5324,18 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			{
 				// corner_set = entry_border | exit_border; correctly identifies which corner of the
 				// tile a turning train occupies, enabling safe co-reservation of opposite corners.
+				const ribi_t::ribi travel_dir = ribi_type(route->at(max(1u,i)-1u), pos);
 				const ribi_t::ribi corner_set =
-					ribi_t::backward(ribi_type(route->at(max(1u,i)-1u), pos))
+					ribi_t::backward(travel_dir)
 					| ribi_type(pos, route->at(min(route->get_count()-1u,i+1u)));
-				if(  !sch1->reserve( cnv->self, corner_set )  ) {
+				if(  !sch1->reserve( cnv->self, corner_set, travel_dir )  ) {
 					success = false;
 				}
 				if (gr->has_two_ways()) {
 					// we may need to reserve the other way as well
 					if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
 						// the other way is reservable too => try to reserve it
-						if (!sch0->reserve(cnv->self, corner_set)) {
+						if (!sch0->reserve(cnv->self, corner_set, travel_dir)) {
 							success = false;
 						}
 					}
@@ -5342,9 +5348,23 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			if(next_crossing_index==route_t::INVALID_INDEX  &&  gr->get_crossing()) {
 				next_crossing_index = i;
 			}
-			for(uint8 i_stop=cnv->get_schedule()->get_current_stop(); cnv->is_waypoint(cnv->get_schedule()->at(i_stop%cnv->get_schedule()->get_count()))&&i_stop!=cnv->get_schedule()->get_current_stop()-1; i_stop++) {
-				i_stop %= cnv->get_schedule()->get_count();
-				if(  cnv->get_schedule()->at(i_stop).is_drive_without_reservation() && pos == cnv->get_schedule()->at(i_stop).pos && !sch1->has_signal()  ) {
+			// scan the schedule entries ahead of us, as long as they are waypoints, and stop
+			// the reservation when this tile is a waypoint that must be driven without one.
+			// The scan must be bounded by the number of entries: the old formulation
+			// (i_stop != get_current_stop()-1) never terminated when every entry is a
+			// waypoint - get_current_stop() is uint8, so current_stop-1 is -1 for
+			// current_stop==0, and for current_stop==1 the value 0 was never seen because
+			// i_stop is taken modulo the count *inside* the body and then incremented.
+			const schedule_t* const reserve_schedule = cnv->get_schedule();
+			const uint8 reserve_entry_count = reserve_schedule ? reserve_schedule->get_count() : 0;
+			for(  uint8 i_offset=0;  i_offset<reserve_entry_count;  i_offset++  ) {
+				const uint8 i_stop = (uint8)((reserve_schedule->get_current_stop()+i_offset) % reserve_entry_count);
+				const schedule_entry_t& reserve_entry = reserve_schedule->at(i_stop);
+				if(  !cnv->is_waypoint(reserve_entry)  ) {
+					// a genuine stop point ends the run of waypoints
+					break;
+				}
+				if(  reserve_entry.is_drive_without_reservation()  &&  pos == reserve_entry.pos  &&  !sch1->has_signal()  ) {
 					dbg->message("rail_vehicle_t::block_reserver()","reservation break because we reach waypoint without reservation, %s, %i",pos.get_str(),i);
 					next_signal_index = i;
 					count --;
@@ -5530,9 +5550,11 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				grund_t* grn = welt->lookup(route->at(h));
 				schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
 				if(  schn  ) {
+					const ribi_t::ribi travel_dir = ribi_type(route->at(max(1u,h)-1u), route->at(h));
 					schn->reserve( cnv->self,
-					ribi_t::backward(ribi_type(route->at(max(1u,h)-1u), route->at(h)))
-					| ribi_type(route->at(h), route->at(min(route->get_count()-1u,h+1u))) );
+					ribi_t::backward(travel_dir)
+					| ribi_type(route->at(h), route->at(min(route->get_count()-1u,h+1u))),
+					travel_dir );
 				}
 			}
 			return true;
