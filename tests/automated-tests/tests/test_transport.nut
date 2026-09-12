@@ -59,6 +59,12 @@ function test_transport_generate_pax_no_route()
 
 function test_transport_pax_valid_route()
 {
+	run_transport_pax_valid_route(false)
+}
+
+
+function run_transport_pax_valid_route(cached_repeat)
+{
 	local pl = player_x(0)
 
 	ASSERT_EQUAL(command_x(tool_build_way).work(pl, coord3d(4, 2, 0), coord3d(4, 8, 0), "cobblestone_road"), null)
@@ -83,11 +89,17 @@ function test_transport_pax_valid_route()
 	sleep()
 
 	{
-		ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, 30), 1) // 1 == OK
+		if (cached_repeat) {
+			ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, 15), 1)
+			ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, 15), 1)
+		} else {
+			ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, 30), 1) // 1 == OK
+		}
 
 		ASSERT_EQUAL(from_halt.waiting[0], 30)
 		ASSERT_EQUAL(from_halt.get_freight_to_halt(good_desc_x.passenger, to_halt), 30)
-		ASSERT_EQUAL(from_halt.get_freight_to_dest(good_desc_x.passenger, coord3d(3, 2, 0)), 30)
+		// This API returns the first packet, not the total. TBGR keeps FIFO packets separate.
+		ASSERT_EQUAL(from_halt.get_freight_to_dest(good_desc_x.passenger, coord3d(3, 2, 0)), cached_repeat ? 15 : 30)
 		ASSERT_EQUAL(from_halt.get_freight_to_dest(good_desc_x.passenger, coord3d(4, 2, 0)), 0)
 		ASSERT_EQUAL(from_halt.happy[0], 30)
 		ASSERT_EQUAL(from_halt.unhappy[0], 0)
@@ -144,6 +156,10 @@ function test_transport_pax_valid_route()
 	cnv.destroy(pl)
 	sleep()
 	sleep() // make sure the convoy is destroyed
+	if (cached_repeat) {
+		// The old cached route must disappear after the network is rebuilt.
+		ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, 1), 0)
+	}
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(0), coord3d(4, 2, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(0), coord3d(4, 7, 0)), null)
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(0), coord3d(4, 8, 0)), null)
@@ -1420,4 +1436,34 @@ function test_transport_route_cache_convoy_length()
 
 	settings.set_advance_to_end(true)
 	debug.set_game_speed(1)
+}
+
+
+// Exercise actual cached TBGR output through loading, transport and arrival.
+function test_transport_pax_cached_route()
+{
+	local pax = good_desc_x.passenger
+	local old_tbgr = settings.get_time_based_routing_enabled(pax)
+	local old_foot = settings.get_transit_by_foot()
+	settings.set_time_based_routing_enabled(pax, true)
+	settings.set_transit_by_foot(false)
+	run_transport_pax_valid_route(true)
+	// The helper destroys its halts. Repeating it reuses handle slots and must
+	// not see search state belonging to the deleted transport network.
+	run_transport_pax_valid_route(true)
+	settings.set_transit_by_foot(old_foot)
+	settings.set_time_based_routing_enabled(pax, old_tbgr)
+}
+
+
+function test_transport_pax_cached_transfer_interval()
+{
+	local pax = good_desc_x.passenger
+	local old_tbgr = settings.get_time_based_routing_enabled(pax)
+	local old_foot = settings.get_transit_by_foot()
+	settings.set_time_based_routing_enabled(pax, true)
+	settings.set_transit_by_foot(false)
+	test_transport_pax_transfer_interval()
+	settings.set_transit_by_foot(old_foot)
+	settings.set_time_based_routing_enabled(pax, old_tbgr)
 }

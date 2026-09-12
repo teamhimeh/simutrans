@@ -4280,6 +4280,7 @@ void karte_t::set_schedule_counter()
 	// do not call this from gui when playing in network mode!
 	assert( (get_random_mode() & INTERACTIVE_RANDOM) == 0  );
 
+	haltestelle_t::invalidate_route_tree_cache();
 	schedule_counter++;
 }
 
