@@ -23,6 +23,7 @@ class schedule_t;
 class signal_t;
 class ware_t;
 class route_t;
+class strasse_t;
 
 /*----------------------- Movables ------------------------------------*/
 
@@ -613,6 +614,15 @@ public:
 	// true if v belongs to the coupling chain of the convoy we are currently approaching to couple
 	// with. Such a vehicle must not be treated as blocking, otherwise we could never drive up to it.
 	bool is_coupling_partner(const vehicle_base_t* v) const;
+
+	// only_one_car_mode: the connected area of tiles carrying that mode takes one convoy at a time.
+	// Returns a convoy already inside that area which keeps us out, or NULL when we may enter.
+	// A convoy waiting to be coupled with us does not keep us out - we are going there to join it.
+	convoi_t* get_blocking_convoi_in_single_car_area(const grund_t* entry) const;
+
+	// passing_lane_stop_only_mode: true while this convoy holds the passing lane under the
+	// permission can_overtake() gave it to come to a stand beside a convoy in the traffic lane.
+	bool holds_passing_lane_to_stop(const strasse_t* str) const;
 };
 
 

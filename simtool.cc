@@ -3478,6 +3478,12 @@ void tool_build_way_t::set_mode_str(char* str, overtaking_mode_t overtaking_mode
 		case inverted_mode:
 			sprintf(str, "I");
 		break;
+		case only_one_car_mode:
+			sprintf(str, "1");
+		break;
+		case passing_lane_stop_only_mode:
+			sprintf(str, "S");
+		break;
 		default:
 			sprintf(str, "X");
 		break;

@@ -1661,7 +1661,7 @@ void convoi_t::step()
 			laden();
 			//When loading, vehicle should not be on passing lane.
 			str = (strasse_t*)welt->lookup(get_pos())->get_weg(road_wt);
-			if(  str  &&  str->get_overtaking_mode()!=inverted_mode  &&  str->get_overtaking_mode()!=halt_mode  ) set_tiles_overtaking(0);
+			if(  str  &&  str->get_overtaking_mode()!=inverted_mode  &&  str->get_overtaking_mode()!=halt_mode  &&  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  ) set_tiles_overtaking(0);
 			break;
 
 		case DUMMY4:
@@ -1815,8 +1815,9 @@ void convoi_t::step()
 					akt_speed = restart_speed;
 				}
 				if(  fahr[0]->get_waytype()==road_wt  ) {
-					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
-					if(  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
+					const strasse_t* str0 = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt));
+					sint8 overtaking_mode = str0->get_overtaking_mode();
+					if(  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  str0->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  &&  !reversing_lane_hold  ) {
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -1835,8 +1836,9 @@ void convoi_t::step()
 					akt_speed = restart_speed;
 				}
 				if(  fahr[0]->get_waytype()==road_wt  ) {
-					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
-					if(  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
+					const strasse_t* str0 = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt));
+					sint8 overtaking_mode = str0->get_overtaking_mode();
+					if(  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  str0->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  &&  !reversing_lane_hold  ) {
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -5797,6 +5799,52 @@ void convoi_t::set_withdraw(bool new_withdraw)
 }
 
 
+// passing_lane_stop_only_mode allows the passing lane to be used for one purpose only: coming to a
+// stand beside a convoy that already occupies the traffic lane, so that two convoys fit into the
+// same stop. So the manoeuvre is granted exactly when the convoy to be passed stands still, every
+// tile needed for it carries that mode and has a free passing lane, and this convoy's route ends
+// within those tiles - i.e. it really does stop there instead of driving on past on the wrong lane.
+bool convoi_t::can_stop_on_passing_lane(sint32 other_speed, sint16 steps_other)
+{
+	if(  other_speed != 0  ) {
+		// only a standing convoy may be passed here
+		return false;
+	}
+	const uint32 idx = fahr[0]->get_route_index();
+	const sint32 tiles = (steps_other-1)/(CARUNITS_PER_TILE*VEHICLE_STEPS_PER_CARUNIT) + get_tile_length() + 1;
+	if(  idx + (uint32)tiles < route.get_count()  ) {
+		// the route goes on beyond the manoeuvre: we would be driving on the passing lane, not stopping on it
+		return false;
+	}
+	for(  sint32 i=0;  i<tiles  &&  idx+(uint32)i<route.get_count();  i++  ) {
+		grund_t *gr = welt->lookup( route.at( idx+i ) );
+		if(  gr==NULL  ||  gr->get_crossing()  ) {
+			return false;
+		}
+		strasse_t *str = (strasse_t*)gr->get_weg(road_wt);
+		if(  str==NULL  ||  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  ) {
+			return false;
+		}
+		// the passing lane itself has to be free: with somebody already standing on it this convoy
+		// stays in the traffic lane, and waits behind if that one is taken as well.
+		const uint8 top = gr->get_top();
+		for(  uint8 j=1;  j<top;  j++  ) {
+			if(  vehicle_base_t* const v = obj_cast<vehicle_base_t>(gr->obj_bei(j))  ) {
+				if(  v->get_typ()==obj_t::pedestrian  ||  v->get_waytype()!=road_wt  ) {
+					continue;
+				}
+				const overtaker_t *ov = v->get_overtaker();
+				if(  ov  &&  ov!=this  &&  ov->is_overtaking()  ) {
+					return false;
+				}
+			}
+		}
+	}
+	set_tiles_overtaking( tiles );
+	return true;
+}
+
+
 /**
  * conditions for a city car to overtake another overtaker.
  * The city car is not overtaking/being overtaken.
@@ -5819,6 +5867,18 @@ bool convoi_t::can_overtake(overtaker_t *other_overtaker, sint32 other_speed, si
 	overtaking_mode_t overtaking_mode = str->get_overtaking_mode();
 	if (  !other_overtaker->can_be_overtaken()  &&  overtaking_mode > oneway_mode  ) {
 		return false;
+	}
+	// This road drives like a prohibited one, with a single exception: pulling onto the passing lane
+	// to stop beside a convoy that already occupies the traffic lane at the stop. The manoeuvre
+	// starts on the tile before the first one carrying the mode, so the tile we are about to enter
+	// decides as well as the one we are standing on.
+	{
+		const grund_t *gr_next = fahr[0]->get_route_index() < route.get_count() ? welt->lookup( route.at( fahr[0]->get_route_index() ) ) : NULL;
+		const strasse_t *str_next = gr_next ? (const strasse_t*)gr_next->get_weg(road_wt) : NULL;
+		if(  str->get_overtaking_mode_raw()==passing_lane_stop_only_mode
+		  ||  (str_next  &&  str_next->get_overtaking_mode_raw()==passing_lane_stop_only_mode)  ) {
+			return can_stop_on_passing_lane( other_speed, steps_other );
+		}
 	}
 	if(  overtaking_mode == prohibited_mode  ){
 		// This road prohibits overtaking.

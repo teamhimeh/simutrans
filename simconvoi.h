@@ -1192,6 +1192,10 @@ public:
 	// Overtaking for convois
 	virtual bool can_overtake(overtaker_t *other_overtaker, sint32 other_speed, sint16 steps_other) OVERRIDE;
 
+	// passing_lane_stop_only_mode: may this convoy pull onto the passing lane in order to come to a
+	// stand beside the standing convoy in front of it? Grants the lane (set_tiles_overtaking) if so.
+	bool can_stop_on_passing_lane(sint32 other_speed, sint16 steps_other);
+
 	/*
 	 * Functions related to requested_change_lane
 	 * @author teamhimeH
