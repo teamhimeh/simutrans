@@ -5321,27 +5321,42 @@ void rail_vehicle_t::get_platform_tiles_behind_route(const route_t* route, halth
 	if(  route->get_count()<2  ||  !halt.is_bound()  ) {
 		return;
 	}
+	const bool need_electric = cnv->needs_electrification();
 	const grund_t* gr = welt->lookup(route->back());
 	ribi_t::ribi dir = ribi_type(route->at((uint16)(route->get_count()-2)), route->back());
 	// A platform is a straight run of tiles, so we simply keep going in the direction we entered
-	// its last route tile from and take everything that still belongs to the same halt. The
-	// platform can never be longer than the halt it is part of, which bounds the walk.
+	// its last route tile from and take everything that still belongs to the same halt and that we
+	// may actually drive on. The platform can never be longer than the halt it is part of, which
+	// bounds the walk.
 	for(  uint32 remaining=halt->get_tiles().get_count();  gr  &&  remaining>0;  remaining--  ) {
 		const weg_t* const way = gr->get_weg(get_waytype());
 		if(  !way  ) {
 			break;
 		}
+		// get_ribi() is masked by the signals and one way signs standing on this tile, so a
+		// direction we are not allowed to leave in is not offered here in the first place.
+		const ribi_t::ribi allowed = way->get_ribi();
 		grund_t* to = NULL;
-		if(  !gr->get_neighbour(to, get_waytype(), dir)  ) {
+		if(  (allowed & dir)==0  ||  !gr->get_neighbour(to, get_waytype(), dir)  ) {
 			// the platform bends here - follow the track as long as it leaves us no choice
-			const ribi_t::ribi next_ribi = way->get_ribi_unmasked() & ~ribi_t::backward(dir);
+			const ribi_t::ribi next_ribi = allowed & ~ribi_t::backward(dir);
 			if(  !ribi_t::is_single(next_ribi)  ||  !gr->get_neighbour(to, get_waytype(), next_ribi)  ) {
 				break;
 			}
 			dir = next_ribi;
 		}
-		if(  !to  ||  to->get_halt()!=halt  ||  !to->get_weg(get_waytype())  ) {
+		if(  !to  ||  to->get_halt()!=halt  ) {
 			// end of the platform
+			break;
+		}
+		// check_next_tile() is the same test the route search applies: it rejects track we cannot
+		// use for want of a catenary, track with no speed, private ways and the like.
+		if(  !check_next_tile(to, need_electric)  ) {
+			break;
+		}
+		const weg_t* const to_way = to->get_weg(get_waytype());
+		if(  !to_way  ||  (to_way->get_ribi_maske() & dir)  ) {
+			// a signal or one way sign on that tile faces against us
 			break;
 		}
 		if(  route->is_contained(to->get_pos())  ||  tiles.is_contained(to->get_pos())  ) {
