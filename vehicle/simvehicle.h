@@ -321,6 +321,19 @@ public:
 	uint16 get_route_index() const {return route_index;}
 
 	/**
+	 * The corner set (see route_t::get_corner_set()) of the tile this vehicle currently stands
+	 * on: the bit pointing back to the tile it came from, plus the bit pointing on to pos_next.
+	 * Tells the two legs apart on a tile carrying two same-waytype disjoint diagonal legs, so
+	 * pass it to grund_t::get_weg(waytype, dir) instead of the ambiguous waytype-only lookup
+	 * whenever a way object is resolved for THIS vehicle. Returns ribi_t::none when neither bit
+	 * can be determined (no route yet, end of route), which makes get_weg() fall back to the
+	 * ordinary lookup.
+	 * Note this is not get_direction(): on a bend the driving direction is the diagonal between
+	 * entry and exit (e.g. SE for a N->W turn) and thus need not be a subset of the leg's ribi.
+	 */
+	ribi_t::ribi get_current_corner_set() const;
+
+	/**
 	* Get the base image.
 	*/
 	image_id get_base_image() const { return desc->get_base_image(); }

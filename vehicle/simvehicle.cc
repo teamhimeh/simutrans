@@ -1227,6 +1227,24 @@ bool vehicle_t::can_enter_tile(sint32 &restart_speed, uint8 second_check_count)
 }
 
 
+ribi_t::ribi vehicle_t::get_current_corner_set() const
+{
+	const koord3d pos = get_pos();
+	// the bit pointing on to where we are heading
+	ribi_t::ribi corner_set = (pos_next!=pos) ? ribi_type(pos, pos_next) : (ribi_t::ribi)ribi_t::none;
+	// and the bit pointing back to where we came from: route_index indexes pos_next, so our
+	// own tile sits at route_index-1 and the one we came from at route_index-2. Verify that
+	// invariant before using it -- it does not hold e.g. while a convoy leaves a depot.
+	if(  cnv  &&  route_index>=2u  ) {
+		const route_t *route = cnv->get_route();
+		if(  route  &&  (uint32)route_index-1u < route->get_count()  &&  route->at(route_index-1u)==pos  ) {
+			corner_set |= ribi_t::backward(ribi_type(route->at(route_index-2u), pos));
+		}
+	}
+	return corner_set;
+}
+
+
 void vehicle_t::leave_tile()
 {
 	vehicle_base_t::leave_tile();
@@ -4166,7 +4184,8 @@ rail_vehicle_t::~rail_vehicle_t()
 	}
 	grund_t *gr = welt->lookup(get_pos());
 	if(gr) {
-		schiene_t * sch = (schiene_t *)gr->get_weg(get_waytype());
+		// direction-aware: the leg we are standing on, not just whichever matches the waytype
+		schiene_t * sch = (schiene_t *)gr->get_weg(get_waytype(), get_current_corner_set());
 		if(sch) {
 			sch->unreserve(this);
 		}
@@ -4554,7 +4573,9 @@ bool rail_vehicle_t::check_longblock_signal(signal_t *sig, uint16 next_block, si
 			// now we unreserve the tiles
 			for(  sint32 i=cnv->get_reserved_tiles().get_count()-1;  i>=start_idx;  i--  ) {
 				grund_t* gr = welt->lookup(cnv->get_reserved_tiles()[i]);
-				schiene_t* sch1 = gr ? (schiene_t*)gr->get_weg(get_waytype()) : NULL;
+				// direction-aware: the reserved tiles are stored in route order, so their own
+				// corner set says which leg was reserved on a same-waytype dual-leg tile
+				schiene_t* sch1 = gr ? (schiene_t*)gr->get_weg(get_waytype(), cnv->get_reserved_tiles_corner_set(i)) : NULL;
 				if(  sch1  &&  !tiles_already_reserved.is_contained(gr->get_pos())  ) {
 					sch1->unreserve(cnv->self);
 				}
@@ -4995,7 +5016,8 @@ bool rail_vehicle_t::is_next_tile_already_reserved(uint16 index)
 		// something wrong!
 		return false;
 	}
-	schiene_t *w = (schiene_t *)gr->get_weg(get_waytype());
+	// direction-aware: the leg our route runs over on that tile, not just any way of our waytype
+	schiene_t *w = (schiene_t *)gr->get_weg(get_waytype(), cnv->get_route()->get_corner_set(index+1));
 	if(  !w  ) {
 		// no way
 		return false;
@@ -5014,7 +5036,8 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	// reset driving without reservation
 	if(  cnv->is_drive_without_reservation()  ) {
 		if(  gr_current  ) {
-			if(weg_t* w = gr_current->get_weg(get_waytype())) {
+			// direction-aware: the leg we are standing on / about to enter
+			if(weg_t* w = gr_current->get_weg(get_waytype(), get_current_corner_set())) {
 				if(w->has_signal()) {
 					cnv->set_drive_without_reservation(false);
 					cnv->set_next_stop_index(route_index-2);
@@ -5022,7 +5045,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 		}
 		if(  gr  ) {
-			if(weg_t* w = gr->get_weg(get_waytype())) {
+			if(weg_t* w = gr->get_weg(get_waytype(), ribi_t::backward(ribi_type(get_pos(), gr->get_pos())))) {
 				if(w->has_signal()) {
 					cnv->set_drive_without_reservation(false);
 					cnv->set_next_stop_index(route_index-1);
@@ -5036,7 +5059,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		if (gr_current) {
 			// direction-aware: resolve to the leg we're actually facing/standing on, relevant
 			// when two same-waytype disjoint diagonal legs coexist on gr_current
-			if (weg_t* w = gr_current->get_weg(get_waytype(), get_direction())) {
+			if (weg_t* w = gr_current->get_weg(get_waytype(), get_current_corner_set())) {
 				// before start, we must check other cars
 				for(  uint8 pos=1;  pos<(volatile uint8)gr_current->get_top();  pos++  ) {
 					if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr_current->obj_bei(pos))  ) {
@@ -5308,7 +5331,12 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 
 		koord3d pos = route->at(i);
 		grund_t *gr = welt->lookup(pos);
-		schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(get_waytype()) : NULL;
+		// corner_set = entry_border | exit_border; it identifies which corner of the tile a
+		// turning train occupies (enabling safe co-reservation of opposite corners) and, on a
+		// tile with two same-waytype disjoint diagonal legs, which of the two legs the route
+		// runs over -- so resolve the way with it instead of the ambiguous waytype-only lookup
+		const ribi_t::ribi corner_set = route->get_corner_set(i);
+		schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(get_waytype(), corner_set) : NULL;
 		if(sch1==NULL  &&  reserve) {
 			// reserve until the end of track
 			break;
@@ -5339,11 +5367,6 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 				}
 			}
 			{
-				// corner_set = entry_border | exit_border; correctly identifies which corner of the
-				// tile a turning train occupies, enabling safe co-reservation of opposite corners.
-				const ribi_t::ribi corner_set =
-					ribi_t::backward(ribi_type(route->at(max(1u,i)-1u), pos))
-					| ribi_type(pos, route->at(min(route->get_count()-1u,i+1u)));
 				if(  !sch1->reserve( cnv->self, corner_set )  ) {
 					success = false;
 				}
@@ -5430,7 +5453,7 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 	if(!success) {
 		// free reservation
 		for ( int j=start_index; j<i; j++) {if (grund_t * gr=welt->lookup(route->at(j))) {
-				schiene_t* sch1 = (schiene_t*)gr->get_weg(get_waytype());
+				schiene_t* sch1 = (schiene_t*)gr->get_weg(get_waytype(), route->get_corner_set(j));
 				if(sch1) {
 					sch1->unreserve(cnv->self);
 					if (gr->has_two_ways()) {
@@ -5557,18 +5580,17 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			while(c_step<0&&coupling_index>0) {
 				coupling_index--;
 				grund_t* gr_coupling = welt->lookup(route->at(coupling_index));
-				c_step += (sint16)(ribi_t::is_bend(gr_coupling->get_weg(get_waytype())->get_ribi_unmasked())? diagonal_vehicle_steps_per_tile : VEHICLE_STEPS_PER_TILE);
+				c_step += (sint16)(ribi_t::is_bend(gr_coupling->get_weg(get_waytype(), route->get_corner_set(coupling_index))->get_ribi_unmasked())? diagonal_vehicle_steps_per_tile : VEHICLE_STEPS_PER_TILE);
 			}
 			// set coupling steps as positive value
 			coupling_steps = c_step;
 			//reserve tiles
 			for(  uint16 h=start_index;  h<coupling_index;  h++  ) {
 				grund_t* grn = welt->lookup(route->at(h));
-				schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
+				const ribi_t::ribi corner_set = route->get_corner_set(h);
+				schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype(), corner_set) : NULL;
 				if(  schn  ) {
-					schn->reserve( cnv->self,
-					ribi_t::backward(ribi_type(route->at(max(1u,h)-1u), route->at(h)))
-					| ribi_type(route->at(h), route->at(min(route->get_count()-1u,h+1u))) );
+					schn->reserve( cnv->self, corner_set );
 				}
 			}
 			return true;
@@ -5590,10 +5612,13 @@ void rail_vehicle_t::leave_tile()
 {
 	vehicle_t::leave_tile();
 	// fix counters
+	// direction-aware: resolve the leg this vehicle actually occupies, relevant when two
+	// same-waytype disjoint diagonal legs coexist on the tile we are leaving
+	const ribi_t::ribi corner_set = get_current_corner_set();
 	if(last) {
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
-			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype());
+			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
 			if(sch0) {
 				// first, we check other vehicles on the same tile (e.g. uncoupling here)
 				convoihandle_t other_convoy;
@@ -5646,7 +5671,7 @@ void rail_vehicle_t::leave_tile()
 	if(leading) {
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
-			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype());
+			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
 			if(sch0) {
 				// tell next signal?
 				// and switch to red
@@ -5670,13 +5695,19 @@ void rail_vehicle_t::enter_tile(grund_t* gr)
 {
 	vehicle_t::enter_tile(gr);
 
-	if(  schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype())  ) {
+	// direction-aware: on a tile with two same-waytype disjoint diagonal legs, book and reserve
+	// the leg we are physically running over, not whichever one happens to sit in weg_nr(0)
+	const ribi_t::ribi corner_set = get_current_corner_set();
+	if(  schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set)  ) {
 		// way statistics
 		const int cargo = get_total_cargo();
 		sch0->book(cargo, WAY_STAT_GOODS);
 		if(leading) {
 			sch0->book(1, WAY_STAT_CONVOIS);
-			sch0->reserve( cnv->self, get_direction() );
+			// pass the corner set rather than get_direction(): the driving direction on a bend
+			// is the diagonal between entry and exit and would store a wrong reservation
+			// direction whenever this call is the one that creates the reservation
+			sch0->reserve( cnv->self, corner_set!=ribi_t::none ? corner_set : get_direction() );
 		}
 	}
 }

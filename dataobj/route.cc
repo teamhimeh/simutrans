@@ -116,6 +116,18 @@ bool route_t::node_in_use=false;
 /**
  * find the route to an unknown location
  */
+ribi_t::ribi route_t::get_corner_set(uint32 index) const
+{
+	if(  route.get_count()==0  ||  index>=route.get_count()  ) {
+		return ribi_t::none;
+	}
+	const koord3d curr = route[index];
+	const koord3d prev = route[ max(1u,index)-1u ];
+	const koord3d next = route[ min(route.get_count()-1u, index+1u) ];
+	return ribi_t::backward(ribi_type(prev, curr)) | ribi_type(curr, next);
+}
+
+
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin )
 {
 	bool ok = false;
