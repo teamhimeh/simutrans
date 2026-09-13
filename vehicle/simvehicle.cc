@@ -5099,12 +5099,36 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 		return false;
 	}
 
-	const uint16 cidx = cnv->get_next_coupling_index();
+	uint16 cidx = cnv->get_next_coupling_index();
+	if(  cidx!=route_t::INVALID_INDEX  &&  cidx>=cnv->get_route()->get_count()  ) {
+		// The coupling point is not on our route. That happens when the route was rebuilt after the
+		// coupling was recorded - convoi_t::drive_to() replaces the route wholesale and leaves
+		// next_coupling_index alone - and it would leave us driving towards an index that can never
+		// be reached. Drop the stale claim and carry on as an ordinary convoy.
+		dbg->warning("rail_vehicle_t::can_enter_tile()","%s: coupling index %i is off its route of %i tiles, dropping it", cnv->get_name(), cidx, cnv->get_route()->get_count());
+		cnv->set_next_coupling(route_t::INVALID_INDEX, 0);
+		cnv->unset_convoi_coupling_in_progress();
+		cidx = route_t::INVALID_INDEX;
+	}
 	if(  cidx<cnv->get_route()->get_count()  &&  cnv->get_route()->at(cidx)==gr->get_pos()  ) {
 		// the next tile is coupling point.
 		return true;
 	}
 
+	// Keep looking at the arrival platform while we approach a coupling stop. Once the route is
+	// reserved up to its end there is no signal left that would trigger a new reservation, and
+	// next_stop_index is invalid, so the check below returns early on every tile - a convoy that
+	// only arrives at the platform (or only becomes ready to be coupled) after our reservation was
+	// made would never be found if we looked for it just once.
+	if(  cidx==route_t::INVALID_INDEX
+	  &&  cnv->get_next_reservation_index()>=cnv->get_route()->get_count()
+	  &&  get_next_coupling_stop()  ) {
+		uint16 coupling_signal = route_t::INVALID_INDEX;
+		if(  check_platform_coupling( coupling_signal )  ) {
+			cnv->set_next_stop_index( min( cnv->get_next_stop_index(), coupling_signal ) );
+			return cnv->get_next_stop_index()>route_index;
+		}
+	}
 	/* this should happen only before signals ...
 	 * but if it is already reserved, we can save lots of other checks later
 	 */
@@ -5245,6 +5269,194 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			return cnv->get_next_stop_index() > route_index;
 		}
 	}
+	return true;
+}
+
+
+// Returns the schedule entry of the next genuine stop if that stop asks for coupling.
+// The current schedule entry can be a waypoint, so we proceed to a genuine stop point.
+const schedule_entry_t* rail_vehicle_t::get_next_coupling_stop() const
+{
+	const schedule_t* const schedule = cnv ? cnv->get_schedule() : NULL;
+	if(  !schedule  ||  schedule->get_count()==0  ) {
+		return NULL;
+	}
+	const uint8 current_stop = schedule->get_current_stop();
+	uint8 idx = current_stop;
+	bool stop_found = false;
+	do {
+		if(  !cnv->is_waypoint(schedule->at(idx))  ) {
+			stop_found = true;
+			break;
+		}
+		idx = (uint8)((idx+1)%schedule->get_count());
+	} while(  idx!=current_stop  );
+	if(  !stop_found  ||  !schedule->at(idx).is_try_coupling()  ) {
+		// all schedule entries are waypoints or the next stop point is not a coupling point.
+		return NULL;
+	}
+	return &schedule->at(idx);
+}
+
+
+// The part of the arrival platform that our route does not cover: our route ends at the halt
+// position we were assigned, while the convoy we want to couple with waits at its own position
+// further down the platform. Those tiles are collected here so that they can be searched for a
+// coupling partner just like the tiles of the route itself.
+void rail_vehicle_t::get_platform_tiles_behind_route(const route_t* route, halthandle_t halt, vector_tpl<koord3d> &tiles) const
+{
+	if(  route->get_count()<2  ||  !halt.is_bound()  ) {
+		return;
+	}
+	const grund_t* gr = welt->lookup(route->back());
+	ribi_t::ribi dir = ribi_type(route->at((uint16)(route->get_count()-2)), route->back());
+	// A platform is a straight run of tiles, so we simply keep going in the direction we entered
+	// its last route tile from and take everything that still belongs to the same halt. The
+	// platform can never be longer than the halt it is part of, which bounds the walk.
+	for(  uint32 remaining=halt->get_tiles().get_count();  gr  &&  remaining>0;  remaining--  ) {
+		const weg_t* const way = gr->get_weg(get_waytype());
+		if(  !way  ) {
+			break;
+		}
+		grund_t* to = NULL;
+		if(  !gr->get_neighbour(to, get_waytype(), dir)  ) {
+			// the platform bends here - follow the track as long as it leaves us no choice
+			const ribi_t::ribi next_ribi = way->get_ribi_unmasked() & ~ribi_t::backward(dir);
+			if(  !ribi_t::is_single(next_ribi)  ||  !gr->get_neighbour(to, get_waytype(), next_ribi)  ) {
+				break;
+			}
+			dir = next_ribi;
+		}
+		if(  !to  ||  to->get_halt()!=halt  ||  !to->get_weg(get_waytype())  ) {
+			// end of the platform
+			break;
+		}
+		if(  route->is_contained(to->get_pos())  ||  tiles.is_contained(to->get_pos())  ) {
+			// do not run in circles
+			break;
+		}
+		tiles.append(to->get_pos());
+		gr = to;
+	}
+}
+
+
+// Called while the route to the next stop is completely reserved and that stop is a coupling stop:
+// once by block_reserver() when that reservation is made, and then on every tile we enter during
+// the approach. The convoy we want to couple with is standing somewhere on the arrival platform,
+// typically behind the end of our route, so we have to look at the whole platform and not only at
+// the tiles of our route. If a partner is found there, the route is extended up to the coupling
+// point and the coupling is recorded in both convoys.
+bool rail_vehicle_t::check_platform_coupling(uint16 &next_signal_index) const
+{
+	const schedule_entry_t* const coupling_stop = get_next_coupling_stop();
+	if(  !coupling_stop  ) {
+		// the next stop does not ask for coupling.
+		return false;
+	}
+	route_t* const route = cnv->access_route();
+	if(  route->get_count()<2  ) {
+		return false;
+	}
+	const grund_t* const end_gr = welt->lookup(route->back());
+	const grund_t* const stop_gr = welt->lookup(coupling_stop->pos);
+	const halthandle_t halt = end_gr ? end_gr->get_halt() : halthandle_t();
+	// compare the halts directly instead of going through haltestelle_t::get_halt(), which would
+	// also apply an ownership check that has nothing to do with where our route ends.
+	if(  !halt.is_bound()  ||  !stop_gr  ||  halt!=stop_gr->get_halt()  ) {
+		// our route does not end at the stop where we are going to couple.
+		return false;
+	}
+
+	// (1) the whole platform: the tiles of our route that belong to halt ...
+	uint16 platform_start = (uint16)(route->get_count()-1);
+	while(  platform_start>0  ) {
+		const grund_t* const gr = welt->lookup(route->at(platform_start-1));
+		if(  !gr  ||  gr->get_halt()!=halt  ) {
+			break;
+		}
+		platform_start--;
+	}
+	vector_tpl<koord3d> platform;
+	for(  uint16 h=platform_start;  h<route->get_count();  h++  ) {
+		platform.append(route->at(h));
+	}
+	// ... and the tiles of halt behind the end of our route.
+	vector_tpl<koord3d> tiles_behind_route;
+	get_platform_tiles_behind_route(route, halt, tiles_behind_route);
+	FOR(vector_tpl<koord3d>, const &pos, tiles_behind_route) {
+		platform.append(pos);
+	}
+
+	// (2) are there other vehicles standing on the platform? Only then it is worth asking
+	// can_couple(), which is the routine that decides whether they are a valid partner.
+	bool other_vehicle_found = false;
+	FOR(vector_tpl<koord3d>, const &pos, platform) {
+		const grund_t* const gr = welt->lookup(pos);
+		if(  !gr  ) {
+			continue;
+		}
+		for(  uint8 idx=1;  idx<(volatile uint8)gr->get_top();  idx++  ) {
+			const rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(idx));
+			if(  v  &&  v->get_convoi()!=cnv  ) {
+				other_vehicle_found = true;
+				break;
+			}
+		}
+		if(  other_vehicle_found  ) {
+			break;
+		}
+	}
+	if(  !other_vehicle_found  ) {
+		// nobody to couple with on this platform.
+		return false;
+	}
+
+	// (3) ask can_couple() on the route extended over the whole platform. We must not extend the
+	// route of the convoy before we know where the coupling takes place: without a partner the
+	// convoy has to stop at the halt position its route ends at.
+	route_t extended_route;
+	extended_route.append(route);
+	FOR(vector_tpl<koord3d>, const &pos, tiles_behind_route) {
+		extended_route.append(pos);
+	}
+	uint16 coupling_index = route_t::INVALID_INDEX;
+	uint8 coupling_steps = 0;
+	// The scan has to start at our own position and not at the platform: can_couple() has no
+	// driving direction for the very first tile it looks at (dir is ribi_t::none there), and with
+	// that it both picks the wrong end of the waiting convoy and computes the wrong coupling step.
+	// Signals are ignored for the same reason the guide signal handling ignores them - we only get
+	// here once the whole route up to the platform is reserved by us.
+	if(  !can_couple(&extended_route, route_index, coupling_index, coupling_steps, true)  ||  coupling_index==route_t::INVALID_INDEX  ) {
+		dbg->message("rail_vehicle_t::check_platform_coupling()","%s found no partner on the platform of %s", cnv->get_name(), halt->get_name());
+		return false;
+	}
+
+	// (4) we have a partner (can_couple() has already claimed it in both convoys and reserved the
+	// way to it), so the whole platform becomes part of our route. Adding all of it -
+	// and not only the tiles up to the coupling point - makes the convoy's route exactly the route
+	// can_couple() worked on, so the index it returned is by construction an index into it.
+	const uint16 old_count = (uint16)route->get_count();
+	FOR(vector_tpl<koord3d>, const &pos, tiles_behind_route) {
+		route->append(pos);
+	}
+	dbg->message("rail_vehicle_t::check_platform_coupling()",
+		"%s: route %i tiles (platform from %i, %i tiles behind it), coupling at %i step %i, route is now %i tiles",
+		cnv->get_name(), old_count, platform_start, tiles_behind_route.get_count(),
+		coupling_index, coupling_steps, route->get_count());
+
+	// the convoys coupled behind us keep their own copy of the route, so they need the platform
+	// too - otherwise they would still drive to the old end of the route.
+	convoihandle_t c = cnv->get_coupling_convoi();
+	while(  c.is_bound()  ) {
+		c->access_route()->clear();
+		c->access_route()->append(route);
+		c = c->get_coupling_convoi();
+	}
+	cnv->set_next_coupling(coupling_index, coupling_steps);
+	// since there is no signal between us and the coupling point ...
+	next_signal_index = (uint16)min(next_signal_index, coupling_index);
+	dbg->message("rail_vehicle_t::check_platform_coupling()","%s couples with %s at %i", cnv->get_name(), cnv->get_convoi_coupling_in_progress()->get_name(), coupling_index);
 	return true;
 }
 
@@ -5433,23 +5645,23 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 	cnv->set_next_reservation_index( i );
 	dbg->message("rail_vehicle_t::block_reserver()","we reserve to %i",i);
 
+	// If the next stop is a coupling stop, the reserved part of the route is not the whole story:
+	// the convoy we want to couple with is waiting at its own position on the arrival platform,
+	// which usually lies behind the end of our route. Now that the way up to the platform is
+	// reserved, we can look at the platform as a whole and drive up to such a convoy. Only done for
+	// the route of our own convoy - the routes handed over by the choose signal handling are
+	// candidates that are not driven (yet).
+	if(  i>=route->get_count()  &&  route==cnv->get_route()  &&  cnv->get_next_coupling_index()==route_t::INVALID_INDEX  ) {
+		check_platform_coupling( next_signal_index );
+	}
+
 	return true;
 }
 
 
-bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps, bool ignore_signals) {
+bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps, bool ignore_signals) const {
 	// first, does the current schedule entry require coupling?
-	// Since current schedule entry can be a waypoint, we proceed to a genuine stop point.
-	sint16 idx = cnv->get_schedule()->get_current_stop();
-	bool stop_found = false;
-	do {
-		if(  !cnv->is_waypoint(cnv->get_schedule()->at(idx))  ) {
-			stop_found = true;
-			break;
-		}
-		idx = (idx+1)%cnv->get_schedule()->get_count();
-	} while(  idx!=cnv->get_schedule()->get_current_stop()  );
-	if(  !stop_found  ||  !cnv->get_schedule()->at(idx).is_try_coupling() ) {
+	if(  !get_next_coupling_stop()  ) {
 		// all schedule entries are waypoint or the next stop point is not a coupling point.
 		cnv->unset_convoi_coupling_in_progress();
 		return false;
@@ -5542,7 +5754,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			//reserve tiles
 			for(  uint16 h=start_index;  h<coupling_index;  h++  ) {
 				grund_t* grn = welt->lookup(route->at(h));
-				schiene_t * schn = gr ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
+				schiene_t * schn = grn ? (schiene_t *)grn->get_weg(get_waytype()) : NULL;
 				if(  schn  ) {
 					schn->reserve( cnv->self,
 					ribi_t::backward(ribi_type(route->at(max(1u,h)-1u), route->at(h)))
