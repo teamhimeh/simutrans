@@ -181,6 +181,7 @@ void convoi_t::init(player_t *player)
 	// convoy shipping
 	shipped_convois.clear();
 	carrier_convoi = convoihandle_t();
+	shipping_income_carrier = convoihandle_t();
 	shipping_wait_since = 0;
 
 	line_update_pending = linehandle_t();
@@ -3993,6 +3994,15 @@ void convoi_t::rdwr(loadsave_t *file)
 		shipping_wait_since = 0;
 	}
 
+	if(  file->get_OTRP_version()>=62  ) {
+		// A convoy can be saved between disembarking and the stop that settles the revenue for
+		// the shipped leg, so the pending payee has to survive the save. Unlike carrier_convoi
+		// this is a real forward link and is stored directly.
+		rdwr_convoihandle_t( file, shipping_income_carrier );
+	} else if(  file->is_loading()  ) {
+		shipping_income_carrier = convoihandle_t();
+	}
+
 	if(  file->is_loading()  ) {
 		recalc_catg_index();
 	}
@@ -4272,11 +4282,14 @@ void convoi_t::calc_gewinn()
 	for(unsigned i=0; i<anz_vehikel; i++) {
 		vehicle_t* v = fahr[i];
 		sint64 tmp;
-		gewinn += tmp = v->calc_revenue(v->last_stop_pos, v->get_pos() );
+		// a leg ridden aboard a carrier pays the carrier its share first
+		gewinn += tmp = deduct_shipping_income_share( v->calc_revenue(v->last_stop_pos, v->get_pos() ), v );
 		// get_schedule is needed as v->get_waytype() returns track_wt for trams (instead of tram_wt
 		owner->book_revenue(tmp, fahr[0]->get_pos().get_2d(), get_schedule()->get_waytype(), v->get_cargo_type()->get_index() );
 		v->last_stop_pos = v->get_pos();
 	}
+	// the shipped leg is settled - any later leg is our own again
+	shipping_income_carrier = convoihandle_t();
 
 	// update statistics of average speed
 	if(  distance_since_last_stop  ) {
@@ -4711,8 +4724,8 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		// we need not to call this on the same position
 		if(  v->last_stop_pos != v->get_pos()  ) {
 			sint64 tmp;
-			// calc_revenue
-			gewinn += tmp = v->calc_revenue(v->last_stop_pos, v->get_pos() );
+			// calc_revenue; a leg ridden aboard a carrier pays the carrier its share first
+			gewinn += tmp = deduct_shipping_income_share( v->calc_revenue(v->last_stop_pos, v->get_pos() ), v );
 			owner->book_revenue(tmp, fahr[0]->get_pos().get_2d(), get_schedule()->get_waytype(), v->get_cargo_type()->get_index());
 			v->last_stop_pos = v->get_pos();
 		}
@@ -4760,6 +4773,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
 	}
+	// The shipped leg has now been settled for every vehicle - any later leg is our own again.
+	shipping_income_carrier = convoihandle_t();
+
 	// Grant departure allowance to a waiting convoy of another line, if configured.
 	// This runs after unloading (self and all coupling children) so that goods just
 	// unloaded here are already available at the halt for the released convoy to load.
@@ -7719,6 +7735,17 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	shipped_convois.remove( c );
 	c->carrier_convoi      = convoihandle_t();
 	c->shipping_wait_since = 0;
+	// Remember who carried us until the revenue for this leg is booked. That happens at this
+	// stop, one step later in hat_gehalten(), because calc_revenue() measures from
+	// last_stop_pos - still the port we boarded at - so the whole leg's income is the
+	// carrier's doing. Every convoy of the chain books its own revenue, so all of them need it.
+	{
+		convoihandle_t k2 = c;
+		while(  k2.is_bound()  ) {
+			k2->shipping_income_carrier = self;
+			k2 = k2->get_coupling_convoi();
+		}
+	}
 
 	// Bring the whole chain back onto the map. This does by hand what start() plus the depot
 	// branch of vorfahren() do between them; start() cannot be used directly because it would
@@ -8185,7 +8212,10 @@ void convoi_t::book_shipping_toll()
 	if(  shipped_convois.empty()  ) {
 		return;
 	}
-	const sint64 pct = (sint64)welt->get_settings().get_way_toll_runningcost_percentage();
+	// Shipping has its own percentage: a ferry crossing is priced differently from running
+	// over someone else's track. It defaults to way_toll_runningcost_percentage, so a pakset
+	// or a save that never sets it behaves exactly as before.
+	const sint64 pct = (sint64)welt->get_settings().get_toll_shipping_percentage();
 	if(  pct == 0  ) {
 		return;
 	}
@@ -8222,4 +8252,35 @@ void convoi_t::book_shipping_toll()
 		c->book( -toll_convoy, CONVOI_WAYTOLL );
 		c->book( -toll_convoy, CONVOI_PROFIT );
 	}
+}
+
+
+sint64 convoi_t::deduct_shipping_income_share(sint64 revenue, const vehicle_t *v)
+{
+	// Convoy shipping: the leg just settled was ridden aboard a carrier - calc_revenue()
+	// measures from last_stop_pos, which is still the port we boarded at, so the whole of this
+	// leg's income was earned by the carrier moving us. Hand the carrier its configured share.
+	if(  !shipping_income_carrier.is_bound()  ||  revenue == 0  ) {
+		return revenue;
+	}
+	const sint64 pct = (sint64)welt->get_settings().get_shipping_income_percentage();
+	if(  pct <= 0  ) {
+		return revenue;
+	}
+	const sint64 share = revenue * pct / 100l;
+	if(  share == 0  ) {
+		return revenue;
+	}
+	convoi_t *carrier = shipping_income_carrier.get_rep();
+	if(  carrier == NULL  ||  carrier->get_vehicle_count() == 0  ||  carrier->get_schedule() == NULL  ) {
+		return revenue;
+	}
+	// booked under the carrier's own waytype, so a ferry's earnings show up in the water
+	// column rather than in the column of whatever it happened to be carrying
+	carrier->get_owner()->book_revenue( share, carrier->front()->get_pos().get_2d(),
+		carrier->get_schedule()->get_waytype(), v->get_cargo_type()->get_index() );
+	carrier->book( share, CONVOI_REVENUE );
+	carrier->book( share, CONVOI_PROFIT );
+	carrier->jahresgewinn += share;
+	return revenue - share;
 }

@@ -274,6 +274,17 @@ private:
 	convoihandle_t carrier_convoi;
 
 	/**
+	* Convoy shipping: the convoy that just carried me, kept only until the revenue for that
+	* leg has been settled. Revenue is booked at the stop AFTER disembarking (calc_revenue()
+	* measures from last_stop_pos, which is still the port we boarded at), so the carrier has
+	* to stay reachable that long to be paid its share. Cleared as soon as the split is done.
+	*/
+	convoihandle_t shipping_income_carrier;
+
+	/// pay `carrier`'s share of a shipped leg's revenue and return what is left for us
+	sint64 deduct_shipping_income_share(sint64 revenue, const vehicle_t *v);
+
+	/**
 	* Convoy shipping: ticks at which this convoy began waiting for a carrier, so that a
 	* convoy nobody ever comes to fetch can eventually be reported instead of hanging forever.
 	*/
