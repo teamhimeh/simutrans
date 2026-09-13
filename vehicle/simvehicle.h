@@ -644,6 +644,9 @@ private:
 	// asks for coupling, NULL otherwise.
 	const schedule_entry_t* get_next_coupling_stop() const;
 
+	// The halt of the next genuine stop if that stop asks for coupling, an unbound handle otherwise.
+	halthandle_t get_coupling_halt() const;
+
 	// Collects the tiles of halt that lie behind the end of route: starting behind route->back()
 	// the track is followed as long as it stays inside halt. Our route ends at our own halt
 	// position, so a convoy waiting further down the platform never appears on it - these are the

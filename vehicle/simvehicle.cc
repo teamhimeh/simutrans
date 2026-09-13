@@ -5299,6 +5299,19 @@ const schedule_entry_t* rail_vehicle_t::get_next_coupling_stop() const
 }
 
 
+// The halt we are going to couple at, i.e. the halt of the next genuine stop when that stop asks
+// for coupling.
+halthandle_t rail_vehicle_t::get_coupling_halt() const
+{
+	const schedule_entry_t* const coupling_stop = get_next_coupling_stop();
+	if(  !coupling_stop  ) {
+		return halthandle_t();
+	}
+	const grund_t* const gr = welt->lookup(coupling_stop->pos);
+	return gr ? gr->get_halt() : halthandle_t();
+}
+
+
 // The part of the arrival platform that our route does not cover: our route ends at the halt
 // position we were assigned, while the convoy we want to couple with waits at its own position
 // further down the platform. Those tiles are collected here so that they can be searched for a
@@ -5349,8 +5362,8 @@ void rail_vehicle_t::get_platform_tiles_behind_route(const route_t* route, halth
 // point and the coupling is recorded in both convoys.
 bool rail_vehicle_t::check_platform_coupling(uint16 &next_signal_index) const
 {
-	const schedule_entry_t* const coupling_stop = get_next_coupling_stop();
-	if(  !coupling_stop  ) {
+	const halthandle_t halt = get_coupling_halt();
+	if(  !halt.is_bound()  ) {
 		// the next stop does not ask for coupling.
 		return false;
 	}
@@ -5359,11 +5372,7 @@ bool rail_vehicle_t::check_platform_coupling(uint16 &next_signal_index) const
 		return false;
 	}
 	const grund_t* const end_gr = welt->lookup(route->back());
-	const grund_t* const stop_gr = welt->lookup(coupling_stop->pos);
-	const halthandle_t halt = end_gr ? end_gr->get_halt() : halthandle_t();
-	// compare the halts directly instead of going through haltestelle_t::get_halt(), which would
-	// also apply an ownership check that has nothing to do with where our route ends.
-	if(  !halt.is_bound()  ||  !stop_gr  ||  halt!=stop_gr->get_halt()  ) {
+	if(  !end_gr  ||  end_gr->get_halt()!=halt  ) {
 		// our route does not end at the stop where we are going to couple.
 		return false;
 	}
@@ -5616,8 +5625,22 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 
 //DBG_MESSAGE("block_reserver()","signals at %i, success=%d",next_signal_index,success);
 
+	// The reservation may have run into the very convoy we are going to couple with: it waits for us
+	// on the arrival platform and holds the tiles it stands on, and nobody else can ever reserve
+	// those. That is the expected state, not an obstacle - so before giving up, look at the platform
+	// as a whole. Only worth it when the tile we failed on belongs to the halt we couple at; a
+	// failure anywhere else is an ordinary blocked route.
+	bool coupling_found = false;
+	if(  !success  &&  i>start_index  &&  route==cnv->get_route()  &&  cnv->get_next_coupling_index()==route_t::INVALID_INDEX  ) {
+		const halthandle_t coupling_halt = get_coupling_halt();
+		const grund_t* const gr_failed = welt->lookup(route->at((uint16)(i-1)));
+		if(  coupling_halt.is_bound()  &&  gr_failed  &&  gr_failed->get_halt()==coupling_halt  ) {
+			coupling_found = check_platform_coupling( next_signal_index );
+		}
+	}
+
 	// free, in case of un-reserve or no success in reservation
-	if(!success) {
+	if(!success  &&  !coupling_found) {
 		// free reservation
 		for ( int j=start_index; j<i; j++) {if (grund_t * gr=welt->lookup(route->at(j))) {
 				schiene_t* sch1 = (schiene_t*)gr->get_weg(get_waytype());
@@ -5642,8 +5665,10 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 			signal->set_state(roadsign_t::STATE_GREEN);
 		}
 	}
-	cnv->set_next_reservation_index( i );
-	dbg->message("rail_vehicle_t::block_reserver()","we reserve to %i",i);
+	if(  !coupling_found  ) {
+		// check_platform_coupling() already pointed the reservation at the coupling point
+		cnv->set_next_reservation_index( i );
+	}
 
 	// If the next stop is a coupling stop, the reserved part of the route is not the whole story:
 	// the convoy we want to couple with is waiting at its own position on the arrival platform,
