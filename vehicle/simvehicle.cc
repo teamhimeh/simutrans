@@ -5120,9 +5120,14 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	// next_stop_index is invalid, so the check below returns early on every tile - a convoy that
 	// only arrives at the platform (or only becomes ready to be coupled) after our reservation was
 	// made would never be found if we looked for it just once.
+	// Our route ends in the coupling halt for the whole leg from the previous stop, so the tile we
+	// are entering has to be part of that halt before the scan is worth anything - otherwise we
+	// would walk the platform on every tile of the journey. Testing the halt of this tile first
+	// keeps ordinary track down to two comparisons.
 	if(  cidx==route_t::INVALID_INDEX
 	  &&  cnv->get_next_reservation_index()>=cnv->get_route()->get_count()
-	  &&  get_next_coupling_stop()  ) {
+	  &&  gr->get_halt().is_bound()
+	  &&  gr->get_halt()==get_coupling_halt()  ) {
 		uint16 coupling_signal = route_t::INVALID_INDEX;
 		if(  check_platform_coupling( coupling_signal )  ) {
 			cnv->set_next_stop_index( min( cnv->get_next_stop_index(), coupling_signal ) );
