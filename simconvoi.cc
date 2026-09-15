@@ -331,7 +331,7 @@ void convoi_t::reserve_route()
 					const koord3d prev = reserved_tiles[max(1u,idx)-1u];
 					const koord3d curr = reserved_tiles[idx];
 					const koord3d next = reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)];
-					if (!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+					if (!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next), ribi_type(prev,curr) )) {
 						// reservation invalid! do not continue reservation more!
 						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
 						break;
@@ -355,7 +355,7 @@ void convoi_t::reserve_route()
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
 					const koord3d curr = route.at(idx);
 					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next), ribi_type(prev,curr) );
 				}
 			}
 		}
@@ -370,7 +370,7 @@ void convoi_t::reserve_route()
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
 					const koord3d curr = route.at(idx);
 					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					if(!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+					if(!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next), ribi_type(prev,curr) )) {
 						next_stop_index = idx;
 						next_reservation_index = idx;
 						// reservation invalid! do not continue reservation more!
@@ -392,7 +392,7 @@ void convoi_t::reserve_route()
 					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
 					const koord3d curr = route.at(idx);
 					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
+					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next), ribi_type(prev,curr) );
 				}
 			}
 		}
@@ -613,7 +613,18 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 				grund_t *gr=welt->lookup(v->get_pos());
 				// airplanes may have no ground ...
 				if (schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(fahr[i]->get_waytype()))) {
-					sch0->reserve(self,ribi_t::none);
+					// Pass the heading with which the vehicle entered this tile: without it
+					// reserved_travel_dir stays ribi_t::none after loading and
+					// schiene_t::can_co_reserve_offset() can never allow the second convoy
+					// onto a way with a vehicle offset.
+					// initialise_journey() sets route_index = index_of(pos)+1, so the tile the
+					// vehicle stands on is route[route_index-1] and we came from route[route_index-2].
+					ribi_t::ribi travel_dir = ribi_t::none;
+					const uint16 ri = v->get_route_index();
+					if(  ri>=2  &&  (uint32)(ri-1u)<route.get_count()  &&  route.at(ri-1u)==v->get_pos()  ) {
+						travel_dir = ribi_type(route.at(ri-2u), route.at(ri-1u));
+					}
+					sch0->reserve(self,ribi_t::none,travel_dir);
 				}
 			}
 			fahr[0]->set_leading(true);
@@ -3200,7 +3211,9 @@ void convoi_t::vorfahren()
 		for(uint16 i=back_index; i<min(get_route()->get_count(),front()->get_route_index()); i++) {
 			// eventually reserve this
 			if (schiene_t* const sch0 = obj_cast<schiene_t>(welt->lookup(get_route()->at(i))->get_weg(front()->get_waytype()))) {
-				sch0->reserve(self,ribi_t::none);
+				// keep the heading, see convoi_t::finish_rd()
+				const ribi_t::ribi travel_dir = i>0 ? ribi_type(get_route()->at((uint32)i-1u), get_route()->at(i)) : ribi_t::none;
+				sch0->reserve(self,ribi_t::none,travel_dir);
 			}
 			else {
 				break;

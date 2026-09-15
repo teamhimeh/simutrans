@@ -52,9 +52,9 @@ public:
 	bool can_co_reserve_offset(ribi_t::ribi travel_dir) const {
 		return  reserved.is_bound()
 		    &&  !reserved2.is_bound()
-		    &&  ribi_t::is_single(travel_dir)
-		    &&  ribi_t::is_single(reserved_travel_dir)
-		    &&  travel_dir == ribi_t::backward(reserved_travel_dir)
+		    &&  travel_dir!=ribi_t::none
+		    &&  reserved_travel_dir!=ribi_t::none
+		    &&  (travel_dir&reserved_travel_dir)==0
 		    &&  get_vehicle_offset_mode() == 0
 		    &&  get_vehicle_offset() != 0
 		    &&  ribi_t::is_twoway(get_ribi_unmasked());
