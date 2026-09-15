@@ -2750,15 +2750,15 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 			}
 		}
 
-		// only_one_car_mode: the area of road behind this tile takes a single convoy at a time. The
+		// exclusive_area_mode: the area of road behind this tile takes a single convoy at a time. The
 		// test is made when crossing the border into such an area - once inside, this convoy is the
 		// one holding it. Convoys check and hop one after the other within their own step, so two of
 		// them cannot both see an empty area and drive in.
-		if(  str->get_overtaking_mode_raw()==only_one_car_mode  ) {
+		if(  str->get_overtaking_mode_raw()==exclusive_area_mode  ) {
 			const grund_t* gr_now = welt->lookup(get_pos());
 			const strasse_t* str_now = gr_now ? (const strasse_t*)gr_now->get_weg(road_wt) : NULL;
-			if(  !str_now  ||  str_now->get_overtaking_mode_raw()!=only_one_car_mode  ) {
-				if(  get_blocking_convoi_in_single_car_area(gr)  ) {
+			if(  !str_now  ||  str_now->get_overtaking_mode_raw()!=exclusive_area_mode  ) {
+				if(  get_blocking_convoi_in_exclusive_area(gr)  ) {
 					// somebody else is in there. Wait at the border, like at a block signal - this is
 					// a normal wait, not a traffic jam, so no stuck message.
 					restart_speed = 0;
@@ -3454,10 +3454,10 @@ bool road_vehicle_t::is_coupling_partner(const vehicle_base_t* v) const
 }
 
 
-// only_one_car_mode makes a whole connected area of road behave like a single-track section: only
+// exclusive_area_mode makes a whole connected area of road behave like a single-track section: only
 // one convoy may be inside it at a time. The area is the set of tiles carrying that mode that are
 // reachable from the entry tile along the road, so it does not matter where a convoy entered it.
-convoi_t* road_vehicle_t::get_blocking_convoi_in_single_car_area(const grund_t* entry) const
+convoi_t* road_vehicle_t::get_blocking_convoi_in_exclusive_area(const grund_t* entry) const
 {
 	if(  !entry  ||  !cnv  ||  cnv==(convoi_t*)1  ) {
 		return NULL;
@@ -3467,8 +3467,8 @@ convoi_t* road_vehicle_t::get_blocking_convoi_in_single_car_area(const grund_t* 
 	const convoihandle_t own_chain = cnv->get_most_parent_convoi();
 
 	// A misconfigured map could mark half the road network with this mode. Stop expanding rather
-	// than walk it every time a convoy reaches the border; an area that large is not a single-car
-	// section any more.
+	// than walk it every time a convoy reaches the border; an area that large is no longer an
+	// exclusive area in any useful sense.
 	const uint32 MAX_AREA_TILES = 256;
 	vector_tpl<koord3d> area(MAX_AREA_TILES);
 	area.append( entry->get_pos() );
@@ -3507,7 +3507,7 @@ convoi_t* road_vehicle_t::get_blocking_convoi_in_single_car_area(const grund_t* 
 				continue;
 			}
 			const strasse_t* str_to = (const strasse_t*)to->get_weg(road_wt);
-			if(  !str_to  ||  str_to->get_overtaking_mode_raw()!=only_one_car_mode  ) {
+			if(  !str_to  ||  str_to->get_overtaking_mode_raw()!=exclusive_area_mode  ) {
 				continue;
 			}
 			if(  !area.is_contained( to->get_pos() )  ) {

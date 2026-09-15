@@ -345,8 +345,8 @@ void weg_t::info(cbuffer_t & buf) const
 			case inverted_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("inverted"));
 				break;
-			case only_one_car_mode:
-				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("only one car"));
+			case exclusive_area_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("exclusive area"));
 				break;
 			case passing_lane_stop_only_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("passing lane stop only"));

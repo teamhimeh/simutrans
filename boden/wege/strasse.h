@@ -108,7 +108,7 @@ public:
 	* loading_only_mode = overtaking a loading convoy only
 	* prohibited_mode = overtaking is completely forbidden
 	* inverted_mode = vehicles can go only on passing lane
-	* only_one_car_mode = drives like prohibited_mode, only one convoy at a time in the connected area
+	* exclusive_area_mode = drives like prohibited_mode, only one convoy at a time in the connected area
 	* passing_lane_stop_only_mode = drives like prohibited_mode, but a convoy may stop on the passing lane
 	*
 	* The last two are restrictions on top of prohibited_mode and are mapped onto it here, so that

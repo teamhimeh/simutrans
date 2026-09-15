@@ -213,7 +213,7 @@ void export_global_constants(HSQUIRRELVM vm)
 	/// vehicles can go only on passing lane
 	enum_slot(vm, "inverted_mode", inverted_mode);
 	/// like prohibited, but only one convoy at a time in the connected area
-	enum_slot(vm, "only_one_car_mode", only_one_car_mode);
+	enum_slot(vm, "exclusive_area_mode", exclusive_area_mode);
 	/// like prohibited, but a convoy may stop on the passing lane
 	enum_slot(vm, "passing_lane_stop_only_mode", passing_lane_stop_only_mode);
 	end_enum();

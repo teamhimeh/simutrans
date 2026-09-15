@@ -170,13 +170,13 @@ enum systemtype_t {
 	 loading_only_mode = 2,  // overtake a loading convoy only
 	 prohibited_mode   = 3,  // overtaking is completely forbidden
 	 inverted_mode     = 4,  // vehicles can go only on passing lane
-	 only_one_car_mode = 5,  // drives like prohibited_mode, but only one convoy at a time in the connected area
+	 exclusive_area_mode = 5,  // drives like prohibited_mode, but only one convoy at a time in the connected area
 	 passing_lane_stop_only_mode = 6, // drives like prohibited_mode, but a convoy may stop on the passing lane
 	 invalid_mode      = 63
  };
 
 /**
- * only_one_car_mode and passing_lane_stop_only_mode are extra restrictions layered on top of
+ * exclusive_area_mode and passing_lane_stop_only_mode are extra restrictions layered on top of
  * prohibited_mode: a vehicle drives on such a road exactly as it drives on a prohibited one, the
  * added rule is checked separately. The whole driving logic compares overtaking modes by their
  * order (<=oneway_mode, >twoway_mode, <inverted_mode ...), so those two are mapped onto the mode
@@ -186,7 +186,7 @@ enum systemtype_t {
  */
 inline overtaking_mode_t effective_overtaking_mode(overtaking_mode_t m)
 {
-	return (m==only_one_car_mode  ||  m==passing_lane_stop_only_mode) ? prohibited_mode : m;
+	return (m==exclusive_area_mode  ||  m==passing_lane_stop_only_mode) ? prohibited_mode : m;
 }
 
 

@@ -16,7 +16,7 @@
 #define L_DIALOG_WIDTH (200)
 
 overtaking_mode_t overtaking_mode_frame_t::overtaking_mode = twoway_mode;
-char overtaking_mode_frame_t::mode_name[8][32] = {"halt mode", "oneway", "twoway", "only loading convoi", "prohibited", "inverted", "only one car", "passing lane stop only"};
+char overtaking_mode_frame_t::mode_name[8][32] = {"halt mode", "oneway", "twoway", "only loading convoi", "prohibited", "inverted", "exclusive area", "passing lane stop only"};
 
 overtaking_mode_frame_t::overtaking_mode_frame_t(player_t *player_, tool_build_way_t* tool_, bool show_avoid_cityroad) :
 	gui_frame_t( tool_->get_waytype()==road_wt? translator::translate("Road Configuration") : translator::translate("Way Configuration") )
@@ -94,7 +94,7 @@ void overtaking_mode_frame_t::init( player_t* player_, overtaking_mode_t overtak
 		if(  overtaking_mode==loading_only_mode  ) mode_button[3].pressed = true;
 		if(  overtaking_mode==prohibited_mode    ) mode_button[4].pressed = true;
 		if(  overtaking_mode==inverted_mode      ) mode_button[5].pressed = true;
-		if(  overtaking_mode==only_one_car_mode   ) mode_button[6].pressed = true;
+		if(  overtaking_mode==exclusive_area_mode   ) mode_button[6].pressed = true;
 		if(  overtaking_mode==passing_lane_stop_only_mode  ) mode_button[7].pressed = true;
 
 		add_component(&divider[0]);
@@ -193,7 +193,7 @@ bool overtaking_mode_frame_t::action_triggered( gui_action_creator_t *komp, valu
 		overtaking_mode = inverted_mode;
 		num = 5;
 	}else if(  komp==&mode_button[6]  ) {
-		overtaking_mode = only_one_car_mode;
+		overtaking_mode = exclusive_area_mode;
 		num = 6;
 	}else if(  komp==&mode_button[7]  ) {
 		overtaking_mode = passing_lane_stop_only_mode;
