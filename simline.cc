@@ -196,9 +196,9 @@ void simline_t::add_convoy(convoihandle_t cnv)
 	// what goods can this line transport?
 	bool update_schedules = false;
 	if(  cnv->get_state()!=convoi_t::INITIAL  ) {
-		FOR(minivec_tpl<uint8>, const catg_index, cnv->get_goods_catg_index()) {
+		FOR(vector_tpl<uint16>, const catg_index, cnv->get_goods_catg_index()) {
 			if(  !goods_catg_index.is_contained( catg_index )  ) {
-				goods_catg_index.append( catg_index, 1 );
+				goods_catg_index.append( catg_index );
 				update_schedules = true;
 			}
 		}
@@ -526,8 +526,8 @@ void simline_t::recalc_status()
 void simline_t::recalc_catg_index()
 {
 	// first copy old
-	minivec_tpl<uint8> old_goods_catg_index(goods_catg_index.get_count());
-	FOR(minivec_tpl<uint8>, const i, goods_catg_index) {
+	vector_tpl<uint16> old_goods_catg_index(goods_catg_index.get_count());
+	FOR(vector_tpl<uint16>, const i, goods_catg_index) {
 		old_goods_catg_index.append(i);
 	}
 	goods_catg_index.clear();
@@ -538,7 +538,7 @@ void simline_t::recalc_catg_index()
 		convoi_t const& cnv = *i;
 		withdraw &= cnv.get_withdraw();
 
-		FOR(minivec_tpl<uint8>, const catg_index, cnv.get_goods_catg_index()) {
+		FOR(vector_tpl<uint16>, const catg_index, cnv.get_goods_catg_index()) {
 			goods_catg_index.append_unique( catg_index );
 		}
 	}
@@ -549,7 +549,7 @@ void simline_t::recalc_catg_index()
 	}
 	else {
 		// maybe changed => must test all entries
-		FOR(minivec_tpl<uint8>, const i, goods_catg_index) {
+		FOR(vector_tpl<uint16>, const i, goods_catg_index) {
 			if (!old_goods_catg_index.is_contained(i)) {
 				// different => recalc
 				welt->set_schedule_counter();

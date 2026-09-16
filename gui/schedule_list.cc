@@ -1209,7 +1209,7 @@ void schedule_list_gui_t::rdwr( loadsave_t *file )
 
 
 // borrowed code from minimap
-bool schedule_list_gui_t::is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_index)
+bool schedule_list_gui_t::is_matching_freight_catg(const vector_tpl<uint16> &goods_catg_index)
 {
 	const goods_desc_t *line_freight_type_group_index = viewable_freight_types[ freight_type_c.get_selection() ];
 	// does this line/convoi has a matching freight
@@ -1221,7 +1221,7 @@ bool schedule_list_gui_t::is_matching_freight_catg(const minivec_tpl<uint8> &goo
 	}
 	else if(  line_freight_type_group_index == goods_manager_t::none  ) {
 		// all freights but not pax or mail
-		for(  uint8 i = 0;  i < goods_catg_index.get_count();  i++  ) {
+		for(  uint32 i = 0;  i < goods_catg_index.get_count();  i++  ) {
 			if(  goods_catg_index[i] > goods_manager_t::INDEX_NONE  ) {
 				return true;
 			}
@@ -1229,7 +1229,7 @@ bool schedule_list_gui_t::is_matching_freight_catg(const minivec_tpl<uint8> &goo
 		return false;
 	}
 	else if(  line_freight_type_group_index != NULL  ) {
-		for(  uint8 i = 0;  i < goods_catg_index.get_count();  i++  ) {
+		for(  uint32 i = 0;  i < goods_catg_index.get_count();  i++  ) {
 			if(  goods_catg_index[i] == line_freight_type_group_index->get_catg_index()  ) {
 				return true;
 			}

@@ -17,7 +17,7 @@ stringhashtable_tpl<const goods_desc_t *> goods_manager_t::desc_table;
 
 vector_tpl<goods_desc_t *> goods_manager_t::goods;
 
-uint8 goods_manager_t::max_catg_index = 0;
+uint16 goods_manager_t::max_catg_index = 0;
 
 const goods_desc_t *goods_manager_t::shipping_goods[16] = { NULL };
 
@@ -48,13 +48,13 @@ bool goods_manager_t::successfully_loaded()
 	goods.insert_at(0,load_mail);
 	goods.insert_at(0,load_passengers);
 
-	if(goods.get_count()>=255) {
-		dbg->fatal("goods_manager_t::successfully_loaded()","Too many different goods %i>255",goods.get_count()-1 );
+	if(  goods.get_count() >= MAX_GOODS_COUNT  ) {
+		dbg->fatal("goods_manager_t::successfully_loaded()","Too many different goods %i>%i",goods.get_count()-1, MAX_GOODS_COUNT-1 );
 	}
 
 	// assign indexes
-	for(  uint8 i=3;  i<goods.get_count();  i++  ) {
-		goods[i]->goods_index = i;
+	for(  uint32 i=3;  i<goods.get_count();  i++  ) {
+		goods[i]->goods_index = (uint16)i;
 	}
 
 	// now assign unique category indexes for unique categories
@@ -66,7 +66,8 @@ bool goods_manager_t::successfully_loaded()
 		}
 	}
 	// mapping of waren_t::catg to catg_index, map[catg] = catg_index
-	uint8 map[255] = {0};
+	// catg is a uint8, so the map needs all 256 entries
+	uint16 map[256] = {0};
 
 	FOR(vector_tpl<goods_desc_t*>, const i, goods) {
 		uint8 const catg = i->get_catg();
@@ -79,7 +80,11 @@ bool goods_manager_t::successfully_loaded()
 	}
 
 	// init the lookup table in ware_t
-	for( unsigned i=0;  i<256;  i++  ) {
+	// It covers the whole uint16 range of ware_t::index, so that a stray index from a
+	// broken savegame still lands inside the array (and yields NULL) instead of out of bounds.
+	delete [] ware_t::index_to_desc;
+	ware_t::index_to_desc = new const goods_desc_t *[MAX_GOODS_COUNT+1];
+	for( uint32 i=0;  i<=MAX_GOODS_COUNT;  i++  ) {
 		if(i>=goods.get_count()) {
 			// these entries will be never looked at;
 			// however, if then this will generate an error
@@ -216,7 +221,7 @@ const goods_desc_t *goods_manager_t::get_info(const char* name)
 const goods_desc_t *goods_manager_t::get_info_catg(const uint8 catg)
 {
 	if(catg>0) {
-		for(unsigned i=0;  i<get_count();  i++  ) {
+		for(uint32 i=0;  i<get_count();  i++  ) {
 			if(goods[i]->catg==catg) {
 				return goods[i];
 			}
@@ -227,9 +232,9 @@ const goods_desc_t *goods_manager_t::get_info_catg(const uint8 catg)
 }
 
 
-const goods_desc_t *goods_manager_t::get_info_catg_index(const uint8 catg_index)
+const goods_desc_t *goods_manager_t::get_info_catg_index(const uint16 catg_index)
 {
-	for(unsigned i=0;  i<get_count();  i++  ) {
+	for(uint32 i=0;  i<get_count();  i++  ) {
 		if(goods[i]->get_catg_index()==catg_index) {
 			return goods[i];
 		}
@@ -243,7 +248,7 @@ const goods_desc_t *goods_manager_t::get_info_catg_index(const uint8 catg_index)
 void goods_manager_t::set_multiplier(sint32 multiplier)
 {
 //DBG_MESSAGE("goods_manager_t::set_multiplier()","new factor %i",multiplier);
-	for(unsigned i=0;  i<get_count();  i++  ) {
+	for(uint32 i=0;  i<get_count();  i++  ) {
 		sint64 long_base_value = goods[i]->base_value;
 		goods[i]->value = (long_base_value*(sint64)multiplier)/INT64_C(1000);
 	}

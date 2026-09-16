@@ -185,8 +185,8 @@ halthandle_t find_halt(const char* name) {
     return halthandle_t();
 }
 
-haltestelle_t::connection_t find_connection(halthandle_t from, halthandle_t to, const uint8 ware_index) {
-    FOR(vector_tpl<haltestelle_t::connection_t>, const c, from->get_connections(ware_index)) {
+haltestelle_t::connection_t find_connection(halthandle_t from, halthandle_t to, const uint16 catg_index) {
+    FOR(vector_tpl<haltestelle_t::connection_t>, const c, from->get_connections(catg_index)) {
         if(  c.halt.is_bound()  &&  c.halt==to  ) {
             return c;
         }
@@ -380,7 +380,7 @@ void route_search_frame_t::search_route() {
     // Helper: collect all enabled halts covering a tile position.
     // is_enabled(uint8) expects a category index, not a goods index, so translate
     // search_ware_index (a goods index) via get_catg_index() before filtering.
-    const uint8 search_catg_index = goods_manager_t::get_info(search_ware_index)->get_catg_index();
+    const uint16 search_catg_index = goods_manager_t::get_info(search_ware_index)->get_catg_index();
     auto collect_halts = [&](koord pos, vector_tpl<halthandle_t>& out) {
         const planquadrat_t *plan = world()->access(pos);
         if(plan) {
@@ -475,7 +475,7 @@ void route_search_frame_t::search_route() {
         return;
     }
 
-    const uint8 ware_catg_idx = dummy_ware.get_desc()->get_catg_index();
+    const uint16 ware_catg_idx = dummy_ware.get_desc()->get_catg_index();
     const bool tbgr = world()->get_settings().get_time_based_routing_enabled(ware_catg_idx);
     // Walking to/from a raw coordinate only makes sense for passengers - goods and mail
     // are never carried on foot, so never show/count a walking leg for those searches.

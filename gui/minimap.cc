@@ -2125,7 +2125,7 @@ void minimap_t::rdwr(loadsave_t *file)
 }
 
 
-bool minimap_t::is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_index)
+bool minimap_t::is_matching_freight_catg(const vector_tpl<uint16> &goods_catg_index)
 {
 	// does this line/convoi has a matching freight
 	if(  freight_type_group_index_showed_on_map == goods_manager_t::passengers  ) {
@@ -2136,7 +2136,7 @@ bool minimap_t::is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_in
 	}
 	else if(  freight_type_group_index_showed_on_map == goods_manager_t::none  ) {
 		// all freights but not pax or mail
-		for(  uint8 i = 0;  i < goods_catg_index.get_count();  i++  ) {
+		for(  uint32 i = 0;  i < goods_catg_index.get_count();  i++  ) {
 			if(  goods_catg_index[i] > goods_manager_t::INDEX_NONE  ) {
 				return true;
 			}
@@ -2144,7 +2144,7 @@ bool minimap_t::is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_in
 		return false;
 	}
 	else if(  freight_type_group_index_showed_on_map != NULL  ) {
-		for(  uint8 i = 0;  i < goods_catg_index.get_count();  i++  ) {
+		for(  uint32 i = 0;  i < goods_catg_index.get_count();  i++  ) {
 			if(  goods_catg_index[i] == freight_type_group_index_showed_on_map->get_catg_index()  ) {
 				return true;
 			}
@@ -2160,7 +2160,7 @@ bool minimap_t::is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_in
 	}
 	else if(  mode & MAP_FREIGHT  ) {
 		// all freights but not pax or mail
-		for(  uint8 i = 0;  i < goods_catg_index.get_count();  i++  ) {
+		for(  uint32 i = 0;  i < goods_catg_index.get_count();  i++  ) {
 			if(  goods_catg_index[i]>2  ) {
 				return true;
 			}

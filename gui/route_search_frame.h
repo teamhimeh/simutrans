@@ -40,7 +40,7 @@ class route_search_frame_t : public gui_frame_t, public action_listener_t
 	vector_tpl<const goods_desc_t *> viewable_freight_types;
 	gui_combobox_t freight_type_c;
 
-	uint8 search_ware_index;
+	uint16 search_ware_index;
 
 	// Parsed from *_koord_text; koord::invalid when the field is empty / invalid.
 	koord from_koord, dest_koord;
