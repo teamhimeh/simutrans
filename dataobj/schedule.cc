@@ -378,6 +378,13 @@ void schedule_t::rdwr(loadsave_t *file)
 			} else {
 				entries[i].set_stop_flags((uint32)0);
 			}
+			if(  file->is_loading()  &&  file->get_OTRP_version()<62  &&  entries[i].get_stop_flags()&schedule_entry_t::NO_GO_NO_USERS  ) {
+				// Savegames older than OTRP v62 only had a single-stop no-go-no-users
+				// flag. Migrate it into a one-entry section (start and end on the same
+				// entry), which is what the new demand-based skip logic looks at.
+				entries[i].set_no_go_no_users_section_start(true);
+				entries[i].set_no_go_no_users_section_end(true);
+			}
 			if(file->get_OTRP_version()>=25) {
 				// prepare for configurable departure slots
 				file->rdwr_short(entries[i].spacing);
@@ -744,7 +751,7 @@ bool schedule_t::sscanf_schedule( const char *ptr )
 
 void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const& entry) {
 	uint8 cnt = 1;
-	char str[24];
+	char str[32];
 	str[0] = '[';
 	const uint32 flag = entry.get_stop_flags();
 	if(  flag&schedule_entry_t::WAIT_FOR_COUPLING  ) {
@@ -803,8 +810,18 @@ void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const&
 		str[cnt] = 'a';
 		cnt++;
 	}
-	if(  entry.is_no_go_no_users()  ) {
+	// A one-entry section (start and end on the same entry) is shown as 'G', matching
+	// the label used by the legacy single-stop no-go-no-users flag it replaces.
+	if(  entry.is_no_go_no_users_section_start()  &&  entry.is_no_go_no_users_section_end()  ) {
 		str[cnt] = 'G';
+		cnt++;
+	}
+	else if(  entry.is_no_go_no_users_section_start()  ) {
+		str[cnt] = 's';
+		cnt++;
+	}
+	else if(  entry.is_no_go_no_users_section_end()  ) {
+		str[cnt] = 'e';
 		cnt++;
 	}
 	if(  entry.is_pass_stop()  ) {
@@ -1030,6 +1047,56 @@ uint8 schedule_t::get_current_stop_exluding_depot() const {
 		}
 	}
 	return idx;
+}
+
+bool schedule_t::get_no_go_no_users_section(uint8 index, uint8& out_start, uint8& out_end) const {
+	const uint8 count = entries.get_count();
+	if(  count==0  ||  index>=count  ) {
+		return false;
+	}
+	// Scan backward for the START entry that encloses index.
+	uint8 start = index;
+	uint8 steps = 0;
+	while(  !entries[start].is_no_go_no_users_section_start()  ) {
+		start = (start==0) ? count-1 : start-1;
+		steps++;
+		if(  steps>=count  ) {
+			// Went all the way round without finding a START entry: index is not
+			// part of any section. This bound also prevents an infinite loop if
+			// the flags are misconfigured.
+			return false;
+		}
+	}
+	// A single entry can carry both START and END: a one-entry section. This is
+	// also what a legacy single-stop NO_GO_NO_USERS entry is migrated to.
+	if(  entries[start].is_no_go_no_users_section_end()  ) {
+		out_start = start;
+		out_end = start;
+		return true;
+	}
+	// Scan forward from the entry after start for the END boundary (or the next
+	// START entry, which closes this section just before it).
+	uint8 end = start;
+	uint8 j = (start+1)%count;
+	while(  j!=start  ) {
+		if(  entries[j].is_no_go_no_users_section_end()  ) {
+			end = j;
+			break;
+		}
+		if(  entries[j].is_no_go_no_users_section_start()  ) {
+			end = (j==0) ? count-1 : j-1;
+			break;
+		}
+		end = j;
+		j = (j+1)%count;
+	}
+	// If neither an END nor another START entry was ever found, the loop above ran
+	// out at j==start, and end is left at the entry just before start: the section
+	// then spans every other entry in the schedule. This bound (at most count-1
+	// iterations) also prevents an infinite loop for misconfigured flags.
+	out_start = start;
+	out_end = end;
+	return true;
 }
 
 

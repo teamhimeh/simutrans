@@ -646,11 +646,16 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_transfer_interval.add_listener(this);
 		bt_transfer_interval.disable();
 		add_component(&bt_transfer_interval);
-		bt_no_go_no_users.init(button_t::square_state, "not go if no users");
-		bt_no_go_no_users.set_tooltip("If there are no users, this convoy will not go to this stop");
-		bt_no_go_no_users.add_listener(this);
-		bt_no_go_no_users.disable();
-		add_component(&bt_no_go_no_users);
+		bt_no_go_no_users_section_start.init(button_t::square_state, "no-go-no-users section start");
+		bt_no_go_no_users_section_start.set_tooltip("Starts a demand-based skip section: if none of the entries up to the matching section end have demand, this convoy skips all of them. Set start and end on the same entry for a single-stop section.");
+		bt_no_go_no_users_section_start.add_listener(this);
+		bt_no_go_no_users_section_start.disable();
+		add_component(&bt_no_go_no_users_section_start);
+		bt_no_go_no_users_section_end.init(button_t::square_state, "no-go-no-users section end");
+		bt_no_go_no_users_section_end.set_tooltip("Ends a demand-based skip section started at an earlier entry.");
+		bt_no_go_no_users_section_end.add_listener(this);
+		bt_no_go_no_users_section_end.disable();
+		add_component(&bt_no_go_no_users_section_end);
 		add_component(&sp_load_settings);
 
 		bt_temp_load.init(button_t::square_state, "load temporary");
@@ -1081,7 +1086,8 @@ void schedule_gui_t::update_selection()
 	bt_no_overtake.disable();
 	bt_start_shipped.disable();
 	bt_max_speed_kmh_of_convoi.disable();
-	bt_no_go_no_users.disable();
+	bt_no_go_no_users_section_start.disable();
+	bt_no_go_no_users_section_end.disable();
 	numimp_max_speed_kmh_of_convoi.disable();
 	bt_balance_speed_kmh_of_convoi.disable();
 	numimp_balance_speed_kmh_of_convoi.disable();
@@ -1169,8 +1175,10 @@ void schedule_gui_t::update_selection()
 			bt_temp_unload.pressed = schedule->at(current_stop).is_temp_unload();
 			bt_temp_unload_all.enable();
 			bt_temp_unload_all.pressed = schedule->at(current_stop).is_temp_unload_all();
-			bt_no_go_no_users.enable();
-			bt_no_go_no_users.pressed = schedule->at(current_stop).is_no_go_no_users();
+			bt_no_go_no_users_section_start.enable();
+			bt_no_go_no_users_section_start.pressed = schedule->at(current_stop).is_no_go_no_users_section_start();
+			bt_no_go_no_users_section_end.enable();
+			bt_no_go_no_users_section_end.pressed = schedule->at(current_stop).is_no_go_no_users_section_end();
 			
 			// wait_for_time releated things
 			const bool wft = schedule->at(current_stop).get_wait_for_time();
@@ -1492,9 +1500,15 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
-	else if(comp == &bt_no_go_no_users) {
+	else if(comp == &bt_no_go_no_users_section_start) {
 		if(!schedule->empty()) {
-			schedule->at(schedule->get_current_stop()).set_no_go_no_users(!bt_no_go_no_users.pressed);
+			schedule->at(schedule->get_current_stop()).set_no_go_no_users_section_start(!bt_no_go_no_users_section_start.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_no_go_no_users_section_end) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_no_go_no_users_section_end(!bt_no_go_no_users_section_end.pressed);
 			update_selection();
 		}
 	}
@@ -2236,7 +2250,8 @@ void schedule_gui_t::extract_loading_settings(bool yesno) {
 	lb_max_load.set_visible(yesno);
 	numimp_max_load.set_visible(yesno);
 	bt_max_load_all_stops.set_visible(yesno);
-	bt_no_go_no_users.set_visible(yesno);
+	bt_no_go_no_users_section_start.set_visible(yesno);
+	bt_no_go_no_users_section_end.set_visible(yesno);
 	bt_temp_load.set_visible(yesno);
 	bt_temp_unload.set_visible(yesno);
 	bt_temp_unload_all.set_visible(yesno);
