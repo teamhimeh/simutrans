@@ -178,6 +178,9 @@ public:
 	 */
 	static void reset_routing();
 
+	// Discard cached passenger searches before graph or handle changes.
+	static void invalidate_route_tree_cache();
+
 	/**
 	 * Tries to generate some pedestrians on the square and the
 	 * adjacent squares. Return actual number of generated
