@@ -4708,16 +4708,22 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	halt->calc_destination_halt(destination_halts, reachable_halts, temp_stop_halts, goods_catg_index, self);
 
 	{
-		// Wagonload-style single-destination loading: this convoy may only carry cargo
-		// bound for one destination halt at a time. If it already carries cargo, restrict
-		// loading to the destination that cargo is bound for (see get_committed_destination()).
-		// If it is empty, tentatively restrict to a single candidate destination (the first
-		// one reachable for the goods this convoy carries); no separate "commit" step is
-		// needed, since get_committed_destination() will report this destination on its own
-		// once cargo bound for it is actually aboard.
+		// Wagonload-style single-destination loading applies to freight only: a bus or
+		// train must remain free to carry passengers or mail bound for many different
+		// stops at once, exactly as before. Only categories other than passengers and
+		// mail are restricted to a single destination halt at a time. If this convoy
+		// already carries freight, restrict loading to the destination that freight is
+		// bound for (see get_committed_destination()). If it carries no freight yet,
+		// tentatively restrict to a single candidate destination (the first one
+		// reachable for the freight this convoy carries); no separate "commit" step is
+		// needed, since get_committed_destination() will report this destination on its
+		// own once freight bound for it is actually aboard.
 		halthandle_t loading_target = get_committed_destination();
 		if(  !loading_target.is_bound()  ) {
 			FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+				if(  category_idx==goods_manager_t::INDEX_PAS  ||  category_idx==goods_manager_t::INDEX_MAIL  ) {
+					continue;
+				}
 				const vector_tpl<halthandle_t>& dest_list = destination_halts.get(category_idx);
 				if(  !dest_list.empty()  ) {
 					loading_target = dest_list.front();
@@ -4727,6 +4733,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 		if(  loading_target.is_bound()  ) {
 			FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+				if(  category_idx==goods_manager_t::INDEX_PAS  ||  category_idx==goods_manager_t::INDEX_MAIL  ) {
+					continue;
+				}
 				vector_tpl<halthandle_t>* dest_list = destination_halts.access(category_idx);
 				if(  dest_list  ) {
 					const bool keep = dest_list->is_contained(loading_target);
@@ -6518,10 +6527,15 @@ bool convoi_t::calc_lane_affinity(uint8 lane_affinity_sign)
 }
 
 // See simconvoi.h for the rationale: the destination this convoy is committed to is
-// always derived from the cargo it already carries, never stored separately.
+// always derived from the cargo it already carries, never stored separately. Only
+// freight commits a convoy this way; passengers and mail are deliberately ignored, so a
+// bus or train stays free to carry riders bound for many different stops at once.
 halthandle_t convoi_t::get_committed_destination() const {
 	for(  uint32 i = 0;  i != anz_vehikel;  ++i  ) {
 		FOR(slist_tpl<ware_t>, const& ware, fahr[i]->get_cargo()) {
+			if(  ware.is_passenger()  ||  ware.is_mail()  ) {
+				continue;
+			}
 			if(  ware.get_ziel().is_bound()  ) {
 				return ware.get_ziel();
 			}
@@ -6577,14 +6591,18 @@ bool convoi_t::has_own_demand_at_entry(const schedule_entry_t& entry) const {
 		inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
 		halt->calc_destination_halt(destination_halts, reachable_halts, temp_stop_halts, goods_catg_index, self);
 
-		// Wagonload-style single-destination loading: if this convoy is already
-		// committed to a destination (see get_committed_destination()), cargo bound
-		// anywhere else does not count as demand, because it could not be loaded here
-		// anyway. Do not restrict this for an empty convoy: it is still free to pick any
-		// destination, so any reachable cargo is genuine demand for it.
+		// Wagonload-style single-destination loading applies to freight only (see the
+		// matching comment in hat_gehalten()). If this convoy is already committed to a
+		// freight destination (see get_committed_destination()), freight bound anywhere
+		// else does not count as demand, because it could not be loaded here anyway.
+		// Passengers and mail, and an empty convoy's freight categories, are left
+		// unrestricted: any reachable cargo there is genuine demand.
 		const halthandle_t committed_destination = get_committed_destination();
 		if(  committed_destination.is_bound()  ) {
 			FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+				if(  category_idx==goods_manager_t::INDEX_PAS  ||  category_idx==goods_manager_t::INDEX_MAIL  ) {
+					continue;
+				}
 				vector_tpl<halthandle_t>* dest_list = destination_halts.access(category_idx);
 				if(  dest_list  ) {
 					const bool keep = dest_list->is_contained(committed_destination);

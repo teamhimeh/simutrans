@@ -864,14 +864,18 @@ public:
 	bool is_users_at_next_stop() const;
 
 	/**
-	 * Wagonload-style single-destination loading: returns the halt this convoy is
-	 * currently committed to carrying cargo for, derived from the cargo it already has
-	 * aboard (the destination of the first ware packet found in any vehicle), or an
-	 * unbound handle if it is currently empty. An empty convoy is free to commit to any
-	 * destination; a non-empty one may only load more cargo bound for this same halt,
-	 * until it unloads everything and becomes empty again. There is deliberately no
-	 * separate stored "committed destination" field: the cargo itself is always the
-	 * single source of truth, so this needs no savegame state of its own.
+	 * Wagonload-style single-destination loading (freight only - see below): returns
+	 * the halt this convoy is currently committed to carrying freight for, derived from
+	 * the freight it already has aboard (the destination of the first non-passenger,
+	 * non-mail ware packet found in any vehicle), or an unbound handle if it currently
+	 * carries no freight. A convoy with no freight aboard is free to commit to any
+	 * freight destination; one already carrying freight may only load more freight
+	 * bound for this same halt, until it unloads all of it and carries none again.
+	 * Passengers and mail are deliberately ignored here, so a bus or train stays free
+	 * to carry riders bound for many different stops at once, exactly as before this
+	 * feature existed. There is deliberately no separate stored "committed destination"
+	 * field: the freight itself is always the single source of truth, so this needs no
+	 * savegame state of its own.
 	 */
 	halthandle_t get_committed_destination() const;
 
