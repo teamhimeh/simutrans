@@ -461,6 +461,18 @@ Wait here until a carrier convoy takes this convoy to its next stop. The convoy 
 航送開始まで待機します。この編成は航送されるまで発車しません。
 aboard
 航送中
+SHIPPING_ROAD
+自動車を航送
+SHIPPING_TRACK
+鉄道車両を航送
+SHIPPING_MONORAIL
+モノレール車両を航送
+SHIPPING_MAGLEV
+マグレブ車両を航送
+SHIPPING_NARROWGAUGE
+ナローゲージ車両を航送
+SHIPPING_WATER
+船を航送
 #------無閉塞運行------
 Without Reservation
 無閉塞運行
