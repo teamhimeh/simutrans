@@ -11022,7 +11022,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 'i':
-		// two_ways: allow convoys to pass the signal from the reverse direction
+		// ignore length for choose/guide signals
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if(  signal_t *sig = gr->find<signal_t>()  ) {
 				if(  player_t::check_owner(sig->get_owner(), player)  ) {

@@ -204,7 +204,6 @@ void signal_info_t::update_data()
 	bt_require_parent.pressed = signal->is_guide_signal();
 	bt_advance_to_end.pressed = signal->is_advance_to_end();
 	bt_choose_signal.pressed = signal->is_choose_signal();
-	bt_skip_default_route.pressed = signal->is_skip_default_route();
 	bt_stop_before_check.pressed = signal->is_stop_before_check();
 	bt_skip_default_route.pressed = signal->is_skip_default_route();
 	bt_start_signal.pressed = signal->is_start_signal();
