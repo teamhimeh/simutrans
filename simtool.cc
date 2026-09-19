@@ -10769,22 +10769,15 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * c:set end of choose signal
  * g:set end of guide signal
  * m:set margin of the stoplength of choose signal
-<<<<<<< HEAD
- * d:set use default route for choose signal
-=======
  * t:set stop before check(for choose/longblock signs)
  * d:set use default route for choose signal
  * p:set start signal(do not start from stops if this flag is true)
-<<<<<<< HEAD
->>>>>>> OTRP-KUTAv6
- * 
-=======
  * l:set length-based choose (choose shortest halt that fits convoy)
  * D:toggle detailed_oneway flag on single_way sign; initialises defaults when enabling
  * n:set packed from-N/from-S allowed exit ribis on detailed_oneway sign (ticks_ns)
  * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
  * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
->>>>>>> OTRP-KUTAv6
+ * i:set ignore lentgh
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
