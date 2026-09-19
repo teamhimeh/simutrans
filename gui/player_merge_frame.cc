@@ -1,62 +1,70 @@
 #include "player_merge_frame.h"
 #include "components/gui_divider.h"
+#include "components/gui_component.h"
 #include "../dataobj/translator.h"
 #include "../player/simplay.h"
 #include "../simmenu.h"
 #include "../simworld.h"
 
 player_merge_frame_t::player_merge_frame_t() :
-	gui_frame_t( translator::translate("Player merger") )
-{  
+	gui_frame_t( translator::translate("Player merger") ),
+	scrolly(&player_table, false, true)
+{
 	selected_merged_player_num = selected_merger_player_num = -1;
-	
+
   set_table_layout(1,0);
-  
+
   lb_description.set_text("Select players to be merged.");
   add_component(&lb_description);
-	
-	add_table(2,0);
-  
+
+	player_table.set_table_layout(3,0);
+
   lb_merged.set_text("merged player");
-  add_component(&lb_merged);
+  player_table.add_component(&lb_merged);
   lb_merge_to.set_text("merge to");
-  add_component(&lb_merge_to);
+  player_table.add_component(&lb_merge_to);
+  player_table.new_component<gui_margin_t>(D_SCROLLBAR_WIDTH+D_H_SPACE,D_V_SPACE);
   for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
     player_t* player = world()->get_player(i);
     if(  player==NULL || player->is_public_service()  ) {
       // empty player or public player, skip.
       continue;
     }
-    
-    button_t* bt_merged_player = new button_t();
+
+    button_t* bt_merged_player = player_table.new_component<button_t>();
     bt_merged_player->init(button_t::roundbox_state | button_t::flexible, player->get_name());
 		bt_merged_player->pressed = false;
     bt_merged_player->add_listener(this);
-		add_component(bt_merged_player);
 		player_item_t merged_player_item;
 		merged_player_item.button = bt_merged_player;
 		merged_player_item.player_num = i;
     players_merged.append(merged_player_item);
-    
-    button_t* bt_to_player = new button_t();
+
+    button_t* bt_to_player = player_table.new_component<button_t>();
     bt_to_player->init(button_t::roundbox_state | button_t::flexible, player->get_name());
 		bt_to_player->pressed = false;
     bt_to_player->add_listener(this);
     bt_to_player->disable();
-		add_component(bt_to_player);
 		player_item_t to_player_item;
 		to_player_item.button = bt_to_player;
 		to_player_item.player_num = i;
     players_merge_to.append(to_player_item);
-  }
-	end_table();
 	
+	player_table.new_component<gui_margin_t>(D_SCROLLBAR_WIDTH+D_H_SPACE,D_V_SPACE);
+  }
+
+	// leave room for the vertical scrollbar so it does not cover the "merge to" column
+	scrolly.set_min_width( player_table.get_min_size().w );
+	add_component(&scrolly);
+
 	new_component<gui_divider_t>();
 	bt_merge.init(button_t::roundbox_state | button_t::flexible, translator::translate("Merge"));
 	bt_merge.add_listener(this);
 	bt_merge.disable();
 	add_component(&bt_merge);
-  
+
+	set_resizemode(vertical_resize);
+
   reset_min_windowsize();
   set_windowsize(get_min_windowsize());
 }

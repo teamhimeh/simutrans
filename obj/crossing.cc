@@ -160,11 +160,19 @@ void crossing_t::rdwr(loadsave_t *file)
 }
 
 
-void crossing_t::finish_rd()
+void crossing_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	grund_t *gr=welt->lookup(get_pos());
 	if(gr==NULL  ||  !gr->hat_weg(desc->get_waytype(0))  ||  !gr->hat_weg(desc->get_waytype(1))) {
 		dbg->error("crossing_t::finish_rd","way/ground missing at %i,%i => ignore", get_pos().x, get_pos().y );
+	}
+	else if(  ribi_t::are_disjoint_bends( gr->get_weg(desc->get_waytype(0))->get_ribi_unmasked(), gr->get_weg(desc->get_waytype(1))->get_ribi_unmasked() )  ) {
+		// the two ways never actually meet at the tile center (e.g. a stale crossing_t
+		// left over from an old save, now built as disjoint diagonal bends instead) --
+		// stay inert and invisible rather than compute a bogus straight-crossing image
+		dbg->warning("crossing_t::finish_rd","ways at %i,%i are disjoint diagonal bends => no crossing image", get_pos().x, get_pos().y );
+		image = IMG_EMPTY;
+		foreground_image = IMG_EMPTY;
 	}
 	else {
 		// try to find crossing that matches way max speed
@@ -177,7 +185,7 @@ void crossing_t::finish_rd()
 		// after loading restore speedlimits
 		w1->count_sign();
 		w2->count_sign();
-		ns = ribi_t::is_straight_ns(w2->get_ribi_unmasked());
+		ns = ribi_t::is_straight_ns(w2->get_ribi_unmasked())||ribi_t::is_straight_ew(w1->get_ribi_unmasked());
 #ifdef MULTI_THREAD
 		pthread_mutex_lock( &crossing_logic_mutex );
 #endif

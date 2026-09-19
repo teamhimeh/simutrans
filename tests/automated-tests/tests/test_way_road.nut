@@ -13,13 +13,16 @@ function test_way_road_build_single_tile()
 {
 	local pl = player_x(0)
 	local road_desc = way_desc_x.get_available_ways(wt_road, st_flat)[0]
+	local remover = command_x(tool_remove_way)
 	local default_cash = pl.get_current_cash()
 
 	ASSERT_TRUE(road_desc != null)
 
+	// without ctrl, start == end is not a valid route: nothing gets built
 	{
-		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, true), "")
+		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, false), "")
 		ASSERT_EQUAL(pl.get_current_cash(), default_cash)
+		ASSERT_TRUE(tile_x(4, 2, 0).find_object(mo_way) == null)
 
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 			[
@@ -34,10 +37,17 @@ function test_way_road_build_single_tile()
 			])
 	}
 
+	// with ctrl, start == end builds a single isolated way tile
 	{
-		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, false), "")
-		ASSERT_EQUAL(pl.get_current_cash(), default_cash)
+		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, true), null)
+		ASSERT_TRUE(pl.get_current_cash() < default_cash)
 
+		local built_way = tile_x(4, 2, 0).find_object(mo_way)
+		ASSERT_TRUE(built_way != null)
+		ASSERT_EQUAL(built_way.get_desc().get_name(), road_desc.get_name())
+		ASSERT_EQUAL(tile_x(4, 2, 0).get_way_dirs(wt_road), dir.none)
+
+		// the tile has no connections, so the ribi-based pattern still reads as empty
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 			[
 				"........",
@@ -49,6 +59,9 @@ function test_way_road_build_single_tile()
 				"........",
 				"........"
 			])
+
+		ASSERT_EQUAL(remover.work(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), "" + wt_road), null)
+		ASSERT_TRUE(tile_x(4, 2, 0).find_object(mo_way) == null)
 	}
 
 	RESET_ALL_PLAYER_FUNDS()
@@ -1156,14 +1169,16 @@ function test_way_road_cityroad_downgrade_with_cityroad()
 function test_way_road_cityroad_replace_by_normal_road()
 {
 	local public_pl = player_x(1)
+	local pl = player_x(0)
 	local start_pos = coord3d(3, 2, 0)
 	local end_pos = coord3d(3, 6, 0)
+	local road_desc = way_desc_x("cobblestone_road")
 
 	ASSERT_EQUAL(command_x(tool_build_cityroad).work(public_pl, start_pos, end_pos, "city_road"), null)
 
 	// replace cityroad by normal road
 	{
-		ASSERT_EQUAL(command_x.build_way(public_pl start_pos, end_pos, way_desc_x("cobblestone_road"), true), null)
+		ASSERT_EQUAL(command_x.build_way(pl, start_pos, end_pos, road_desc, true), null)
 
 		for (local y = start_pos.y; y < end_pos.y; ++y) {
 			local r = way_x(start_pos.x, y, start_pos.z)
@@ -1171,6 +1186,7 @@ function test_way_road_cityroad_replace_by_normal_road()
 			ASSERT_TRUE(r.is_valid())
 			ASSERT_FALSE(r.has_sidewalk())
 			ASSERT_EQUAL(r.desc.name, "cobblestone_road")
+			ASSERT_EQUAL(r.get_max_speed(), road_desc.get_topspeed())
 		}
 
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),

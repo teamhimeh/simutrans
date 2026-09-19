@@ -311,6 +311,7 @@ public:
 	* Determine the direction bits for this kind of vehicle.
 	*/
 	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return gr->get_weg_ribi(get_waytype()); }
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE;
 
 	sint32 get_purchase_time() const {return purchase_time;}
 
@@ -350,6 +351,14 @@ public:
 	 * If @p recalc is true this sets position and recalculates/resets movement parameters.
 	 */
 	void initialise_journey( uint16 start_route_index, bool recalc );
+
+	/**
+	 * Emergency clamp of route_index into the current (possibly just-shortened or
+	 * stub) route. Used when a mid-drive reroute fails: route_t::calc_route() then
+	 * leaves a 1-tile [start] route while the vehicles still carry their old, larger
+	 * route_index, which would make route_t::at() run off the end.
+	 */
+	void clamp_route_index();
 
 	vehicle_t();
 	vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player);
@@ -498,6 +507,26 @@ private:
 	// returns true on success
 	bool choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based );
 
+	// Guide signal handling, called internally only from can_enter_tile(): a try-coupling convoy
+	// may only pass a guide signal once the convoy it wants to couple with is waiting in the target
+	// halt. Returns false (and stops the convoy at the sign) while there is no such partner.
+	bool guide_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index);
+
+	// true while this convoy is looking for a convoy to couple with at its next genuine stop
+	bool is_seeking_coupling_partner() const;
+
+	// true if the destination is still inside the guide area of the guide signal at route[index]
+	bool is_in_guide_area(uint16 index) const;
+
+	// true once the route leads to a convoy we are going to couple with, either because a coupling
+	// point is fixed or because a guide signal claimed a partner. Such a route must not be replaced
+	// by a choose signal.
+	bool is_on_coupling_approach() const;
+
+	// Shared predicate of every coupling target search: may this convoy couple behind vehicle v when
+	// it enters v's tile driving in direction dir?
+	bool is_valid_coupling_partner(const road_vehicle_t* v, ribi_t::ribi dir) const;
+
 	koord3d last_stop_for_intersection;
 
 	vector_tpl<koord3d> reserving_tiles;
@@ -505,6 +534,7 @@ private:
 protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE;
 
 	koord3d pos_prev; //used in enter_tile()
 
@@ -540,6 +570,9 @@ public:
 	// returns true for the way search to an unknown target.
 	bool is_target(const grund_t *,const grund_t *) const OVERRIDE;
 
+	// returns true for the way search of a guide signal: gr holds a convoy we may couple with.
+	bool is_coupling_target(const grund_t *, const grund_t *) const OVERRIDE;
+
 	// since we must consider overtaking, we use this for offset calculation
 	virtual void get_screen_offset( int &xoff, int &yoff, const sint16 raster_width, bool prev_based ) const;
 	virtual void get_screen_offset( int &xoff, int &yoff, const sint16 raster_width ) const OVERRIDE { get_screen_offset(xoff,yoff,raster_width,false); }
@@ -561,9 +594,25 @@ public:
 	virtual vehicle_base_t* other_lane_blocked(const bool only_search_top = false, sint8 offset = 0) const;
 	virtual vehicle_base_t* other_lane_blocked_offset() const { return other_lane_blocked(false,1); }
 
+	// Is the traffic lane free on the tile this vehicle is standing on? Same test as the
+	// tiles_overtaking==1 branch of enter_tile(), for callers that have to decide about the lane
+	// without a tile entry to hook on - see convoi_t::vorfahren().
+	bool can_return_to_traffic_lane();
+
 	void refresh();
 
 	void unreserve_all_tiles();
+	void unreserve_target_halt();
+
+	// Searches the remaining route for a waiting convoy this convoy can couple with and returns
+	// the position (index/steps) at which the coupling takes place. Unlike the rail version this
+	// only accepts a partner that can be coupled to without any reversing, i.e. the tail of the
+	// waiting coupling chain, driving in the same direction as we do.
+	bool can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps);
+
+	// true if v belongs to the coupling chain of the convoy we are currently approaching to couple
+	// with. Such a vehicle must not be treated as blocking, otherwise we could never drive up to it.
+	bool is_coupling_partner(const vehicle_base_t* v) const;
 };
 
 
@@ -579,6 +628,7 @@ protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE { return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid); }
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE { return check_next_tile(bd, need_electric, false, false, koord3d::invalid); }
 	bool check_next_tile(const grund_t *bd) const OVERRIDE { return check_next_tile(bd, false, false, false, koord3d::invalid); }
+	bool check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_from, ribi_t::ribi exit) const OVERRIDE;
 	void enter_tile(grund_t*) OVERRIDE;
 
 	bool is_pre_signal_clear(signal_t *sig, uint16 start_index, sint32 &restart_speed, bool const call_by_step);

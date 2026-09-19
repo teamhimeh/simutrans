@@ -415,6 +415,14 @@ bonus_basefactor = 125
 toll_runningcost_percentage = 0
 toll_waycost_percentage = 0
 
+# Multipliers [%] applied to the maintenance cost of ways and of way objects
+# (overhead lines etc.), and to the running cost of vehicles.
+# The value from the pakset is multiplied by this value and divided by 100.
+# Range 1..250, default 100 (= no change).
+maintenance_cost_multiplier_way = 100
+maintenance_cost_multiplier_overhead = 100
+running_cost_multiplier_vehicle = 100
+
 # Maintenance costs of buildings
 #maintenance_building = 2000
 

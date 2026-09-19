@@ -28,12 +28,14 @@
 #include "convoi_detail_t.h"
 #include "convoi_stops_list_t.h"
 #include "depot_picker.h"
+#include "route_display.h"
+#include "minimap.h"
 
 #define CHART_HEIGHT (100)
 
 static const char cost_type[convoi_t::MAX_CONVOI_COST][64] =
 {
-	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo"
+	"Free Capacity", "Transported", "Revenue", "Operation", "Profit", "Distance", "Maxspeed", "Way toll", "Freight ton-kilo", "Distance (m)"
 };
 
 static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
@@ -46,12 +48,13 @@ static const uint8 cost_type_color[convoi_t::MAX_CONVOI_COST] =
 	COL_DISTANCE,
 	COL_MAXSPEED,
 	COL_TOLL,
-	COL_TONKILO
+	COL_TONKILO,
+	COL_DISTANCE
 };
 
 static const bool cost_type_money[convoi_t::MAX_CONVOI_COST] =
 {
-	false, false, true, true, true, false, false, true, false
+	false, false, true, true, true, false, false, true, false, false
 };
 
 
@@ -357,7 +360,7 @@ void convoi_info_t::update_labels()
 		scroll_freight.set_size( scroll_freight.get_size() );
 	}
 
-	scroll_stops_list.set_size(  scr_size( scroll_stops_list.get_size().w,get_client_windowsize().h - scroll_stops_list.get_pos().y - D_MARGIN_BOTTOM )  );
+	scroll_stops_list.set_size(  scr_size( scroll_stops_list.get_size().w, switch_mode.get_size().h - scroll_stops_list.get_pos().y )  );
 
 	// realign container - necessary if strings changed length
 	container_top->set_size( container_top->get_size() );
@@ -380,7 +383,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	next_reservation_index = cnv->get_next_reservation_index();
 
 	// make titlebar dirty to display the correct coordinates
-	if(cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()) {
+	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
 		if (line_bound != cnv->get_line().is_bound()  ) {
 			line_bound = cnv->get_line().is_bound();
@@ -462,7 +465,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		}
 		bt_promote_to_line.disable();
 		button.set_text(cnv->get_owner()->get_name());
-		if(  !cnv->get_owner()->is_locked()  ) {
+		if(  welt->player_can_act_unrestricted(cnv->get_owner())  ) {
 			button.set_tooltip("move to the owner");
 			button.enable();
 		} else {
@@ -490,14 +493,27 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 	route_bar.set_base(cnv->get_route()->get_count()-1);
 	cnv_route_index = cnv->front()->get_route_index() - 1;
 
-	// show route update
-	show_route(is_route_show);
-	route_show_button.pressed = is_route_show;
-	route_show_button.enable();
+	// show route update - while a whole-schedule route overlay is requested or
+	// shown (e.g. from the Stops tab or a schedule editor), the convoy route
+	// must not be drawn and its button is disabled
+	if(  welt->is_schedule_route_active()  ) {
+		if(  is_route_show  ) {
+			is_route_show = false;
+			show_route(false);
+		}
+		route_show_button.pressed = false;
+		route_show_button.disable();
+	}
+	else {
+		show_route(is_route_show);
+		route_show_button.pressed = is_route_show;
+		route_show_button.enable();
+	}
 
+	// update layout before rendering so upper section width matches current window size
+	set_windowsize(size);
 	// all gui stuff set => display it
 	gui_frame_t::draw(pos, size);
-	set_windowsize(size);
 }
 
 
@@ -523,6 +539,14 @@ koord3d convoi_info_t::get_weltpos( bool set )
 	}
 }
 
+void convoi_info_t::hide_route_display(void *owner)
+{
+	convoi_info_t *win = static_cast<convoi_info_t*>(owner);
+	win->is_route_show = false;
+	win->show_route(false);
+}
+
+
 void convoi_info_t::show_route(bool const yesno)
 {
 	if(!cnv_route.empty()) {
@@ -536,12 +560,17 @@ void convoi_info_t::show_route(bool const yesno)
 			}
 		}
 		cnv_route.clear();
+		minimap_t::get_instance()->clear_highlighted_route();
+	}
+	if(!yesno) {
+		route_display_t::deactivate(this);
 	}
 	if(!cnv.is_bound() || route_search_in_progress || cnv->get_state()==convoi_t::EDIT_SCHEDULE || cnv->get_route()->get_count()<1) {
 		return;
 	}
 	// draw route
 	if(yesno) {
+		route_display_t::activate(this, &convoi_info_t::hide_route_display);
 		for( uint32 i=0; i<cnv->get_route()->get_count(); i++) {
 			cnv_route.append(cnv->get_route()->at(i));
 		}
@@ -558,6 +587,7 @@ void convoi_info_t::show_route(bool const yesno)
 				}
 			}
 		}
+		minimap_t::get_instance()->set_highlighted_route(cnv_route.get_route());
 	}
 }
 
@@ -602,7 +632,7 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	}
 
 	// some actions only allowed, when I am the player
-	if(cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()) {
+	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
 
 		if(  comp == &button  ) {
 			if(  cnv->get_coupling_convoi().is_bound()  ) {

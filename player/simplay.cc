@@ -368,14 +368,14 @@ bool player_t::new_month()
 			}
 			// never changed convoi, never built => abandoned
 			if(  abandoned  ) {
+				// clear the hash first, so the broadcast below reports the correct password-set state
+				pwd_hash.clear();
+				locked = false;
+				unlock_pending = false;
 				if (env_t::server) {
 					// server: unlock this player for all clients
 					socket_list_t::unlock_player_all(player_nr, true);
 				}
-				// clients: local unlock
-				pwd_hash.clear();
-				locked = false;
-				unlock_pending = false;
 			}
 		}
 	}

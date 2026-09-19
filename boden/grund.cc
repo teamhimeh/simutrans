@@ -4,6 +4,7 @@
  */
 
 #include <string.h>
+#include "../simversion.h"
 
 #include "../simcolor.h"
 #include "../simconst.h"
@@ -454,9 +455,12 @@ void grund_t::rdwr(loadsave_t *file)
 	if (file->is_loading()  &&  has_two_ways()) {
 		const weg_t* w1 = ((weg_t*)obj_bei(0));
 		const weg_t* w2 = ((weg_t*)obj_bei(1));
-		if(w1->needs_crossing(w2->get_desc())){
+		// two different waytypes on non-crossing diagonal bends never share the tile
+		// center, so no crossing_t is needed even if the waytype pair normally requires one
+		const bool disjoint_diagonal = ribi_t::are_disjoint_bends(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
+		if(w1->needs_crossing(w2->get_desc())  &&  !disjoint_diagonal){
 			if (crossing_t* cr = get_crossing()) {
-				cr->finish_rd();
+				cr->finish_rd( file->get_OTRP_version() );
 			}
 			else {
 				const crossing_desc_t* cr_desc = crossing_logic_t::get_crossing(w1->get_waytype(), w2->get_waytype(), w1->get_max_speed(), w2->get_max_speed(), 0);
@@ -469,7 +473,7 @@ void grund_t::rdwr(loadsave_t *file)
 				}
 				cr = new crossing_t(w1->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(get_weg(cr_desc->get_waytype(1))->get_ribi_unmasked()));
 				objlist.add(cr);
-				cr->finish_rd(); // or else not multithred safe!
+				cr->finish_rd( file->get_OTRP_version() ); // or else not multithred safe!
 			}
 		}
 		else {
@@ -1682,19 +1686,16 @@ void grund_t::display_obj_fg(const sint16 xpos, const sint16 ypos, const bool is
 void display_text_label(sint16 xpos, sint16 ypos, const char* text, const player_t *player, bool dirty)
 {
 	sint16 pc = player ? player->get_player_color1()+4 : SYSCOL_TEXT_HIGHLIGHT;
-	switch( env_t::show_names >> 2 ) {
-		case 0:
-			display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
-			break;
-		case 1:
-			display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
-			break;
-		case 2: {
-			display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
-			display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
-			display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
-			break;
-		}
+	if(  env_t::show_names & env_t::SHOW_NAME_TYPE3  ) {
+		display_outline_proportional_rgb( xpos + LINESPACE + D_H_SPACE, ypos,   color_idx_to_rgb(COL_YELLOW), color_idx_to_rgb(COL_BLACK), text, dirty );
+		display_ddd_box_clip_rgb(         xpos,                         ypos,   LINESPACE,   LINESPACE,   color_idx_to_rgb(pc-2), PLAYER_FLAG|color_idx_to_rgb(pc+2) );
+		display_fillbox_wh_rgb(           xpos+1,                       ypos+1, LINESPACE-2, LINESPACE-2, color_idx_to_rgb(pc), dirty );
+	}
+	else if(  env_t::show_names & env_t::SHOW_NAME_TYPE2  ) {
+		display_outline_proportional_rgb( xpos, ypos, color_idx_to_rgb(pc+3), color_idx_to_rgb(COL_BLACK), text, dirty );
+	}
+	else {
+		display_ddd_proportional_clip( xpos, ypos, color_idx_to_rgb(pc), color_idx_to_rgb(COL_BLACK), text, dirty );
 	}
 }
 
@@ -1707,7 +1708,7 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 #endif
 	// marker/station text
 	if(  get_flag(has_text)  &&  env_t::show_names  ) {
-		if(  env_t::show_names&1  ) {
+		if(  env_t::show_names & env_t::SHOW_NAME  ) {
 			const char *text = get_text();
 			const sint16 raster_tile_width = get_tile_raster_width();
 			const int width = proportional_string_width(text)+7;
@@ -1718,8 +1719,8 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 			display_text_label(new_xpos, ypos, text, owner, dirty);
 		}
 
-		// display station waiting information/status
-		if(env_t::show_names & 2) {
+		// display station waiting information/status and/or allowed player bars
+		if(  env_t::show_names & (env_t::SHOW_WAITING_BARS | env_t::SHOW_ALLOWED_PLAYERS)  ) {
 			const halthandle_t halt = get_halt();
 			if(halt.is_bound()  &&  halt->get_basis_pos3d()==pos) {
 				halt->display_status(xpos, ypos);
@@ -1989,7 +1990,15 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player)
 			weg->set_ribi(ribi);
 			weg->set_pos(pos);
 			flags |= has_way2;
-			if (weg->needs_crossing(other->get_desc())) {
+			// two different waytypes on non-crossing diagonal bends never share the tile
+			// center, so no crossing_t is needed even if the waytype pair normally requires
+			// one. The new way may still be just a single-direction stub on its first tile
+			// (its second leg not built yet), so only require the OTHER way to already be a
+			// bend disjoint from our (possibly partial) ribi -- once the second leg is built
+			// this reduces to the same "both full bends, disjoint" check as elsewhere.
+			const ribi_t::ribi other_ribi = other->get_ribi_unmasked();
+			const bool disjoint_diagonal = ribi_t::is_bend(other_ribi)  &&  (ribi & other_ribi)==0;
+			if (weg->needs_crossing(other->get_desc()) && !disjoint_diagonal) {
 				//crossing needed!
 				waytype_t w2 =  other->get_waytype();
 				const crossing_desc_t *cr_desc = crossing_logic_t::get_crossing( weg->get_waytype(), w2, weg->get_max_speed(), other->get_max_speed(), welt->get_timeline_year_month() );
@@ -1999,7 +2008,7 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player)
 				crossing_t *cr = new crossing_t(obj_bei(0)->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(get_weg(cr_desc->get_waytype(1))->get_ribi_unmasked()) );
 				objlist.add( cr );
 				crossing_logic_t::add(cr, crossing_logic_t::CROSSING_INVALID);
-				cr->finish_rd();
+				cr->finish_rd( OTRP_VERSION_MAJOR );
 			}
 		}
 

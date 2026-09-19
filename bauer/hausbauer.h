@@ -156,6 +156,11 @@ public:
 	// desc has to have 48 layouts.
 	static gebaeude_t* build_station_on_diagonal_way(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi way_connection, halthandle_t halt);
 
+	// Build a stop on a sloped way tile.
+	// Slope image offsets per flat pattern: N/W single=+48, S/E single=+64, N/W double=+80, S/E double=+96.
+	// If the descriptor does not have slope images the flat layout is used unchanged.
+	static gebaeude_t* build_station_on_slope_way(player_t* player, koord3d pos, int layout, const building_desc_t* desc, halthandle_t halt);
+
 	/// @returns house list of type @p typ
 	static const vector_tpl<const building_desc_t *> *get_list(building_desc_t::btype typ);
 

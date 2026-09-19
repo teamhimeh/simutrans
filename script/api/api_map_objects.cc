@@ -381,7 +381,7 @@ const char* label_get_text(label_t* l)
 // roadsign
 bool roadsign_can_pass(const roadsign_t* rs, player_t* player)
 {
-	return player  &&  rs->get_desc()->is_private_way()  ?  (rs->get_player_mask() & (1<<player->get_player_nr()))!=0 : true;
+	return player  &&  rs->get_desc()->is_private_way()  ?  (rs->get_player_mask() & ((uint64)1 << player->get_player_nr())) != 0 : true;
 }
 
 sint32 roadsign_get_state(roadsign_t* rs)
@@ -802,6 +802,43 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @returns true if the flag is set
 	 */
 	register_method(vm, &roadsign_t::is_start_signal, "is_start_signal");
+	/**
+	 * Get "advance to end" flag of a choose signal.
+	 * When true, trains routed to this choose signal will try to advance to the end of the platform.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_advance_to_end, "is_advance_to_end");
+	/**
+	 * Get "require parent convoy to enter" (guide signal) flag of a signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_guide_signal, "is_guide_signal");
+	/**
+	 * Get "choose signal" flag of a signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_choose_signal, "is_choose_signal");
+	/**
+	 * Get "skip default route" flag of a choose signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_skip_default_route, "is_skip_default_route");
+	/**
+	 * Get "length based" flag of a choose signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_length_based, "is_length_based");
+	/**
+	 * Get margin length of a choose signal.
+	 * @returns margin length in tiles
+	 */
+	register_method(vm, &roadsign_t::get_margin_length, "get_margin_length");
+	/**
+	 * Get "allow reverse passage" (two ways) flag of a signal.
+	 * When true, trains coming from the reverse direction are allowed to pass the signal.
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::get_two_ways, "get_two_ways");
 	end_class(vm);
 
 	/**

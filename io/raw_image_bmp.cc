@@ -7,7 +7,11 @@
 
 #include "raw_image.h"
 
-#include "../sys/simsys.h"
+#ifdef MAKEOBJ
+#define dr_fopen fopen
+#else
+FILE *dr_fopen(const char *filename, const char *mode);
+#endif
 #include "../simdebug.h"
 #include "../simmem.h"
 #include "../tpl/array_tpl.h"
@@ -76,13 +80,14 @@ static bool is_format_supported(uint16 bpp, uint32 compression)
 
 bool raw_image_t::read_bmp(const char *filename)
 {
-#ifdef MAKEOBJ
-	FILE *file = fopen(filename, "rb");
-#else
 	FILE *file = dr_fopen(filename, "rb");
-#endif
 
 	bitmap_file_header_t bmp_header;
+
+	if (!file) {
+		dbg->warning("raw_image_t::read_bmp", "Cannot open bmp file '%s'", filename);
+		return false;
+	}
 
 	if (fread(&bmp_header, sizeof(bitmap_file_header_t), 1, file) != 1) {
 		dbg->warning("raw_image_t::read_bmp", "Malformed bmp file");
@@ -395,7 +400,7 @@ bool raw_image_t::write_bmp(const char *filename) const
 	fheader.file_size            = endian(uint32(headers_size + gap1_size + image_data_size));
 
 	// now actually write the data
-	FILE *f = fopen(filename, "wb");
+	FILE *f = dr_fopen(filename, "wb");
 
 	if (!f) {
 		return false;

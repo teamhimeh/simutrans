@@ -114,6 +114,11 @@ bool display_snapshot(const scr_rect &)
 	return false;
 }
 
+bool display_snapshot_png(const scr_rect &, std::string &)
+{
+	return false;
+}
+
 void display_get_image_offset(image_id image, scr_coord_val *xoff, scr_coord_val *yoff, scr_coord_val *xw, scr_coord_val *yw)
 {
 	if(  image < 2  ) {
@@ -176,7 +181,15 @@ void display_color_img(const image_id, scr_coord_val, scr_coord_val, const sint8
 {
 }
 
+void display_color_img_line(const image_id, scr_coord_val, scr_coord_val, const uint8, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
+{
+}
+
 void display_base_img(const image_id, scr_coord_val, scr_coord_val, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
+{
+}
+
+void display_base_img_line(const image_id, scr_coord_val, scr_coord_val, const uint8, const sint8, const bool, const bool  CLIP_NUM_DEF_NOUSE)
 {
 }
 

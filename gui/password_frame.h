@@ -12,6 +12,7 @@
 #include "components/gui_container.h"
 #include "components/gui_textinput.h"
 #include "components/gui_label.h"
+#include "components/gui_button.h"
 
 
 class password_frame_t : public gui_frame_t, action_listener_t
@@ -25,6 +26,7 @@ protected:
 	gui_textinput_t player_name;
 	gui_hidden_textinput_t password;
 	gui_label_t fnlabel, const_player_name;
+	button_t unlock_button;
 
 public:
 	password_frame_t( player_t *player );

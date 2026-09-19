@@ -8,10 +8,12 @@
 /** @file api_settings.cc exports game settings functions. */
 
 #include "api_command.h"
+#include "api_obj_desc_base.h"
 #include "api_simple.h"
 #include "../api_class.h"
 #include "../api_function.h"
 #include "../../dataobj/settings.h"
+#include "../../descriptor/goods_desc.h"
 #include "../../simmenu.h"
 #include "../../simworld.h"
 
@@ -30,6 +32,99 @@ call_tool_init set_traffic_level(settings_t*, sint16 rate)
 	cbuffer_t buf;
 	buf.printf("%i", rate);
 	return call_tool_init(TOOL_TRAFFIC_LEVEL | SIMPLE_TOOL, buf, 0, welt->get_public_player());
+}
+
+
+bool get_time_based_routing_enabled(settings_t* settings, const goods_desc_t* goods)
+{
+	return settings  &&  goods  &&  settings->get_time_based_routing_enabled(goods->get_catg_index());
+}
+
+
+bool set_time_based_routing_enabled(settings_t* settings, const goods_desc_t* goods, bool enabled)
+{
+	if(  settings  &&  goods  ) {
+		const uint8 catg_index = goods->get_catg_index();
+		if(  settings->get_time_based_routing_enabled(catg_index) != enabled  ) {
+			settings->set_time_based_routing_enabled(catg_index, enabled);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+bool get_transit_by_foot(settings_t* settings)
+{
+	return settings  &&  settings->is_transit_by_foot();
+}
+
+
+bool set_transit_by_foot(settings_t* settings, bool enabled)
+{
+	if(  settings  ) {
+		if(  settings->is_transit_by_foot() != enabled  ) {
+			settings->set_transit_by_foot(enabled);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+uint32 get_foot_path_weight(settings_t* settings)
+{
+	return settings ? settings->get_foot_path_weight() : 0;
+}
+
+
+bool set_foot_path_weight(settings_t* settings, uint32 weight)
+{
+	if(  settings  ) {
+		if(  settings->get_foot_path_weight() != weight  ) {
+			settings->set_foot_path_weight(weight);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+uint32 get_foot_path_time_ticks(settings_t* settings)
+{
+	return settings ? settings->get_foot_path_time_ticks() : 0;
+}
+
+
+bool set_foot_path_time_ticks(settings_t* settings, uint32 ticks)
+{
+	if(  settings  ) {
+		if(  settings->get_foot_path_time_ticks() != ticks  ) {
+			settings->set_foot_path_time_ticks(ticks);
+			welt->set_schedule_counter();
+		}
+		return true;
+	}
+	return false;
+}
+
+
+bool get_walk_cost_to_halt(settings_t* settings)
+{
+	return settings  &&  settings->is_walk_cost_to_halt();
+}
+
+
+bool set_walk_cost_to_halt(settings_t* settings, bool enabled)
+{
+	if(  settings  ) {
+		settings->set_walk_cost_to_halt(enabled);
+		return true;
+	}
+	return false;
 }
 
 
@@ -118,6 +213,79 @@ void export_settings(HSQUIRRELVM vm)
 	 * @param b true if trains should advance to the end of platform
 	 */
 	register_method(vm, &settings_t::set_advance_to_end, "set_advance_to_end");
+
+	/// @returns true if all goods categories are loaded first-come-first-served
+	register_method<bool (settings_t::*)() const>(vm, &settings_t::get_first_come_first_serve, "get_first_come_first_serve", false);
+
+	/**
+	 * Sets first_come_first_serve setting.
+	 * @param b true if all goods categories should be loaded first-come-first-served
+	 */
+	register_method(vm, &settings_t::set_first_come_first_serve, "set_first_come_first_serve");
+
+	/**
+	 * Returns whether time based routing is enabled for the goods category.
+	 * @param goods goods descriptor whose category is checked
+	 */
+	register_method(vm, &get_time_based_routing_enabled, "get_time_based_routing_enabled", true);
+
+	/**
+	 * Sets whether time based routing is enabled for the goods category.
+	 * @param goods goods descriptor whose category is changed
+	 * @param enabled true if the category should use time based routing
+	 */
+	register_method(vm, &set_time_based_routing_enabled, "set_time_based_routing_enabled", true);
+
+	/// @returns true if passengers may transfer between nearby halts on foot
+	register_method(vm, &get_transit_by_foot, "get_transit_by_foot", true);
+
+	/**
+	 * Enables or disables passenger transfers on foot between nearby halts.
+	 * Rebuilds halt connections when the value changes.
+	 */
+	register_method(vm, &set_transit_by_foot, "set_transit_by_foot", true);
+
+	/// @returns route cost per tile for a foot-path connection
+	register_method(vm, &get_foot_path_weight, "get_foot_path_weight", true);
+
+	/**
+	 * Sets the route cost per tile for a foot-path connection.
+	 * Rebuilds halt connections when the value changes.
+	 */
+	register_method(vm, &set_foot_path_weight, "set_foot_path_weight", true);
+
+	/// @returns journey time in ticks per tile for a foot-path connection
+	register_method(vm, &get_foot_path_time_ticks, "get_foot_path_time_ticks", true);
+
+	/**
+	 * Sets the journey time in ticks per tile for a foot-path connection.
+	 * Rebuilds halt connections when the value changes.
+	 */
+	register_method(vm, &set_foot_path_time_ticks, "set_foot_path_time_ticks", true);
+
+	/// @returns true if walking to the first and from the last halt affects routing
+	register_method(vm, &get_walk_cost_to_halt, "get_walk_cost_to_halt", true);
+
+	/// Enables or disables walking costs between origins/destinations and their halts.
+	register_method(vm, &set_walk_cost_to_halt, "set_walk_cost_to_halt", true);
+
+	/// @returns true if route cache is enabled
+	register_method(vm, &settings_t::is_using_route_cache, "is_using_route_cache");
+
+	/**
+	 * Enables or disables the route cache for line convoys.
+	 * @param b true to enable route caching
+	 */
+	register_method(vm, &settings_t::set_use_route_cache, "set_use_route_cache");
+
+	/// @returns true if building elevated way over another player's halt is allowed
+	register_method(vm, &settings_t::get_allow_elevated_way_over_others_halt, "get_allow_elevated_way_over_others_halt");
+
+	/**
+	 * Enables or disables building elevated ways over another player's halt.
+	 * @param b true to allow building elevated way over other players' halts
+	 */
+	register_method(vm, &settings_t::set_allow_elevated_way_over_others_halt, "set_allow_elevated_way_over_others_halt");
 
 	end_class(vm);
 }

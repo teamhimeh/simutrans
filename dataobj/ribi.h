@@ -246,6 +246,10 @@ public:
 	/// Convert ribi to dir
 	static dir get_dir(ribi x) { return (INT64_C(0x0002007103006540) >> (x * 4)) & 0x7; }
 #endif
+	/// true if both are 2-bit bends that share no direction bit (e.g. NW & SE, NE & SW) -
+	/// such bends never physically cross, only touching at the tile's diagonal corner.
+	static bool are_disjoint_bends(ribi x, ribi y) { return is_bend(x) && is_bend(y) && (x & y) == 0; }
+
 	/**
 	 * Same as backward, but for single directions only.
 	 * Effectively does bit rotation. Avoids lookup table backwards.

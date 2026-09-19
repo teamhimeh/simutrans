@@ -166,7 +166,7 @@ void bruecke_t::rdwr(loadsave_t *file)
 
 
 // correct speed and maintenance
-void bruecke_t::finish_rd()
+void bruecke_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	grund_t *gr = welt->lookup(get_pos());
 	if(desc==NULL) {

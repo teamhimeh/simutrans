@@ -21,7 +21,7 @@
 
 class karte_ptr_t;
 
-#define MAP_MAX_BUTTONS (24)
+#define MAP_MAX_BUTTONS (25)
 
 /**
  * Minimap window
@@ -70,6 +70,7 @@ private:
 	button_t filter_buttons[MAP_MAX_BUTTONS];
 	button_t zoom_buttons[2];
 	button_t b_rotate45;
+	button_t b_show_convoi;
 	button_t b_show_legend;
 	button_t b_show_scale;
 	gui_combobox_t c_show_outlines;

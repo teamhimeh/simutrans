@@ -382,4 +382,51 @@ public:
 	bool execute(karte_t *) OVERRIDE { return true;}
 };
 
+/**
+ * nwc_clientlist_t
+ * @from-server: broadcasts nickname and the bitmask of unlocked (actively playable)
+ *      companies for every connected client, whenever this information changes
+ *      (join, leave, nick change, company lock/unlock).
+ *      Deliberately does NOT include client IP addresses, so it is safe to send
+ *      to any playing client, not just admins.
+ * client: stores the received list for display (e.g. in server_frame_t)
+ */
+class nwc_clientlist_t : public network_command_t {
+public:
+	class entry_t {
+	public:
+		uint32 client_id;
+		plainstring nickname;
+
+		entry_t() : client_id(0), nickname() {}
+		entry_t(uint32 client_id_, const char* nickname_) : client_id(client_id_), nickname(nickname_) {}
+
+		void rdwr(packet_t *p);
+	};
+
+	nwc_clientlist_t() : network_command_t(NWC_CLIENT_LIST) {}
+
+	bool execute(karte_t *) OVERRIDE;
+	void rdwr() OVERRIDE;
+
+	vector_tpl<entry_t> entries;
+
+	/**
+	 * server only: gathers current client info from socket_list_t and
+	 * broadcasts it to all playing clients; also updates the local copy
+	 * used for display on the server itself
+	 */
+	static void broadcast(karte_t *welt);
+
+	/// last list received (client) resp. assembled (server)
+	static const vector_tpl<entry_t>& get_client_list() { return client_list; }
+
+	/// bumped every time get_client_list() changes, so GUI can detect updates cheaply
+	static uint32 get_generation() { return client_list_generation; }
+
+private:
+	static vector_tpl<entry_t> client_list;
+	static uint32 client_list_generation;
+};
+
 #endif

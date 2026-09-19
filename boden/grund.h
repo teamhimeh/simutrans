@@ -167,8 +167,9 @@ public:
 	enum _underground_modes {
 		ugm_none = 0, // normal view
 		ugm_all  = 1, // everything underground visible, grid for grounds
-		ugm_level= 2  // overground things visible if their height  <= underground_level
+		ugm_level= 2, // overground things visible if their height  <= underground_level
 		              // underground things visible if their height == underground_level
+		ugm_count
 	};
 	static uint8 underground_mode;
 	static sint8 underground_level;
@@ -846,6 +847,19 @@ public:
 		}
 
 		return h;
+	}
+
+	/**
+	 * On a bridge ramp built on already-sloped terrain, the whole ramp is lifted an extra
+	 * 1 or 2 tile heights above the corner offsets that get_weg_hang() alone accounts for
+	 * (mirrors the bridgehead case in get_vmove()). Used when placing something (e.g. an
+	 * elevated way) a fixed clearance above this ground's own way surface.
+	 */
+	inline sint8 get_bridge_slope_extra_height() const {
+		if(  ist_bruecke()  &&  slope  &&  get_weg_hang() != slope  ) {
+			return is_one_high(slope) ? 1 : 2;
+		}
+		return 0;
 	}
 
 	/** removes everything from a tile, including a halt but i.e. leave a

@@ -16,11 +16,15 @@
 #include "../simworld.h"
 #include "../simware.h"
 #include "simwin.h"
+#include "convoi_info_t.h"
+#include "../simhalt.h"
 #include "depot_picker.h"
 
 #include "../dataobj/translator.h"
 #include "../dataobj/loadsave.h"
 #include "../dataobj/environment.h"
+
+#include "../sys/simsys.h"
 
 #include "../player/simplay.h"
 
@@ -158,19 +162,14 @@ void convoi_detail_t::init(convoihandle_t cnv)
 	set_table_layout(1,0);
 
 
-	add_table(4,1);
+	add_table(3,1);
 	{
 		add_component(&label_power);
 
 		new_component<gui_fill_t>();
 
-		add_table(4,1)->set_force_equal_columns(true);
+		add_table(3,1)->set_force_equal_columns(true);
 		{
-			suspension_button.init(button_t::roundbox| button_t::flexible, "Suspension");
-			suspension_button.set_tooltip(translator::translate("Suspend this convoy"));
-			suspension_button.add_listener(this);
-			add_component(&suspension_button);
-
 			move_to_depot_button.init(button_t::roundbox| button_t::flexible, "Teleport to Depot");
 			move_to_depot_button.set_tooltip(translator::translate("Remove vehicle from here and send to the nearest depot. (Ctrl+click to choose depot.)"));
 			move_to_depot_button.add_listener(this);
@@ -190,9 +189,41 @@ void convoi_detail_t::init(convoihandle_t cnv)
 	}
 	end_table();
 
-	add_component(&label_odometer);
+	add_table(3,1);
+	{
+		add_component(&label_odometer);
+
+		new_component<gui_fill_t>();
+
+		add_table(2,1)->set_force_equal_columns(true);
+		{
+			suspension_button.init(button_t::roundbox| button_t::flexible, "Suspension");
+			suspension_button.set_tooltip(translator::translate("Suspend this convoy"));
+			suspension_button.add_listener(this);
+			add_component(&suspension_button);
+			unload_all_button.init(button_t::roundbox| button_t::flexible, "Unload all");
+			unload_all_button.set_tooltip(translator::translate("Unload all at next stop"));
+			unload_all_button.add_listener(this);
+			add_component(&unload_all_button);
+		}
+		end_table();
+
+	}
+	end_table();
 
 	add_component(&label_length);
+
+	// convoy shipping: only shown while this convoy actually carries or is carried
+	add_table(2,1);
+	{
+		add_component(&label_shipping);
+		show_carrier_button.init(button_t::roundbox, "Show carrier");
+		show_carrier_button.set_tooltip(translator::translate("Open the window of the convoy that is carrying this one."));
+		show_carrier_button.add_listener(this);
+		add_component(&show_carrier_button);
+	}
+	end_table();
+	add_component(&label_shipping_list);
 
 	set_table_layout(1,0);
 	add_table(4,1);
@@ -241,7 +272,7 @@ void convoi_detail_t::init(convoihandle_t cnv)
 			new_component<gui_fill_t>();
 
 			copy_convoi_button.init(button_t::roundbox| button_t::flexible, "Copy Convoi");
-			copy_convoi_button.set_tooltip("Copy this convoi");
+			copy_convoi_button.set_tooltip(translator::translate("Copy this convoi (ctrl pressed: copy vehicle list as template format to clipboard)"));
 			copy_convoi_button.add_listener(this);
 			add_component(&copy_convoi_button);
 		}
@@ -339,6 +370,63 @@ void convoi_detail_t::update_labels()
 		label_length.buf().printf( "%s %i %s %.4f", translator::translate( "Vehicle count:" ), cnv->get_vehicle_count(), translator::translate( "Station tiles:" ), (double)(cnv->get_length()) / CARUNITS_PER_TILE );
 	}
 	label_length.update();
+
+	// ---- convoy shipping ----
+	{
+		const bool shipped  = cnv->is_shipped();
+		const bool carrying = cnv->is_carrying_convoys();
+		if(  shipped  ) {
+			convoihandle_t carrier = cnv->get_shipping_carrier();
+			// the length is what this convoy costs the carrier, in the same car-length units
+			// the ferry's payload is given in, so the two can be compared directly
+			label_shipping.buf().printf( "%s %s (%s %u)", translator::translate("Aboard:"),
+				carrier.is_bound() ? carrier->get_name() : translator::translate("unknown"),
+				translator::translate("length:"), (unsigned)cnv->get_shipping_length() );
+			const halthandle_t dest = cnv->get_shipping_dest_halt();
+			if(  dest.is_bound()  ) {
+				label_shipping_list.buf().printf( "%s %s", translator::translate("Put ashore at:"), dest->get_name() );
+			}
+			else {
+				// the drop-off halt is gone; the carrier will rescue it at its next stop
+				label_shipping_list.buf().printf( "%s", translator::translate("Transfer stop no longer exists") );
+			}
+		}
+		else if(  carrying  ) {
+			// how much of the deck is taken, so the player can see at a glance whether another
+			// convoy would still fit
+			uint32 used = 0;
+			FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
+				if(  c.is_bound()  ) {
+					used += c->get_shipping_length();
+				}
+			}
+			label_shipping.buf().printf( "%s %u (%s %u)", translator::translate("Convoys aboard:"),
+				(unsigned)cnv->get_shipped_convois().get_count(),
+				translator::translate("length:"), (unsigned)used );
+			// list what is aboard, with each convoy's length and its own drop-off stop
+			bool first = true;
+			FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
+				if(  !c.is_bound()  ) {
+					continue;
+				}
+				if(  !first  ) {
+					label_shipping_list.buf().append( ", " );
+				}
+				first = false;
+				const halthandle_t d = c->get_shipping_dest_halt();
+				label_shipping_list.buf().printf( "%s (%u)", c->get_name(), (unsigned)c->get_shipping_length() );
+				if(  d.is_bound()  ) {
+					label_shipping_list.buf().printf( " %s %s", translator::translate("to"), d->get_name() );
+				}
+			}
+		}
+		label_shipping.update();
+		label_shipping_list.update();
+		label_shipping.set_visible( shipped || carrying );
+		label_shipping_list.set_visible( shipped || carrying );
+		show_carrier_button.set_visible( shipped && cnv->get_shipping_carrier().is_bound() );
+	}
+
 	label_resale.buf().printf("%s ", translator::translate("Restwert:"));
 	label_resale.buf().append_money( cnv->calc_restwert() / 100.0 );
 	label_resale.update();
@@ -355,7 +443,7 @@ void convoi_detail_t::update_labels()
 
 void convoi_detail_t::draw(scr_coord offset)
 {
-	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  !welt->get_active_player()->is_locked()  ;
+	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())  ;
 	sale_button.enable(selling_allowed && !cnv->get_coupling_convoi().is_bound());
 	withdraw_button.enable(selling_allowed  &&  !cnv->get_coupling_convoi().is_bound()  &&  !cnv->is_coupled());
 	bool show_move_to_depot_button = selling_allowed;
@@ -395,6 +483,12 @@ void convoi_detail_t::draw(scr_coord offset)
 		suspension_button.disable();
 	}
 	suspension_button.pressed = cnv->is_suspended();
+	if (is_owner) {
+		unload_all_button.enable();
+	} else {
+		unload_all_button.disable();
+	}
+	unload_all_button.pressed = cnv->get_unload_all();
 
 	update_labels();
 
@@ -425,12 +519,31 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			}
 			return true;
 		}
+		else if(comp==&show_carrier_button) {
+			convoihandle_t carrier = cnv->get_shipping_carrier();
+			if(  carrier.is_bound()  ) {
+				create_win( new convoi_info_t(carrier), w_info, magic_convoi_info+carrier.get_id() );
+			}
+			return true;
+		}
 		else if(comp==&withdraw_button) {
 			cnv->call_convoi_tool( 'w', NULL );
 			return true;
 		}
 		else if(comp==&copy_convoi_button) {
-			welt->set_copy_convoi(cnv);
+			if(  event_get_last_control_shift() == 2  ) {
+				// Ctrl+click: copy vehicle list as convoy template format to system clipboard
+				welt->set_copy_convoi(cnv);
+				cbuffer_t buf;
+				for(  uint16 i = 0;  i < cnv->get_vehicle_count();  i++  ) {
+					buf.printf("vehicle[%u]=%s\n", i, cnv->get_vehikel(i)->get_desc()->get_name());
+				}
+				if(  buf.len() > 0  ) {
+					dr_copy(buf, buf.len());
+				}
+			} else {
+				welt->set_copy_convoi(cnv);
+			}
 			return true;
 		}
 		else if(comp==&trade_convoi_button) {
@@ -465,6 +578,12 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 			cnv->call_convoi_tool( 'u', buf );
 			return true;
 		}
+		else if(comp==&unload_all_button) {
+			cbuffer_t buf;
+			buf.printf( "%d", !cnv->get_unload_all() );
+			cnv->call_convoi_tool( 'k', buf);
+			return true;
+		} 
 	}
 	return false;
 }

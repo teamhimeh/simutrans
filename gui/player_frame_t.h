@@ -14,6 +14,7 @@
 #include "components/gui_combobox.h"
 #include "components/gui_label.h"
 #include "components/action_listener.h"
+#include "components/gui_scrollpane.h"
 #include "simwin.h"
 
 
@@ -37,6 +38,8 @@ class ki_kontroll_t : public gui_frame_t, private action_listener_t
 		gui_combobox_t
 			player_select[MAX_PLAYER_COUNT-1];
 
+		gui_aligned_container_t player_list;
+		gui_scrollpane_t scrolly;
 
 		void update_income();
 
@@ -68,5 +71,6 @@ class ki_kontroll_t : public gui_frame_t, private action_listener_t
 		// since no information are needed to be saved to restore this, returning magic is enough
 		uint32 get_rdwr_id() OVERRIDE { return magic_ki_kontroll_t; }
 };
+ 
 
 #endif

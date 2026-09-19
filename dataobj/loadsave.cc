@@ -11,6 +11,7 @@
 #include <errno.h>
 
 #include "../sys/simsys.h"
+#include "../simconst.h"
 #include "../simtypes.h"
 #include "../macros.h"
 #include "../simversion.h"
@@ -321,7 +322,8 @@ loadsave_t::file_status_t loadsave_t::rd_open(const char *filename_utf8)
 	else if(  finfo.version == INVALID_FILE_VERSION  ) {
 		return FILE_STATUS_ERR_NO_VERSION;
 	}
-	else if(  finfo.version > (SIM_LOADABLE_MAJOR*1000 + SIM_LOADABLE_MINOR)  ) {
+	else if(  finfo.version > (SIM_LOADABLE_MAJOR*1000 + SIM_LOADABLE_MINOR)
+	       || finfo.OTRP_version > OTRP_VERSION_MAJOR  ) {
 		/*
 		 * Reading future versions will almost certainly lead to exceptions; so we close here.
 		 * It would be nice to give a detailed message what failed (like the fatal error does)
@@ -796,6 +798,33 @@ void loadsave_t::rdwr_long(uint32 &l)
 	sint32 ll=l;
 	rdwr_long(ll);
 	l = (uint32)ll;
+}
+
+
+// pre-v59 savegames only had 16 player slots and used 15 as the "unowned" sentinel
+static const sint32 LEGACY_PLAYER_UNOWNED = 15;
+
+void loadsave_t::rdwr_player_nr(sint8 &owner_n)
+{
+	if(  is_saving()  &&  get_OTRP_version() < 59  &&  owner_n == PLAYER_UNOWNED  ) {
+		owner_n = (sint8)LEGACY_PLAYER_UNOWNED;
+	}
+	rdwr_byte(owner_n);
+	if(  is_loading()  &&  get_OTRP_version() < 59  &&  owner_n == LEGACY_PLAYER_UNOWNED  ) {
+		owner_n = PLAYER_UNOWNED;
+	}
+}
+
+
+void loadsave_t::rdwr_player_nr(sint32 &owner_n)
+{
+	if(  is_saving()  &&  get_OTRP_version() < 59  &&  owner_n == PLAYER_UNOWNED  ) {
+		owner_n = LEGACY_PLAYER_UNOWNED;
+	}
+	rdwr_long(owner_n);
+	if(  is_loading()  &&  get_OTRP_version() < 59  &&  owner_n == LEGACY_PLAYER_UNOWNED  ) {
+		owner_n = PLAYER_UNOWNED;
+	}
 }
 
 
