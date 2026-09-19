@@ -22,6 +22,7 @@ class player_t;
 class depot_t;
 class karte_ptr_t;
 class cbuffer_t;
+class way_desc_t;
 
 
 /* A map from obj_t subtypes to their enum equivalent
@@ -673,6 +674,26 @@ public:
 
 	bool has_two_ways() const { return flags&has_way2; }
 
+	/**
+	* Like get_weg(typ), but when two ways of the SAME waytype coexist on this tile
+	* (disjoint diagonal legs, see grund_t::weg_erweitern()), disambiguates by which one's
+	* ribi actually contains the single direction bit @p dir - the two legs are never
+	* connected to each other, so only one of them owns any given direction. Falls back to
+	* the ordinary waytype-only lookup when dir==ribi_t::none or only one weg matches typ.
+	*/
+	weg_t *get_weg(waytype_t typ, ribi_t::ribi dir) const {
+		weg_t *w0 = get_weg_nr(0);
+		weg_t *w1 = has_two_ways() ? get_weg_nr(1) : NULL;
+		bool m0 = w0 && (w0->get_waytype()==typ || (typ==any_wt && w0->get_waytype()>0));
+		bool m1 = w1 && (w1->get_waytype()==typ || (typ==any_wt && w1->get_waytype()>0));
+		if(  m0  &&  m1  &&  dir!=ribi_t::none  ) {
+			if(  w0->get_ribi_unmasked() & dir  ) return w0;
+			if(  w1->get_ribi_unmasked() & dir  ) return w1;
+			return NULL; // dir isn't on either leg here => genuinely disconnected
+		}
+		return m0 ? w0 : (m1 ? w1 : NULL);
+	}
+
 	bool hat_weg(waytype_t typ) const { return get_weg(typ)!=NULL; }
 
 	/**
@@ -700,6 +721,20 @@ public:
 	 * These are required e.g. for building. For pathfinding masked ribis are used.
 	 */
 	virtual ribi_t::ribi get_weg_ribi_unmasked(waytype_t typ) const;
+
+	/**
+	 * Like get_weg_ribi_unmasked(typ), but resolves the correct leg by @p dir when two ways
+	 * of the same waytype coexist on disjoint diagonal bends (see get_weg(typ,dir) above).
+	 * Falls back to the ordinary (possibly virtual, e.g. water) behavior otherwise.
+	 */
+	ribi_t::ribi get_weg_ribi_unmasked(waytype_t typ, ribi_t::ribi dir) const {
+		if(  dir!=ribi_t::none  &&  has_two_ways()  ) {
+			if(  weg_t *w = get_weg(typ, dir)  ) {
+				return w->get_ribi_unmasked();
+			}
+		}
+		return get_weg_ribi_unmasked(typ);
+	}
 
 	/**
 	* checks a ways on this ground tile and returns the highest speedlimit.
@@ -761,7 +796,7 @@ public:
 	 * @param ribi    die neuen ribis
 	 * @param player  Player building the way
 	 */
-	sint64 neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player);
+	sint64 neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player, bool allow_same_waytype_dual_leg = false);
 
 	/**
 	 * Bauhilfsfunktion - die ribis eines vorhandenen weges werden erweitert
@@ -769,8 +804,14 @@ public:
 	 * @return bool  true, falls weg vorhanden
 	 * @param wegtyp um welchen wegtyp geht es
 	 * @param ribi   die neuen ribis
+	 * @param new_desc  descriptor of the way being built here (only needed to detect the
+	 *        same-waytype dual-diagonal-leg case below; NULL for ordinary callers)
+	 * @param allow_same_waytype_dual_leg  when true (only set from ctrl/straight-route way
+	 *        building), a single existing way that is a bend disjoint from @p ribi and has a
+	 *        different descriptor is left untouched (return false) so the caller adds the new
+	 *        way as a second, independent leg via neuen_weg_bauen() instead of extending it
 	 */
-	bool weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi);
+	bool weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_t* new_desc = NULL, bool allow_same_waytype_dual_leg = false);
 
 	/**
 	 * Bauhilfsfunktion - einen Weg entfernen

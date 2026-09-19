@@ -274,6 +274,17 @@ private:
 	convoihandle_t carrier_convoi;
 
 	/**
+	* Convoy shipping: the convoy that just carried me, kept only until the revenue for that
+	* leg has been settled. Revenue is booked at the stop AFTER disembarking (calc_revenue()
+	* measures from last_stop_pos, which is still the port we boarded at), so the carrier has
+	* to stay reachable that long to be paid its share. Cleared as soon as the split is done.
+	*/
+	convoihandle_t shipping_income_carrier;
+
+	/// pay `carrier`'s share of a shipped leg's revenue and return what is left for us
+	sint64 deduct_shipping_income_share(sint64 revenue, const vehicle_t *v);
+
+	/**
 	* Convoy shipping: ticks at which this convoy began waiting for a carrier, so that a
 	* convoy nobody ever comes to fetch can eventually be reported instead of hanging forever.
 	*/
@@ -1127,6 +1138,18 @@ public:
 	void reserve_pos(koord3d pos) {reserved_tiles.append(pos); }
 	bool is_reservation_empty() const { return reserved_tiles.empty(); }
 	vector_tpl<koord3d>& get_reserved_tiles() { return reserved_tiles; }
+
+	/**
+	 * The corner set (see route_t::get_corner_set()) of reserved_tiles[index]: reserved tiles
+	 * are held in route order, so the neighbouring entries give the bits this convoy occupies
+	 * there. Pass it to grund_t::get_weg(waytype, dir) so the reservation is looked up on the
+	 * leg actually reserved when two same-waytype disjoint diagonal legs share that tile.
+	 */
+	ribi_t::ribi get_reserved_tiles_corner_set(uint32 index) const;
+
+	/// heading with which the reserved tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_reserved_tiles_travel_dir(uint32 index) const;
+
 	void clear_reserved_tiles();
 	/**
 	 * the index and steps of the coupling point.
