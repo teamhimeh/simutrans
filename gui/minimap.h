@@ -16,6 +16,8 @@
 #include "../tpl/vector_tpl.h"
 #include "../dataobj/translator.h"
 
+#include <string>
+
 
 class karte_ptr_t;
 class fabrik_t;
@@ -251,6 +253,12 @@ public:
 
 	/// calculates the current size of the map (but do not change anything else)
 	void calc_map_size();
+
+	/**
+	 * Export the complete minimap using the current zoom and display settings.
+	 * @param filename receives the relative output path on success
+	 */
+	bool export_to_png(std::string &filename);
 
 	~minimap_t();
 

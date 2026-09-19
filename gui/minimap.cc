@@ -17,6 +17,17 @@
 #include "fabrik_info.h"
 #include "simwin.h"
 #include "minimap.h"
+
+#include "../display/simgraph.h"
+#include "../io/raw_image.h"
+#include "../pathes.h"
+
+#ifdef _MSC_VER
+#include <io.h>
+#define W_OK 2
+#else
+#include <unistd.h>
+#endif
 #include "schedule_gui.h"
 
 #include "../dataobj/translator.h"
@@ -1112,6 +1123,68 @@ void minimap_t::calc_map_size()
 }
 
 
+bool minimap_t::export_to_png(std::string &filename)
+{
+	filename.clear();
+	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
+		return false;
+	}
+
+	const scr_size export_size = get_max_size();
+	const scr_size screen_size(display_get_width(), display_get_height());
+	if (export_size.w <= 0 || export_size.h <= 0 || screen_size.w <= 0 || screen_size.h <= 0) {
+		return false;
+	}
+
+	static int number = 0;
+	char path[80];
+	do {
+		snprintf(path, lengthof(path), SCREENSHOT_PATH_X "simmap%02d.png", number++);
+	} while (access(path, W_OK) != -1);
+
+	raw_image_png_writer_t writer(path, (uint32)export_size.w, (uint32)export_size.h, raw_image_t::FMT_RGB888);
+	if (!writer.is_valid()) {
+		return false;
+	}
+
+	// Bound temporary RGB memory independently of the total exported image size.
+	static const uint64 max_strip_bytes = 32ULL * 1024ULL * 1024ULL;
+	const uint64 row_bytes = (uint64)export_size.w * 3ULL;
+	const uint64 rows_per_strip = max_strip_bytes / row_bytes > 0 ? max_strip_bytes / row_bytes : 1;
+	const scr_coord_val strip_height = min(screen_size.h, (scr_coord_val)rows_per_strip);
+	raw_image_t strip((uint32)export_size.w, (uint32)strip_height, raw_image_t::FMT_RGB888);
+	const scr_coord saved_new_off = new_off;
+	const scr_size saved_new_size = new_size;
+	const clip_dimension saved_clip = display_get_clip_wh();
+	bool ok = true;
+
+	for (scr_coord_val y = 0; ok && y < export_size.h; y += strip_height) {
+		const scr_coord_val tile_height = min(strip_height, export_size.h - y);
+		for (scr_coord_val x = 0; ok && x < export_size.w; x += screen_size.w) {
+			const scr_coord_val tile_width = min(screen_size.w, export_size.w - x);
+			set_xy_offset_size(scr_coord(x, y), scr_size(tile_width, tile_height));
+			display_set_clip_wh(0, 0, tile_width, tile_height);
+			display_fillbox_wh_clip_rgb(0, 0, tile_width, tile_height, color_idx_to_rgb(COL_BLACK), false);
+			draw(scr_coord(-x, -y));
+			ok &= display_snapshot(scr_rect(0, 0, tile_width, tile_height), strip, scr_coord(x, 0));
+		}
+		ok = ok && writer.write_rows(strip, (uint32)tile_height);
+	}
+
+	new_off = saved_new_off;
+	new_size = saved_new_size;
+	needs_redraw = true;
+	display_set_clip_wh(saved_clip.x, saved_clip.y, saved_clip.w, saved_clip.h);
+	mark_screen_dirty();
+
+	if (!ok || !writer.finish()) {
+		return false;
+	}
+	filename = path;
+	return true;
+}
+
+
 void minimap_t::calc_map()
 {
 	// only use bitmap size like screen size
@@ -1130,7 +1203,14 @@ void minimap_t::calc_map()
 	if(  !isometric  ) {
 		koord k;
 		koord start_off = koord( (cur_off.x*zoom_out)/zoom_in, (cur_off.y*zoom_out)/zoom_in );
-		koord end_off = start_off+koord( ( map_data->get_width()*zoom_out)/zoom_in+1, ( map_data->get_height()*zoom_out)/zoom_in+1 );
+		// cur_off need not be aligned to zoom_in (notably when exporting the map in
+		// memory-bounded strips).  Calculate the absolute far edge and round it up;
+		// deriving it only from the bitmap size can leave the final partial tile
+		// unpainted and retain pixels from the preceding strip.
+		koord end_off = koord(
+			((cur_off.x + map_data->get_width()) * zoom_out + zoom_in - 1) / zoom_in,
+			((cur_off.y + map_data->get_height()) * zoom_out + zoom_in - 1) / zoom_in
+		);
 		for(  k.y=start_off.y;  k.y<end_off.y;  k.y+=zoom_out  ) {
 			for(  k.x=start_off.x;  k.x<end_off.x;  k.x+=zoom_out  ) {
 				calc_map_pixel(k);

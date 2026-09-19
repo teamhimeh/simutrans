@@ -5908,6 +5908,40 @@ bool display_snapshot_png(const scr_rect &area, std::string &png_data)
 }
 
 
+bool display_snapshot(const scr_rect &area, raw_image_t &image, const scr_coord &destination)
+{
+	if (area.x < 0 || area.y < 0 || area.w <= 0 || area.h <= 0 ||
+		area.get_right() > disp_actual_width || area.get_bottom() > disp_height ||
+		destination.x < 0 || destination.y < 0 ||
+		(uint32)(destination.x + area.w) > image.get_width() ||
+		(uint32)(destination.y + area.h) > image.get_height() ||
+		image.get_format() != raw_image_t::FMT_RGB888) {
+		return false;
+	}
+
+	for (scr_coord_val y = 0; y < area.h; ++y) {
+		uint8 *dst = image.access_pixel(destination.x, destination.y + y);
+		const PIXVAL *row = textur + area.x + (area.y + y) * disp_width;
+
+		for (scr_coord_val x = 0; x < area.w; ++x) {
+			const PIXVAL pixel = *row++;
+
+#ifdef RGB555
+			*dst++ = ((pixel >> 10) & 0x1F) << (8-5);
+			*dst++ = ((pixel >>  5) & 0x1F) << (8-5);
+			*dst++ = ((pixel >>  0) & 0x1F) << (8-5);
+#else
+			*dst++ = ((pixel >> 11) & 0x1F) << (8-5);
+			*dst++ = ((pixel >>  5) & 0x3F) << (8-6);
+			*dst++ = ((pixel >>  0) & 0x1F) << (8-5);
+#endif
+		}
+	}
+
+	return true;
+}
+
+
 bool display_snapshot(const scr_rect &area)
 {
 	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
@@ -5919,7 +5953,7 @@ bool display_snapshot(const scr_rect &area)
 
 	// find the first not used screenshot image
 	do {
-		sprintf(filename, SCREENSHOT_PATH_X "simscr%02d.png", number++);
+		snprintf(filename, lengthof(filename), SCREENSHOT_PATH_X "simscr%02d.png", number++);
 	} while (access(filename, W_OK) != -1);
 
 	raw_image_t *img = capture_snapshot(area);
