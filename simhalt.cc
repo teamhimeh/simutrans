@@ -3679,27 +3679,50 @@ sint64 haltestelle_t::calc_maintenance() const
 
 
 
-// changes this to a public transfer exchange stop
-void haltestelle_t::change_owner( player_t *player, bool halt_only )
+// changes the owner of this transfer exchange stop, public as well as private
+// no_cost == true : public undertaking mode : no cost spend
+void haltestelle_t::change_owner( player_t *player, bool halt_only, bool no_cost )
 {
-	// check if already public
+	// check if already owned by this player
 	if(  owner == player  ) {
 		return;
 	}
 
 	// change owner of halt
 	player_t* const prev_owner = owner;
+	// [mod : shingoushori] a public stop taken over by a company: cost and permissions work the other way round
+	const bool to_private = prev_owner  &&  prev_owner->is_public_service()  &&  !player->is_public_service();
 	owner = player;
-	set_permissions(~(uint64)0);
+	if(  player->is_public_service()  ) {
+		// everybody may use a public stop
+		flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
+		set_permissions(~(uint64)0);
+	}
+	else if(  to_private  ) {
+		// the all-players permission of a public stop is meaningless now: only the new owner may use it
+		flags &= ~HS_ALLOW_OTHER_PLAYER_CONNECTION;
+		set_permissions(0); // set_permissions() always adds the owner
+	}
+	else {
+		// company to company: everybody allowed so far may go on using this stop
+		set_permissions(permissions);
+	}
 	rebuild_connections();
 	rebuild_linked_connections();
 	rebuild_connected_components();
 
 	// tell the world of it ...
-	if(  player == welt->get_public_player()  &&  env_t::networkmode  ) {
+	if(  env_t::networkmode  ) {
 		cbuffer_t buf;
-		buf.printf( translator::translate("%s at (%i,%i) now public stop."), get_name(), get_basis_pos().x, get_basis_pos().y );
-		welt->get_message()->add_message( buf, get_basis_pos(), message_t::ai, PLAYER_FLAG|player->get_player_nr(), IMG_EMPTY );
+		if(  player == welt->get_public_player()  ) {
+			buf.printf( translator::translate("%s at (%i,%i) now public stop."), get_name(), get_basis_pos().x, get_basis_pos().y );
+		}
+		else if(  to_private  ) {
+			buf.printf( translator::translate("%s at (%i,%i) now private stop."), get_name(), get_basis_pos().x, get_basis_pos().y );
+		}
+		if(  buf.len()>0  ) {
+			welt->get_message()->add_message( buf, get_basis_pos(), message_t::ai, PLAYER_FLAG|player->get_player_nr(), IMG_EMPTY );
+		}
 	}
 
 	if(  halt_only  ) {
@@ -3708,7 +3731,6 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 	}
 
 	// process every tile of stop
-	slist_tpl<halthandle_t> joining;
 	FOR(slist_tpl<tile_t>, const& i, tiles) {
 
 		grund_t* const gr = i.grund;
@@ -3723,9 +3745,15 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 			player_t::add_maintenance(player, monthly_costs, costs_type);
 
 			// cost is computed as cst_make_public_months
-			sint64 const cost = -welt->scale_with_month_length(monthly_costs * welt->get_settings().cst_make_public_months);
-			player_t::book_construction_costs(gbplayer, cost, get_basis_pos(), costs_type);
-			player_t::book_construction_costs(player, -cost, koord::invalid, costs_type);
+			if(  !no_cost  ) {
+				sint64 cost = -welt->scale_with_month_length(monthly_costs * welt->get_settings().cst_make_public_months);
+				if(  to_private  ) {
+					// the new owner buys the building from the public player
+					cost = -cost;
+				}
+				player_t::book_construction_costs(gbplayer, cost, get_basis_pos(), costs_type);
+				player_t::book_construction_costs(player, -cost, koord::invalid, costs_type);
+			}
 		}
 
 		// change way ownership
@@ -3754,8 +3782,24 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 						welt->get_message()->add_message( buf, w->get_pos().get_2d(), message_t::ai, PLAYER_FLAG|player->get_player_nr(), IMG_EMPTY );
 						has_been_announced = true; // one message is enough
 					}
-					cost = -welt->scale_with_month_length(cost * (player==welt->get_public_player())*welt->get_settings().cst_make_public_months );
-					player_t::book_construction_costs(wplayer, cost, koord::invalid, financetype);
+					else if(  to_private  &&  env_t::networkmode  &&  !has_been_announced  ) {
+						cbuffer_t buf;
+						buf.printf( translator::translate("(%s) now private way."), w->get_pos().get_str() );
+						welt->get_message()->add_message( buf, w->get_pos().get_2d(), message_t::ai, PLAYER_FLAG|player->get_player_nr(), IMG_EMPTY );
+						has_been_announced = true; // one message is enough
+					}
+					if(  !no_cost  ) {
+						if(  to_private  ) {
+							// the new owner buys the way from the public player
+							sint64 const price = welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months );
+							player_t::book_construction_costs(wplayer, price, koord::invalid, financetype);
+							player_t::book_construction_costs(player, -price, koord::invalid, financetype);
+						}
+						else {
+							sint64 const price = -welt->scale_with_month_length(cost * (player==welt->get_public_player())*welt->get_settings().cst_make_public_months );
+							player_t::book_construction_costs(wplayer, price, koord::invalid, financetype);
+						}
+					}
 				}
 			}
 		}
@@ -3772,7 +3816,13 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only )
 					waytype_t const financetype = wo->get_desc()->get_waytype();
 					player_t::add_maintenance( woplayer, -cost, financetype);
 					player_t::add_maintenance( player, cost, financetype);
-					player_t::book_construction_costs( woplayer, cost, koord::invalid, financetype);
+					if(  !no_cost  ) {
+						player_t::book_construction_costs( woplayer, cost, koord::invalid, financetype);
+						if(  to_private  ) {
+							// the new owner buys the way object from the public player
+							player_t::book_construction_costs( player, -cost, koord::invalid, financetype);
+						}
+					}
 				}
 			}
 		}
@@ -3838,80 +3888,52 @@ void haltestelle_t::merge_halt( halthandle_t halt_merged )
 	rebuild_connected_components();
 }
 // [mod : shingoushori] mod : changes this to a private transfer exchange stop 3/3
-// changes this to a private transfer exchange stop
+// changes this to a private transfer exchange stop and joins it with the adjacent stops of the new owner
 // public_undertaking == true : public undertaking mode : no cost spend
 void haltestelle_t::make_private_and_join( player_t *player, bool public_undertaking )
 {
-	player_t *const public_owner = welt->get_public_player();
-
 	// check if already private
 	if(  owner == player  ) {
 		return;
 	}
 
-	// process every tile of stop
+	// search for stops to join, before the takeover: afterwards our own tiles would match too
 	slist_tpl<halthandle_t> joining;
 	FOR(slist_tpl<tile_t>, const& i, tiles) {
-											 grund_t* const gr = i.grund;
-		gebaeude_t* gb = gr->find<gebaeude_t>();
-		if(  gb  ) {
-			player_t *const current_owner = gb->get_owner();
-			// change ownership
-			gb->set_owner(player);
-			gb->set_flag(obj_t::dirty);
-			sint64 const monthly_costs = welt->get_settings().maint_building * gb->get_tile()->get_desc()->get_level();
-			waytype_t const costs_type = gb->get_waytype();
-			player_t::add_maintenance(current_owner, -monthly_costs, costs_type);
-			player_t::add_maintenance(player, monthly_costs, costs_type);
-
-			// cost is computed and transfered to private player
-			if(  !public_undertaking  ) {
-				sint64 const cost = -welt->scale_with_month_length(monthly_costs * welt->get_settings().cst_make_public_months);
-				player_t::book_construction_costs(current_owner, -cost, get_basis_pos(), costs_type);
-				player_t::book_construction_costs(player, cost, koord::invalid, costs_type);
+		const koord pos = i.grund->get_pos().get_2d();
+		for(  uint8 n=0;  n<9;  n++  ) {
+			// n==8 is the tile itself, 0...7 are its neighbours
+			const planquadrat_t *pl = welt->access( n==8 ? pos : pos+koord::neighbours[n] );
+			if(  !pl  ) {
+				continue;
 			}
-		}
-
-		// search for stops to join, starting with this tile
-		const planquadrat_t *pl = welt->access(gr->get_pos().get_2d());
-		for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-			halthandle_t my_halt = pl->get_boden_bei(i)->get_halt();
-			if(  my_halt.is_bound()  &&  my_halt->get_owner()==player  &&  !joining.is_contained(my_halt)  ) {
-				joining.append(my_halt);
-			}
-		}
-		// search neighbouring tiles
-		for( uint8 i=0;  i<8;  i++  ) {
-			const planquadrat_t *pl2 = welt->access(gr->get_pos().get_2d()+koord::neighbours[i]);
-			if(  pl2  ) {
-				for(  uint8 i=0;  i < pl2->get_boden_count();  i++  ) {
-					halthandle_t my_halt = pl2->get_boden_bei(i)->get_halt();
-					if(  my_halt.is_bound()  &&  my_halt->get_owner()==player  &&  !joining.is_contained(my_halt)  ) {
-						joining.append(my_halt);
-					}
+			for(  uint8 b=0;  b < pl->get_boden_count();  b++  ) {
+				halthandle_t my_halt = pl->get_boden_bei(b)->get_halt();
+				if(  my_halt.is_bound()  &&  my_halt!=self  &&  my_halt->get_owner()==player  &&  !joining.is_contained(my_halt)  ) {
+					joining.append(my_halt);
 				}
 			}
 		}
 	}
 
-	// transfer ownership
-	owner = player;
+	// transfer ownership of the stop and of the buildings, ways and way objects on it
+	change_owner( player, false, public_undertaking );
 
-	// Public halt: allow all players to stop here, including future companies that reuse a deleted
-	// company's slot. Set HS_ALLOW_OTHER_PLAYER_CONNECTION so that is_connection_allowed() grants
-	// access based on the all-company flag rather than relying solely on per-slot bitmask bits that
-	// would be cleared by remove_player() when a company is removed.
-	flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
-	set_permissions(~(uint64)0);
-
-	// set name to name of first public stop
+	// set name to name of first stop of the new owner
 	if(  !joining.empty()  ) {
 		set_name( joining.front()->get_name());
 	}
 
+	// after joining, allow everyone who could stop at any of the joined halts to continue doing so
+	uint64 joined_perms = permissions;
+
 	while(  !joining.empty()  ) {
 		// join this halt with me
 		halthandle_t halt = joining.remove_first();
+		joined_perms |= halt->get_permissions();
+		if(  halt->is_allow_other_player_connection()  ) {
+			flags |= HS_ALLOW_OTHER_PLAYER_CONNECTION;
+		}
 
 		// now with the second stop
 		while(  halt.is_bound()  &&  halt!=self  ) {
@@ -3944,15 +3966,15 @@ void haltestelle_t::make_private_and_join( player_t *player, bool public_underta
 			}
 		}
 	}
+	set_permissions(joined_perms);
 
-	// tell the world of it ...
-	if(  player != public_owner  &&  env_t::networkmode  ) {
-		cbuffer_t buf;
-		buf.printf( translator::translate("%s at (%i,%i) now private stop."), get_name(), get_basis_pos().x, get_basis_pos().y );
-		welt->get_message()->add_message( buf, get_basis_pos(), message_t::ai, PLAYER_FLAG|player->get_player_nr(), IMG_EMPTY );
-	}
+	recalc_basis_pos();
 
+	// also rebuild our connections
 	recalc_station_type();
+	rebuild_connections();
+	rebuild_linked_connections();
+	rebuild_connected_components();
 }
 
 void haltestelle_t::transfer_goods(halthandle_t halt)

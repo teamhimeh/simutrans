@@ -4177,6 +4177,17 @@ public:
 	way_checker_t(waytype_t w, bool unmasked_ = false) : wt(w), unmasked(unmasked_) {}
 	bool check_next_tile(const grund_t* gr) const OVERRIDE { return gr->hat_weg(wt); }
 	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return unmasked ? gr->get_weg_ribi_unmasked(wt) : gr->get_weg_ribi(wt); }
+	// direction-aware: resolve to the specific leg entered via from_dir, relevant when two
+	// same-waytype disjoint diagonal legs coexist on gr (harmless no-op otherwise, since the
+	// base test_driver_t::get_ribi(gr,from_dir) would otherwise just discard from_dir entirely)
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE {
+		if(  from_dir!=ribi_t::none  &&  gr->has_two_ways()  ) {
+			if(  weg_t *w = gr->get_weg(wt, ribi_t::backward(from_dir))  ) {
+				return unmasked ? w->get_ribi_unmasked() : w->get_ribi();
+			}
+		}
+		return get_ribi(gr);
+	}
 	waytype_t get_waytype() const OVERRIDE { return wt; }
 	int get_cost(const grund_t*, const weg_t*, const sint32, ribi_t::ribi) const OVERRIDE { return 1; }
 	bool is_target(const grund_t*, const grund_t*) const OVERRIDE { return false; }
@@ -4209,6 +4220,11 @@ public:
 private:
 	bool check_next_tile(const grund_t* gr) const OVERRIDE { return other->check_next_tile(gr)  &&  scenario->is_work_allowed_here(player, id, other->get_waytype(), gr->get_pos())==NULL;}
 	ribi_t::ribi get_ribi(const grund_t* gr) const OVERRIDE { return other->get_ribi(gr); }
+	// forward the direction-aware overload too -- the base test_driver_t default would
+	// otherwise silently discard from_dir and fall back to the ambiguous single-arg version,
+	// bypassing the wrapped driver's own direction-aware resolution (e.g. way_checker_t's,
+	// needed on a same-waytype disjoint-diagonal-leg tile)
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE { return other->get_ribi(gr, from_dir); }
 	waytype_t get_waytype() const OVERRIDE { return other->get_waytype(); }
 	int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const OVERRIDE { return other->get_cost(gr, w, max_speed, from); }
 	bool is_target(const grund_t *gr,const grund_t *gr2) const OVERRIDE { return other->is_target(gr,gr2); }
@@ -5417,10 +5433,21 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// find out orientation ...
 	uint32 layout = 0;
 	ribi_t::ribi ribi=ribi_t::none;
-	
+
+	// two disjoint diagonal bends (e.g. N-W and S-E) never meet at the tile center, so a
+	// through-station can sit on such a tile using just weg_nr(0)'s own bend ribi -- unlike
+	// the ordinary two-way case (crossing, tram-on-road) where the union of both ribis is
+	// what determines validity/orientation. If either way is straight, this is false and the
+	// existing union-based logic below applies unchanged.
+	const bool disjoint_diagonal_halt = bd->has_two_ways()
+		&&  ribi_t::are_disjoint_bends( bd->get_weg_nr(0)->get_ribi_unmasked(), bd->get_weg_nr(1)->get_ribi_unmasked() );
+
 	if(  desc->get_all_layouts()==112  ) {
 		// through station supporting diagonal
-		if(  bd->has_two_ways()  ) {
+		if(  disjoint_diagonal_halt  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
 		}
@@ -5439,7 +5466,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	}
 	else if(  desc->get_all_layouts()==80  ) {
 		// through station supporting diagonal
-		if(  bd->has_two_ways()  ) {
+		if(  disjoint_diagonal_halt  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
 		}
@@ -5458,7 +5488,10 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	}
 	else if(  desc->get_all_layouts()==48  ) {
 		// through station supporting diagonal
-		if(  bd->has_two_ways()  ) {
+		if(  disjoint_diagonal_halt  ) {
+			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		}
+		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
 		}
@@ -8367,16 +8400,35 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 
 	// [mod : shingoushori] mod : changes this to a private transfer exchange stop 1/3
 	if( is_shift_pressed()  ){
-		// [mod : shingoushori] shortcut the process "// make way public if any suitable" for avoid complexity
 		if( halt.is_bound()  &&  (halt->get_owner() != player) /* !player_t::check_owner(halt->get_owner(), player)*/ ) {
-			// check funds
-			sint64 const workcost = -welt->scale_with_month_length(halt->calc_maintenance() * welt->get_settings().cst_make_public_months);
-			if(  player!=welt->get_public_player()  &&  !player->can_afford(workcost)  ) {
-				return NOTICE_INSUFFICIENT_FUNDS;
+			// check funds; is_ctrl_pressed == true : public undertaking mode : no cost spend
+			if(  !is_ctrl_pressed()  ) {
+				player_t *const prev_owner = halt->get_owner();
+				sint64 workcost = -welt->scale_with_month_length(halt->calc_maintenance() * welt->get_settings().cst_make_public_months);
+				// the ways of the previous owner are taken over as well
+				FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
+					for(  int j=0;  j<2;  j++  ) {
+						if(  weg_t *w=i.grund->get_weg_nr(j)  ) {
+							if(  w->get_owner()==prev_owner  ) {
+								sint64 cost = w->get_desc()->get_maintenance();
+								// tunnel cost overwrites way cost
+								if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
+									cost = t->get_desc()->get_maintenance();
+								}
+								if(  wayobj_t* wo = i.grund->get_wayobj(w->get_waytype())  ) {
+									cost += wo->get_desc()->get_maintenance();
+								}
+								workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
+							}
+						}
+					}
+				}
+				if(  player!=welt->get_public_player()  &&  !player->can_afford(workcost)  ) {
+					return NOTICE_INSUFFICIENT_FUNDS;
+				}
 			}
 
 			// change ownership
-			// is_ctrl_pressed == true : public undertaking mode : no cost spend
 			halt->make_private_and_join(player, is_ctrl_pressed() );
 		}
 		return NULL;
@@ -8409,6 +8461,9 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 						// tunnel cost overwrites way cost
 						if(  tunnel_t *t = i.grund->find<tunnel_t>()  ) {
 							cost = t->get_desc()->get_maintenance();
+						}
+						if(  wayobj_t* wo = i.grund->get_wayobj(w->get_waytype())  ) {
+							cost += wo->get_desc()->get_maintenance();
 						}
 						workcost -= welt->scale_with_month_length(cost * welt->get_settings().cst_make_public_months);
 					}

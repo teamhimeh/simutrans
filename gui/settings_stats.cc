@@ -368,6 +368,9 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 
 	INIT_NUM( "toll_runningcost_percentage", sets->get_way_toll_runningcost_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "toll_waycost_percentage", sets->get_way_toll_waycost_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
+	// convoy shipping - must stay in the same order as the matching READ_NUM_VALUE lines below
+	INIT_NUM( "toll_shipping_percentage", sets->get_toll_shipping_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "shipping_income_percentage", sets->get_shipping_income_percentage(), 0, 100, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "maintenance_cost_multiplier_way", sets->get_maintenance_cost_multiplier_way(), 1, 250, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "maintenance_cost_multiplier_overhead", sets->get_maintenance_cost_multiplier_overhead(), 1, 250, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "running_cost_multiplier_vehicle", sets->get_running_cost_multiplier_vehicle(), 1, 250, gui_numberinput_t::AUTOLINEAR, false );
@@ -472,6 +475,8 @@ void settings_economy_stats_t::read(settings_t* const sets)
 
 	READ_NUM_VALUE( sets->way_toll_runningcost_percentage );
 	READ_NUM_VALUE( sets->way_toll_waycost_percentage );
+	READ_NUM_VALUE( sets->toll_shipping_percentage );
+	READ_NUM_VALUE( sets->shipping_income_percentage );
 	READ_NUM_VALUE( sets->maintenance_cost_multiplier_way );
 	READ_NUM_VALUE( sets->maintenance_cost_multiplier_overhead );
 	READ_NUM_VALUE( sets->running_cost_multiplier_vehicle );
