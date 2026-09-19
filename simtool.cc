@@ -10832,6 +10832,7 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * n:set packed from-N/from-S allowed exit ribis on detailed_oneway sign (ticks_ns)
  * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
  * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
+ * i:set ignore lentgh
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
@@ -11066,6 +11067,21 @@ bool tool_change_roadsign_t::init( player_t *player )
 			if(  signal_t *sig = gr->find<signal_t>()  ) {
 				if(  player_t::check_owner(sig->get_owner(), player)  ) {
 					sig->set_two_ways(inst != 0);
+					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)sig);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
+				}
+			}
+		}
+		break;
+
+		case 'i':
+		// ignore length for choose/guide signals
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  signal_t *sig = gr->find<signal_t>()  ) {
+				if(  player_t::check_owner(sig->get_owner(), player)  ) {
+					sig->set_ignore_length(inst != 0);
 					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)sig);
 					if(  signal_info_win  ) {
 						signal_info_win->update_data();

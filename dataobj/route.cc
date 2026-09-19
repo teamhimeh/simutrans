@@ -113,9 +113,6 @@ uint32 route_t::MAX_STEP=0;
 bool route_t::node_in_use=false;
 #endif
 
-/**
- * find the route to an unknown location
- */
 ribi_t::ribi route_t::get_corner_set(uint32 index) const
 {
 	if(  route.get_count()==0  ||  index>=route.get_count()  ) {
@@ -138,8 +135,10 @@ ribi_t::ribi route_t::get_travel_dir(uint32 index) const
 	return ribi_type( route[ max(1u,index)-1u ], route[index] );
 }
 
-
-bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin )
+/**
+ * find the route to an unknown location
+ */
+bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin, const bool ignore_length )
 {
 	bool ok = false;
 
@@ -222,10 +221,10 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		bool already_there;
 		if(  coupling  ) {
 			// find place to do a coupling.
-			already_there = tdriver->is_coupling_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr);
+			already_there = tdriver->is_coupling_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr, ignore_length);
 		} else {
 			// normal routine.
-			already_there = tdriver->is_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr, need_electric, choose_margin );
+			already_there = tdriver->is_target( gr, tmp->parent==NULL ? NULL : tmp->parent->gr, need_electric, choose_margin, ignore_length );
 		}
 		if(  already_there  ) {
 			// we added a target to the closed list: check for length
