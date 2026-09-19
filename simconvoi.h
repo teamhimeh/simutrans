@@ -1127,6 +1127,18 @@ public:
 	void reserve_pos(koord3d pos) {reserved_tiles.append(pos); }
 	bool is_reservation_empty() const { return reserved_tiles.empty(); }
 	vector_tpl<koord3d>& get_reserved_tiles() { return reserved_tiles; }
+
+	/**
+	 * The corner set (see route_t::get_corner_set()) of reserved_tiles[index]: reserved tiles
+	 * are held in route order, so the neighbouring entries give the bits this convoy occupies
+	 * there. Pass it to grund_t::get_weg(waytype, dir) so the reservation is looked up on the
+	 * leg actually reserved when two same-waytype disjoint diagonal legs share that tile.
+	 */
+	ribi_t::ribi get_reserved_tiles_corner_set(uint32 index) const;
+
+	/// heading with which the reserved tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_reserved_tiles_travel_dir(uint32 index) const;
+
 	void clear_reserved_tiles();
 	/**
 	 * the index and steps of the coupling point.

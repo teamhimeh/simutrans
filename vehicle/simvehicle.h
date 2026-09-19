@@ -23,6 +23,7 @@ class schedule_t;
 class signal_t;
 class ware_t;
 class route_t;
+struct schedule_entry_t;
 
 /*----------------------- Movables ------------------------------------*/
 
@@ -319,6 +320,22 @@ public:
 
 	virtual bool calc_route(koord3d start, koord3d ziel, sint32 max_speed, route_t* route, bool pass_next=false);
 	uint16 get_route_index() const {return route_index;}
+
+	/**
+	 * The corner set (see route_t::get_corner_set()) of the tile this vehicle currently stands
+	 * on: the bit pointing back to the tile it came from, plus the bit pointing on to pos_next.
+	 * Tells the two legs apart on a tile carrying two same-waytype disjoint diagonal legs, so
+	 * pass it to grund_t::get_weg(waytype, dir) instead of the ambiguous waytype-only lookup
+	 * whenever a way object is resolved for THIS vehicle. Returns ribi_t::none when neither bit
+	 * can be determined (no route yet, end of route), which makes get_weg() fall back to the
+	 * ordinary lookup.
+	 * Note this is not get_direction(): on a bend the driving direction is the diagonal between
+	 * entry and exit (e.g. SE for a N->W turn) and thus need not be a subset of the leg's ribi.
+	 */
+	ribi_t::ribi get_current_corner_set() const;
+
+	/// heading with which we entered our current tile (see schiene_t::reserve())
+	ribi_t::ribi get_current_travel_dir() const;
 
 	/**
 	* Get the base image.
@@ -639,6 +656,25 @@ protected:
 private:
 	bool is_next_tile_already_reserved(uint16 index);
 
+	// Returns the schedule entry of the next genuine stop (waypoints are skipped) if that stop
+	// asks for coupling, NULL otherwise.
+	const schedule_entry_t* get_next_coupling_stop() const;
+
+	// The halt of the next genuine stop if that stop asks for coupling, an unbound handle otherwise.
+	halthandle_t get_coupling_halt() const;
+
+	// Collects the tiles of halt that lie behind the end of route: starting behind route->back()
+	// the track is followed as long as it stays inside halt. Our route ends at our own halt
+	// position, so a convoy waiting further down the platform never appears on it - these are the
+	// tiles we would have to drive over to reach such a convoy.
+	void get_platform_tiles_behind_route(const route_t* route, halthandle_t halt, vector_tpl<koord3d> &tiles) const;
+
+	// Called once the route to the next stop is completely reserved and that stop is a coupling
+	// stop: looks at the whole arrival platform for a convoy to couple with and, if one is found,
+	// extends the route up to the coupling point and records it in the convoy. Returns true if a
+	// coupling point was found.
+	bool check_platform_coupling(uint16 &next_signal_index) const;
+
 public:
 	waytype_t get_waytype() const OVERRIDE { return track_wt; }
 
@@ -662,7 +698,7 @@ public:
 	// returns true on successful reservation
 	bool block_reserver(const route_t *route, uint16 start_index, uint16 &next_signal, uint16 &next_crossing, int signal_count, bool reserve, bool force_unreserve, bool use_vector = false, bool signal_index_must_return = false ) const;
 
-	bool can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps, bool ignore_signals = false);
+	bool can_couple(const route_t* route, uint16 start_index, uint16 &coupling_index, uint8 &coupling_steps, bool ignore_signals = false) const;
 
 	void leave_tile() OVERRIDE;
 
