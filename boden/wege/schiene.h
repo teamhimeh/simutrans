@@ -47,7 +47,7 @@ public:
 	 * convoys would get the *same* offset, so co-reservation is not allowed there.
 	 *
 	 * This needs the true heading, not the corner_set: only a pair of exactly opposite
-	 * single directions is safe, and only on a plain through tile (no switch/crossing).
+	 * single directions is safe, and only on a straight or diagonal tile (no switch/crossing).
 	 */
 	bool can_co_reserve_offset(ribi_t::ribi travel_dir) const {
 		return  reserved.is_bound()
