@@ -1139,7 +1139,7 @@ bool minimap_t::export_to_png(std::string &filename)
 	static int number = 0;
 	char path[80];
 	do {
-		sprintf(path, SCREENSHOT_PATH_X "simmap%02d.png", number++);
+		snprintf(path, lengthof(path), SCREENSHOT_PATH_X "simmap%02d.png", number++);
 	} while (access(path, W_OK) != -1);
 
 	raw_image_png_writer_t writer(path, (uint32)export_size.w, (uint32)export_size.h, raw_image_t::FMT_RGB888);
@@ -1166,7 +1166,7 @@ bool minimap_t::export_to_png(std::string &filename)
 			display_set_clip_wh(0, 0, tile_width, tile_height);
 			display_fillbox_wh_clip_rgb(0, 0, tile_width, tile_height, color_idx_to_rgb(COL_BLACK), false);
 			draw(scr_coord(-x, -y));
-			ok = display_snapshot(scr_rect(0, 0, tile_width, tile_height), strip, scr_coord(x, 0));
+			ok &= display_snapshot(scr_rect(0, 0, tile_width, tile_height), strip, scr_coord(x, 0));
 		}
 		ok = ok && writer.write_rows(strip, (uint32)tile_height);
 	}

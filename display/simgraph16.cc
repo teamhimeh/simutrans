@@ -5953,7 +5953,7 @@ bool display_snapshot(const scr_rect &area)
 
 	// find the first not used screenshot image
 	do {
-		sprintf(filename, SCREENSHOT_PATH_X "simscr%02d.png", number++);
+		snprintf(filename, lengthof(filename), SCREENSHOT_PATH_X "simscr%02d.png", number++);
 	} while (access(filename, W_OK) != -1);
 
 	raw_image_t *img = capture_snapshot(area);
