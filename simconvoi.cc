@@ -6715,7 +6715,7 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 			if(  sch1  ) {
 				sch1->unreserve(get_most_parent_convoi());
 				get_most_parent_convoi()->unreserve_pos(pos);
-				sch1->reserve(ret,corner_set);
+				sch1->reserve(ret,corner_set,r->get_travel_dir(i));
 			}
 		}
 	}

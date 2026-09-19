@@ -5904,6 +5904,7 @@ void rail_vehicle_t::leave_tile()
 				// first, we check other vehicles on the same tile (e.g. uncoupling here)
 				convoihandle_t other_convoy;
 				ribi_t::ribi other_convoy_dir=ribi_t::none;
+				ribi_t::ribi other_convoy_travel_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
 					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
@@ -5916,6 +5917,9 @@ void rail_vehicle_t::leave_tile()
 					other_convoy_dir =
 					ribi_t::backward(ribi_type(other_convoy->get_route()->at(max(2u,current_stop)-2u), get_pos()))
 					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count()-1u,current_stop)));
+					// its heading, which the corner set above cannot express - this is exactly
+					// the tile two convoys share on a way with a vehicle offset
+					other_convoy_travel_dir = v->get_current_travel_dir();
 				}
 				// Use convoy handle so co-reserved convoys are correctly identified:
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
@@ -5925,7 +5929,7 @@ void rail_vehicle_t::leave_tile()
 				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
-					sch0->reserve(other_convoy->get_most_parent_convoi(),other_convoy_dir);
+					sch0->reserve(other_convoy->get_most_parent_convoi(),other_convoy_dir,other_convoy_travel_dir);
 				}
 				// tell next signal?
 				// and switch to red
@@ -5987,8 +5991,12 @@ void rail_vehicle_t::enter_tile(grund_t* gr)
 			sch0->book(1, WAY_STAT_CONVOIS);
 			// pass the corner set rather than get_direction(): the driving direction on a bend
 			// is the diagonal between entry and exit and would store a wrong reservation
-			// direction whenever this call is the one that creates the reservation
-			sch0->reserve( cnv->self, corner_set!=ribi_t::none ? corner_set : get_direction() );
+			// direction whenever this call is the one that creates the reservation.
+			// The heading goes along as well: when this call is the one that creates the
+			// reservation (drive_without_reservation, depot departure, a lost reservation)
+			// reserved_travel_dir would otherwise stay none and
+			// schiene_t::can_co_reserve_offset() could never let a second convoy pass here.
+			sch0->reserve( cnv->self, corner_set!=ribi_t::none ? corner_set : get_direction(), get_current_travel_dir() );
 		}
 	}
 }
