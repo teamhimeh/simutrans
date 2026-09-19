@@ -827,3 +827,11 @@ This tool must be executed by the public player.
 このツールは公共事業のみ実行できます。
 No city found!
 都市が見つかりません！
+Export map
+マップ画像を出力
+Export the entire map with the current display settings.
+現在の表示設定でマップ全体を画像として出力します。
+Map image exported to the screenshot folder.
+マップ画像をスクリーンショットフォルダに出力しました。
+Map image export failed.
+マップ画像の出力に失敗しました。

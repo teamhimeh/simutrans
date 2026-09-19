@@ -64,6 +64,152 @@ static void flush_png_string(png_structp)
 }
 
 
+struct raw_image_png_writer_t::impl_t
+{
+	png_structp png_ptr;
+	png_infop info_ptr;
+	FILE *file;
+	std::string filename;
+	raw_image_t::format_t format;
+	uint32 width;
+	uint32 height;
+	uint32 rows_written;
+	bool valid;
+	bool finished;
+
+	impl_t() :
+		png_ptr(NULL), info_ptr(NULL), file(NULL), format(raw_image_t::FMT_INVALID),
+		width(0), height(0), rows_written(0), valid(false), finished(false)
+	{}
+};
+
+
+raw_image_png_writer_t::raw_image_png_writer_t(const char *filename, uint32 width, uint32 height, raw_image_t::format_t format) :
+	impl(new impl_t())
+{
+	impl->filename = filename;
+	impl->format = format;
+	impl->width = width;
+	impl->height = height;
+
+	int color_type;
+	switch (format) {
+		case raw_image_t::FMT_RGBA8888: color_type = PNG_COLOR_TYPE_RGBA; break;
+		case raw_image_t::FMT_RGB888:   color_type = PNG_COLOR_TYPE_RGB;  break;
+		case raw_image_t::FMT_GRAY8:    color_type = PNG_COLOR_TYPE_GRAY; break;
+		default: return;
+	}
+
+	impl->file = dr_fopen(filename, "wb");
+	if (impl->file == NULL) {
+		return;
+	}
+	impl->png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+	if (impl->png_ptr == NULL) {
+		close(false);
+		return;
+	}
+	impl->info_ptr = png_create_info_struct(impl->png_ptr);
+	if (impl->info_ptr == NULL) {
+		close(false);
+		return;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(impl->png_ptr))) {
+		dbg->error("raw_image_png_writer_t", "fatal error starting PNG output");
+		close(false);
+		return;
+	}
+#endif
+
+	png_init_io(impl->png_ptr, impl->file);
+#if PNG_LIBPNG_VER_MAJOR<=1  &&  PNG_LIBPNG_VER_MINOR<5
+	png_set_compression_level(impl->png_ptr, Z_BEST_COMPRESSION);
+#endif
+	png_set_IHDR(impl->png_ptr, impl->info_ptr, width, height, 8, color_type,
+		PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+	png_write_info(impl->png_ptr, impl->info_ptr);
+	impl->valid = true;
+}
+
+
+raw_image_png_writer_t::~raw_image_png_writer_t()
+{
+	if (impl != NULL) {
+		close(impl->finished);
+		delete impl;
+	}
+}
+
+
+void raw_image_png_writer_t::close(bool keep_file)
+{
+	if (impl->png_ptr != NULL) {
+		png_destroy_write_struct(&impl->png_ptr, impl->info_ptr != NULL ? &impl->info_ptr : (png_infopp)NULL);
+	}
+	if (impl->file != NULL) {
+		fclose(impl->file);
+		impl->file = NULL;
+	}
+	impl->valid = false;
+	if (!keep_file && !impl->filename.empty()) {
+		remove(impl->filename.c_str());
+	}
+}
+
+
+bool raw_image_png_writer_t::is_valid() const
+{
+	return impl != NULL && impl->valid;
+}
+
+
+bool raw_image_png_writer_t::write_rows(const raw_image_t &image, uint32 row_count)
+{
+	if (!is_valid() || image.get_format() != impl->format || image.get_width() != impl->width ||
+		row_count > image.get_height() || row_count > impl->height - impl->rows_written) {
+		return false;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(impl->png_ptr))) {
+		dbg->error("raw_image_png_writer_t", "fatal error writing PNG rows");
+		close(false);
+		return false;
+	}
+#endif
+
+	for (uint32 y = 0; y < row_count; ++y) {
+		const uint8 *row = image.access_pixel(0, y);
+		png_write_row(impl->png_ptr, const_cast<png_bytep>(row));
+	}
+	impl->rows_written += row_count;
+	return true;
+}
+
+
+bool raw_image_png_writer_t::finish()
+{
+	if (!is_valid() || impl->rows_written != impl->height) {
+		return false;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(impl->png_ptr))) {
+		dbg->error("raw_image_png_writer_t", "fatal error finishing PNG output");
+		close(false);
+		return false;
+	}
+#endif
+
+	png_write_end(impl->png_ptr, impl->info_ptr);
+	impl->finished = true;
+	close(true);
+	return true;
+}
+
+
 bool raw_image_t::read_png_data(FILE *file)
 {
 	png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING,NULL,NULL,NULL);
