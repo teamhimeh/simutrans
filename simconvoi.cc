@@ -4690,12 +4690,12 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	vector_tpl<haltestelle_t::reachable_halt_t> reachable_halts;
 	vector_tpl<haltestelle_t::reachable_halt_t> temp_stop_halts;
 	calc_reachable_halts(reachable_halts, temp_stop_halts, self);
-	inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
+	inthashtable_tpl<uint16, vector_tpl<halthandle_t>> destination_halts;
 	halt->calc_destination_halt(destination_halts, reachable_halts, temp_stop_halts, goods_catg_index, self);
 
 	// fetch fresh cargos.
 	if(  loading_needed  ) {
-		FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+		FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 			vector_tpl<haltestelle_t::loadable_fresh_goods_t> loadable_fresh_goods;
 			halt->fetch_loadable_fresh_goods(loadable_fresh_goods, category_idx, destination_halts.get(category_idx));
 			FOR(vector_tpl<haltestelle_t::loadable_fresh_goods_t>, &goods, loadable_fresh_goods) {
@@ -6507,11 +6507,11 @@ bool convoi_t::is_users_at_next_stop() const{
 		vector_tpl<haltestelle_t::reachable_halt_t> reachable_halts;
 		vector_tpl<haltestelle_t::reachable_halt_t> temp_stop_halts;
 		calc_reachable_halts(reachable_halts, temp_stop_halts, self);
-		inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
+		inthashtable_tpl<uint16, vector_tpl<halthandle_t>> destination_halts;
 		halt->calc_destination_halt(destination_halts, reachable_halts, temp_stop_halts, goods_catg_index, self);
 
 		// fetch fresh cargos.
-		FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+		FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 			vector_tpl<haltestelle_t::loadable_fresh_goods_t> loadable_fresh_goods;
 			halt->fetch_loadable_fresh_goods(loadable_fresh_goods, category_idx, destination_halts.get(category_idx));
 			FOR(vector_tpl<haltestelle_t::loadable_fresh_goods_t>, &goods, loadable_fresh_goods) {

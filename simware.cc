@@ -22,7 +22,7 @@
 
 
 
-const goods_desc_t *ware_t::index_to_desc[256];
+const goods_desc_t *ware_t::index_to_desc[ware_t::GOODS_INDEX_LIMIT+1];
 
 ware_t::ware_t() : ziel(), zielpos(-1, -1)
 {
@@ -39,12 +39,6 @@ ware_t::ware_t(const goods_desc_t *wtyp) : ziel(), zielpos(-1, -1)
 	index = wtyp->get_index();
 	to_factory = 0;
 	clear_transit_halts();
-}
-
-
-ware_t::ware_t(loadsave_t *file)
-{
-	rdwr(file);
 }
 
 
@@ -68,11 +62,22 @@ ware_t& ware_t::operator=(const ware_t &w) {
 }
 
 
-void ware_t::rdwr(loadsave_t *file)
+void ware_t::rdwr(loadsave_t *file, vector_tpl<ware_t> *split_off)
 {
 	sint32 amount = menge;
 	file->rdwr_long(amount);
-	menge = amount;
+	// menge holds only GOODS_AMOUNT_LIMIT units. Savegames written while the field was wider
+	// can carry more than that in a single packet, so keep what does not fit and split it
+	// off into extra packets once the rest of this one (goods type, destination) is read.
+	goods_amount_t surplus = 0;
+	if(  file->is_loading()  ) {
+		const goods_amount_t loaded = amount > 0 ? (goods_amount_t)amount : 0;
+		menge = min( loaded, GOODS_AMOUNT_LIMIT );
+		surplus = loaded - menge;
+		if(  surplus>0  ) {
+			dbg->warning("ware_t::rdwr()","amout too large! %lu", loaded);
+		}
+	}
 	if(file->is_version_less(99, 8)) {
 		sint32 max;
 		file->rdwr_long(max);
@@ -105,6 +110,7 @@ void ware_t::rdwr(loadsave_t *file)
 			dbg->warning("ware_t::rdwr()","unknown ware of catg %d!",catg);
 			index = goods_manager_t::get_info_catg(catg)->get_index();
 			menge = 0;
+			surplus = 0;
 		}
 		else {
 			index = type->get_index();
@@ -181,6 +187,22 @@ void ware_t::rdwr(loadsave_t *file)
 	if(  file->is_version_less(110, 5)  &&  file->is_loading()  ) {
 		if (fabrik_t::get_fab(zielpos)) {
 			to_factory = 1;
+		}
+	}
+
+	// This packet is complete now, so the surplus can be split off into copies of it.
+	if(  surplus > 0  ) {
+		if(  split_off == NULL  ) {
+			// deliberately not get_name(): the descriptor can be NULL here
+			dbg->error( "ware_t::rdwr()", "%u units of goods %u to %s do not fit into one packet and are lost", surplus, (uint32)index, zielpos.get_str() );
+		}
+		else {
+			while(  surplus > 0  ) {
+				ware_t extra( *this );
+				extra.menge = 0;
+				surplus = extra.add_goods( surplus );
+				split_off->append( extra );
+			}
 		}
 	}
 }

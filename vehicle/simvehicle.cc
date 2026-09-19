@@ -1813,15 +1813,26 @@ DBG_MESSAGE("vehicle_t::rdwr_from_convoi()","bought at %i/%i.",(purchase_time%12
 	}
 	else {
 		for(int i=0; i<fracht_count; i++) {
-			ware_t ware(file);
+			// A packet saved with a wider amount field than ware_t has now is split into several.
+			ware_t ware;
+			vector_tpl<ware_t> split_off;
+			ware.rdwr(file, &split_off);
 			if(  (desc==NULL  ||  ware.menge>0)  &&  welt->is_within_limits(ware.get_zielpos())  &&  ware.get_desc()  ) {
 				// also add, of the desc is unknown to find matching replacement
 				fracht.append(ware);
+				FOR(vector_tpl<ware_t>, &extra, split_off) {
+					fracht.append(extra);
+				}
 #ifdef CACHE_TRANSIT
 				if(  file->is_version_less(112, 1)  )
 #endif
+				{
 					// restore in-transit information
 					fabrik_t::update_transit( &ware, true );
+					FOR(vector_tpl<ware_t>, &extra, split_off) {
+						fabrik_t::update_transit( &extra, true );
+					}
+				}
 			}
 			else if(  ware.menge>0  ) {
 				if(  ware.get_desc()  ) {
@@ -2248,7 +2259,7 @@ uint32 vehicle_t::get_total_weight() const {
 uint32 vehicle_t::calc_full_load_weight(const vehicle_desc_t* desc) {
 	uint32 weight_per_unit = 0;
 	// use heaviest goods which can be loaded on this vehicle
-	for(uint8 i=0; i<goods_manager_t::get_count(); i++) {
+	for(uint32 i=0; i<goods_manager_t::get_count(); i++) {
 		const goods_desc_t* gd = goods_manager_t::get_info(i);
 		if(  gd->is_interchangeable(desc->get_freight_type())  &&  weight_per_unit<gd->get_weight_per_unit()  ) {
 			weight_per_unit = gd->get_weight_per_unit();

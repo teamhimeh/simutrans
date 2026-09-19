@@ -343,7 +343,7 @@ settings_t::settings_t() :
 	
 	advance_to_end = true;
 	first_come_first_serve = false;
-	MEMZERON(is_time_based_routing_enabled, 256);
+	MEMZERON(is_time_based_routing_enabled, lengthof(is_time_based_routing_enabled));
 	waiting_limit_for_first_come_first_serve = 500000;
 	
 	routecost_wait = 8;
@@ -1030,7 +1030,7 @@ void settings_t::rdwr(loadsave_t *file)
 			first_come_first_serve = dummy > 0;
 			if(  dummy==2  ) {
 				// Time based goods routing has to be enabled for all goods categories.
-				for(uint16 i=0; i<256; i++) {
+				for(uint32 i=0; i<lengthof(is_time_based_routing_enabled); i++) {
 					is_time_based_routing_enabled[i] = true;
 				}
 			}
@@ -1050,14 +1050,14 @@ void settings_t::rdwr(loadsave_t *file)
 			if(  file->is_saving()  ) {
 				// count enabled entries that have a valid goods desc
 				uint16 count = 0;
-				for(uint16 i = 0; i < 256; i++) {
+				for(uint32 i = 0; i < goods_manager_t::get_max_catg_index(); i++) {
 					if(  is_time_based_routing_enabled[i]  ) {
 						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
 						if(  desc  ) { count++; }
 					}
 				}
 				file->rdwr_short(count);
-				for(uint16 i = 0; i < 256; i++) {
+				for(uint32 i = 0; i < goods_manager_t::get_max_catg_index(); i++) {
 					if(  is_time_based_routing_enabled[i]  ) {
 						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
 						if(  desc  ) {
@@ -1069,7 +1069,7 @@ void settings_t::rdwr(loadsave_t *file)
 			}
 			else {
 				// loading: reset all flags first, then restore by name
-				MEMZERON(is_time_based_routing_enabled, 256);
+				MEMZERON(is_time_based_routing_enabled, lengthof(is_time_based_routing_enabled));
 				uint16 count = 0;
 				file->rdwr_short(count);
 				for(uint16 j = 0; j < count; j++) {
