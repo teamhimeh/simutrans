@@ -8,6 +8,7 @@
 
 #include "../simunits.h"
 #include "../simdebug.h"
+#include "../simversion.h"
 #include "simobj.h"
 #include "../display/simimg.h"
 #include "../player/simplay.h"
@@ -101,12 +102,7 @@ roadsign_t::roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const ro
 	if(  desc->is_private_way()  ) {
 		// init ownership of private ways
 		ticks_ns = ticks_ow = 0;
-		if(  player->get_player_nr() >= 8  ) {
-			ticks_ow = 1 << (player->get_player_nr()-8);
-		}
-		else {
-			ticks_ns = 1 << player->get_player_nr();
-		}
+		private_way_mask = (uint64)1 << player->get_player_nr();
 	}
 	if(  desc->is_signal_type()  ) {
 		set_two_ways(false);
@@ -341,7 +337,7 @@ void roadsign_t::calc_image()
 	// private way have also closed/open states
 	if(  desc->is_private_way()  ) {
 		uint8 image = 1-(dir&1);
-		if(  (1<<welt->get_active_player_nr()) & get_player_mask()  ) {
+		if(  private_way_mask & ((uint64)1 << welt->get_active_player_nr())  ) {
 			// gate open
 			image += 2;
 		}
@@ -571,7 +567,7 @@ sync_result roadsign_t::sync_step(uint32 /*delta_t*/)
 {
 	if(  desc->is_private_way()  ) {
 		uint8 image = 1-(dir&1);
-		if(  (1<<welt->get_active_player_nr()) & get_player_mask()  ) {
+		if(  private_way_mask & ((uint64)1 << welt->get_active_player_nr())  ) {
 			// gate open
 			image += 2;
 			// force redraw
@@ -695,6 +691,13 @@ void roadsign_t::rdwr(loadsave_t *file)
 			ticks_ns = ticks_ow = 16;
 		}
 	}
+	else if(  file->is_saving()  &&  desc  &&  desc->is_private_way()  &&  file->get_OTRP_version() < 59  ) {
+		// truncate 64-bit mask to legacy 16-bit layout for old saves
+		uint8 ns_byte = (uint8)(private_way_mask & 0xFF);
+		uint8 ow_byte = (uint8)((private_way_mask >> 8) & 0xFF);
+		file->rdwr_byte(ns_byte);
+		file->rdwr_byte(ow_byte);
+	}
 	else {
 		file->rdwr_byte(ticks_ns);
 		file->rdwr_byte(ticks_ow);
@@ -796,6 +799,24 @@ void roadsign_t::rdwr(loadsave_t *file)
 			ticks_ns = 0;
 		}
 	}
+
+	if(  file->get_OTRP_version() >= 59  ) {
+		// Whether the mask follows must not depend on whether desc resolved on load (a missing pak would
+		// then desync the stream from what was actually written on save), so store presence explicitly.
+		bool has_private_way_mask = desc && desc->is_private_way();
+		file->rdwr_bool(has_private_way_mask);
+		if(  has_private_way_mask  ) {
+			file->rdwr_longlong((sint64&)private_way_mask);
+		}
+	}
+	else if(  file->is_loading()  &&  desc  &&  desc->is_private_way()  ) {
+		if(  file->is_version_less(110, 7)  ) {
+			private_way_mask = ~(uint64)0;
+		}
+		else {
+			private_way_mask = ((uint64)ticks_ow << 8) | ticks_ns;
+		}
+	}
 }
 
 
@@ -805,8 +826,18 @@ void roadsign_t::cleanup(player_t *player)
 }
 
 
-void roadsign_t::finish_rd()
+void roadsign_t::finish_rd(const uint8 loaded_OTRP_version)
 {
+	// Before OTRP v61 the end-of-choose flags of a road sign were never shown in the UI and road
+	// vehicles ignored them - they stopped at any END_OF_CHOOSE_AREA sign. Whatever is stored for
+	// such a sign is therefore meaningless, and now that road honours the flags an old sign whose
+	// bits happen to be unset would silently stop ending the choose area. Give it back the
+	// behaviour it had when it was saved.
+	if(  loaded_OTRP_version < 61  &&  desc  &&  desc->is_end_choose_signal()  &&  get_waytype()==road_wt  ) {
+		set_end_of_choose(true);
+		set_end_of_guide(true);
+	}
+
 	grund_t *gr=welt->lookup(get_pos());
 	if(  gr==NULL  ||  !gr->hat_weg(desc->get_wtyp()!=tram_wt ? desc->get_wtyp() : track_wt)  ) {
 		dbg->error("roadsign_t::finish_rd","roadsing: way/ground missing at %i,%i => ignore", get_pos().x, get_pos().y );

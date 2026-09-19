@@ -17,6 +17,8 @@
 
 #include "components/gui_scrollpane.h"
 
+#include "route_display.h"
+
 #include "../convoihandle_t.h"
 #include "../linehandle_t.h"
 #include "simwin.h"
@@ -51,7 +53,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// only active with lines
 	button_t bt_promote_to_line;
-	gui_combobox_t line_selector, departure_slot_group_selector, next_line_selector;
+	gui_combobox_t line_selector, departure_slot_group_selector, next_line_selector, allow_depart_line_selector;
 	gui_label_buf_t lb_waitlevel;
 	gui_fill_t sp_schedule_settings,sp_load_settings,sp_departure_settings,sp_coupling_settings,sp_reverse_settings,sp_road_settings,sp_schedule_reverse_settings,sp_schedule_coupling_settings;
 
@@ -69,15 +71,30 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	// coupling, load/unload only, temp schedule, departure time, max_speed
 	button_t bt_extract_schedule_settings, bt_extract_loading_settings, bt_extract_driving_settings;
 	button_t bt_find_parent, bt_wait_for_child, bt_reset_coupling; // convoy coupling
+	button_t bt_wait_for_other_convoy, bt_wait_allow_convoy_depart; // wait for departure allowance granted by another convoy
 	button_t bt_no_go_no_users;
+	// convoy shipping: carrier side (water schedules) and carried side (land schedules)
+	button_t bt_start_shipped;
 	button_t bt_wait_full_load;
 	button_t bt_no_use_electric;
 	button_t bt_no_load, bt_no_unload, bt_tmp_schedule, bt_wait_for_time, 
 		bt_same_dep_time, bt_full_load_acceleration, bt_full_load_time,bt_unload_all,bt_transfer_interval, bt_balance_speed_kmh_of_convoi,
 		bt_load_before_departure, bt_reverse_convoy, bt_reverse_coupling, bt_wait_coupling_done, bt_uncouple_child, bt_max_speed_kmh_of_convoi, bt_no_overtake, bt_max_load_all_stops, bt_pass_stop,
-		bt_temp_load, bt_temp_unload, bt_temp_unload_all;
+		bt_temp_load, bt_temp_unload, bt_temp_unload_all, bt_drive_without_reservation, bt_all_without_reservation;
 	button_t bt_reverse_default;
 	button_t bt_up, bt_down;
+
+	// shows the whole route of the schedule under editing on map + minimap
+	button_t bt_show_line_route;
+	gui_label_buf_t lb_route_time; ///< estimated time to drive the whole route
+	schedule_route_overlay_t route_overlay;
+	bool is_line_route_show;
+	uint32 last_route_schedule_count;
+	static void hide_line_route_overlay(void *win);
+	// (re)issue the route request when shown, and update the button state
+	void update_line_route_overlay();
+	// refresh the estimated whole-route time label from the computed route
+	void update_route_time_label();
 
 	gui_numberinput_t numimp_spacing, numimp_spacing_shift,
 		numimp_delay_tolerance, numimp_max_speed, numimp_max_speed_kmh_of_convoi , numimp_tbgr_waiting_time, numimp_length_coupling_done;
@@ -118,6 +135,10 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	void extract_driving_settings(bool yesno);
 	
 protected:
+	// convoy whose speed/electrification the shown line route should match;
+	// line_management_gui_t overrides this to use its line's convoy
+	virtual convoihandle_t get_route_reference_convoi() const;
+
 	schedule_t *schedule;
 	schedule_t* old_schedule;
 	player_t *player;
@@ -135,6 +156,7 @@ public:
 	// for updating info ...
 	void init_line_selector();
 	void init_next_line_selector();
+	void init_allow_depart_line_selector();
 	void init_departure_slot_group_selector();
 
 	bool infowin_event(event_t const*) OVERRIDE;

@@ -381,7 +381,7 @@ const char* label_get_text(label_t* l)
 // roadsign
 bool roadsign_can_pass(const roadsign_t* rs, player_t* player)
 {
-	return player  &&  rs->get_desc()->is_private_way()  ?  (rs->get_player_mask() & (1<<player->get_player_nr()))!=0 : true;
+	return player  &&  rs->get_desc()->is_private_way()  ?  (rs->get_player_mask() & ((uint64)1 << player->get_player_nr())) != 0 : true;
 }
 
 sint32 roadsign_get_state(roadsign_t* rs)

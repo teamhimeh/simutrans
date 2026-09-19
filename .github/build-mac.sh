@@ -2,7 +2,7 @@
 # builds for macOS
 
 # normal build
-echo "BACKEND = sdl2" >config.default
+echo "BACKEND = sdl3" >config.default
 echo "OSTYPE = mac" >>config.default
 echo "COLOUR_DEPTH =16" >>config.default
 echo "DEBUG = 0" >>config.default

@@ -24,11 +24,16 @@
 #include "../script/script.h"
 #include "../script/script_loader.h"
 #include "../dataobj/environment.h"
+#include "../dataobj/koord3d.h"
+#include "../dataobj/ribi.h"
 #include "../display/simgraph.h"
 #include "../utils/cbuffer_t.h"
 #include "../utils/plainstring.h"
 #include "../simconst.h"
 #include "../simworld.h"
+#include "../boden/grund.h"
+#include "../obj/simobj.h"
+#include "../player/simplay.h"
 
 
 // ---------------------------------------------------------------------------
@@ -127,6 +132,163 @@ static std::string tool_run_squirrel(const std::string &code, int player_nr,
 	return result_json;
 }
 
+// Reads an integer arg from a JSON args object. Returns false if the key is
+// absent or JSON null, leaving *out untouched.
+static bool json_get_int(const std::string &args_json, const std::string &key, int *out)
+{
+	std::string raw = mcp_server_t::json_get_raw(args_json, key);
+	if (raw.empty() || raw == "null") {
+		return false;
+	}
+	*out = atoi(raw.c_str());
+	return true;
+}
+
+static const char *obj_type_name(obj_t::typ t)
+{
+	switch (t) {
+		case obj_t::baum:                return "tree";
+		case obj_t::gebaeude:            return "building";
+		case obj_t::signal:              return "signal";
+		case obj_t::bruecke:             return "bridge";
+		case obj_t::tunnel:              return "tunnel";
+		case obj_t::bahndepot:           return "rail_depot";
+		case obj_t::strassendepot:       return "road_depot";
+		case obj_t::schiffdepot:         return "ship_depot";
+		case obj_t::leitung:             return "powerline";
+		case obj_t::pumpe:               return "pump";
+		case obj_t::senke:               return "sink";
+		case obj_t::roadsign:            return "roadsign";
+		case obj_t::pillar:              return "pillar";
+		case obj_t::airdepot:            return "air_depot";
+		case obj_t::monoraildepot:       return "monorail_depot";
+		case obj_t::tramdepot:           return "tram_depot";
+		case obj_t::maglevdepot:         return "maglev_depot";
+		case obj_t::wayobj:              return "wayobj";
+		case obj_t::way:                 return "way";
+		case obj_t::label:               return "label";
+		case obj_t::field:               return "field";
+		case obj_t::crossing:            return "crossing";
+		case obj_t::groundobj:           return "groundobj";
+		case obj_t::narrowgaugedepot:    return "narrowgauge_depot";
+		case obj_t::pedestrian:          return "pedestrian";
+		case obj_t::road_user:           return "citycar";
+		case obj_t::road_vehicle:        return "road_vehicle";
+		case obj_t::rail_vehicle:        return "rail_vehicle";
+		case obj_t::monorail_vehicle:    return "monorail_vehicle";
+		case obj_t::maglev_vehicle:      return "maglev_vehicle";
+		case obj_t::narrowgauge_vehicle: return "narrowgauge_vehicle";
+		case obj_t::water_vehicle:       return "water_vehicle";
+		case obj_t::air_vehicle:         return "air_vehicle";
+		case obj_t::movingobj:           return "movingobj";
+		default:                         return "other";
+	}
+}
+
+static const char *ground_type_name(grund_t::typ t)
+{
+	switch (t) {
+		case grund_t::boden:         return "boden";
+		case grund_t::wasser:        return "wasser";
+		case grund_t::fundament:     return "fundament";
+		case grund_t::tunnelboden:   return "tunnelboden";
+		case grund_t::brueckenboden: return "brueckenboden";
+		case grund_t::monorailboden: return "monorailboden";
+		default:                     return "unknown";
+	}
+}
+
+static void append_slope_json(cbuffer_t &buf, slope_t::type sl)
+{
+	buf.printf(
+		"{\"raw\":%d,\"flat\":%s,\"buildable_way\":%s,\"single\":%s,"
+		"\"corners\":{\"sw\":%d,\"se\":%d,\"ne\":%d,\"nw\":%d}}",
+		(int)sl,
+		sl == slope_t::flat ? "true" : "false",
+		slope_t::is_way(sl) ? "true" : "false",
+		slope_t::is_single(sl) ? "true" : "false",
+		(int)corner_sw(sl), (int)corner_se(sl), (int)corner_ne(sl), (int)corner_nw(sl));
+}
+
+// Reports ground type (flat/bridge/tunnel/elevated), slope, and the objects
+// (with owners) present on a tile. If "z" is omitted, the surface tile is
+// used; if given, that exact height is looked up (no silent fallback to the
+// surface tile when nothing exists there).
+static std::string tool_get_tile_info(karte_t *welt, const std::string &args_json)
+{
+	if (!welt) {
+		return text_content("{\"error\":\"world not ready\"}");
+	}
+
+	int x = 0, y = 0, z = 0;
+	bool has_x = json_get_int(args_json, "x", &x);
+	bool has_y = json_get_int(args_json, "y", &y);
+	bool has_z = json_get_int(args_json, "z", &z);
+	if (!has_x || !has_y) {
+		return text_content("{\"error\":\"x and y are required\"}");
+	}
+
+	koord k((sint16)x, (sint16)y);
+	if (!welt->is_within_limits(k)) {
+		return text_content("{\"error\":\"coordinate out of range\"}");
+	}
+
+	grund_t *gr = has_z ? welt->lookup(koord3d(k, (sint8)z)) : welt->lookup_kartenboden(k);
+	if (!gr) {
+		return text_content(has_z
+			? "{\"error\":\"no ground tile at given height\",\"found\":false}"
+			: "{\"error\":\"no ground tile\",\"found\":false}");
+	}
+
+	const koord3d pos = gr->get_pos();
+	const bool is_elevated = gr->get_typ() == grund_t::monorailboden;
+	const bool is_ground   = gr->ist_karten_boden();
+	const bool is_tunnel   = gr->ist_tunnel();
+
+	cbuffer_t buf;
+	buf.printf("{\"found\":true,\"x\":%d,\"y\":%d,\"z\":%d,", pos.x, pos.y, pos.z);
+	buf.printf("\"ground_type\":%s,", jstr(ground_type_name(gr->get_typ())).c_str());
+	buf.printf("\"is_water\":%s,",       gr->is_water()   ? "true" : "false");
+	buf.printf("\"is_ground\":%s,",      is_ground        ? "true" : "false");
+	buf.printf("\"is_bridge\":%s,",      gr->ist_bruecke() ? "true" : "false");
+	buf.printf("\"is_tunnel\":%s,",      is_tunnel        ? "true" : "false");
+	buf.printf("\"is_elevated\":%s,",    is_elevated      ? "true" : "false");
+	buf.printf("\"is_underground\":%s,", (is_tunnel && !is_ground) ? "true" : "false");
+
+	buf.printf("\"slope\":");
+	append_slope_json(buf, gr->get_grund_hang());
+	buf.printf(",\"way_slope\":");
+	append_slope_json(buf, gr->get_weg_hang());
+	buf.printf(",");
+
+	buf.printf("\"objects\":[");
+	const uint8 top = gr->get_top();
+	for (uint8 i = 0; i < top; i++) {
+		obj_t *obj = gr->obj_bei(i);
+		if (!obj) {
+			continue;
+		}
+		if (i > 0) {
+			buf.printf(",");
+		}
+		player_t *owner = obj->get_owner();
+		buf.printf("{\"index\":%d,\"type\":%d,\"type_name\":%s,\"name\":%s,\"owner\":",
+			(int)i, (int)obj->get_typ(),
+			jstr(obj_type_name(obj->get_typ())).c_str(),
+			jstr(obj->get_name()).c_str());
+		if (owner) {
+			buf.printf("%d", (int)owner->get_player_nr());
+		}
+		else {
+			buf.printf("null");
+		}
+		buf.printf("}");
+	}
+	buf.printf("]}");
+
+	return text_content((const char *)buf);
+}
+
 static std::string tool_capture_screen()
 {
 	std::string png_data;
@@ -173,6 +335,23 @@ static const tool_def_t TOOL_DEFS[] = {
 		"Capture the current Simutrans window as a PNG image. "
 		"Use this to inspect the actual on-screen game view and GUI state.",
 		"{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+	},
+	{
+		"get_tile_info",
+		"Inspect a single map tile: ground type (flat ground/bridge/tunnel/elevated way), "
+		"slope of the ground and of the way on it (with buildability flags), and the list "
+		"of objects present (ways, buildings, signs, vehicles, ...) with their owning player. "
+		"x,y select the 2D map position. z is optional: if omitted, the surface (kartenboden) "
+		"tile is used; if given, that exact height is looked up and an error is returned if "
+		"there is no ground there (it does NOT silently fall back to the surface tile), which "
+		"lets you distinguish e.g. an elevated way tile from the ground below it.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"x\":{\"type\":\"integer\",\"description\":\"map x coordinate\"},"
+		   "\"y\":{\"type\":\"integer\",\"description\":\"map y coordinate\"},"
+		   "\"z\":{\"type\":\"integer\",\"description\":\"optional exact tile height; omit for the surface tile\"}"
+		 "},"
+		 "\"required\":[\"x\",\"y\"]}"
 	}
 };
 static const int NUM_TOOLS = sizeof(TOOL_DEFS) / sizeof(TOOL_DEFS[0]);
@@ -199,7 +378,7 @@ std::string mcp_tools::tools_list_json()
 
 std::string mcp_tools::tools_call(const std::string &name,
                                    const std::string &args_json,
-                                   karte_t           * /*welt*/,
+                                   karte_t           *welt,
                                    script_vm_t      **out_pending_vm)
 {
 	if (name == "run_squirrel") {
@@ -222,6 +401,10 @@ std::string mcp_tools::tools_call(const std::string &name,
 
 	if (name == "capture_screen") {
 		return tool_capture_screen();
+	}
+
+	if (name == "get_tile_info") {
+		return tool_get_tile_info(welt, args_json);
 	}
 
 	return text_content("{\"error\":\"unknown tool: " + jesc(name) + "\"}");

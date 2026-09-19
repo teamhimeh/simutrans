@@ -163,7 +163,7 @@ public:
 	void cleanup(player_t *player) OVERRIDE;
 
 	/// @copydoc obj_t::finish_rd
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// currently animated
 	bool is_sync() const { return sync; }

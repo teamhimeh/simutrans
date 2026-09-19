@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4
@@ -31,6 +31,7 @@ jobs:
       run: |
         autoconf
         ./configure
+        echo "BACKEND = sdl2" >>config.default
         echo "FLAGS = -DREVISION=$(svn info --show-item revision svn://servers.simutrans.org/simutrans) " >>config.default
         echo "STATIC = 1" >>config.default
         cat config.default
@@ -53,7 +54,7 @@ jobs:
         path: dist/
 
   list-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     outputs:
       test-batches: ${{ steps.list.outputs.test-batches }}
@@ -98,7 +99,7 @@ jobs:
 
   test:
     needs: [build, list-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       matrix:

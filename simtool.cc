@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include "simversion.h"
 #include <string.h>
 #include <math.h>
 
@@ -1842,7 +1843,10 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 		// maximum difference check with tiles to north, south east and west
 		const sint8 test_hgt = hgt+(new_slope!=0);
 
-		if(  gr1->get_typ()==grund_t::boden  ) {
+		// Foundations reaching this point carry a field (building tiles were rejected above),
+		// but their height may still be altered by this tool, so they have to obey the
+		// neighbour height difference limit just like plain ground.
+		if(  gr1->get_typ()==grund_t::boden  ||  gr1->get_typ()==grund_t::fundament  ) {
 			for(  sint16 i = 0 ;  i < 4 ;  i++  ) {
 				const koord neighbour = k + koord::nesw[i];
 
@@ -1944,7 +1948,7 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 			if(  lt  ) {
 				// remove maintenance for existing powerline
 				player_t::add_maintenance(lt->get_owner(), -lt->get_desc()->get_maintenance(), powerline_wt);
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 			}
 
 			if(  gr1->ist_karten_boden()  ) {
@@ -2051,9 +2055,15 @@ const char *tool_clear_reservation_t::work( player_t *, koord3d pos )
 			if( typ >= obj_t::road_vehicle  &&  typ <= obj_t::air_vehicle ) {
 				vehicle_t *veh = dynamic_cast<vehicle_t *>(gr->obj_bei( i ));
 				if( veh->get_convoi() ) {
-					uint16 state = veh->get_convoi()->get_state();
-					if( state > convoi_t::EDIT_SCHEDULE ) {
-						veh->get_convoi()->set_state(convoi_t::ROUTING_1);
+					convoihandle_t c = veh->get_convoi()->get_most_parent_convoi();
+					uint16 state = c->get_state();
+					// A convoy aboard a carrier holds no reservation and is not on the map, so
+					// it can normally not be reached from a tile at all. Guard anyway: the test
+					// below is an ordinal comparison and SHIPPED is > EDIT_SCHEDULE, so if a
+					// shipped vehicle ever were still on a tile (a transition, or a load bug)
+					// this would set it driving and a train would roll out of a ship.
+					if( state > convoi_t::EDIT_SCHEDULE  &&  state != convoi_t::SHIPPED  &&  !c->is_shipped() ) {
+						c->set_state(convoi_t::ROUTING_1);
 					}
 				}
 			}
@@ -2245,12 +2255,12 @@ const char *tool_transformer_t::work( player_t *player, koord3d pos )
 	if(fab && fab->get_desc()->is_electricity_producer()) {
 		pumpe_t *p = new pumpe_t(gr->get_pos(), player);
 		gr->obj_add( p );
-		p->finish_rd();
+		p->finish_rd( OTRP_VERSION_MAJOR );
 	}
 	else {
 		senke_t *s = new senke_t(gr->get_pos(), player);
 		gr->obj_add(s);
-		s->finish_rd();
+		s->finish_rd( OTRP_VERSION_MAJOR );
 	}
 
 	return NULL; // ok
@@ -3219,7 +3229,7 @@ uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, cons
 		}
 		// elevated ways have to check tile above
 		if(  elevated  ) {
-			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance() ) );
+			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance()+height_offset ) );
 			if(  gr == NULL  ) {
 				return 2;
 			}
@@ -6719,7 +6729,7 @@ const char *tool_build_roadsign_t::place_sign_intern( player_t *player, grund_t*
 					rs = new roadsign_t(player, gr->get_pos(), dir, desc);
 built_sign:
 					gr->obj_add(rs);
-					rs->finish_rd(); // to make them visible
+					rs->finish_rd( OTRP_VERSION_MAJOR ); // to make them visible
 					weg->count_sign();
 					player_t::book_construction_costs(player, -desc->get_price(), gr->get_pos().get_2d(), weg->get_waytype());
 				}
@@ -10092,6 +10102,12 @@ bool tool_change_line_t::init( player_t *player )
 
 							for(  int j=initial-1;  j >= 0  &&  initial-destroyed > max_left  &&  new_sum_capacity < old_sum_capacity;  j--  ) {
 								convoihandle_t cnv = line->get_convoy(j);
+								// SHIPPED is ordinally above WAITING_FOR_CLEARANCE_ONE_MONTH, so
+								// without this guard the excess-capacity cleanup would happily
+								// self_destruct() convoys that are aboard a carrier.
+								if(  cnv->is_shipped()  ||  cnv->is_carrying_convoys()  ) {
+									continue;
+								}
 								if(  cnv->get_state() == convoi_t::INITIAL  ||  cnv->get_state() >= convoi_t::WAITING_FOR_CLEARANCE_ONE_MONTH  ) {
 									for(  int i=0;  i<cnv->get_vehicle_count();  i++  ) {
 										old_sum_capacity -= cnv->get_vehikel(i)->get_desc()->get_capacity();
@@ -10395,7 +10411,7 @@ bool tool_change_depot_t::init( player_t *player )
 						while(nr<cnv->get_vehicle_count()) {
 							const vehicle_desc_t *info = cnv->get_vehikel(nr)->get_desc();
 							nr ++;
-							if(info->get_trailer_count()!=1) {
+							if(info->get_trailer_count()!=1 || info->get_trailer(0)==vehicle_desc_t::any_vehicle) {
 								break;
 							}
 						}
@@ -10722,6 +10738,12 @@ bool tool_change_traffic_light_t::init( player_t *player )
 	else if(  ns == 3  ) {
 		rs->set_ticks_yellow_ow( (uint8)ticks );
 	}
+	else if(  ns == 5  ) {
+		sint32 mask_lo = 0, mask_hi = 0;
+		sscanf( default_param, "%hi,%hi,%hhi,%hi,%hi,%i,%i", &pos2d.x, &pos2d.y, &z, &ns, &ticks, &mask_lo, &mask_hi );
+		uint64 new_mask = ((uint64)(uint32)mask_hi << 32) | (uint32)mask_lo;
+		rs->set_player_mask( new_mask );
+	}
 	// update the window
 	if(  rs->get_desc()->is_traffic_light()  ) {
 		trafficlight_info_t* trafficlight_win = (trafficlight_info_t*)win_get_magic((ptrdiff_t)rs);
@@ -10781,13 +10803,20 @@ bool tool_change_roadsign_t::init( player_t *player )
 		break;
 
 		case 's':
-		// set guide signal state for signal
+		// set guide signal state for signal or (road) choose sign
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				rs->set_guide_signal(inst);
 				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
 				if(  signal_info_win  ) {
 					signal_info_win->update_data();
+				}
+			}
+			else if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				rs->set_guide_signal(inst);
+				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  sign_info_win  ) {
+					sign_info_win->update_data();
 				}
 			}
 		}
@@ -10821,7 +10850,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		case 'c':
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<roadsign_t>()  ) {
-				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+				if(  rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
 					rs->set_end_of_choose(inst);
 					end_of_choose_info_t* signal_info_win = (end_of_choose_info_t*)win_get_magic((ptrdiff_t)rs);
 					if(  signal_info_win  ) {
@@ -10834,7 +10863,7 @@ bool tool_change_roadsign_t::init( player_t *player )
 		case 'g':
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<roadsign_t>()  ) {
-				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+				if(  rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
 					rs->set_end_of_guide(inst);
 					end_of_choose_info_t* signal_info_win = (end_of_choose_info_t*)win_get_magic((ptrdiff_t)rs);
 					if(  signal_info_win  ) {
@@ -11089,15 +11118,15 @@ bool tool_change_halt_t::init(player_t *player) {
 bool tool_change_permission_t::init(player_t *player)
 {
 	uint32 halt_id = 0;
-	uint32 perms = 0;
+	unsigned long long perms_ull = 0;
 	const char *p = default_param;
 	while(  *p  &&  *p <= ' '  ) { p++; }
-	sscanf( p, "%u,%u", &halt_id, &perms );
+	sscanf( p, "%u,%llu", &halt_id, &perms_ull );
 
 	halthandle_t halt;
 	halt.set_id(halt_id);
 	if(  halt.is_bound()  &&  player_t::check_owner(halt->get_owner(), player)  ) {
-		halt->set_permissions((uint16)perms);
+		halt->set_permissions((uint64)perms_ull);
 	}
 	return false;
 }
@@ -11358,9 +11387,9 @@ bool tool_merge_player_t::init( player_t *player )
 			halt->make_private_and_join(merger_player, false);
 		}
 		else if(  !halt->is_allow_other_player_connection()
-		          &&  (halt->get_permissions() & (1 << merged_player_num))  ) {
+		          &&  (halt->get_permissions() & ((uint64)1 << merged_player_num))  ) {
 			// Transfer merged player's stop permission to the merger player
-			halt->set_permissions( halt->get_permissions() | (1 << merger_player_num) );
+			halt->set_permissions( halt->get_permissions() | ((uint64)1 << merger_player_num) );
 		}
 	}
 	
@@ -11379,6 +11408,15 @@ bool tool_merge_player_t::init( player_t *player )
 						continue;
 					}
 					obj->set_owner(merger_player);
+					if(  roadsign_t* const sign = obj_cast<roadsign_t>(obj)  ) {
+						// migrate the merged player's private-way permission bit, otherwise it is
+						// orphaned on the old owner's slot and lost entirely when saved in a legacy
+						// format that truncates it, locking out the new owner as well
+						const uint64 mask = sign->get_player_mask();
+						if(  mask & ((uint64)1 << merged_player_num)  ) {
+							sign->set_player_mask( (mask & ~((uint64)1 << merged_player_num)) | ((uint64)1 << merger_player_num) );
+						}
+					}
 				}
 			}
 			pos_2d.x += 1;

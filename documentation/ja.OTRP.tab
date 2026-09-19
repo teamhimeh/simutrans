@@ -365,6 +365,18 @@ Not use electricity
 電気を使用しない
 Not use electricity in this schedule
 このスケジュールでは電気を使用しません(電車の出力が0となります)
+Always use maximum boarding and alighting time, regardless of boardings and alightings.
+常に最長の待機時間を使用する．
+Waiting for departure allowance!
+発車許可待ち
+Wait for other convoy
+他編成の到着を待機
+Wait allow other convoy depart
+他編成を発車させるまで待機
+Waiting until make another convoy depart
+他の編成に発車許可を出すまで待機します(通過駅には付与できません)
+Select Line Allow Departure
+発車許可を出す路線を指定
 #------円表記------
 $
  円
@@ -416,6 +428,56 @@ Reverse coupling order
 編成連結順序を反転します(この編成を先頭の編成にして運航継続します)
 Reverse coupling
 編成連結順序反転
+#------航送------
+%s has entered a depot.
+%sは車庫に入庫しました
+%s was lost: no depot could be found for it.
+%sは入庫先が見つからなかったため除去されました
+%s was lost with its carrier: no depot could be found for it.
+%sは入庫先が見つからなかったため除去されました
+%s was put ashore at %s: it can no longer reach its transfer stop and there is no depot for it.
+%sは到達可能な駅や車庫が見つからなかったため%sに下船しました。
+%s was sent to a depot: %s can no longer reach its transfer stop.
+%sは車庫に転送されました: %sは駅に到達できませんでした
+Aboard:
+航送中
+Convoys aboard:
+航送している編成一覧:
+Put ashore at:
+航送終了予定駅:
+Show carrier
+この編成を航送している編成を表示
+Open the window of the convoy that is carrying this one.
+同じ編成のウィンドウを開こうとしています
+Transfer stop no longer exists
+航送終了予定駅がみつかりません!
+Wait to be shipped
+航送開始待ち
+Wait here until a carrier convoy takes this convoy to its next stop. The convoy will not depart on its own.
+航送開始まで待機します。この編成は航送されるまで発車しません。
+aboard
+航送中
+SHIPPING_ROAD
+自動車を航送
+SHIPPING_TRACK
+鉄道車両を航送
+SHIPPING_MONORAIL
+モノレール車両を航送
+SHIPPING_MAGLEV
+マグレブ車両を航送
+SHIPPING_NARROWGAUGE
+ナローゲージ車両を航送
+SHIPPING_WATER
+船を航送
+#------無閉塞運行------
+Without Reservation
+無閉塞運行
+Drive without reservation until next signal
+この駅から次の信号まで無閉塞で運行します
+apply driving with reservation setting for all stops
+閉塞使用/無閉塞運行を全駅(中継点)に適用します
+apply for all
+全駅に適用
 #------乗降時間制御------
 Full Get on/off Time
 乗降時間制御(G)
@@ -619,6 +681,14 @@ allow_elevated_way_over_others_halt
 他社駅直上に高架線を建設可(allow_elevated_way_over_others_halt)
 Detailed oneway
 通行可能な方向の詳細設定
+Copy oneway detail
+通行方向の詳細設定をコピー
+Paste oneway detail
+通行方向の詳細設定を貼り付け
+Click an arrow to toggle whether that turn is allowed
+矢印をクリックすると、その進行方向の可否を切り替えます
+allowed direction
+通行可能な方向
 transit_by_foot
 徒歩乗り換え許可(transit_by_foot)
 foot_path_weight
@@ -627,6 +697,12 @@ foot_path_time_ticks
 徒歩乗り換え1マスに掛かる時間(foot_path_time_ticks)
 walk_cost_to_halt
 最寄り駅までの距離をルート計算に使用(walk_cost_to_halt)
+penalty_wait_for_two_month
+停滞中に課税する(penalty_wait_for_two_month)
+base_revenue_from_halt
+駅からの収入を得る(base_revenue_from_halt)
+tile_length
+直線1タイルの長さ(tile_length) (m)
 #------通知設定------
 New Year
 新年
@@ -680,6 +756,8 @@ Electrified
 %sは異なる会社か\n異なる属性の車両を\n連結しているため\n入庫できません.\n
 Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
+Distance (m)
+走行距離 (m)
 #------その他の翻訳------
 v%d (current version)
 v%d (現在のバージョン)
@@ -827,6 +905,18 @@ This tool must be executed by the public player.
 このツールは公共事業のみ実行できます。
 No city found!
 都市が見つかりません！
+Players 16+ exist; this save cannot use the selected older format.\nSaving in the current format instead.\nServer state is unaffected.
+プレイヤーが16社以上存在するため、選択した古い形式では保存できません。\n代わりに現在の形式で保存します。\nサーバーの状態には影響ありません。
+Players 16+ exist and must be merged into company 0 to use this older format.\nThis cannot be undone. Hold SHIFT and click Save again to confirm.
+プレイヤーが16社以上存在するため、この古い形式で保存するには\n会社0へ統合する必要があります。この操作は取り消せません。\n確認のため、SHIFTを押しながらもう一度保存ボタンを押してください。
+This convoy waits here until another convoy grants it departure allowance
+他編成が本路線の出発許可を与えるまで，発車を待機します．
+Show Route Cache
+キャッシュ中のルートを表示
+Show tiles of this line's cached route.
+本路線のキャッシュ中のルートを表示します
+Revenue
+収入
 Export map
 マップ画像を出力
 Export the entire map with the current display settings.

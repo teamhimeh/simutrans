@@ -631,8 +631,7 @@ void stadt_t::remove_gebaeude_from_stadt(gebaeude_t* gb)
 	for (grund_t* gr : gb_tiles) {
 		gebaeude_t* remove_gb = gr->find<gebaeude_t>();
 		remove_gb->set_stadt(NULL);
-		bool ok = buildings.remove(remove_gb);
-		assert(ok);
+		buildings.remove(remove_gb);
 	}
 	recalc_city_size();
 }
@@ -1171,7 +1170,7 @@ void stadt_t::rdwr(loadsave_t* file)
 	lo.y = lob;
 	ur.x = lre;
 	ur.y = lun;
-	file->rdwr_long(owner_n);
+	file->rdwr_player_nr(owner_n);
 	file->rdwr_long(bev);
 	file->rdwr_long(arb);
 	file->rdwr_long(won);

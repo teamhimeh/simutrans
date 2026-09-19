@@ -19,6 +19,7 @@
 #include "tpl/vector_tpl.h"
 #include "tpl/slist_tpl.h"
 
+#include "dataobj/schedule.h"
 #include "dataobj/settings.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/rect.h"
@@ -460,7 +461,7 @@ private:
 	 * Network client only: bitmask of players that have a password stored on the server
 	 * (bit i = player i). Updated by nwc_auth_player_t; not saved.
 	 */
-	uint16 player_password_set_bits;
+	uint64 player_password_set_bits;
 	/** @} */
 
 	/**
@@ -947,7 +948,7 @@ public:
 	 * Player management here
 	 */
 	uint8 sp2num(player_t *player);
-	player_t * get_player(uint8 n) const { return players[n&15]; }
+	player_t * get_player(uint8 n) const { return players[n&PLAYER_UNOWNED]; }
 	player_t* get_active_player() const { return active_player; }
 	uint8 get_active_player_nr() const { return active_player_nr; }
 	void switch_active_player(uint8 nr, bool silent);
@@ -979,7 +980,7 @@ public:
 	bool is_player_password_set(uint8 player_nr) const;
 
 	/// network client only: store password-set state received from the server
-	void set_player_password_set_bits(uint16 bits) { player_password_set_bits = bits; }
+	void set_player_password_set_bits(uint64 bits) { player_password_set_bits = bits; }
 
 	/**
 	 * Network safe initiation of new and deletion of players, change freeplay.
@@ -1414,6 +1415,28 @@ public:
 		return (slope4_t::corner_SE);
 	}
 
+	/* Route of the schedule that is currently shown by a schedule editor.
+	 * Display only, never saved. Like the deferred move above the route search
+	 * must not run from the GUI, so the editor only asks for it here and it is
+	 * calculated in interactive(). @p owner identifies the asking component, so
+	 * that closing an old window cannot drop the route of a newer one.
+	 */
+	void request_schedule_route(schedule_t *schedule, player_t *pl, uint32 owner, uint16 speed_kmh, bool needs_electrification);
+	void clear_schedule_route(uint32 owner); ///< owner 0 clears unconditionally
+	void step_schedule_route();
+	const vector_tpl<koord3d> &get_schedule_route() const;
+	/// false if any required leg of the shown schedule route had no route
+	/// (the final wrap-around leg that next_line schedules omit does not count)
+	bool is_schedule_route_complete() const;
+	uint32 get_schedule_route_owner() const;
+	uint8 get_schedule_route_player_nr() const;
+	uint32 get_schedule_route_count() const;
+	/// true while a schedule-route overlay is requested or shown; other route
+	/// overlays (convoy route, line route cache) must yield and disable then
+	bool is_schedule_route_active() const;
+	/// true while the requested route has not been calculated by step() yet
+	bool is_schedule_route_pending() const;
+
 
 private:
 	/**
@@ -1469,6 +1492,10 @@ public:
 	 * @note Useful for finish_rd
 	 */
 	uint32 load_version;
+
+	/// OTRP version of the savegame being loaded, so that finish_rd() of map objects can make
+	/// version dependent corrections. OTRP_VERSION_MAJOR while no savegame is being read.
+	uint8 load_otrp_version;
 
 	/**
 	 * Checks if the planquadrat (tile) at coordinate (x,y)
@@ -1576,6 +1603,10 @@ public:
 	void add_convoi(convoihandle_t);
 	void rem_convoi(convoihandle_t);
 	vector_tpl<convoihandle_t> const& convoys() const { return convoi_array; }
+
+	// rescales the stored CONVOI_DISTANCE_METERS/LINE_DISTANCE_METERS history for all convois and
+	// lines by new_tile_length/old_tile_length; called whenever the tile_length setting changes
+	void recalc_distance_new_records(sint32 old_tile_length, sint32 new_tile_length);
 
 	void load_convoy_templates();
 	const vector_tpl<convoi_template_t>& get_convoy_templates() const { return convoy_templates; }

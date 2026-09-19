@@ -89,6 +89,7 @@ bool env_t::mute_midi = false;
 bool env_t::shuffle_midi = true;
 sint16 env_t::window_snap_distance = 8;
 scr_size env_t::iconsize( 32, 32 );
+bool env_t::iconsize_set_by_pak = false;
 uint8 env_t::chat_window_transparency = 100;
 bool env_t::hide_rail_return_ticket = true;
 bool env_t::show_delete_buttons = false;

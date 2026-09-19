@@ -63,6 +63,8 @@ protected:
 	uint8 lane_affinity;
 	koord3d intersection_pos;
 
+	uint64 private_way_mask = 0ll;
+
 	const roadsign_desc_t *desc;
 
 	ribi_t::ribi calc_mask() const { return ribi_t::is_single(dir) ? dir : (ribi_t::ribi)ribi_t::none; }
@@ -95,12 +97,21 @@ public:
 	const char* get_name() const OVERRIDE { return "Roadsign"; }
 
 	// assuming this is a private way sign
-	uint16 get_player_mask() const { return (ticks_ow<<8)|ticks_ns; }
+	uint64 get_player_mask() const { return private_way_mask; }
+	void set_player_mask(uint64 mask) { private_way_mask = mask; }
 
 	/**
 	 * waytype associated with this object
 	 */
 	waytype_t get_waytype() const OVERRIDE { return desc ? desc->get_wtyp() : invalid_wt; }
+
+	/**
+	 * Waytype of the way this sign actually sits on and governs.
+	 * Same as get_waytype(), except tram signs govern the track_wt way.
+	 * Use this to test whether a sign is relevant to a given vehicle/route
+	 * (compare against vehicle_t::get_waytype() / weg_t::get_waytype()).
+	 */
+	waytype_t get_governed_waytype() const { return get_waytype() != tram_wt ? get_waytype() : track_wt; }
 
 	roadsign_t(loadsave_t *file);
 	roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const roadsign_desc_t* desc, bool preview = false);
@@ -257,7 +268,7 @@ public:
 	// subtracts cost
 	void cleanup(player_t *player) OVERRIDE;
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// static routines from here
 private:

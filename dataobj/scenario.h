@@ -189,12 +189,12 @@ private:
 	/// @}
 
 	/// bit set if player has won / lost
-	uint16 won;
-	uint16 lost;
+	uint64 won;
+	uint64 lost;
 
 	/// function to update the won / lost bitset
 	/// called if this information changes for some players
-	void update_won_lost(uint16 new_won, uint16 new_lost);
+	void update_won_lost(uint64 new_won, uint64 new_lost);
 
 public:
 

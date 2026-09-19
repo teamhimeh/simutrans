@@ -23,8 +23,8 @@
 
 
 // number of player
-#define MAX_PLAYER_COUNT (16)
-#define PLAYER_UNOWNED (15)
+#define MAX_PLAYER_COUNT (64)
+#define PLAYER_UNOWNED (63)
 
 /* Flag for non Intel byte order
  * SET THIS IN YOUR COMPILER COMMAND LINE!
