@@ -254,6 +254,17 @@ private:
 	*/
 	convoihandle_t coupling_convoi;
 
+	// Cache of the most recently resolved demand-based skip section decision (see
+	// would_stop_at_entry() and section_has_demand()). Valid only while
+	// section_cache_valid is true, and then applies to every entry belonging to the
+	// section [section_cache_start, section_cache_end] (inclusive, may wrap around the
+	// end of the schedule). Recomputed as soon as an entry belonging to a different
+	// section is evaluated. Not saved: always safe to recompute from schedule and cargo.
+	mutable uint8 section_cache_start;
+	mutable uint8 section_cache_end;
+	mutable bool section_cache_valid;
+	mutable bool section_cache_decision;
+
 	/**
 	* a convoy that pulls me.
 	*/
@@ -851,6 +862,69 @@ public:
 	void add_running_cost( const weg_t *weg );
 
 	bool is_users_at_next_stop() const;
+
+	/**
+	 * Wagonload-style single-destination loading (freight only - see below): returns
+	 * the halt this convoy is currently committed to carrying freight for, derived from
+	 * the freight it already has aboard (the destination of the first non-passenger,
+	 * non-mail ware packet found in any vehicle), or an unbound handle if it currently
+	 * carries no freight. A convoy with no freight aboard is free to commit to any
+	 * freight destination; one already carrying freight may only load more freight
+	 * bound for this same halt, until it unloads all of it and carries none again.
+	 * Passengers and mail are deliberately ignored here, so a bus or train stays free
+	 * to carry riders bound for many different stops at once, exactly as before this
+	 * feature existed. There is deliberately no separate stored "committed destination"
+	 * field: the freight itself is always the single source of truth, so this needs no
+	 * savegame state of its own.
+	 */
+	halthandle_t get_committed_destination() const;
+
+	/**
+	 * Returns true if this convoy would actually stop at the schedule entry with the
+	 * given index, taking demand-based skip sections into account. An entry that is not
+	 * part of any section (see schedule_entry_t::is_no_go_no_users_section_member())
+	 * always returns true. Otherwise, the decision is computed once per section and
+	 * cached (see section_has_demand()), so that repeated calls for entries in the same
+	 * section, or calls made after the convoy already committed to the section (e.g.
+	 * once a coupling partner has been matched), all agree.
+	 */
+	bool would_stop_at_entry(uint8 index) const;
+
+	/**
+	 * Returns the next schedule entry this convoy will actually stop at, skipping
+	 * waypoints and entries within a demand-based skip section that has no demand (see
+	 * would_stop_at_entry()). Also mirrors schedule_t::get_next_entry()'s handling of
+	 * the dummy last entry of a schedule with a valid next_line. Used where "the next
+	 * real stop" must agree with what would_stop_at_entry() will actually decide (e.g.
+	 * coupling rendezvous matching), rather than the raw schedule_t::get_next_entry().
+	 */
+	schedule_entry_t get_next_real_stop_entry() const;
+
+	/**
+	 * Same as get_next_real_stop_entry(), but scanning forward from an arbitrary index
+	 * rather than from the convoy's current schedule position. Used by coupling
+	 * matching, which needs "the real stop after t_idx" for a t_idx that may already be
+	 * ahead of get_current_stop().
+	 */
+	schedule_entry_t get_real_stop_entry_after(uint8 from_index) const;
+
+	/**
+	 * Returns true if any entry in the schedule range [start, end] (inclusive, may wrap
+	 * around the end of the schedule) has demand for this convoy: cargo already aboard
+	 * bound for that entry's halt, or fresh cargo waiting there that this convoy could
+	 * load and carry on. Used to decide whether to enter a whole demand-based skip
+	 * section at once (see would_stop_at_entry()).
+	 */
+	bool section_has_demand(uint8 start, uint8 end) const;
+
+	/**
+	 * Returns true if this convoy has its own reason to stop at the given schedule
+	 * entry (onboard cargo bound for its halt, or loadable fresh cargo waiting there
+	 * reachable by this convoy). This is the same check is_users_at_next_stop() used to
+	 * run only against the current entry; section_has_demand() runs it against every
+	 * member of a section instead.
+	 */
+	bool has_own_demand_at_entry(const schedule_entry_t& entry) const;
 
 	/**
 	 * moving the vehicles of a convoi and acceleration/deceleration
