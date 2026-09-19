@@ -1841,7 +1841,7 @@ vehicle_base_t* private_car_t::is_there_car (grund_t *gr) const
 	assert(  gr  );
 	// this function cannot process vehicles on twoway and related mode road.
 	const strasse_t* str = (strasse_t *)gr->get_weg(road_wt);
-	if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode)  ) {
+	if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode  &&  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode)  ) {
 		return NULL;
 	}
 	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {

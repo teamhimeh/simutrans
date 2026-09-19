@@ -23,6 +23,10 @@ oneway
 片側二車線一方通行
 halt mode
 追越車線にも停車
+exclusive area
+一編成専用区間
+passing lane stop only
+追越車線は停車のみ可
 avoid becoming cityroad
 市道化を禁止する
 no building adjacent

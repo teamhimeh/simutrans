@@ -108,7 +108,7 @@ void strasse_t::rdwr(loadsave_t *file)
 		uint8 mask_oneway = get_ribi_mask_oneway();
 		file->rdwr_byte(mask_oneway);
 		set_ribi_mask_oneway(mask_oneway);
-		sint8 ov = get_overtaking_mode();
+		sint8 ov = get_overtaking_mode_raw();
 		file->rdwr_byte(ov);
 		overtaking_mode_t nov = (overtaking_mode_t)ov;
 		set_overtaking_mode(nov);

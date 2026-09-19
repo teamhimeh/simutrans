@@ -304,7 +304,7 @@ static SQInteger get_overtaking_mode(HSQUIRRELVM vm)
 {
 	strasse_t *w = param<strasse_t*>::get(vm, 1);
 	if (w) {
-		return param<sint8>::push(vm, w->get_overtaking_mode());
+		return param<sint8>::push(vm, w->get_overtaking_mode_raw());
 	}
 	return param<sint8>::push(vm, twoway_mode);
 }
