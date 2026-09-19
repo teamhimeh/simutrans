@@ -3555,7 +3555,17 @@ void convoi_t::rdwr(loadsave_t *file)
 				// set_convoi; reserving the occupied tile here would permanently lock
 				// taxiway tiles (which have no leave_tile unreservation path)
 				if(v->get_waytype() != air_wt) {
-					if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype(), v->get_current_corner_set()))) {
+					// vehicle_t::get_current_corner_set() is useless here: the vehicles are not yet
+					// attached to this convoy (set_convoi() only happens in finish_rd()), so they
+					// cannot reach the route. But our own route is already loaded above, so look the
+					// tile up in it directly: the vehicle sits at route_index-1 (route_index indexes
+					// pos_next). Verify that invariant before trusting the index.
+					ribi_t::ribi corner_set = ribi_t::none;
+					const uint16 idx = v->get_route_index();
+					if(  idx>=1u  &&  (uint32)idx-1u < route.get_count()  &&  route.at((uint16)(idx-1u))==v->get_pos()  ) {
+						corner_set = route.get_corner_set(idx-1u);
+					}
+					if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype(), corner_set))) {
 						sch->reserve(self,ribi_t::none);
 					}
 				}
