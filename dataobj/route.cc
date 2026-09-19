@@ -116,6 +116,18 @@ bool route_t::node_in_use=false;
 /**
  * find the route to an unknown location
  */
+ribi_t::ribi route_t::get_corner_set(uint32 index) const
+{
+	if(  route.get_count()==0  ||  index>=route.get_count()  ) {
+		return ribi_t::none;
+	}
+	const koord3d curr = route[index];
+	const koord3d prev = route[ max(1u,index)-1u ];
+	const koord3d next = route[ min(route.get_count()-1u, index+1u) ];
+	return ribi_t::backward(ribi_type(prev, curr)) | ribi_type(curr, next);
+}
+
+
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin )
 {
 	bool ok = false;
@@ -238,7 +250,10 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 				// Only a sign that governs the way this route runs on is relevant
 				// (a sign on a tile shared with another waytype must be ignored).
 				{
-					weg_t *w_to = to->get_weg(wegtyp);
+					// direction-aware: `to` is entered via nesw[r], so the leg we're actually
+					// transiting is the one owning the backward bit (relevant when two
+					// same-waytype disjoint diagonal legs coexist on `to`)
+					weg_t *w_to = to->get_weg(wegtyp, ribi_t::backward(ribi_t::nesw[r]));
 					if(  w_to  &&  w_to->has_sign()  ) {
 						const roadsign_t *rs = to->find<roadsign_t>();
 						if(  rs  &&  rs->get_governed_waytype() == w_to->get_waytype()  &&  rs->get_desc()->is_single_way()  &&  rs->is_detailed_oneway()  ) {
@@ -256,7 +271,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 				k->gr = to;
 				k->count = tmp->count+1;
 				k->f = 0;
-				k->g = tmp->g + tdriver->get_cost(to, to->get_weg(wegtyp), max_khm, ribi_t::nesw[r]);
+				k->g = tmp->g + tdriver->get_cost(to, to->get_weg(wegtyp, ribi_t::backward(ribi_t::nesw[r])), max_khm, ribi_t::nesw[r]);
 				k->ribi_from = ribi_t::nesw[r];
 
 				uint8 current_dir = ribi_t::nesw[r];
@@ -462,7 +477,10 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			// a way goes here, and it is not marked (i.e. in the closed list)
 			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to,need_electric)  &&  !marker.is_marked(to)) {
 
-				weg_t *w = to->get_weg(wegtyp);
+				// direction-aware: `to` is entered via next_ribi[r], so the leg actually being
+				// transited is the one owning the backward bit (relevant when two same-waytype
+				// disjoint diagonal legs coexist on `to`)
+				weg_t *w = to->get_weg(wegtyp, ribi_t::backward(next_ribi[r]));
 				// Do not go on a tile, where a oneway sign forbids going.
 				// This saves time and fixed the bug, that a oneway sign on the final tile was ignored.
 				if (w  &&  w->get_ribi_maske()  &&  ribi_t::reverse_single(next_ribi[r]) == w->get_ribi()) {
