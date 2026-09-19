@@ -334,6 +334,9 @@ public:
 	 */
 	ribi_t::ribi get_current_corner_set() const;
 
+	/// heading with which we entered our current tile (see schiene_t::reserve())
+	ribi_t::ribi get_current_travel_dir() const;
+
 	/**
 	* Get the base image.
 	*/

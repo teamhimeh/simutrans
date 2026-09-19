@@ -1147,6 +1147,9 @@ public:
 	 */
 	ribi_t::ribi get_reserved_tiles_corner_set(uint32 index) const;
 
+	/// heading with which the reserved tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_reserved_tiles_travel_dir(uint32 index) const;
+
 	void clear_reserved_tiles();
 	/**
 	 * the index and steps of the coupling point.

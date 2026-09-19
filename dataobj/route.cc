@@ -128,6 +128,17 @@ ribi_t::ribi route_t::get_corner_set(uint32 index) const
 }
 
 
+// The heading with which this tile is entered.  Unlike the corner_set it distinguishes
+// the two opposite traversals of a tile, which schiene_t::can_co_reserve_offset() needs.
+ribi_t::ribi route_t::get_travel_dir(uint32 index) const
+{
+	if(  route.get_count()==0  ||  index>=route.get_count()  ) {
+		return ribi_t::none;
+	}
+	return ribi_type( route[ max(1u,index)-1u ], route[index] );
+}
+
+
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin )
 {
 	bool ok = false;

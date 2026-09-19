@@ -333,7 +333,7 @@ void convoi_t::reserve_route()
 				const ribi_t::ribi corner_set = get_reserved_tiles_corner_set(idx);
 				const koord3d curr = reserved_tiles[idx];
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
-					if (!sch->reserve( self, corner_set )) {
+					if (!sch->reserve( self, corner_set, get_reserved_tiles_travel_dir(idx) )) {
 						// reservation invalid! do not continue reservation more!
 						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
 						break;
@@ -357,7 +357,7 @@ void convoi_t::reserve_route()
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				const ribi_t::ribi corner_set = route.get_corner_set(idx);
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
-					sch->reserve( self, corner_set );
+					sch->reserve( self, corner_set, route.get_travel_dir(idx) );
 				}
 			}
 		}
@@ -371,7 +371,7 @@ void convoi_t::reserve_route()
 				const ribi_t::ribi corner_set = route.get_corner_set(idx);
 				const koord3d curr = route.at(idx);
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
-					if(!sch->reserve( self, corner_set )) {
+					if(!sch->reserve( self, corner_set, route.get_travel_dir(idx) )) {
 						next_stop_index = idx;
 						next_reservation_index = idx;
 						// reservation invalid! do not continue reservation more!
@@ -391,7 +391,7 @@ void convoi_t::reserve_route()
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				const ribi_t::ribi corner_set = route.get_corner_set(idx);
 				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
-					sch->reserve( self, corner_set );
+					sch->reserve( self, corner_set, route.get_travel_dir(idx) );
 				}
 			}
 		}
@@ -612,7 +612,10 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 				grund_t *gr=welt->lookup(v->get_pos());
 				// airplanes may have no ground ...
 				if (schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(fahr[i]->get_waytype(), fahr[i]->get_current_corner_set()))) {
-					sch0->reserve(self,ribi_t::none);
+					// Pass the heading too: without it reserved_travel_dir stays ribi_t::none
+					// after loading and schiene_t::can_co_reserve_offset() can never allow the
+					// second convoy onto a way with a vehicle offset.
+					sch0->reserve(self,ribi_t::none,fahr[i]->get_current_travel_dir());
 				}
 			}
 			fahr[0]->set_leading(true);
@@ -3205,7 +3208,8 @@ void convoi_t::vorfahren()
 		for(uint16 i=back_index; i<min(get_route()->get_count(),front()->get_route_index()); i++) {
 			// eventually reserve this
 			if (schiene_t* const sch0 = obj_cast<schiene_t>(welt->lookup(get_route()->at(i))->get_weg(front()->get_waytype(), get_route()->get_corner_set(i)))) {
-				sch0->reserve(self,ribi_t::none);
+				// keep the heading, see convoi_t::finish_rd()
+				sch0->reserve(self,ribi_t::none,get_route()->get_travel_dir(i));
 			}
 			else {
 				break;
@@ -6604,6 +6608,17 @@ ribi_t::ribi convoi_t::get_reserved_tiles_corner_set(uint32 index) const
 }
 
 
+// The heading with which this tile is entered.  Unlike the corner_set it distinguishes
+// the two opposite traversals of a tile, which schiene_t::can_co_reserve_offset() needs.
+ribi_t::ribi convoi_t::get_reserved_tiles_travel_dir(uint32 index) const
+{
+	if(  index>=reserved_tiles.get_count()  ) {
+		return ribi_t::none;
+	}
+	return ribi_type( reserved_tiles[ max(1u,index)-1u ], reserved_tiles[index] );
+}
+
+
 void convoi_t::clear_reserved_tiles(){
 	dbg->message("convoi_t::clear_reserved_tiles()","%s clear its reserved tiles",get_name());
 	if(  reserved_tiles.get_count()==0  ) {
@@ -6716,7 +6731,7 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 			if(  sch1  ) {
 				sch1->unreserve(get_most_parent_convoi());
 				get_most_parent_convoi()->unreserve_pos(pos);
-				sch1->reserve(ret,corner_set);
+				sch1->reserve(ret,corner_set,r->get_travel_dir(i));
 			}
 		}
 	}

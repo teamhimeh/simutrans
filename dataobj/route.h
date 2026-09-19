@@ -104,6 +104,9 @@ public:
 	 */
 	ribi_t::ribi get_corner_set(uint32 index) const;
 
+	/// heading with which the tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_travel_dir(uint32 index) const;
+
 	koord3d const& front() const { return route.front(); }
 
 	koord3d const& back() const { return route.back(); }

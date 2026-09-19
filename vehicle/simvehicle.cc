@@ -1245,6 +1245,22 @@ ribi_t::ribi vehicle_t::get_current_corner_set() const
 }
 
 
+// The heading with which we entered our current tile.  Unlike the corner_set it
+// distinguishes the two opposite traversals of a tile, which
+// schiene_t::can_co_reserve_offset() needs.  Same invariant as above: our tile is
+// route[route_index-1] and we came from route[route_index-2].
+ribi_t::ribi vehicle_t::get_current_travel_dir() const
+{
+	if(  cnv  &&  route_index>=2u  ) {
+		const route_t *route = cnv->get_route();
+		if(  route  &&  (uint32)route_index-1u < route->get_count()  &&  route->at(route_index-1u)==get_pos()  ) {
+			return ribi_type(route->at(route_index-2u), get_pos());
+		}
+	}
+	return ribi_t::none;
+}
+
+
 void vehicle_t::leave_tile()
 {
 	vehicle_base_t::leave_tile();
@@ -4344,8 +4360,12 @@ bool rail_vehicle_t::check_next_tile(const grund_t *bd, const bool need_electric
 		// check_transit_tile (called when expanding FROM this tile) will then validate
 		// the exact entry+exit corner_set before any conflicting transit is queued.
 		if(  prev != koord3d::invalid  ) {
-			const ribi_t::ribi entry = ribi_t::backward(ribi_type(prev, bd->get_pos()));
-			if(  sch->can_co_reserve_approach(entry)  ) {
+			const ribi_t::ribi approach = ribi_type(prev, bd->get_pos());
+			if(  sch->can_co_reserve_approach(ribi_t::backward(approach))  ) {
+				return true;
+			}
+			// two convoys may pass each other on a way with a vehicle offset
+			if(  sch->can_co_reserve_offset(approach)  ) {
 				return true;
 			}
 		}
@@ -4388,8 +4408,9 @@ bool rail_vehicle_t::check_transit_tile(const grund_t *gr, ribi_t::ribi ribi_fro
 	if(  !sch  ||  !sch->is_reserved()  ||  sch->can_reserve(cnv->self)  ) {
 		return true;
 	}
+	// ribi_from is the heading with which we enter the tile
 	const ribi_t::ribi corner_set = ribi_t::backward(ribi_from) | exit;
-	return sch->can_co_reserve_with(corner_set);
+	return sch->can_co_reserve_with(corner_set, ribi_from);
 }
 
 
@@ -5182,7 +5203,7 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	/* this should happen only before signals ...
 	 * but if it is already reserved, we can save lots of other checks later
 	 */
-	if(  !w->can_reserve(cnv->self)  ) {
+	if(  !w->can_reserve(cnv->self, ribi_t::none, ribi_type(get_pos(), gr->get_pos()))  ) {
 		restart_speed = 0;
 		return false;
 	}
@@ -5608,14 +5629,17 @@ bool rail_vehicle_t::block_reserver(const route_t *route, uint16 start_index, ui
 				}
 			}
 			{
-				if(  !sch1->reserve( cnv->self, corner_set )  ) {
+				// the heading tells the two opposite traversals of the tile apart, which the
+				// corner_set cannot -- schiene_t::can_co_reserve_offset() needs it
+				const ribi_t::ribi travel_dir = route->get_travel_dir(i);
+				if(  !sch1->reserve( cnv->self, corner_set, travel_dir )  ) {
 					success = false;
 				}
 				if (gr->has_two_ways()) {
 					// we may need to reserve the other way as well
 					if (schiene_t* sch0 = dynamic_cast<schiene_t*>(gr->get_weg_nr(gr->get_weg_nr(0) == sch1))) {
 						// the other way is reservable too => try to reserve it
-						if (!sch0->reserve(cnv->self, corner_set)) {
+						if (!sch0->reserve(cnv->self, corner_set, travel_dir)) {
 							success = false;
 						}
 					}
@@ -5847,7 +5871,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				const ribi_t::ribi corner_set = route->get_corner_set(h);
 				schiene_t * schn = (gr&&grn) ? (schiene_t *)grn->get_weg(get_waytype(), corner_set) : NULL;
 				if(  schn  ) {
-					schn->reserve( cnv->self, corner_set );
+					schn->reserve( cnv->self, corner_set, route->get_travel_dir(h) );
 				}
 			}
 			return true;
@@ -5880,6 +5904,7 @@ void rail_vehicle_t::leave_tile()
 				// first, we check other vehicles on the same tile (e.g. uncoupling here)
 				convoihandle_t other_convoy;
 				ribi_t::ribi other_convoy_dir=ribi_t::none;
+				ribi_t::ribi other_convoy_travel_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
 					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
@@ -5892,6 +5917,9 @@ void rail_vehicle_t::leave_tile()
 					other_convoy_dir =
 					ribi_t::backward(ribi_type(other_convoy->get_route()->at(max(2u,current_stop)-2u), get_pos()))
 					| ribi_type(get_pos(), other_convoy->get_route()->at(min(other_convoy->get_route()->get_count()-1u,current_stop)));
+					// its heading, which the corner set above cannot express - this is exactly
+					// the tile two convoys share on a way with a vehicle offset
+					other_convoy_travel_dir = v->get_current_travel_dir();
 				}
 				// Use convoy handle so co-reserved convoys are correctly identified:
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
@@ -5901,7 +5929,7 @@ void rail_vehicle_t::leave_tile()
 				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
-					sch0->reserve(other_convoy->get_most_parent_convoi(),other_convoy_dir);
+					sch0->reserve(other_convoy->get_most_parent_convoi(),other_convoy_dir,other_convoy_travel_dir);
 				}
 				// tell next signal?
 				// and switch to red
@@ -5963,8 +5991,12 @@ void rail_vehicle_t::enter_tile(grund_t* gr)
 			sch0->book(1, WAY_STAT_CONVOIS);
 			// pass the corner set rather than get_direction(): the driving direction on a bend
 			// is the diagonal between entry and exit and would store a wrong reservation
-			// direction whenever this call is the one that creates the reservation
-			sch0->reserve( cnv->self, corner_set!=ribi_t::none ? corner_set : get_direction() );
+			// direction whenever this call is the one that creates the reservation.
+			// The heading goes along as well: when this call is the one that creates the
+			// reservation (drive_without_reservation, depot departure, a lost reservation)
+			// reserved_travel_dir would otherwise stay none and
+			// schiene_t::can_co_reserve_offset() could never let a second convoy pass here.
+			sch0->reserve( cnv->self, corner_set!=ribi_t::none ? corner_set : get_direction(), get_current_travel_dir() );
 		}
 	}
 }
