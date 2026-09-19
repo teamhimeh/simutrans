@@ -211,7 +211,7 @@ public:
 	bool is_detailed_oneway() const;
 	void set_detailed_oneway(bool tf) { tf? choose_sign_flag|=detailed_oneway:choose_sign_flag&=~detailed_oneway; }
 	bool is_ignore_length() const {return (choose_sign_flag&ignore_length)>0;}
-	void set_ignnore_length(bool tf) { tf? choose_sign_flag|=ignore_length: choose_sign_flag&=~ignore_length; }
+	void set_ignore_length(bool tf) { tf? choose_sign_flag|=ignore_length: choose_sign_flag&=~ignore_length; }
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
 	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
