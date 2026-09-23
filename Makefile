@@ -302,6 +302,7 @@ SOURCES += boden/wege/schiene.cc
 SOURCES += boden/wege/strasse.cc
 SOURCES += boden/wege/weg.cc
 SOURCES += dataobj/convoi_template.cc
+SOURCES += dataobj/citybuilding_preset.cc
 SOURCES += dataobj/crossing_logic.cc
 SOURCES += dataobj/environment.cc
 SOURCES += dataobj/freelist.cc

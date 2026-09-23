@@ -931,3 +931,43 @@ Map image exported to the screenshot folder.
 マップ画像をスクリーンショットフォルダに出力しました。
 Map image export failed.
 マップ画像の出力に失敗しました。
+Preset
+プリセット
+Load preset
+プリセットを読込
+Save preset
+プリセットを保存
+Delete preset
+プリセットを削除
+Preset loaded: %u / %u buildings selected
+プリセットを読み込みました: %u / %u 件を選択
+Preset name is required.
+プリセット名を入力してください。
+Please choose buildings first.
+先に建築物を選択してください。
+Could not save building presets.
+建築物プリセットを保存できませんでした。
+Building preset saved.
+建築物プリセットを保存しました。
+Building preset deleted.
+建築物プリセットを削除しました。
+<no building presets>
+<保存済プリセット無し>
+Building name filter
+建物名フィルタ
+Preset name
+プリセット名
+Restore the building selection from the selected preset.
+選択したプリセットから建物の選択状態を復元します。
+Save the currently selected buildings as the named preset.
+現在選択している建物を、入力した名前のプリセットとして保存します。
+Delete the selected building preset.
+選択した建物プリセットを削除します。
+Overwrite preset
+プリセットの上書き
+Overwrite preset "%s"?
+プリセット「%s」を上書きしますか？
+Overwrite
+上書き
+Delete preset "%s"?
+プリセット「%s」を削除しますか？

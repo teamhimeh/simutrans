@@ -28,6 +28,7 @@ target_sources(simutrans PRIVATE
 		dataobj/freelist.cc
 		dataobj/gameinfo.cc
 		dataobj/height_map_loader.cc
+		dataobj/citybuilding_preset.cc
 		dataobj/koord.cc
 		dataobj/koord3d.cc
 		dataobj/loadsave.cc
