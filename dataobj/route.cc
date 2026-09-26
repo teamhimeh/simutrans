@@ -136,6 +136,70 @@ ribi_t::ribi route_t::get_travel_dir(uint32 index) const
 }
 
 /**
+ * Closed list of the route searches. On a tile carrying two same-waytype disjoint diagonal legs
+ * the two legs are separate nodes: a route may run over the one leg and later over the other
+ * one (e.g. a circular route whose two sides share these tiles), so marking the whole tile would
+ * make such a route impossible.
+ * @p from is the direction the node was entered with (ribi_t::none for the start node).
+ */
+class route_closed_list_t
+{
+	marker_t &marker;
+	ptrhashtable_tpl<const weg_t *, bool> &legs;
+	const waytype_t wt;
+
+	// the leg entered via from, or NULL when the tile is an ordinary one
+	const weg_t *get_leg(const grund_t *gr, ribi_t::ribi from) const {
+		if(  from==ribi_t::none  ||  !ribi_t::is_single(from)  ||  !gr->has_two_same_waytype_ways()  ) {
+			return NULL;
+		}
+		return gr->get_weg(wt, ribi_t::backward(from));
+	}
+
+	// a start node on a two-leg tile has no leg yet: it is never closed
+	bool is_open_start(const grund_t *gr, ribi_t::ribi from) const {
+		return from==ribi_t::none  &&  gr->has_two_same_waytype_ways();
+	}
+
+public:
+	route_closed_list_t(marker_t &m, ptrhashtable_tpl<const weg_t *, bool> &l, waytype_t w) : marker(m), legs(l), wt(w) { legs.clear(); }
+
+	bool is_marked(const grund_t *gr, ribi_t::ribi from) const {
+		if(  const weg_t *leg = get_leg(gr, from)  ) {
+			return legs.get(leg);
+		}
+		return !is_open_start(gr, from)  &&  marker.is_marked(gr);
+	}
+
+	void mark(const grund_t *gr, ribi_t::ribi from) {
+		if(  const weg_t *leg = get_leg(gr, from)  ) {
+			legs.set(leg, true);
+		}
+		else if(  !is_open_start(gr, from)  ) {
+			marker.mark(gr);
+		}
+	}
+
+	/// @return true, if already marked
+	bool test_and_mark(const grund_t *gr, ribi_t::ribi from) {
+		if(  const weg_t *leg = get_leg(gr, from)  ) {
+			if(  legs.get(leg)  ) {
+				return true;
+			}
+			legs.set(leg, true);
+			return false;
+		}
+		if(  is_open_start(gr, from)  ) {
+			return false;
+		}
+		return marker.test_and_mark(gr);
+	}
+};
+
+static ptrhashtable_tpl<const weg_t *, bool> route_closed_legs;
+
+
+/**
  * find the route to an unknown location
  */
 bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, bool need_electric, const bool length_based, bool coupling, const uint8 choose_margin, const bool ignore_length )
@@ -195,6 +259,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 
 	// nothing in lists
 	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	route_closed_list_t closed( marker, route_closed_legs, wegtyp );
 
 	queue.clear();
 	queue.insert(tmp);
@@ -209,7 +274,8 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 		tmp = queue.pop();
 		const grund_t* gr = tmp->gr;
 
-		if(  marker.test_and_mark(gr)  ) {
+		// the start node's ribi_from is only a direction mask (see above), not an entry direction
+		if(  closed.test_and_mark( gr, tmp->parent ? tmp->ribi_from : (ribi_t::ribi)ribi_t::none )  ) {
 			// we were already here on a faster route, thus ignore this branch
 			// (trading speed against memory consumption)
 			continue;
@@ -250,7 +316,7 @@ bool route_t::find_route(karte_t *welt, const koord3d start, test_driver_t *tdri
 			if(  (ribi & ribi_t::nesw[r] )!=0 // do not go backwards
 			    && koord_distance(start, gr->get_pos() + koord::nesw[r])<max_depth // not too far away
 			    && gr->get_neighbour(to, wegtyp, ribi_t::nesw[r])  // is connected
-			    && !marker.is_marked(to) // not already tested
+			    && !closed.is_marked(to, ribi_t::nesw[r]) // not already tested
 			    && tdriver->check_next_tile(to, need_electric, true, coupling, gr->get_pos()) // can be driven on
 			    // With entry (backward ribi_from) and exit (nesw[r]) both known, verify that
 			    // a reserved junction tile gr can be co-reserved for this specific transit.
@@ -428,6 +494,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 	// nothing in lists
 	marker_t& marker = marker_t::instance(welt->get_size().x, welt->get_size().y);
+	route_closed_list_t closed( marker, route_closed_legs, wegtyp );
 
 	// clear the queue (should be empty anyhow)
 	queue.clear();
@@ -446,12 +513,12 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			tmp = new_top;
 			new_top = NULL;
 			gr = tmp->gr;
-			marker.mark(gr);
+			closed.mark(gr, tmp->ribi_from);
 		}
 		else {
 			tmp = queue.pop();
 			gr = tmp->gr;
-			if(marker.test_and_mark(gr)) {
+			if(closed.test_and_mark(gr, tmp->ribi_from)) {
 				// we were already here on a faster route, thus ignore this branch
 				// (trading speed against memory consumption)
 				continue;
@@ -466,7 +533,28 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 
 		uint32 topnode_f = !queue.empty() ? queue.front()->f : max_cost;
 
-		const ribi_t::ribi way_ribi =  tdriver->get_ribi(gr, tmp->ribi_from);
+		ribi_t::ribi way_ribi;
+		if(  tmp->parent==NULL  &&  gr->has_two_same_waytype_ways()  ) {
+			// start tile with two same-waytype disjoint diagonal legs: start on the leg we are on
+			// (known from the heading with which it was entered), or on either one if unknown
+			if(  start_heading!=ribi_t::none  ) {
+				way_ribi = tdriver->get_ribi(gr, start_heading);
+			}
+			else {
+				way_ribi = ribi_t::none;
+				for(  uint8 i=0;  i<2;  i++  ) {
+					const ribi_t::ribi leg_ribi = gr->get_weg_nr(i)->get_ribi_unmasked();
+					// any single bit of the leg selects it; get_ribi() expects the entry heading
+					const ribi_t::ribi leg_bit = leg_ribi & (ribi_t::ribi)(~leg_ribi+1u);
+					if(  leg_bit!=ribi_t::none  ) {
+						way_ribi |= tdriver->get_ribi(gr, ribi_t::backward(leg_bit));
+					}
+				}
+			}
+		}
+		else {
+			way_ribi = tdriver->get_ribi(gr, tmp->ribi_from);
+		}
 		// testing all four possible directions
 		// mask direction we came from
 		const ribi_t::ribi ribi =  way_ribi  &  ( ~ribi_t::reverse_single(tmp->ribi_from) )  &  tmp->jps_ribi;
@@ -485,7 +573,8 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			}
 
 			// a way goes here, and it is not marked (i.e. in the closed list)
-			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to,need_electric)  &&  !marker.is_marked(to)) {
+			// passing gr checks the leg of `to` entered from here (two same-waytype disjoint diagonal legs)
+			if((to  ||  gr->get_neighbour(to, wegtyp, next_ribi[r]))  &&  tdriver->check_next_tile(to, need_electric, false, false, gr->get_pos())  &&  !closed.is_marked(to, next_ribi[r])) {
 
 				// direction-aware: `to` is entered via next_ribi[r], so the leg actually being
 				// transited is the one owning the backward bit (relevant when two same-waytype
@@ -770,6 +859,9 @@ bool is_way_bend(koord3d pos, waytype_t waytype) {
 route_t::route_result_t route_t::calc_route(karte_t *welt, const koord3d ziel, const koord3d start, test_driver_t *tdriver, const sint32 max_khm, sint32 max_len, const bool need_electric )
 {
 	route.clear();
+	// the start heading only applies to this search (see set_start_heading())
+	start_heading = next_start_heading;
+	next_start_heading = ribi_t::none;
 
 	INT_CHECK("route 336");
 
