@@ -23,6 +23,8 @@
 #include "../../dataobj/environment.h"
 #include "../../network/network.h"
 #include "../../network/network_cmd_scenario.h"
+#include "../../utils/plainstring.h"
+#include "../../gui/minimap.h"
 
 using namespace script_api;
 
@@ -98,6 +100,15 @@ void_t take_screenshot()
 {
 	display_snapshot( scr_rect(0, 0, display_get_width(), display_get_height()) );
 	return void_t();
+}
+
+plainstring export_minimap()
+{
+	std::string filename;
+	if (!minimap_t::get_instance()->export_to_png(filename)) {
+		return plainstring();
+	}
+	return filename.c_str();
 }
 
 void_t set_zoom(uint8 val)
@@ -500,7 +511,14 @@ void export_gui(HSQUIRRELVM vm, bool scenario)
 	* Take a screen shot.
 	*/
 	STATIC register_method(vm, &take_screenshot, "take_screenshot");
-	
+
+	/**
+	* Render the entire minimap (the whole world, not just the current viewport)
+	* to a PNG file in the screenshot folder.
+	* @return path to the exported file, or empty/null string on failure.
+	*/
+	STATIC register_method(vm, &export_minimap, "export_minimap");
+
 	/**
 	* Set zoom factor.
 	*

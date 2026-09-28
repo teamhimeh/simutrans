@@ -9548,6 +9548,16 @@ bool tool_screenshot_t::init( player_t * )
 	else {
 		create_win( new news_img("Could not\ncreate screenshot!\n"), w_time_delete, magic_none);
 	}
+	return false;
+}
+
+
+bool tool_export_minimap_t::init( player_t * )
+{
+	std::string filename;
+	const char *message = minimap_t::get_instance()->export_to_png(filename) ?
+		"Map image exported to the screenshot folder." : "Map image export failed.";
+	create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
 
 	return false;
 }
