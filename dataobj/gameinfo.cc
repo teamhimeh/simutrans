@@ -107,6 +107,19 @@ gameinfo_t::gameinfo_t(karte_t *welt) :
 }
 
 
+gameinfo_t::gameinfo_t() :
+	size_x(0),
+	size_y(0),
+	map_idx(MINIMAP_SIZE,MINIMAP_SIZE),
+	map_rgb(MINIMAP_SIZE,MINIMAP_SIZE),
+	game_comment(""),
+	file_name(""),
+	pak_name(""),
+	game_engine_revision(0)
+{
+}
+
+
 gameinfo_t::gameinfo_t(loadsave_t *file) :
 	map_idx(MINIMAP_SIZE,MINIMAP_SIZE),
 	map_rgb(MINIMAP_SIZE,MINIMAP_SIZE),
