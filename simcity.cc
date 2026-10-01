@@ -3600,7 +3600,8 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 				if(  gebaeude_t const* const testgb = obj_cast<gebaeude_t>(gr->first_obj())  ) {
 					// We really have a building here
 					const building_desc_t* neighbor_building = testgb->get_tile()->get_desc();
-					if(  neighbor_building->is_city_building()  ) {
+					// only tiles belonging to this city can be replaced (otherwise update_gebaeude_from_stadt() fails)
+					if(  neighbor_building->is_city_building()  &&  testgb->get_stadt() == this  ) {
 
 						if(  gb->get_tile()->get_desc() == neighbor_building   &&   testgb->get_tile()->get_offset() == area3x3[area_level]  ) {
 							// part of same building
@@ -3750,6 +3751,17 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 							return;
 						}
 					}
+				}
+			}
+		}
+
+		// all tiles to be replaced must be city buildings of this city
+		for(  int x=0;  x<h->get_x(rotation);  x++  ) {
+			for(  int y=0;  y<h->get_y(rotation);  y++  ) {
+				grund_t *gr = welt->lookup_kartenboden(k+koord(x,y));
+				gebaeude_t *testgb = gr ? gr->find<gebaeude_t>() : NULL;
+				if(  testgb == NULL  ||  !testgb->is_city_building()  ||  testgb->get_stadt() != this  ) {
+					return;
 				}
 			}
 		}
