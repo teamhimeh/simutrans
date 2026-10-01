@@ -22,8 +22,8 @@ class ware_t
 	friend class goods_manager_t;
 
 private:
-	/// private lookup table to speedup
-	static const goods_desc_t *index_to_desc[256];
+	/// private lookup table to speedup; allocated by goods_manager_t::successfully_loaded()
+	static const goods_desc_t **index_to_desc;
 
 public:
 	// Type used to specify an amount of goods. Always positive.
@@ -33,7 +33,7 @@ public:
 	static goods_amount_t const GOODS_AMOUNT_LIMIT = (1 << 23) - 1;
 
 	/// type of good, used as index into goods-types array
-	uint32 index: 8;
+	uint16 index;
 
 	/// amount of goods
 	goods_amount_t menge : 23;
@@ -98,7 +98,7 @@ public:
 	const char *get_name() const { return get_desc()->get_name(); }
 	const char *get_mass() const { return get_desc()->get_mass(); }
 	uint8 get_catg() const { return get_desc()->get_catg(); }
-	uint8 get_index() const { return index; }
+	uint16 get_index() const { return index; }
 
 	const goods_desc_t* get_desc() const { return index_to_desc[index]; }
 
