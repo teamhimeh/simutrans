@@ -16,22 +16,26 @@ class gui_numberinput_t;
 class tool_build_way_t;
 class tool_build_bridge_t;
 class tool_build_tunnel_t;
+class tool_change_way_settings_t;
+class tool_change_way_offset_t;
 class player_t;
 
 class overtaking_mode_frame_t : public gui_frame_t, private action_listener_t
 {
 private:
 	static overtaking_mode_t overtaking_mode;
-	static char mode_name[6][20];
+	static char mode_name[8][32];
 	player_t *player;
 	tool_build_way_t* tool_w;
 	tool_build_bridge_t* tool_b;
 	tool_build_tunnel_t* tool_tu;
+	tool_change_way_settings_t* tool_ws;
+	tool_change_way_offset_t* tool_wo;
 	waytype_t waytype;
 	sint8 vehicle_offset_value;
 	bool vehicle_offset_mode_value;
-	uint8 tool_class; // 0:way, 1:bridge, 2:tunnel
-	button_t mode_button[6];
+	uint8 tool_class; // 0:way, 1:bridge, 2:tunnel, 3:change_way_settings, 4:change_way_offset
+	button_t mode_button[8];
 	gui_divider_t divider[2];
 	button_t avoid_cityroad_button;
 	button_t citycar_no_entry_button;
@@ -49,6 +53,8 @@ public:
 	overtaking_mode_frame_t( player_t *, tool_build_way_t *, bool );
 	overtaking_mode_frame_t( player_t *, tool_build_bridge_t * );
 	overtaking_mode_frame_t( player_t *, tool_build_tunnel_t * );
+	overtaking_mode_frame_t( player_t *, tool_change_way_settings_t * );
+	overtaking_mode_frame_t( player_t *, tool_change_way_offset_t * );
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 	const char * get_help_filename() const OVERRIDE { return "overtaking_mode_frame.txt"; }
 };

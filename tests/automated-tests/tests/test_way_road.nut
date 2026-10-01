@@ -13,13 +13,16 @@ function test_way_road_build_single_tile()
 {
 	local pl = player_x(0)
 	local road_desc = way_desc_x.get_available_ways(wt_road, st_flat)[0]
+	local remover = command_x(tool_remove_way)
 	local default_cash = pl.get_current_cash()
 
 	ASSERT_TRUE(road_desc != null)
 
+	// without ctrl, start == end is not a valid route: nothing gets built
 	{
-		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, true), "")
+		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, false), "")
 		ASSERT_EQUAL(pl.get_current_cash(), default_cash)
+		ASSERT_TRUE(tile_x(4, 2, 0).find_object(mo_way) == null)
 
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 			[
@@ -34,10 +37,17 @@ function test_way_road_build_single_tile()
 			])
 	}
 
+	// with ctrl, start == end builds a single isolated way tile
 	{
-		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, false), "")
-		ASSERT_EQUAL(pl.get_current_cash(), default_cash)
+		ASSERT_EQUAL(command_x.build_way(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), road_desc, true), null)
+		ASSERT_TRUE(pl.get_current_cash() < default_cash)
 
+		local built_way = tile_x(4, 2, 0).find_object(mo_way)
+		ASSERT_TRUE(built_way != null)
+		ASSERT_EQUAL(built_way.get_desc().get_name(), road_desc.get_name())
+		ASSERT_EQUAL(tile_x(4, 2, 0).get_way_dirs(wt_road), dir.none)
+
+		// the tile has no connections, so the ribi-based pattern still reads as empty
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 			[
 				"........",
@@ -49,6 +59,9 @@ function test_way_road_build_single_tile()
 				"........",
 				"........"
 			])
+
+		ASSERT_EQUAL(remover.work(pl, coord3d(4, 2, 0), coord3d(4, 2, 0), "" + wt_road), null)
+		ASSERT_TRUE(tile_x(4, 2, 0).find_object(mo_way) == null)
 	}
 
 	RESET_ALL_PLAYER_FUNDS()
@@ -451,16 +464,32 @@ function test_way_road_build_below_powerline()
 
 	// build way ending below power line, should succeed
 	{
+		// In OTRP, building with the straight/ctrl route onto an existing bend in a direction
+		// disjoint from it creates a second, independent leg instead of merging into a junction
+		// (see test_diagonal_two_waytypes_same_desc). So the four spokes below leave (2,2) with
+		// two disjoint legs (north+east and south+west) rather than one four-way way -- which of
+		// the two lands in weg_nr(0) is an internal ordering detail, so the center tile is left
+		// as "dontcare" here and checked through the neighbours the legs actually touch.
 		ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 2, 0), coord3d(2, 1, 0), road, true), null)
 		ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 2, 0), coord3d(3, 2, 0), road, true), null)
 		ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 2, 0), coord3d(2, 3, 0), road, true), null)
 		ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 2, 0), coord3d(1, 2, 0), road, true), null)
 
+		ASSERT_TRUE(tile_x(2, 2, 0).has_two_ways())
+
+		local center_dirs = tile_x(2, 2, 0).get_way_dirs(wt_road)
+		ASSERT_TRUE(center_dirs == (dir.north | dir.east)  ||  center_dirs == (dir.south | dir.west))
+
+		// everything around the center tile, checked in the four blocks that skip (2,2)
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 			[
 				"........",
-				"..4.....",
-				".2F8....",
+				"..4....."
+			])
+		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 2, 0), [".2"])
+		ASSERT_WAY_PATTERN(wt_road, coord3d(3, 2, 0), ["8...."])
+		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 3, 0),
+			[
 				"..1.....",
 				"........",
 				"........",
@@ -469,9 +498,9 @@ function test_way_road_build_below_powerline()
 			])
 	}
 
-	// remove ways
-	ASSERT_EQUAL(remover.work(pl, coord3d(2, 1, 0), coord3d(2, 3, 0), "" + wt_road), null)
-	ASSERT_EQUAL(remover.work(pl, coord3d(1, 2, 0), coord3d(3, 2, 0), "" + wt_road), null)
+	// remove ways -- each call has to match one leg's own two endpoints
+	ASSERT_EQUAL(remover.work(pl, coord3d(2, 1, 0), coord3d(3, 2, 0), "" + wt_road), null)
+	ASSERT_EQUAL(remover.work(pl, coord3d(1, 2, 0), coord3d(2, 3, 0), "" + wt_road), null)
 
 	ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 		[
@@ -492,11 +521,21 @@ function test_way_road_build_below_powerline()
 		ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 2, 0), coord3d(2, 4, 0), road, true), null)
 		ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 2, 0), coord3d(0, 2, 0), road, true), null)
 
+		// same as above: the four ctrl-built spokes leave two disjoint legs on (2,2)
+		ASSERT_TRUE(tile_x(2, 2, 0).has_two_ways())
+
+		local center_dirs = tile_x(2, 2, 0).get_way_dirs(wt_road)
+		ASSERT_TRUE(center_dirs == (dir.north | dir.east)  ||  center_dirs == (dir.south | dir.west))
+
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
 			[
 				"..4.....",
-				"..5.....",
-				"2AFA8...",
+				"..5....."
+			])
+		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 2, 0), ["2A"])
+		ASSERT_WAY_PATTERN(wt_road, coord3d(3, 2, 0), ["A8..."])
+		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 3, 0),
+			[
 				"..5.....",
 				"..1.....",
 				"........",
@@ -505,9 +544,9 @@ function test_way_road_build_below_powerline()
 			])
 	}
 
-	// remove ways
-	ASSERT_EQUAL(remover.work(pl, coord3d(2, 0, 0), coord3d(2, 4, 0), "" + wt_road), null)
-	ASSERT_EQUAL(remover.work(pl, coord3d(0, 2, 0), coord3d(4, 2, 0), "" + wt_road), null)
+	// remove ways -- each call has to match one leg's own two endpoints
+	ASSERT_EQUAL(remover.work(pl, coord3d(2, 0, 0), coord3d(4, 2, 0), "" + wt_road), null)
+	ASSERT_EQUAL(remover.work(pl, coord3d(0, 2, 0), coord3d(2, 4, 0), "" + wt_road), null)
 	ASSERT_EQUAL(remover.work(pl, coord3d(1, 1, 0), coord3d(3, 3, 0), "" + wt_power), null)
 	ASSERT_EQUAL(remover.work(pl, coord3d(1, 1, 0), coord3d(3, 3, 0), "" + wt_power), null)
 
@@ -1156,14 +1195,16 @@ function test_way_road_cityroad_downgrade_with_cityroad()
 function test_way_road_cityroad_replace_by_normal_road()
 {
 	local public_pl = player_x(1)
+	local pl = player_x(0)
 	local start_pos = coord3d(3, 2, 0)
 	local end_pos = coord3d(3, 6, 0)
+	local road_desc = way_desc_x("cobblestone_road")
 
 	ASSERT_EQUAL(command_x(tool_build_cityroad).work(public_pl, start_pos, end_pos, "city_road"), null)
 
 	// replace cityroad by normal road
 	{
-		ASSERT_EQUAL(command_x.build_way(public_pl start_pos, end_pos, way_desc_x("cobblestone_road"), true), null)
+		ASSERT_EQUAL(command_x.build_way(pl, start_pos, end_pos, road_desc, true), null)
 
 		for (local y = start_pos.y; y < end_pos.y; ++y) {
 			local r = way_x(start_pos.x, y, start_pos.z)
@@ -1171,6 +1212,7 @@ function test_way_road_cityroad_replace_by_normal_road()
 			ASSERT_TRUE(r.is_valid())
 			ASSERT_FALSE(r.has_sidewalk())
 			ASSERT_EQUAL(r.desc.name, "cobblestone_road")
+			ASSERT_EQUAL(r.get_max_speed(), road_desc.get_topspeed())
 		}
 
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),

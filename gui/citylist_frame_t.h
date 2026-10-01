@@ -47,8 +47,8 @@ private:
 
 	gui_scrolled_list_t scrolly;
 
-	gui_aligned_container_t container_year, container_month;
-	gui_chart_t chart, mchart;
+	gui_aligned_container_t container_year, container_month, container_decade;
+	gui_chart_t chart, mchart, dchart;
 	gui_button_to_chart_array_t button_to_chart;
 	gui_tab_panel_t year_month_tabs;
 	gui_tab_panel_t main;

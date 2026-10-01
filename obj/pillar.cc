@@ -72,6 +72,12 @@ void pillar_t::calc_image()
  * Einen Beschreibungsstring fuer das Objekt, der z.B. in einem
  * Beobachtungsfenster angezeigt wird.
  */
+void pillar_t::cleanup(player_t *)
+{
+	// pillars carry no independent cost; their construction cost is part of the bridge
+}
+
+
 void pillar_t::show_info()
 {
 	planquadrat_t *plan=welt->access(get_pos().get_2d());

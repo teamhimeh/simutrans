@@ -86,13 +86,13 @@ public:
 	static void fill_menu(tool_selector_t* tool_selector, building_desc_t::btype, waytype_t wt, sint16 sound_ok);
 
 	/// @returns a random commercial building matching the requirements.
-	static const building_desc_t* get_commercial(int level, uint16 time, climate c, uint32 clusters, koord minsize, koord maxsize );
+	static const building_desc_t* get_commercial(int level, uint16 time, climate c, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude = nullptr );
 
 	/// @returns a random industrial building matching the requirements.
-	static const building_desc_t* get_industrial(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize );
+	static const building_desc_t* get_industrial(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude = nullptr );
 
 	/// @returns a random residential building matching the requirements.
-	static const building_desc_t* get_residential(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize );
+	static const building_desc_t* get_residential(int level, uint16 time, climate cl, uint32 clusters, koord minsize, koord maxsize, vector_tpl<const building_desc_t*>* exclude = nullptr );
 
 	/// @returns headquarters with level @p level (takes the first matching one)
 	static const building_desc_t* get_headquarters(int level, uint16 time);
@@ -155,6 +155,11 @@ public:
 	// Build a stop on a digonal way tile. Use this only when the way of pos is diagonal.
 	// desc has to have 48 layouts.
 	static gebaeude_t* build_station_on_diagonal_way(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi way_connection, halthandle_t halt);
+
+	// Build a stop on a sloped way tile.
+	// Slope image offsets per flat pattern: N/W single=+48, S/E single=+64, N/W double=+80, S/E double=+96.
+	// If the descriptor does not have slope images the flat layout is used unchanged.
+	static gebaeude_t* build_station_on_slope_way(player_t* player, koord3d pos, int layout, const building_desc_t* desc, halthandle_t halt);
 
 	/// @returns house list of type @p typ
 	static const vector_tpl<const building_desc_t *> *get_list(building_desc_t::btype typ);

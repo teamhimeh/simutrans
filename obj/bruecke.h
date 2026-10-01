@@ -53,7 +53,7 @@ public:
 	 */
 	bool check_season(const bool calc_only_season_change) OVERRIDE { if(  !calc_only_season_change  ) { calc_image(); } return true; }  // depends on snowline only
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	void cleanup(player_t *player) OVERRIDE;
 
@@ -63,6 +63,8 @@ public:
 	 * @return NULL wenn OK, ansonsten eine Fehlermeldung
 	 */
 	const char *is_deletable(const player_t *player) OVERRIDE;
+
+	virtual bool is_clipping_below_needed() const OVERRIDE;
 };
 
 #endif

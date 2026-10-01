@@ -10,6 +10,7 @@
 #include "../simdebug.h"
 
 #include "../dataobj/koord3d.h"
+#include "../dataobj/ribi.h"
 
 #include "../tpl/vector_tpl.h"
 
@@ -34,6 +35,11 @@ private:
 	bool intern_calc_route(karte_t *w, koord3d start, koord3d ziel, test_driver_t *tdriver, const sint32 max_kmh, const uint32 max_cost, const bool need_electric);
 
 	koord3d_vector_t route;           // The coordinates for the vehicle route
+
+	/// heading with which the start tile was entered, used by the running search and set from
+	/// next_start_heading (see set_start_heading())
+	ribi_t::ribi start_heading = ribi_t::none;
+	ribi_t::ribi next_start_heading = ribi_t::none;
 
 	void postprocess_water_route(karte_t *welt);
 
@@ -93,6 +99,19 @@ public:
 	 */
 	const koord3d& at(const uint16 n) const { return route[n]; }
 
+	/**
+	 * The two tile-local direction bits occupied at route index @p index: the bit pointing back
+	 * to the previous tile, plus the bit pointing on to the next one ("corner set", the value
+	 * schiene_t::reserve() stores as the reservation direction).
+	 * On a tile carrying two same-waytype disjoint diagonal legs it also tells the two legs
+	 * apart -- only the leg the route actually runs over owns these bits -- so it is the right
+	 * argument for grund_t::get_weg(waytype, dir) whenever a route index is at hand.
+	 */
+	ribi_t::ribi get_corner_set(uint32 index) const;
+
+	/// heading with which the tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_travel_dir(uint32 index) const;
+
 	koord3d const& front() const { return route.front(); }
 
 	koord3d const& back() const { return route.back(); }
@@ -136,7 +155,14 @@ public:
 	 * Finds route to a location, where @p tdriver->is_target becomes true.
 	 * @param max_depth is the maximum length of a route
 	 */
-	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, bool coupling = false, const uint8 choose_margin=0 );
+	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, const bool length_based = false, bool coupling = false, const uint8 choose_margin=0, const bool ignore_length=false );
+
+	/**
+	 * The heading with which the start tile of the next calc_route() was entered. It tells on
+	 * which leg a route starts on a tile with two same-waytype disjoint diagonal legs (without
+	 * it both legs are tried). Applies to the next calc_route() only.
+	 */
+	void set_start_heading(ribi_t::ribi heading) { next_start_heading = heading; }
 
 	/**
 	 * Calculates the route from @p start to @p target

@@ -576,13 +576,13 @@ void scenario_t::step()
 		return;
 	}
 
-	uint16 new_won = 0;
-	uint16 new_lost = 0;
+	uint64 new_won = 0;
+	uint64 new_lost = 0;
 
 	// first check, whether win/loss state of any player changed
 	for(uint32 i=0; i<PLAYER_UNOWNED; i++) {
 		player_t *player = welt->get_player(i);
-		uint16 mask = 1 << i;
+		uint64 mask = (uint64)1 << i;
 		// player exists and has not won/lost yet
 		if (player  &&  (((won | lost) & mask)==0)) {
 			sint32 percentage = 0;
@@ -656,7 +656,7 @@ void scenario_t::new_year()
 }
 
 
-void scenario_t::update_won_lost(uint16 new_won, uint16 new_lost)
+void scenario_t::update_won_lost(uint64 new_won, uint64 new_lost)
 {
 	// server sends the new state to the clients
 	if (env_t::server  &&  (new_won | new_lost)) {
@@ -678,7 +678,7 @@ void scenario_t::update_won_lost(uint16 new_won, uint16 new_lost)
 	}
 
 	// notify active player
-	if ( (new_won|new_lost) & (1<<welt->get_active_player_nr()) ) {
+	if ( (new_won|new_lost) & ((uint64)1<<welt->get_active_player_nr()) ) {
 		// most likely result text has changed, force update
 		result_text.update(script, welt->get_active_player(), true);
 
@@ -782,8 +782,20 @@ void scenario_t::rdwr(loadsave_t *file)
 	}
 
 	script_api::coordinate_transform_t::rdwr(file);
-	file->rdwr_short(won);
-	file->rdwr_short(lost);
+	if(  file->get_OTRP_version() >= 59  ) {
+		file->rdwr_longlong((sint64&)won);
+		file->rdwr_longlong((sint64&)lost);
+	}
+	else {
+		uint16 won16  = (uint16)won;
+		uint16 lost16 = (uint16)lost;
+		file->rdwr_short(won16);
+		file->rdwr_short(lost16);
+		if(  file->is_loading()  ) {
+			won  = won16;
+			lost = lost16;
+		}
+	}
 	file->rdwr_str(scenario_name);
 
 	// load scripts and scenario files
@@ -894,10 +906,10 @@ sint32 scenario_t::get_completion(int player_nr)
 	}
 	// check if won / lost
 	uint32 pl = player_nr;
-	if (won & (1<<player_nr)) {
+	if (won & ((uint64)1<<player_nr)) {
 		return 100;
 	}
-	else if (lost & (1<<player_nr)) {
+	else if (lost & ((uint64)1<<player_nr)) {
 		return -1;
 	}
 
@@ -935,7 +947,7 @@ bool scenario_t::set_completion(sint32 player_nr, sint32 percentage)
 	}
 	player->set_scenario_completion(percentage - player->get_scenario_completion());
 
-	uint16 mask = 1 << player_nr;
+	uint64 mask = (uint64)1 << player_nr;
 	// check won/lost
 	if (percentage < 0  &&  (lost & mask)==0) {
 		update_won_lost(0, mask);

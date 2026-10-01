@@ -53,6 +53,15 @@ extern char **__argv;
 static const LPCWSTR WINDOW_CLASS_NAME = L"Simu";
 
 static volatile HWND hwnd;
+// The IME context originally associated with the window. While no text input
+// field is focused, the IME is detached from the window (see dr_stop_textinput)
+// so that Japanese input does not eat keyboard shortcuts. It is re-attached
+// while editing a text field (see dr_start_textinput).
+static HIMC default_himc = NULL;
+// Whether a text input field currently has focus. The window may be recreated
+// (e.g. on fullscreen restore) while editing, so create_window() uses this to
+// decide whether to re-attach the IME to the freshly created window.
+static bool textinput_focused = false;
 static sint16 fullscreen = WINDOWED;
 static bool is_not_top = false;
 static MSG msg;
@@ -160,6 +169,21 @@ static void create_window(DWORD const ex_style, DWORD const style, int const x, 
 	hwnd = CreateWindowExW(ex_style, WINDOW_CLASS_NAME, wSIM_TITLE, style, x, y, r.right - r.left, r.bottom - r.top, 0, 0, hInstance, 0);
 
 	delete[] wSIM_TITLE;
+
+	// Detach the IME from the window initially and remember its context. No text
+	// input field is focused at startup, so the IME (e.g. Japanese conversion
+	// mode) must not consume keystrokes that are meant as keyboard shortcuts.
+	// The context is remembered so it can be re-attached while editing a text
+	// field.
+	default_himc = ImmAssociateContext( hwnd, NULL );
+
+	// This function is also called to recreate the window on fullscreen restore
+	// (see WM_ACTIVATE). If a text input field is focused at that point, the GUI
+	// will not call dr_start_textinput() again (focus state is unchanged), so
+	// re-attach the IME here to keep Japanese input working in the new window.
+	if(  textinput_focused  &&  default_himc  ) {
+		ImmAssociateContext( hwnd, default_himc );
+	}
 
 	ShowWindow(hwnd, SW_SHOW);
 	SetTimer( hwnd, 0, 1111, NULL ); // HACK: so windows thinks we are not dead when processing a timer every 1111 ms ...
@@ -295,8 +319,14 @@ int dr_textur_resize(unsigned short** const textur, int w, int const h)
 
 	AllDib->bmiHeader.biWidth  = img_w;
 	AllDib->bmiHeader.biHeight = img_h;
-	WindowSize.right           = (w*32)/x_scale;
-	WindowSize.bottom          = (h*32)/y_scale;
+	// WindowSize is in physical client pixels: dr_os_open fills it that way and
+	// WM_PAINT consumes it that way, both as the blit destination and to derive
+	// the framebuffer height. w and h arrive here in logical pixels, so they have
+	// to be scaled up, not down. Dividing by the scale only matched at 100%;
+	// above it every repaint after a resize painted into a rectangle smaller than
+	// the client area and overwrote biHeight with a framebuffer height too small.
+	WindowSize.right           = (w * x_scale) / 32;
+	WindowSize.bottom          = (h * y_scale) / 32;
 
 #ifdef MULTI_THREAD
 	LeaveCriticalSection( &redraw_underway );
@@ -460,6 +490,16 @@ static inline unsigned int ModifierKeys()
 }
 
 
+// The client size is state, not history. sys_event holds a single pending
+// event and one message retrieval can dispatch several messages (the sent
+// ones, WM_SIZE among them, before the posted one is returned), so a resize
+// written into the slot is lost when a later message of the same retrieval
+// overwrites it. Keep only the newest client size here and let GetEvents()
+// hand it to the slot as soon as the slot is free.
+static bool   resize_pending = false;
+static uint16 resize_pending_w = 0;
+static uint16 resize_pending_h = 0;
+
 /* Windows eventhandler: does most of the work */
 LRESULT WINAPI WindowProc(HWND this_hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -586,18 +626,20 @@ LRESULT WINAPI WindowProc(HWND this_hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 		case WM_SIZE: // resize client area
 			if(lParam!=0) {
-				sys_event.type = SIM_SYSTEM;
-				sys_event.code = SYSTEM_RESIZE;
-
-				sys_event.new_window_size_w = (LOWORD(lParam)*32)/x_scale;
-				if (sys_event.new_window_size_w <= 0) {
-					sys_event.new_window_size_w = 4;
+				// only the newest size matters; GetEvents() delivers it
+				int w = (LOWORD(lParam)*32)/x_scale;
+				if (w <= 0) {
+					w = 4;
 				}
 
-				sys_event.new_window_size_h = (HIWORD(lParam)*32)/y_scale;
-				if (sys_event.new_window_size_h <= 1) {
-					sys_event.new_window_size_h = 64;
+				int h = (HIWORD(lParam)*32)/y_scale;
+				if (h <= 1) {
+					h = 64;
 				}
+
+				resize_pending_w = (uint16)w;
+				resize_pending_h = (uint16)h;
+				resize_pending   = true;
 			}
 			break;
 
@@ -687,10 +729,16 @@ LRESULT WINAPI WindowProc(HWND this_hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 
 		case WM_IME_SETCONTEXT:
-			// attempt to avoid crash at windows 1809> just not call DefWinodwsProc seems to work for SDL2 ...
-//			DefWindowProc( this_hwnd, msg, wParam, lParam&~ISC_SHOWUICOMPOSITIONWINDOW );
-			lParam = 0;
-			return 0;
+			// Simutrans draws the composition (preedit) string itself, so clear
+			// ISC_SHOWUICOMPOSITIONWINDOW to hide the system composition window.
+			// Clearing this bit is also the documented workaround for the IME
+			// crash seen on Windows 10 1809. The conversion candidate window
+			// (変換候補ウインドウ), however, must still be drawn by the IME, so its
+			// bits are kept and the message is forwarded to DefWindowProc.
+			// Returning without calling DefWindowProc (the previous behaviour)
+			// suppressed the candidate window entirely.
+			lParam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
+			return DefWindowProcW( this_hwnd, msg, wParam, lParam );
 
 		case WM_IME_STARTCOMPOSITION:
 			break;
@@ -912,6 +960,15 @@ static void internal_GetEvents(bool const wait)
 
 void GetEvents()
 {
+	if (sys_event.type==SIM_NOEVENT  &&  resize_pending) {
+		// the newest client size goes out before anything else is fetched
+		sys_event.type = SIM_SYSTEM;
+		sys_event.code = SYSTEM_RESIZE;
+		sys_event.new_window_size_w = resize_pending_w;
+		sys_event.new_window_size_h = resize_pending_h;
+		resize_pending = false;
+		return;
+	}
 	if (sys_event.type==SIM_NOEVENT  &&  PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)) {
 		internal_GetEvents(false);
 	}
@@ -951,13 +1008,28 @@ void dr_sleep(uint32 millisec)
 
 void dr_start_textinput()
 {
+	// A text input field gained focus: re-attach the IME so the user can type
+	// (and use Japanese conversion) inside the field.
+	textinput_focused = true;
+	if(  default_himc  ) {
+		ImmAssociateContext( hwnd, default_himc );
+	}
 }
 
 void dr_stop_textinput()
 {
 	HIMC immcx = ImmGetContext( hwnd );
-	ImmNotifyIME( immcx, NI_COMPOSITIONSTR, CPS_CANCEL, 0 );
-	ImmReleaseContext( hwnd, immcx );
+	if(  immcx  ) {
+		ImmNotifyIME( immcx, NI_COMPOSITIONSTR, CPS_CANCEL, 0 );
+		ImmReleaseContext( hwnd, immcx );
+	}
+	// No text input field is focused any more: detach the IME so Japanese input
+	// mode does not swallow keystrokes meant as keyboard shortcuts.
+	textinput_focused = false;
+	HIMC old = ImmAssociateContext( hwnd, NULL );
+	if(  old  &&  !default_himc  ) {
+		default_himc = old;
+	}
 }
 
 void dr_notify_input_pos(int x, int y)

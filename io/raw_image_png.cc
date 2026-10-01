@@ -14,9 +14,200 @@
 
 #include "../simmem.h"
 #include "../simdebug.h"
-
+#ifdef MAKEOBJ
+#define dr_fopen fopen
+#else
+FILE *dr_fopen(const char *filename, const char *mode);
+#endif
 
 static std::string filename_;
+
+static bool write_png_content(const raw_image_t &image, png_structp png_ptr, png_infop info_ptr)
+{
+	int color_type;
+
+	switch (image.get_format()) {
+	case raw_image_t::FMT_RGBA8888: color_type = PNG_COLOR_TYPE_RGBA; break;
+	case raw_image_t::FMT_RGB888:   color_type = PNG_COLOR_TYPE_RGB;  break;
+	case raw_image_t::FMT_GRAY8:    color_type = PNG_COLOR_TYPE_GRAY; break;
+	default:
+		dbg->error("raw_image_t::write_png", "Unsupported source format for writing png");
+		return false;
+	}
+
+#if PNG_LIBPNG_VER_MAJOR<=1  &&  PNG_LIBPNG_VER_MINOR<5
+	png_set_compression_level(png_ptr, Z_BEST_COMPRESSION);
+#endif
+
+	png_set_IHDR(png_ptr, info_ptr, image.get_width(), image.get_height(), 8,
+		color_type, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
+		PNG_FILTER_TYPE_DEFAULT);
+	png_write_info(png_ptr, info_ptr);
+
+	for (uint32 y = 0; y < image.get_height(); ++y) {
+		const uint8 *row = image.access_pixel(0, y);
+		png_write_row(png_ptr, const_cast<png_bytep>(row));
+	}
+
+	png_write_end(png_ptr, info_ptr);
+	return true;
+}
+
+static void write_png_to_string(png_structp png_ptr, png_bytep data, png_size_t length)
+{
+	std::string *output = static_cast<std::string *>(png_get_io_ptr(png_ptr));
+	output->append(reinterpret_cast<const char *>(data), length);
+}
+
+static void flush_png_string(png_structp)
+{
+}
+
+
+struct raw_image_png_writer_t::impl_t
+{
+	png_structp png_ptr;
+	png_infop info_ptr;
+	FILE *file;
+	std::string filename;
+	raw_image_t::format_t format;
+	uint32 width;
+	uint32 height;
+	uint32 rows_written;
+	bool valid;
+	bool finished;
+
+	impl_t() :
+		png_ptr(NULL), info_ptr(NULL), file(NULL), format(raw_image_t::FMT_INVALID),
+		width(0), height(0), rows_written(0), valid(false), finished(false)
+	{}
+};
+
+
+raw_image_png_writer_t::raw_image_png_writer_t(const char *filename, uint32 width, uint32 height, raw_image_t::format_t format) :
+	impl(new impl_t())
+{
+	impl->filename = filename;
+	impl->format = format;
+	impl->width = width;
+	impl->height = height;
+
+	int color_type;
+	switch (format) {
+		case raw_image_t::FMT_RGBA8888: color_type = PNG_COLOR_TYPE_RGBA; break;
+		case raw_image_t::FMT_RGB888:   color_type = PNG_COLOR_TYPE_RGB;  break;
+		case raw_image_t::FMT_GRAY8:    color_type = PNG_COLOR_TYPE_GRAY; break;
+		default: return;
+	}
+
+	impl->file = dr_fopen(filename, "wb");
+	if (impl->file == NULL) {
+		return;
+	}
+	impl->png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+	if (impl->png_ptr == NULL) {
+		close(false);
+		return;
+	}
+	impl->info_ptr = png_create_info_struct(impl->png_ptr);
+	if (impl->info_ptr == NULL) {
+		close(false);
+		return;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(impl->png_ptr))) {
+		dbg->error("raw_image_png_writer_t", "fatal error starting PNG output");
+		close(false);
+		return;
+	}
+#endif
+
+	png_init_io(impl->png_ptr, impl->file);
+#if PNG_LIBPNG_VER_MAJOR<=1  &&  PNG_LIBPNG_VER_MINOR<5
+	png_set_compression_level(impl->png_ptr, Z_BEST_COMPRESSION);
+#endif
+	png_set_IHDR(impl->png_ptr, impl->info_ptr, width, height, 8, color_type,
+		PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+	png_write_info(impl->png_ptr, impl->info_ptr);
+	impl->valid = true;
+}
+
+
+raw_image_png_writer_t::~raw_image_png_writer_t()
+{
+	if (impl != NULL) {
+		close(impl->finished);
+		delete impl;
+	}
+}
+
+
+void raw_image_png_writer_t::close(bool keep_file)
+{
+	if (impl->png_ptr != NULL) {
+		png_destroy_write_struct(&impl->png_ptr, impl->info_ptr != NULL ? &impl->info_ptr : (png_infopp)NULL);
+	}
+	if (impl->file != NULL) {
+		fclose(impl->file);
+		impl->file = NULL;
+	}
+	impl->valid = false;
+	if (!keep_file && !impl->filename.empty()) {
+		remove(impl->filename.c_str());
+	}
+}
+
+
+bool raw_image_png_writer_t::is_valid() const
+{
+	return impl != NULL && impl->valid;
+}
+
+
+bool raw_image_png_writer_t::write_rows(const raw_image_t &image, uint32 row_count)
+{
+	if (!is_valid() || image.get_format() != impl->format || image.get_width() != impl->width ||
+		row_count > image.get_height() || row_count > impl->height - impl->rows_written) {
+		return false;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(impl->png_ptr))) {
+		dbg->error("raw_image_png_writer_t", "fatal error writing PNG rows");
+		close(false);
+		return false;
+	}
+#endif
+
+	for (uint32 y = 0; y < row_count; ++y) {
+		const uint8 *row = image.access_pixel(0, y);
+		png_write_row(impl->png_ptr, const_cast<png_bytep>(row));
+	}
+	impl->rows_written += row_count;
+	return true;
+}
+
+
+bool raw_image_png_writer_t::finish()
+{
+	if (!is_valid() || impl->rows_written != impl->height) {
+		return false;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(impl->png_ptr))) {
+		dbg->error("raw_image_png_writer_t", "fatal error finishing PNG output");
+		close(false);
+		return false;
+	}
+#endif
+
+	png_write_end(impl->png_ptr, impl->info_ptr);
+	impl->finished = true;
+	close(true);
+	return true;
+}
 
 
 bool raw_image_t::read_png_data(FILE *file)
@@ -167,7 +358,7 @@ bool raw_image_t::read_png(const char *fname)
 	// remember the file name for better error messages.
 	filename_ = fname;
 
-	FILE* file = fopen(fname, "rb");
+	FILE* file = dr_fopen(fname, "rb");
 
 	if (file) {
 		const bool ok = read_png_data(file);
@@ -188,7 +379,7 @@ bool raw_image_t::write_png(const char *file_name) const
 
 	png_structp png_ptr = NULL;
 	png_infop info_ptr = NULL;
-	FILE *fp = fopen(file_name, "wb");
+	FILE *fp = dr_fopen(file_name, "wb");
 	if (!fp) {
 		return false;
 	}
@@ -218,49 +409,43 @@ bool raw_image_t::write_png(const char *file_name) const
 	// assign file
 	png_init_io(png_ptr, fp);
 
-#if PNG_LIBPNG_VER_MAJOR<=1  &&  PNG_LIBPNG_VER_MINOR<5
-	/* set the zlib compression level */
-	png_set_compression_level( png_ptr, Z_BEST_COMPRESSION );
-#endif
-
-	// output header
-	int color_type;
-
-	switch (fmt) {
-	case FMT_RGBA8888: color_type = PNG_COLOR_TYPE_RGBA; break;
-	case FMT_RGB888:   color_type = PNG_COLOR_TYPE_RGB;  break;
-	case FMT_GRAY8:    color_type = PNG_COLOR_TYPE_GRAY; break;
-	default:
-		dbg->fatal( "raw_image_t::write_png", "Cannot write png file: Unupported source format" );
-	}
-
-	png_set_IHDR( png_ptr, info_ptr, width, height, 8, color_type, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT );
-	png_write_info(png_ptr, info_ptr);
-
-	switch (fmt) {
-	case FMT_RGBA8888:
-	case FMT_RGB888:
-	case FMT_GRAY8:
-		{
-			for (uint32 y = 0; y < height; ++y) {
-				// hack to compile with old libpng versions that take a png_bytep instead of a png_const_bytep
-				const uint8 *row = access_pixel(0, y);
-				png_write_row(png_ptr, const_cast<png_bytep>(row));
-			}
-		}
-		break;
-
-	default:
-		dbg->error("raw_image_t::write_png", "Unsupported source format for writing png");
-		png_destroy_write_struct(&png_ptr, &info_ptr);
-		fclose( fp );
-		return false;
-	}
-
-	// free all
-	png_write_end(png_ptr, info_ptr);
+	const bool ok = write_png_content(*this, png_ptr, info_ptr);
 	png_destroy_write_struct(&png_ptr, &info_ptr);
 
 	fclose( fp );
-	return true;
+	return ok;
+}
+
+
+bool raw_image_t::write_png(std::string &output) const
+{
+	output.clear();
+
+	png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+	if (!png_ptr) {
+		return false;
+	}
+
+	png_infop info_ptr = png_create_info_struct(png_ptr);
+	if (!info_ptr) {
+		png_destroy_write_struct(&png_ptr, (png_infopp)NULL);
+		return false;
+	}
+
+#ifdef PNG_SETJMP_SUPPORTED
+	if (setjmp(png_jmpbuf(png_ptr))) {
+		dbg->error("raw_image_t::write_png", "fatal error writing PNG to memory");
+		png_destroy_write_struct(&png_ptr, &info_ptr);
+		output.clear();
+		return false;
+	}
+#endif
+
+	png_set_write_fn(png_ptr, &output, write_png_to_string, flush_png_string);
+	const bool ok = write_png_content(*this, png_ptr, info_ptr);
+	png_destroy_write_struct(&png_ptr, &info_ptr);
+	if (!ok) {
+		output.clear();
+	}
+	return ok;
 }

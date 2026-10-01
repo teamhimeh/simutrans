@@ -154,6 +154,24 @@ void gebaeude_t::rotate90()
 			// eight layout city building
 			layout = (layout & 4) + ((layout+3) & 3);
 		}
+		else if(  layout>=48  &&  building_desc->get_all_layouts()>48  ) {
+			// slope stop layout: rotate90 cycles N->E->S->W->N
+			// Layout = slope_group (upper nibble, one of 48/64/80/96) + flat_part (lower nibble).
+			// When way is NS (bit0=0) the slope group shifts by ±16 following the rotate90 cycle.
+			// When way is EW (bit0=1) the slope group is unchanged (rotating EW->NS keeps the slope).
+			// The flat part rotates via the same table used for straight stations.
+			static const uint8 layout_rotate[16] = { 1, 8, 5, 10, 3, 12, 7, 14, 9, 0, 13, 2, 11, 4, 15, 6 };
+			const uint8 slope_group = layout & 0xF0;
+			const uint8 flat_part   = layout & 0x0F;
+			const int   flat_count  = min( 48, (int)building_desc->get_all_layouts() );
+			const uint8 new_flat    = layout_rotate[flat_part] % flat_count;
+			// for NS-way (bit0=0): swap between N/W group and S/E group (add or subtract 16)
+			// for EW-way (bit0=1): slope group is unchanged
+			const uint8 new_group = (flat_part & 1)
+				? slope_group
+				: (uint8)(slope_group + ((slope_group & 0x10) ? 16 : -16));
+			layout = new_group + new_flat;
+		}
 		else if(  layout>=16  ) {
 			// diagonal tile layout for stations
 			// construct the rotated layout
@@ -373,10 +391,19 @@ image_id gebaeude_t::get_image() const
 {
 	if(env_t::hide_buildings!=0  &&  tile->has_image()) {
 		// opaque houses
-		if(is_city_building()) {
-			return env_t::hide_with_transparency ? skinverwaltung_t::fussweg->get_image_id(0) : skinverwaltung_t::construction_site->get_image_id(0);
+		if (is_city_building()) {
+			if (env_t::hide_with_transparency) {
+				// transparent mode: building shape is drawn by get_outline_image(); no basement here
+				return IMG_EMPTY;
+			}
+			if (skinverwaltung_t::construction_site->get_count() == 1) {
+				// only one kind of construction site?
+				return skinverwaltung_t::construction_site->get_image_id(0);
+			}
+			// 6 is special building, 7-9 is res com ind (our type)
+			return skinverwaltung_t::construction_site->get_count() > 7 ? skinverwaltung_t::construction_site->get_image_id(tile->get_desc()->get_type() - building_desc_t::city_res + 7) : skinverwaltung_t::construction_site->get_image_id(0);
 		}
-		else if(  (env_t::hide_buildings == env_t::ALL_HIDDEN_BUILDING  &&  tile->get_desc()->get_type() < building_desc_t::others)) {
+		else if(  env_t::hide_buildings == env_t::ALL_HIDDEN_BUILDING  &&  tile->get_desc()->get_type() < building_desc_t::others  ) {
 			// hide with transparency or tile without information
 			if(env_t::hide_with_transparency) {
 				if(tile->get_desc()->get_type() == building_desc_t::factory  &&  ptr.fab->get_desc()->get_placement() == factory_desc_t::Water) {
@@ -385,10 +412,13 @@ image_id gebaeude_t::get_image() const
 				}
 				return skinverwaltung_t::fussweg->get_image_id(0);
 			}
-			else {
-				uint16 kind=skinverwaltung_t::construction_site->get_count()<=tile->get_desc()->get_type() ? skinverwaltung_t::construction_site->get_count()-1 : tile->get_desc()->get_type();
-				return skinverwaltung_t::construction_site->get_image_id( kind );
+			// only one kind of construction site
+			if (skinverwaltung_t::construction_site->get_count() == 1) {
+				return skinverwaltung_t::construction_site->get_image_id(0);
 			}
+			// 6 is special building, 7-9 is res com ind (handled above) => we only go up to 6
+			uint16 kind = tile->get_desc()->get_type() > 6 ? 6 : tile->get_desc()->get_type();
+			return skinverwaltung_t::construction_site->get_image_id( kind );
 		}
 	}
 
@@ -936,9 +966,9 @@ void gebaeude_t::rdwr(loadsave_t *file)
 				switch(type) {
 					case building_desc_t::city_res:
 						{
-							const building_desc_t *bdsc = hausbauer_t::get_residential( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ), 0, koord(1,1), koord(1,1) );
+							const building_desc_t *bdsc = hausbauer_t::get_residential( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ), 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 							if(bdsc==NULL) {
-								bdsc = hausbauer_t::get_residential(level,0, MAX_CLIMATES, 0, koord(1,1), koord(1,1) );
+								bdsc = hausbauer_t::get_residential(level,0, MAX_CLIMATES, 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 							}
 							if( bdsc) {
 								dbg->message("gebaeude_t::rwdr", "replace unknown building %s with residence level %i by %s",buf,level,bdsc->get_name());
@@ -950,9 +980,9 @@ void gebaeude_t::rdwr(loadsave_t *file)
 					case building_desc_t::city_com:
 						{
 							// for replacement, ignore cluster and size
-							const building_desc_t *bdsc = hausbauer_t::get_commercial( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ), 0, koord(1,1), koord(1,1) );
+							const building_desc_t *bdsc = hausbauer_t::get_commercial( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ), 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 							if(bdsc==NULL) {
-								bdsc = hausbauer_t::get_commercial(level, 0, MAX_CLIMATES, 0, koord(1,1), koord(1,1) );
+								bdsc = hausbauer_t::get_commercial(level, 0, MAX_CLIMATES, 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 							}
 							if(bdsc) {
 								dbg->message("gebaeude_t::rwdr", "replace unknown building %s with commercial level %i by %s",buf,level,bdsc->get_name());
@@ -963,11 +993,11 @@ void gebaeude_t::rdwr(loadsave_t *file)
 
 					case building_desc_t::city_ind:
 						{
-							const building_desc_t *bdsc = hausbauer_t::get_industrial( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ), 0, koord(1,1), koord(1,1) );
+							const building_desc_t *bdsc = hausbauer_t::get_industrial( level, welt->get_timeline_year_month(), welt->get_climate( get_pos().get_2d() ), 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 							if(bdsc==NULL) {
-								bdsc = hausbauer_t::get_industrial(level, 0, MAX_CLIMATES, 0, koord(1,1), koord(1,1) );
+								bdsc = hausbauer_t::get_industrial(level, 0, MAX_CLIMATES, 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 								if(bdsc==NULL) {
-									bdsc = hausbauer_t::get_residential(level, 0, MAX_CLIMATES, 0, koord(1,1), koord(1,1) );
+									bdsc = hausbauer_t::get_residential(level, 0, MAX_CLIMATES, 0, koord((sint16)1,(sint16)1), koord((sint16)1,(sint16)1) );
 								}
 							}
 							if (bdsc) {
@@ -1007,11 +1037,19 @@ void gebaeude_t::rdwr(loadsave_t *file)
 	if(  file->is_version_atleast(99, 14)  ) {
 		sint32 city_index = -1;
 		if(  file->is_saving()  &&  ptr.stadt!=NULL  ) {
-			city_index = welt->get_cities().index_of( ptr.stadt );
+			if(  welt->get_cities().is_contained( ptr.stadt )  ) {
+				city_index = welt->get_cities().index_of( ptr.stadt );
+			}
+			// else: city was removed; save city_index as -1 without touching ptr.stadt
 		}
 		file->rdwr_long(city_index);
-		if(  file->is_loading()  &&  city_index!=-1  &&  (tile==NULL  ||  tile->get_desc()==NULL  ||  tile->get_desc()->is_connected_with_town())  ) {
-			ptr.stadt = welt->get_cities()[city_index];
+		if(  file->is_loading()  &&  (tile==NULL  ||  tile->get_desc()==NULL  ||  tile->get_desc()->is_connected_with_town())  ) {
+			if (city_index != -1) {
+				ptr.stadt = welt->get_cities()[city_index];
+			}
+			else {
+				ptr.stadt = NULL;
+			}
 		}
 	}
 
@@ -1028,7 +1066,7 @@ void gebaeude_t::rdwr(loadsave_t *file)
 }
 
 
-void gebaeude_t::finish_rd()
+void gebaeude_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	player_t::add_maintenance(get_owner(), tile->get_desc()->get_maintenance(welt), tile->get_desc()->get_finance_waytype());
 
@@ -1074,43 +1112,53 @@ void gebaeude_t::cleanup(player_t *player)
 
 	// may need to update next buildings, in the case of start, middle, end buildings
 	// realign surrounding buildings...
-	const uint32 layout = tile->get_layout();
-	
-	// [straight/vertical/horizontal][layout&1][index_to_lookup]
-	const koord directions_to_lookup[3][2][2] = {
-		{{koord::south, koord::north}, {koord::east, koord::west}},
-		{{koord::north, koord::east}, {koord::west, koord::south}},
-		{{koord::south, koord::east}, {koord::west, koord::north}}
-	};
+
+	// Which end-cap bit to restore on a neighbour reached from direction dir,
+	// given the neighbour's layout type (straight=0, vertical diag=1, horizontal diag=2).
 	const ribi_t::ribi bit_4_turn_on_dir[3] = {
 		ribi_t::southeast, // straight
 		ribi_t::northwest, // vertical diagonal
-		ribi_t::southwest // horizontal diagonal
+		ribi_t::southwest  // horizontal diagonal
 	};
-	
-	// check adjacent tiles and turn on the connection bit.
-	const sint8 offset = this_gr->get_weg_yoff()/TILE_HEIGHT_STEP;
-	// WORKAROUND: station extensions have somehow inverted layout bits.
-	const bool is_generic_ext = tile->get_desc()->get_type() == building_desc_t::generic_extension;
-	for(  uint8 i=0;  i<2;  i++  ) {
-		const koord dir = directions_to_lookup[(layout&0x30)>>4][(layout&1)^is_generic_ext][i];
-		grund_t* gr = welt->lookup(get_pos() + koord3d(dir, offset));
-		if(!gr) {
-			// check whether bridge end tile
-			grund_t * gr_tmp = welt->lookup(get_pos() + koord3d(dir, offset - 1));
-			if(gr_tmp && gr_tmp->get_weg_yoff()/TILE_HEIGHT_STEP == 1) {
-				gr = gr_tmp;
+
+	// Walk every way on this tile. For each connected direction, find the neighbouring
+	// stop via get_neighbour() and restore its end-cap bit.
+	// get_neighbour() resolves the correct height for slopes and bridges via get_vmove(),
+	// handling single slopes, double slopes, and all combinations correctly.
+	for(  int w = 0;  w < 2;  w++  ) {
+		const weg_t* weg = this_gr->get_weg_nr( w );
+		if(  !weg  ) { continue; }
+		const ribi_t::ribi way_ribi = weg->get_ribi_unmasked();
+		for(  uint8 i = 0;  i < 4;  i++  ) {
+			const ribi_t::ribi dir = ribi_t::nesw[i];
+			if(  !(way_ribi & dir)  ) { continue; }
+
+			grund_t* gr = nullptr;
+			this_gr->get_neighbour( gr, weg->get_waytype(), dir );
+			if(  !gr  ) {
+				// Same-height tile with a halt (stop extension without direct way link).
+				const planquadrat_t* pl = welt->access( get_pos().get_2d() + koord(dir) );
+				if(  pl  ) {
+					grund_t* same_z = pl->get_boden_in_hoehe( get_pos().z );
+					if(  same_z  &&  same_z->get_halt().is_bound()  ) {
+						gr = same_z;
+					}
+				}
 			}
+
+			gebaeude_t* gb = gr ? gr->find<gebaeude_t>() : NULL;
+			if(  !gb  ||  gb->get_tile()->get_desc()->get_all_layouts() <= 4u  ) {
+				continue;
+			}
+			const koord xy = gb->get_tile()->get_offset();
+			uint8 layoutbase = gb->get_tile()->get_layout();
+			// Slope stop neighbours use the straight-way rule (index 0) for bit selection.
+			const uint32 nb_idx = (layoutbase >= 48 && gb->get_tile()->get_desc()->get_all_layouts() > 48)
+			                    ? 0u : (layoutbase & 0x30u) >> 4;
+			const bool bit_4_turn_on = (dir & bit_4_turn_on_dir[nb_idx]) > 0;
+			layoutbase |= bit_4_turn_on ? 4u : 2u; // restore end-cap bit on neighbour
+			gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
 		}
-		gebaeude_t* gb = gr ? gr->find<gebaeude_t>() : NULL;
-		if(  !gb  ||  gb->get_tile()->get_desc()->get_all_layouts()<=4u  ) {
-			continue;
-		}
-		const koord xy = gb->get_tile()->get_offset();
-		uint8 layoutbase = gb->get_tile()->get_layout();
-		const bool bit_4_turn_on = (ribi_type(dir) & bit_4_turn_on_dir[(layoutbase&0x30)>>4]) > 0;
-		layoutbase |= bit_4_turn_on ? 4u : 2u; // set far bit on neighbour
-		gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
 	}
 	mark_images_dirty();
 }

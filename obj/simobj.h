@@ -62,9 +62,9 @@ private:
 	sint8 yoff;
 
 	/**
-	 * Owner of the object (1 - public player, 15 - unowned)
+	 * Owner of the object (1 - public player, PLAYER_UNOWNED - unowned)
 	 */
-	uint8 owner_n:4;
+	uint8 owner_n:6;
 
 	/**
 	 * @see flag_values
@@ -213,6 +213,9 @@ public:
 	 */
 	virtual waytype_t get_waytype() const { return invalid_wt; }
 
+	/// true if clipping below is needed
+	virtual bool is_clipping_below_needed() const { return true; }
+
 	/**
 	 * called whenever the snowline height changes
 	 * return false and the obj_t will be deleted
@@ -261,7 +264,7 @@ public:
 	/**
 	 * Called after the world is completely loaded from savegame
 	 */
-	virtual void finish_rd() {}
+	virtual void finish_rd(const uint8 /*loaded_OTRP_version*/) {}
 
 	/**
 	 * @return position

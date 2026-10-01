@@ -544,7 +544,7 @@ fabrik_t* factory_builder_t::build_factory(koord3d* parent, const factory_desc_t
 							fab->link_halt(halt_list[h]);
 						}
 					}
-					// cannot call halt_list[h]->verbinde_fabriken() here,
+					// cannot call halt_list[h]->reconnect_factories() here,
 					// as it modifies halt_list in its calls to fabrik_t::unlink_halt and fabrik_t::link_halt
 				}
 			}

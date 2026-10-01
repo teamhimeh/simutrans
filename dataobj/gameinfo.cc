@@ -138,8 +138,20 @@ void gameinfo_t::rdwr(loadsave_t *file)
 	file->rdwr_long( city_count );
 	file->rdwr_long( citizen_count );
 
-	file->rdwr_short( convoi_count );
-	file->rdwr_short( halt_count );
+	if(  file->get_OTRP_version() >= 55  ) {
+		file->rdwr_long( convoi_count );
+		file->rdwr_long( halt_count );
+	}
+	else {
+		uint16 tmp_convoi = (uint16)convoi_count;
+		uint16 tmp_halt   = (uint16)halt_count;
+		file->rdwr_short( tmp_convoi );
+		file->rdwr_short( tmp_halt );
+		if(  file->is_loading()  ) {
+			convoi_count = tmp_convoi;
+			halt_count   = tmp_halt;
+		}
+	}
 
 	file->rdwr_longlong( total_pass_transported );
 	file->rdwr_longlong( total_mail_transported );
@@ -182,8 +194,21 @@ void gameinfo_t::rdwr(loadsave_t *file)
 	}
 	file->rdwr_long( game_engine_revision );
 
-	for(  int i=0;  i<16;  i++  ) {
-		file->rdwr_byte( player_type[i] );
+	if(  file->get_OTRP_version()<59  ) {
+		// old savegames only stored the first 16 players
+		for(  int i=0;  i<16;  i++  ) {
+			file->rdwr_byte( player_type[i] );
+		}
+		if(  file->is_loading()  ) {
+			for(  int i=16;  i<MAX_PLAYER_COUNT;  i++  ) {
+				player_type[i] = player_t::EMPTY;
+			}
+		}
+	}
+	else {
+		for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			file->rdwr_byte( player_type[i] );
+		}
 	}
 	file->rdwr_byte( clients );
 

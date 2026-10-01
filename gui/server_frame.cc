@@ -14,6 +14,7 @@
 
 
 #include "../dataobj/translator.h"
+#include "../sys/simsys.h"
 #include "../network/network.h"
 #include "../network/network_file_transfer.h"
 #include "../network/network_cmd_ingame.h"
@@ -82,12 +83,53 @@ public:
 };
 
 
+void server_frame_t::load_pakset_servers()
+{
+	pakset_servers.clear();
+	std::string filepath = env_t::pak_dir + "config/servers.tab";
+	FILE *f = dr_fopen(filepath.c_str(), "r");
+	if(  !f  ) {
+		return;
+	}
+	char line[512];
+	while(  fgets(line, sizeof(line), f)  ) {
+		// skip leading whitespace
+		char *p = line;
+		while(  *p == ' '  ||  *p == '\t'  ) { p++; }
+		// skip comments and empty lines
+		if(  *p == '#'  ||  *p == '\0'  ||  *p == '\n'  ||  *p == '\r'  ) {
+			continue;
+		}
+		// find '='
+		char *eq = strchr(p, '=');
+		if(  !eq  ) { continue; }
+		// trim name (right-trim up to '=')
+		char *name_end = eq - 1;
+		while(  name_end > p  &&  (*name_end == ' '  ||  *name_end == '\t')  ) { name_end--; }
+		std::string name(p, name_end - p + 1);
+		// trim address (left-trim after '=')
+		char *addr = eq + 1;
+		while(  *addr == ' '  ||  *addr == '\t'  ) { addr++; }
+		// right-trim address
+		char *addr_end = addr + strlen(addr) - 1;
+		while(  addr_end > addr  &&  (*addr_end == ' '  ||  *addr_end == '\t'  ||  *addr_end == '\n'  ||  *addr_end == '\r')  ) { addr_end--; }
+		std::string dns(addr, addr_end - addr + 1);
+		if(  !name.empty()  &&  !dns.empty()  ) {
+			pakset_servers.push_back({ name, dns });
+		}
+	}
+	fclose(f);
+}
+
+
 server_frame_t::server_frame_t() :
 	gui_frame_t( translator::translate("Game info") ),
 	gi(welt),
 	custom_valid(false),
 	serverlist( gui_scrolled_list_t::listskin, gui_scrolled_list_t::scrollitem_t::compare ),
-	game_text(&buf)
+	game_text(&buf),
+	clientlist( gui_scrolled_list_t::listskin ),
+	clientlist_generation_shown( 0xFFFFFFFFu )
 {
 	map = new gui_minimap_t();
 	// update_info();
@@ -182,6 +224,13 @@ server_frame_t::server_frame_t() :
 	end_table();
 	new_component<gui_divider_t>();
 
+	if (  env_t::networkmode  ) {
+		new_component<gui_label_t>("Clients:" );
+		add_component( &clientlist );
+		update_clientlist();
+		new_component<gui_divider_t>();
+	}
+
 	if (  !env_t::networkmode  ) {
 
 		add_table(3,1)->set_force_equal_columns(true);
@@ -199,6 +248,7 @@ server_frame_t::server_frame_t() :
 
 			// only update serverlist, when not already in network mode
 			// otherwise desync to current game may happen
+			load_pakset_servers();
 			update_serverlist();
 		}
 		end_table();
@@ -337,7 +387,7 @@ void server_frame_t::update_serverlist_threaded () {
 
 	if(  const char *err = network_http_get( ANNOUNCE_SERVER, ANNOUNCE_LIST_URL, network_buf )  ) {
 		dbg->error( "server_frame_t::update_serverlist", "could not download list: %s", err );
-		return;
+		// still update list so pakset-defined servers are shown
 	}
 
 	set_server_list_result(server_list_request_result_t{this, network_buf});
@@ -346,7 +396,15 @@ void server_frame_t::update_serverlist_threaded () {
 
 void server_frame_t::handle_serverlist_request_result(cbuffer_t network_buf) {
 	buf.clear();
-	
+
+	// Add servers defined in pak_dir/config/servers.tab first
+	for(  const pakset_server_t &s : pakset_servers  ) {
+		cbuffer_t name, dns, altdns;
+		name.append( s.name.c_str() );
+		dns.append(  s.dns.c_str()  );
+		serverlist.new_component<server_scrollitem_t>( name, dns, altdns, true, color_idx_to_rgb(COL_BLUE) );
+	}
+
 	// Parse listing into CSV_t object
 	CSV_t csvdata( network_buf.get_str() );
 	int ret;
@@ -455,6 +513,25 @@ void server_frame_t::handle_serverlist_request_result(cbuffer_t network_buf) {
 
 	set_dirty();
 	resize(scr_size(0, 0));
+}
+
+
+void server_frame_t::update_clientlist()
+{
+	clientlist.clear_elements();
+
+	const vector_tpl<nwc_clientlist_t::entry_t>& entries = nwc_clientlist_t::get_client_list();
+	for (  uint32 i = 0;  i < entries.get_count();  i++  ) {
+		const nwc_clientlist_t::entry_t& e = entries[i];
+
+		cbuffer_t line;
+		line.printf( "%s", e.nickname.c_str() );
+
+		clientlist.new_component<client_scrollitem_t>( line, SYSCOL_TEXT );
+	}
+
+	clientlist.set_size( clientlist.get_size() );
+	clientlist_generation_shown = nwc_clientlist_t::get_generation();
 }
 
 
@@ -610,6 +687,10 @@ void server_frame_t::draw (scr_coord pos, scr_size size)
 	server_list_request_result_t server_list_result = pop_server_list_result();
 	if(  server_list_result.window==this  ) {
 		handle_serverlist_request_result(server_list_result.network_buf);
+	}
+
+	if (  env_t::networkmode  &&  clientlist_generation_shown != nwc_clientlist_t::get_generation()  ) {
+		update_clientlist();
 	}
 
 	gui_frame_t::draw( pos, size );

@@ -23,10 +23,11 @@ HOSTCXX ?=$(CXX)
 SDL_CONFIG       ?= sdl-config
 SDL2_CONFIG      ?= pkg-config sdl2
 #SDL2_CONFIG     ?= sdl2-config
+SDL3_CONFIG      ?= pkg-config sdl3
 FREETYPE_CONFIG  ?= pkg-config freetype2
 #FREETYPE_CONFIG ?= freetype-config
 
-BACKENDS  := gdi sdl sdl2 mixer_sdl mixer_sdl2 posix
+BACKENDS  := gdi sdl sdl2 sdl3 mixer_sdl mixer_sdl2 posix
 OSTYPES   := amiga beos freebsd haiku linux mac mingw openbsd
 
 
@@ -85,6 +86,8 @@ endif
 
 ifeq ($(BACKEND),sdl2)
   SOURCES += sys/clipboard_s2.cc
+else ifeq ($(BACKEND),sdl3)
+  SOURCES += sys/clipboard_s3.cc
 else ifeq ($(OSTYPE),mingw)
   SOURCES += sys/clipboard_w32.cc
 else
@@ -270,7 +273,6 @@ ifdef KUTA_REVISION
   endif
 endif
 
-
 CFLAGS   += -Wall -Wextra -Wcast-qual -Wpointer-arith -Wcast-align $(FLAGS) -Wconversion
 CCFLAGS  += -ansi -Wstrict-prototypes -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64
 
@@ -299,6 +301,7 @@ SOURCES += boden/wege/runway.cc
 SOURCES += boden/wege/schiene.cc
 SOURCES += boden/wege/strasse.cc
 SOURCES += boden/wege/weg.cc
+SOURCES += dataobj/convoi_template.cc
 SOURCES += dataobj/crossing_logic.cc
 SOURCES += dataobj/environment.cc
 SOURCES += dataobj/freelist.cc
@@ -339,6 +342,7 @@ SOURCES += descriptor/reader/ground_reader.cc
 SOURCES += descriptor/reader/groundobj_reader.cc
 SOURCES += descriptor/reader/image_reader.cc
 SOURCES += descriptor/reader/imagelist2d_reader.cc
+SOURCES += descriptor/reader/imagelist3d_reader.cc
 SOURCES += descriptor/reader/imagelist_reader.cc
 SOURCES += descriptor/reader/obj_reader.cc
 SOURCES += descriptor/reader/pedestrian_reader.cc
@@ -464,6 +468,7 @@ SOURCES += gui/password_frame.cc
 SOURCES += gui/player_frame_t.cc
 SOURCES += gui/player_merge_frame.cc
 SOURCES += gui/privatesign_info.cc
+SOURCES += gui/route_display.cc
 SOURCES += gui/route_search_frame.cc
 SOURCES += gui/savegame_frame.cc
 SOURCES += gui/scenario_frame.cc
@@ -509,6 +514,8 @@ SOURCES += network/network_cmp_pakset.cc
 SOURCES += network/network_file_transfer.cc
 SOURCES += network/network_packet.cc
 SOURCES += network/network_socket_list.cc
+SOURCES += network/mcp_server.cc
+SOURCES += network/mcp_tools.cc
 SOURCES += network/pakset_info.cc
 SOURCES += obj/baum.cc
 SOURCES += obj/bruecke.cc
@@ -539,6 +546,7 @@ SOURCES += script/api/api_const.cc
 SOURCES += script/api/api_control.cc
 SOURCES += script/api/api_convoy.cc
 SOURCES += script/api/api_factory.cc
+SOURCES += script/api/api_good.cc
 SOURCES += script/api/api_gui.cc
 SOURCES += script/api/api_halt.cc
 SOURCES += script/api/api_include.cc
@@ -729,6 +737,46 @@ ifeq ($(BACKEND),sdl2)
       SDL_LDFLAGS := $(shell $(SDL2_CONFIG) --static --libs)
     else
       SDL_LDFLAGS := $(shell $(SDL2_CONFIG) --libs)
+    endif
+  endif
+  CFLAGS += $(SDL_CFLAGS)
+  LIBS   += $(SDL_LDFLAGS)
+endif
+
+ifeq ($(BACKEND),sdl3)
+  SOURCES += sys/simsys_s3.cc
+  SOURCES += sound/sdl3_sound.cc
+  ifneq ($(shell expr $(USE_FLUIDSYNTH_MIDI) \>= 1), 1)
+    ifeq ($(OSTYPE),mac)
+      AV_FOUNDATION ?= 0
+      ifeq ($(shell expr $(AV_FOUNDATION) \>= 1), 1)
+        SOURCES += music/AVF_core-audio_midi.mm
+        LIBS    += -framework Foundation -framework AVFoundation
+      else
+        SOURCES += music/core-audio_midi.mm
+        LIBS    += -framework Foundation -framework QTKit
+      endif
+    else ifneq ($(OSTYPE),mingw)
+      SOURCES += music/no_midi.cc
+    else
+      SOURCES += music/w32_midi.cc
+    endif
+  endif
+
+  ifeq ($(SDL3_CONFIG),)
+    ifeq ($(OSTYPE),mac)
+      SDL_CFLAGS  := -F /Library/Frameworks -I/Library/Frameworks/SDL3.framework/Headers
+      SDL_LDFLAGS := -framework SDL3 -F /Library/Frameworks
+    else
+      SDL_CFLAGS  := -I$(MINGDIR)/include
+      SDL_LDFLAGS := -lSDL3
+    endif
+  else
+    SDL_CFLAGS    := $(shell $(SDL3_CONFIG) --cflags)
+    ifeq ($(shell expr $(STATIC) \>= 1), 1)
+      SDL_LDFLAGS := $(shell $(SDL3_CONFIG) --static --libs)
+    else
+      SDL_LDFLAGS := $(shell $(SDL3_CONFIG) --libs)
     endif
   endif
   CFLAGS += $(SDL_CFLAGS)

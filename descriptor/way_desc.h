@@ -60,6 +60,8 @@ private:
 	/// if true front_images lists exists as nodes
 	bool front_images;
 
+	bool clip_below; // only relevant for elevated ways
+
 	/**
 	 * calculates index of image list for flat ways
 	 * for winter and/or front images
@@ -93,12 +95,21 @@ public:
 	waytype_t get_finance_waytype() const;
 
 	/**
+	* Maintenance cost scaled by settings_t::maintenance_cost_multiplier_way [%].
+	* Hides obj_desc_transport_related_t::get_maintenance() on purpose, so that
+	* every user of a way_desc_t sees the scaled value.
+	*/
+	sint64 get_maintenance() const;
+
+	/**
 	* returns the system type of this way (mostly used with rails)
 	* @see systemtype_t
 	*/
 	systemtype_t get_styp() const { return (systemtype_t)styp; }
 
 	bool is_tram() const { return wtyp == track_wt  &&  styp == type_tram; }
+
+	bool is_clip_below() const { return clip_below; }
 
 	image_id get_image_id(ribi_t::ribi ribi, uint8 season, bool front = false) const
 	{

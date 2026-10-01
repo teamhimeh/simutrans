@@ -43,6 +43,7 @@ enum {
 	IDBTN_SHOW_GRID,
 	IDBTN_SHOW_STATION_NAMES_ARROW,
 	IDBTN_SHOW_WAITING_BARS,
+	IDBTN_SHOW_ALLOWED_PLAYERS,
 	IDBTN_SHOW_SLICE_MAP_VIEW,
 	IDBTN_HIDE_BUILDINGS,
 	IDBTN_SHOW_SCHEDULES_STOP,
@@ -371,6 +372,15 @@ transparency_settings_t::transparency_settings_t()
 	factory_tooltip.set_selection( env_t::show_factory_storage_bar );
 	add_component( &factory_tooltip );
 	factory_tooltip.add_listener( this );
+
+	new_component<gui_label_t>( "Clip below elevated ways" );
+	clip_below_setting.set_focusable( false );
+	clip_below_setting.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate( "no cut" ), SYSCOL_TEXT );
+	clip_below_setting.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate( "all cut" ), SYSCOL_TEXT );
+	clip_below_setting.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate( "pak dependence" ), SYSCOL_TEXT );
+	clip_below_setting.set_selection( env_t::clip_below );
+	add_component( &clip_below_setting );
+	clip_below_setting.add_listener( this );
 }
 
 bool transparency_settings_t::action_triggered( gui_action_creator_t *comp, value_t v )
@@ -390,6 +400,11 @@ bool transparency_settings_t::action_triggered( gui_action_creator_t *comp, valu
 
 		return true;
 	}
+	if( comp == &clip_below_setting ) {
+		env_t::clip_below = (sint8)v.i;
+		world()->set_dirty();
+		return true;
+	}
 	return true;
 }
 
@@ -397,6 +412,7 @@ bool transparency_settings_t::action_triggered( gui_action_creator_t *comp, valu
 void transparency_settings_t::draw( scr_coord offset )
 {
 	hide_buildings.set_selection( env_t::hide_buildings );
+	clip_below_setting.set_selection( env_t::clip_below );
 
 	gui_aligned_container_t::draw(offset);
 }
@@ -428,8 +444,13 @@ station_settings_t::station_settings_t()
 
 	// Show waiting bars checkbox
 	buttons[ IDBTN_SHOW_WAITING_BARS ].init( button_t::square_state, "show waiting bars" );
-	buttons[ IDBTN_SHOW_WAITING_BARS ].pressed = env_t::show_names & 2;
+	buttons[ IDBTN_SHOW_WAITING_BARS ].pressed = env_t::show_names & env_t::SHOW_WAITING_BARS;
 	add_component( buttons + IDBTN_SHOW_WAITING_BARS, 2 );
+
+	// Show allowed players checkbox
+	buttons[ IDBTN_SHOW_ALLOWED_PLAYERS ].init( button_t::square_state, "show allowed players" );
+	buttons[ IDBTN_SHOW_ALLOWED_PLAYERS ].pressed = env_t::show_names & env_t::SHOW_ALLOWED_PLAYERS;
+	add_component( buttons + IDBTN_SHOW_ALLOWED_PLAYERS, 2 );
 }
 
 traffic_settings_t::traffic_settings_t()
@@ -683,21 +704,27 @@ bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 		grund_t::toggle_grid();
 		break;
 	case IDBTN_SHOW_STATION_NAMES_ARROW:
-		if( env_t::show_names & 1 ) {
-			if( (env_t::show_names >> 2) == 2 ) {
-				env_t::show_names &= 2;
+		if( env_t::show_names & env_t::SHOW_NAME ) {
+			if( env_t::show_names & env_t::SHOW_NAME_TYPE3 ) {
+				env_t::show_names &= env_t::bars_settings;
 			}
-			else {
-				env_t::show_names += 4;
+			else if(  env_t::show_names & env_t::SHOW_NAME_TYPE2  ) {
+				env_t::show_names &= ~env_t::SHOW_NAME_TYPE2;
+				env_t::show_names |= env_t::SHOW_NAME_TYPE3;
+			} else {
+				env_t::show_names |= env_t::SHOW_NAME_TYPE2;
 			}
 		}
 		else {
-			env_t::show_names &= 2;
-			env_t::show_names |= 1;
+			env_t::show_names &= env_t::bars_settings;
+			env_t::show_names |= env_t::SHOW_NAME;
 		}
 		break;
 	case IDBTN_SHOW_WAITING_BARS:
-		env_t::show_names ^= 2;
+		env_t::show_names ^= env_t::SHOW_WAITING_BARS;
+		break;
+	case IDBTN_SHOW_ALLOWED_PLAYERS:
+		env_t::show_names ^= env_t::SHOW_ALLOWED_PLAYERS;
 		break;
 	case IDBTN_SHOW_WAY_OFFSET_LABEL:
 		env_t::show_way_offset_label = !env_t::show_way_offset_label;
@@ -768,7 +795,8 @@ void color_gui_t::draw(scr_coord pos, scr_size size)
 	buttons[IDBTN_SHOW_STATION_COVERAGE].pressed = env_t::station_coverage_show;
 	buttons[IDBTN_UNDERGROUND_VIEW].pressed = grund_t::underground_mode == grund_t::ugm_all;
 	buttons[IDBTN_SHOW_GRID].pressed = grund_t::show_grid;
-	buttons[IDBTN_SHOW_WAITING_BARS].pressed = (env_t::show_names&2)!=0;
+	buttons[IDBTN_SHOW_WAITING_BARS].pressed = (env_t::show_names & env_t::SHOW_WAITING_BARS)!=0;
+	buttons[IDBTN_SHOW_ALLOWED_PLAYERS].pressed = (env_t::show_names & env_t::SHOW_ALLOWED_PLAYERS)!=0;
 	buttons[IDBTN_SHOW_SLICE_MAP_VIEW].pressed = grund_t::underground_mode == grund_t::ugm_level;
 	buttons[IDBTN_SHOW_SCHEDULES_STOP].pressed = env_t::visualize_schedule;
 	buttons[IDBTN_SIMPLE_DRAWING].pressed = env_t::simple_drawing;

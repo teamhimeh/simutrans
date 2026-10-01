@@ -11,6 +11,7 @@
 #include "../simtypes.h"
 #include "../dataobj/route.h"
 #include "../linehandle_t.h"
+#include "../tpl/vector_tpl.h"
 
 /**
  * Global route cache keyed by (line, schedule_entry, start, ziel, max_speed_kmh, convoy_length, need_electric).
@@ -54,6 +55,7 @@ struct route_cache_t {
 		}
 	};
 
+private:
 	static const size_t MAX_ROUTES_PER_ENTRY = 4;
 
 	typedef std::unordered_map<key_t, entry_t, key_hash> route_map_t;
@@ -63,6 +65,7 @@ struct route_cache_t {
 	// Outer key: linehandle_t, Middle key: schedule entry index, Inner key: route key
 	line_map_t map;
 
+public:
 	route_t* find(linehandle_t line, uint8 schedule_entry, koord3d start, koord3d ziel,
 	              sint32 max_speed_kmh, uint16 convoy_length, bool need_electric);
 
@@ -75,6 +78,13 @@ struct route_cache_t {
 
 	// Erase all cache entries for a given line
 	void remove_line(linehandle_t line);
+
+	// Erase all cache entries
+	void clear() { map.clear(); }
+
+	// Collect all currently valid (non-expired) cached route tiles for a line, across all
+	// schedule entries and cached variants. Used by the GUI to display the cached routes.
+	void get_route_tiles_for_line(linehandle_t line, vector_tpl<koord3d> &tiles) const;
 };
 
 #endif

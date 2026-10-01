@@ -20,6 +20,7 @@ class powernet_t;
 class player_t;
 class fabrik_t;
 class way_desc_t;
+class stadt_t;
 
 class leitung_t : public obj_t
 {
@@ -108,7 +109,7 @@ public:
 	void calc_neighbourhood();
 
 	void rdwr(loadsave_t *file) OVERRIDE;
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	/**
 	 * @return NULL if OK, otherwise an error message
@@ -169,7 +170,7 @@ public:
 	void info(cbuffer_t & buf) const OVERRIDE;
 
 	void rdwr(loadsave_t *file) OVERRIDE;
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	void calc_image() OVERRIDE {} // empty; otherwise it will change to leitung
 
@@ -183,6 +184,7 @@ public:
  */
 class senke_t : public leitung_t, public sync_steppable
 {
+	friend class stadt_t;
 public:
 	static void new_world();
 	static void step_all(uint32 delta_t);
@@ -201,6 +203,9 @@ private:
 	static uint32 payment_timer;
 
 	fabrik_t *fab;
+
+	// Connected city (alternative to fab for city substations)
+	stadt_t *city;
 
 	// Pwm timer for duty cycling image.
 	uint32 delta_sum;
@@ -256,11 +261,17 @@ public:
 	void info(cbuffer_t & buf) const OVERRIDE;
 
 	void rdwr(loadsave_t *file) OVERRIDE;
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	void calc_image() OVERRIDE {} // empty; otherwise it will change to leitung
 
 	const fabrik_t* get_factory() const { return fab; }
+	const stadt_t* get_city() const { return city; }
+
+	/**
+	 * Get the actual power load delivered through this transformer.
+	 */
+	uint32 get_power_load() const;
 };
 
 

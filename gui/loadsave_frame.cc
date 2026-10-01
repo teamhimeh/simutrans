@@ -10,10 +10,13 @@
 #include "loadsave_frame.h"
 #include "unused_addons_frame.h"
 #include "simwin.h"
+#include "messagebox.h"
 
 #include "../sys/simsys.h"
 #include "../simworld.h"
 #include "../simversion.h"
+#include "../simmenu.h"
+#include "../player/simplay.h"
 #include "../pathes.h"
 
 #include "../dataobj/loadsave.h"
@@ -26,6 +29,7 @@
 #include "../network/network_socket_list.h"
 
 #include "../utils/simstring.h"
+#include "../simevent.h"
 
 
 stringhashtable_tpl<sve_info_t *> loadsave_frame_t::cached_info;
@@ -96,19 +100,75 @@ bool loadsave_frame_t::item_action(const char *filename)
 			// and now we need to copy the servergame to the map ...
 #endif
 		}
-		if(  save_as_standard.pressed  ) {
-			// save as standard data
+		static char otrp_ver_str[32];
+		const int sel = save_version_combo.get_selection();
+		const int last_idx = (int)save_ver_labels.size() - 1;
+		const bool version_overridden = (sel != 0);
+		const char *const original_version_str = env_t::savegame_version_str;
+		if(  sel == last_idx  ) {
+			// "Readable by standard."
 			#define STD_SAVEGAME_VER_NR "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR)
 			env_t::savegame_version_str = STD_SAVEGAME_VER_NR;
+		}
+		else if(  sel > 0  ) {
+			// older OTRP version: index 1 => v(OTRP_VERSION_MAJOR-1), index 2 => v(OTRP_VERSION_MAJOR-2), ...
+			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", OTRP_VERSION_MAJOR - sel );
+			env_t::savegame_version_str = otrp_ver_str;
+		}
+		if(  OTRP_VERSION_MAJOR - sel < 59  ) {
+			// older save formats only support player slots 0..14
+			const uint8 old_player_count = 15;
+			bool has_extra_players = false;
+			for(  uint8 i=old_player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+				player_t *player = welt->get_player(i);
+				if(  player != NULL  &&  !player->is_public_service()  ) {
+					has_extra_players = true;
+					break;
+				}
+			}
+			if(  has_extra_players  ) {
+				if(  env_t::networkmode  ) {
+					// In network mode merging companies would sync to the server and destroy them for all players.
+					// obj_t::rdwr only remaps the PLAYER_UNOWNED sentinel, not real owner ids >=15, so silently
+					// saving in the old format would corrupt ownership on reload. Forbid the old format here and
+					// fall back to the current, fully player-64-aware format instead.
+					create_win( new news_img(translator::translate("Players 16+ exist; this save cannot use the selected older format.\nSaving in the current format instead.\nServer state is unaffected.")), w_info, magic_none );
+					env_t::savegame_version_str = original_version_str;
+				}
+				else if(  (event_get_last_control_shift() & 1) == 0  ) {
+					// Merging is immediate and irreversible (welt->set_tool runs synchronously), so a failed
+					// save afterwards cannot restore the original companies. Require an explicit SHIFT+click
+					// to confirm, matching the SHIFT+delete convention used elsewhere in this dialog, and
+					// abort this save attempt otherwise.
+					create_win( new news_img(translator::translate("Players 16+ exist and must be merged into company 0 to use this older format.\nThis cannot be undone. Hold SHIFT and click Save again to confirm.")), w_info, magic_none );
+					if(  version_overridden  ) {
+						env_t::savegame_version_str = original_version_str;
+					}
+					return false;
+				}
+				else {
+					// single-player: merge extra companies into company 0 before saving
+					player_t *const public_player = welt->get_public_player();
+					for(  uint8 i=old_player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+						player_t *player = welt->get_player(i);
+						if(  player==NULL  ||  player->is_public_service()  ) {
+							continue;
+						}
+						static char merge_param[32];
+						sprintf( merge_param, "%hhi,%hhi", i, (uint8)0 );
+						tool_t::simple_tool[TOOL_MERGE_PLAYER]->set_default_param( merge_param );
+						welt->set_tool( tool_t::simple_tool[TOOL_MERGE_PLAYER], public_player );
+					}
+				}
+			}
 		}
 		long start_save = dr_time();
 		welt->save( filename, loadsave_t::save_mode, env_t::savegame_version_str, false );
 		DBG_MESSAGE( "loadsave_frame_t::item_action", "save world %li ms", dr_time() - start_save );
 		welt->set_dirty();
 		welt->reset_timer();
-		if(  save_as_standard.pressed  ) {
-			// restore savegame_version_str
-			env_t::savegame_version_str = SAVEGAME_VER_NR;
+		if(  version_overridden  ) {
+			env_t::savegame_version_str = original_version_str;
 		}
 	}
 
@@ -138,8 +198,23 @@ loadsave_frame_t::loadsave_frame_t(bool do_load) : savegame_frame_t(".sve",false
 		bottom_left_frame.add_component(&show_unused_addons);
 	}
 	else {
-		save_as_standard.init( button_t::square_automatic, "Readable by standard.");
-		bottom_left_frame.add_component(&save_as_standard);
+		// Build combo labels: index 0 = current, 1..N-1 = older OTRP versions descending, N = standard
+		char buf[64];
+		snprintf( buf, sizeof(buf), translator::translate("v%d (current version)"), OTRP_VERSION_MAJOR );
+		save_ver_labels.push_back( buf );
+		for(  int v = OTRP_VERSION_MAJOR - 1;  v >= 54;  v--  ) {
+			snprintf( buf, sizeof(buf), "v%d", v );
+			save_ver_labels.push_back( buf );
+		}
+		save_ver_labels.push_back( translator::translate("Readable by standard.") );
+
+		save_version_combo.set_unsorted();
+		for(  const std::string &s : save_ver_labels  ) {
+			save_version_combo.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( s.c_str(), SYSCOL_TEXT );
+		}
+		save_version_combo.set_selection( 0 );
+		bottom_left_frame.add_component( &save_version_combo );
+
 		env_t::previous_OTRP_data = false;
 		set_filename(welt->get_settings().get_filename());
 		set_name(translator::translate("Speichern"));
