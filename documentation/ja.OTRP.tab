@@ -965,3 +965,7 @@ Invalid building preset filename.
 プリセットのファイル名が無効です。
 Could not load building preset.
 建築物プリセットを読み込めませんでした。
+Could not recover building presets:
+次の建築物プリセットを復旧できませんでした：
+Corrupt building preset preserved at:\n%s
+不正な建築物プリセットを次の場所に退避しました：\n%s

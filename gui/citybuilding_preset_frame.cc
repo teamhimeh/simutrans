@@ -9,6 +9,8 @@
 #include "../dataobj/translator.h"
 #include "../sys/simsys.h"
 #include "../utils/cbuffer_t.h"
+#include "../utils/searchfolder.h"
+#include <set>
 #include <sys/stat.h>
 #include <ctype.h>
 
@@ -21,6 +23,14 @@ static bool exists(const std::string &path)
 {
 	struct stat info;
 	return dr_stat(path.c_str(), &info) == 0;
+}
+
+static void recovery_failure(const cbuffer_t &failures)
+{
+	cbuffer_t message;
+	message.append(translator::translate("Could not recover building presets:"));
+	message.append(failures.get_str());
+	create_win(new news_img(message.get_str()), w_info, magic_none);
 }
 
 class citybuilding_preset_confirm_t : public gui_frame_t, private action_listener_t
@@ -87,6 +97,43 @@ citybuilding_preset_frame_t::~citybuilding_preset_frame_t()
 	destroy_win(magic_citybuilding_preset_confirm);
 }
 
+bool citybuilding_preset_frame_t::recover(const std::string &path, cbuffer_t &failures)
+{
+	std::string archived;
+	const citybuilding_preset_recovery_t result = citybuilding_preset_recover(path, &archived);
+	if (!archived.empty()) {
+		cbuffer_t message;
+		message.printf(translator::translate("Corrupt building preset preserved at:\n%s"), archived.c_str());
+		create_win(new news_img(message.get_str()), w_info, magic_none);
+	}
+	if (result == CITYBUILDING_PRESET_RECOVERY_FAILED) {
+		failures.printf("\n%s", get_filename(path.c_str()));
+		return false;
+	}
+	return true;
+}
+
+void citybuilding_preset_frame_t::fill_list()
+{
+	searchfolder_t files;
+	files.search(directory, "", false, false);
+	std::set<std::string> targets;
+	FOR(searchfolder_t, const &name, files) {
+		std::string filename(name);
+		if (filename.size() <= 8 || (filename.substr(filename.size() - 8) != ".tab.tmp" && filename.substr(filename.size() - 8) != ".tab.bak")) continue;
+		struct stat info;
+		if (dr_stat((directory + filename).c_str(), &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG) {
+			targets.insert(directory + filename.substr(0, filename.size() - 4));
+		}
+	}
+	cbuffer_t failures;
+	for (std::set<std::string>::const_iterator i = targets.begin(); i != targets.end(); ++i) recover(*i, failures);
+	if (failures.len()) {
+		recovery_failure(failures);
+	}
+	savegame_frame_t::fill_list();
+}
+
 bool citybuilding_preset_frame_t::infowin_event(const event_t *event)
 {
 	if (event->ev_class == EVENT_KEYBOARD && event->ev_code == 27) {
@@ -142,6 +189,8 @@ bool citybuilding_preset_frame_t::request(const std::string &filename)
 		(base.substr(3) == "\xC2\xB9" || base.substr(3) == "\xC2\xB2" || base.substr(3) == "\xC2\xB3")) invalid = true;
 	if (invalid) { preset_message("Invalid building preset filename."); return false; }
 	const std::string path = directory + name + ".tab";
+	cbuffer_t failures;
+	if (!recover(path, failures)) { recovery_failure(failures); return false; }
 	if (do_load) {
 		citybuilding_preset_t loaded;
 		if (!citybuilding_preset_load(path, loaded)) { preset_message("Could not load building preset."); return false; }
@@ -160,7 +209,10 @@ bool citybuilding_preset_frame_t::request(const std::string &filename)
 
 bool citybuilding_preset_frame_t::write_confirmed(const std::string &path, const citybuilding_preset_t &snapshot)
 {
-	if (win_get_magic(magic_edit_house) != owner || !exists(path)) return false;
+	if (win_get_magic(magic_edit_house) != owner) return false;
+	cbuffer_t failures;
+	if (!recover(path, failures)) { recovery_failure(failures); return false; }
+	if (!exists(path)) return false;
 	if (!citybuilding_preset_save(path, snapshot)) { preset_message("Could not save building presets."); return false; }
 	preset_message("Building preset saved.");
 	return true;

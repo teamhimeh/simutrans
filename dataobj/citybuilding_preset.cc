@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 static std::string tab_escape(const std::string &value)
 {
@@ -56,7 +57,7 @@ static std::string tab_unescape(const char *value)
 	return result;
 }
 
-bool citybuilding_preset_load(const std::string &path, citybuilding_preset_t &out)
+static bool read_preset(const std::string &path, citybuilding_preset_t &out)
 {
 	tabfile_t file;
 	if (!file.open(path.c_str())) return false;
@@ -77,6 +78,58 @@ bool citybuilding_preset_load(const std::string &path, citybuilding_preset_t &ou
 	return true;
 }
 
+// Missing files are not errors; inaccessible and non-regular files are.
+static int regular_file_state(const std::string &path)
+{
+	struct stat info;
+	if (dr_stat(path.c_str(), &info) != 0) return errno == ENOENT ? 0 : -1;
+	return (info.st_mode & S_IFMT) == S_IFREG ? 1 : -1;
+}
+
+citybuilding_preset_recovery_t citybuilding_preset_recover(const std::string &path, std::string *archived)
+{
+	if (archived) archived->clear();
+	const std::string temporary = path + ".tmp", backup = path + ".bak";
+	const int target_state = regular_file_state(path);
+	const int backup_state = regular_file_state(backup);
+	const int temporary_state = regular_file_state(temporary);
+	if (target_state < 0 || backup_state < 0 || temporary_state < 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
+	if (!backup_state && !temporary_state) return CITYBUILDING_PRESET_UNCHANGED;
+	if (backup_state) {
+		citybuilding_preset_t checked;
+		if (target_state && read_preset(path, checked)) {
+			if (dr_remove(backup.c_str()) != 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
+		}
+		else {
+			if (!read_preset(backup, checked)) return CITYBUILDING_PRESET_RECOVERY_FAILED;
+			std::string quarantine;
+			if (target_state) {
+				quarantine = path + ".corrupt";
+				unsigned int index = 0;
+				struct stat info;
+				while (dr_stat(quarantine.c_str(), &info) == 0) {
+					char suffix[32];
+					snprintf(suffix, sizeof(suffix), ".corrupt.%u", ++index);
+					quarantine = path + suffix;
+				}
+				if (errno != ENOENT || dr_rename(path.c_str(), quarantine.c_str()) != 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
+				if (archived) *archived = quarantine;
+			}
+			if (dr_rename(backup.c_str(), path.c_str()) != 0) {
+				if (target_state && dr_rename(quarantine.c_str(), path.c_str()) == 0 && archived) archived->clear();
+				return CITYBUILDING_PRESET_RECOVERY_FAILED;
+			}
+		}
+	}
+	if (temporary_state && dr_remove(temporary.c_str()) != 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
+	return CITYBUILDING_PRESET_RECOVERED;
+}
+
+bool citybuilding_preset_load(const std::string &path, citybuilding_preset_t &out)
+{
+	return citybuilding_preset_recover(path) != CITYBUILDING_PRESET_RECOVERY_FAILED && read_preset(path, out);
+}
+
 bool citybuilding_preset_save(const std::string &path, const citybuilding_preset_t &preset)
 {
 	const std::string preset_dir = env_t::pak_dir + "building_preset/";
@@ -87,6 +140,7 @@ bool citybuilding_preset_save(const std::string &path, const citybuilding_preset
 		}
 	}
 
+	if (citybuilding_preset_recover(path) == CITYBUILDING_PRESET_RECOVERY_FAILED) return false;
 	const std::string temporary = path + ".tmp";
 	FILE *file = dr_fopen(temporary.c_str(), "wb");
 	if (!file) return false;
@@ -118,6 +172,6 @@ bool citybuilding_preset_save(const std::string &path, const citybuilding_preset
 		dr_remove(temporary.c_str());
 		return false;
 	}
-	if (has_existing) dr_remove(backup.c_str());
+	if (has_existing && dr_remove(backup.c_str()) != 0) return false;
 	return true;
 }
