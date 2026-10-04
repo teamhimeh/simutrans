@@ -192,10 +192,6 @@ void citybuilding_edit_frame_t::load_preset(const citybuilding_preset_t &preset)
 void citybuilding_edit_frame_t::save_preset()
 {
 	citybuilding_preset_t preset;
-	preset.pakset = env_t::objfilename;
-	while (!preset.pakset.empty() && (preset.pakset.back() == '/' || preset.pakset.back() == '\\')) preset.pakset.pop_back();
-	const size_t pak_separator = preset.pakset.find_last_of("/\\");
-	if (pak_separator != std::string::npos) preset.pakset.erase(0, pak_separator + 1);
 	vector_tpl<sint32> selections = scl.get_selections();
 	for (uint32 i = 0; i < selections.get_count(); ++i) {
 		if (selections[i] >= 0 && (uint32)selections[i] < building_list.get_count()) preset.buildings.push_back(building_list[selections[i]]->get_name());
