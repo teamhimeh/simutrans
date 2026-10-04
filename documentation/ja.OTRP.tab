@@ -959,3 +959,5 @@ Invalid building preset filename.
 プリセットのファイル名が無効です。
 Could not load building preset.
 建築物プリセットを読み込めませんでした。
+Pakset: %s
+Pakset: %s

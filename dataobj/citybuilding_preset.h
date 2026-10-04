@@ -13,6 +13,7 @@
 
 struct citybuilding_preset_t {
 	std::string name;
+	std::string pakset;
 	std::vector<std::string> buildings;
 };
 

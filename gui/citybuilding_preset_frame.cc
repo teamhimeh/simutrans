@@ -77,7 +77,7 @@ citybuilding_preset_frame_t::citybuilding_preset_frame_t(citybuilding_edit_frame
 	directory(env_t::pak_dir + "building_preset/")
 {
 	add_path(directory.c_str());
-	label_enabled = false;
+	label_enabled = true;
 	set_name(translator::translate(load ? "Load preset" : "Save preset"));
 	savebutton.set_text(load ? "Load preset" : "Save preset");
 }
@@ -102,6 +102,16 @@ bool citybuilding_preset_frame_t::check_file(const char *path, const char *)
 	struct stat info;
 	return name.size() > 4 && name.substr(name.size() - 4) == ".tab" &&
 		dr_stat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG;
+}
+
+const char *citybuilding_preset_frame_t::get_info(const char *path)
+{
+	citybuilding_preset_t loaded;
+	cbuffer_t text;
+	citybuilding_preset_load(path, loaded);
+	text.printf(translator::translate("Pakset: %s"), loaded.pakset.c_str());
+	file_info = text.get_str();
+	return file_info.c_str();
 }
 
 bool citybuilding_preset_frame_t::ok_action(const char *)
