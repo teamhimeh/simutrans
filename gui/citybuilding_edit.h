@@ -38,7 +38,6 @@ private:
 	button_t bt_com;
 	button_t bt_ind;
 
-	gui_label_t lb_name_filter_input;
 	static char name_filter_value[64];
 	gui_textinput_t name_filter_input;
 	button_t bt_preset_load, bt_preset_save;

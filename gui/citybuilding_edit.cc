@@ -119,10 +119,7 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 
 	// name filter
 	name_filter_input.set_text(name_filter_value, 60);
-	gui_aligned_container_t *name_filter_table = cont_filter.add_table(2, 0);
-	name_filter_table->new_component<gui_label_t>("Building name filter");
-	name_filter_table->add_component(&name_filter_input);
-	cont_filter.end_table();
+	cont_filter.add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
 
 	gui_aligned_container_t *preset_buttons = cont_filter.add_table(2, 0);
