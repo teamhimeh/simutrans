@@ -376,6 +376,7 @@ SOURCES += gui/base_info.cc
 SOURCES += gui/baum_edit.cc
 SOURCES += gui/city_info.cc
 SOURCES += gui/citybuilding_edit.cc
+SOURCES += gui/citybuilding_preset_frame.cc
 SOURCES += gui/citylist_frame_t.cc
 SOURCES += gui/citylist_stats_t.cc
 SOURCES += gui/climates.cc

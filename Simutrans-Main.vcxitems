@@ -134,6 +134,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\baum_edit.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\city_info.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\citybuilding_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\citybuilding_preset_frame.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\citylist_frame_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\citylist_stats_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\climates.cc" />
@@ -497,6 +498,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\baum_edit.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\city_info.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\citybuilding_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\citybuilding_preset_frame.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\citylist_frame_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\citylist_stats_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\climates.h" />

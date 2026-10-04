@@ -23,6 +23,7 @@
 #include "citybuilding_edit.h"
 #include "components/gui_label.h"
 #include "messagebox.h"
+#include "citybuilding_preset_frame.h"
 
 char citybuilding_edit_frame_t::name_filter_value[64] = "";
 
@@ -30,73 +31,6 @@ char citybuilding_edit_frame_t::name_filter_value[64] = "";
 tool_build_house_t* citybuilding_edit_frame_t::haus_tool=new tool_build_house_t();
 cbuffer_t citybuilding_edit_frame_t::param_str;
 bool citybuilding_edit_frame_t::sortreverse = false;
-
-
-class citybuilding_preset_confirm_t : public gui_frame_t, private action_listener_t
-{
-public:
-	enum action_t {
-		overwrite,
-		remove
-	};
-
-	citybuilding_preset_confirm_t(action_t action, const citybuilding_preset_t &preset) :
-		gui_frame_t(translator::translate(action == overwrite ? "Overwrite preset" : "Delete preset")),
-		action(action),
-		preset(preset)
-	{
-		set_table_layout(1, 0);
-		question.printf(translator::translate(action == overwrite ? "Overwrite preset \"%s\"?" : "Delete preset \"%s\"?"), preset.name.c_str());
-		message.set_text_pointer(question.get_str());
-		add_component(&message);
-
-		gui_aligned_container_t *buttons = add_table(2, 1);
-		confirm.init(button_t::roundbox, action == overwrite ? "Overwrite" : "Delete preset");
-		cancel.init(button_t::roundbox, "Cancel");
-		confirm.add_listener(this);
-		cancel.add_listener(this);
-		buttons->add_component(&confirm);
-		buttons->add_component(&cancel);
-		end_table();
-
-		buttons->set_focus(&cancel);
-		set_focus(buttons);
-		reset_min_windowsize();
-		set_windowsize(get_min_windowsize());
-	}
-
-	bool action_triggered(gui_action_creator_t *comp, value_t) OVERRIDE
-	{
-		if (comp == &confirm) {
-			citybuilding_edit_frame_t *editor = dynamic_cast<citybuilding_edit_frame_t *>(win_get_magic(magic_edit_house));
-			if (editor) {
-				if (action == overwrite) {
-					editor->commit_preset_save(preset, true);
-				}
-				else {
-					editor->commit_preset_delete(preset.name);
-				}
-			}
-		}
-		destroy_win(this);
-		return true;
-	}
-
-private:
-	action_t action;
-	citybuilding_preset_t preset;
-	cbuffer_t question;
-	gui_label_t message;
-	button_t confirm;
-	button_t cancel;
-};
-
-
-static void show_preset_confirmation(citybuilding_preset_confirm_t::action_t action, const citybuilding_preset_t &preset)
-{
-	destroy_win(magic_citybuilding_preset_confirm);
-	create_win(new citybuilding_preset_confirm_t(action, preset), w_info, magic_citybuilding_preset_confirm);
-}
 
 
 static bool compare_building_desc(const building_desc_t* a, const building_desc_t* b)
@@ -164,7 +98,6 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 	extend_edit_gui_t(translator::translate("citybuilding builder"), player_),
 	building_list(16)
 {
-	preset_name_value[0] = 0;
 	desc = NULL;
 	haus_tool->set_default_param(NULL);
 	haus_tool->cursor = tool_t::general_tool[TOOL_BUILD_HOUSE]->cursor;
@@ -192,32 +125,16 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 	cont_filter.end_table();
 	name_filter_input.add_listener(this);
 
-	gui_aligned_container_t *preset_table = cont_filter.add_table(2, 0);
-	preset_table->new_component<gui_label_t>("Preset");
-	preset_table->add_component(&cb_preset);
-	cont_filter.end_table();
-	preset_name_input.set_text(preset_name_value, sizeof(preset_name_value) - 1);
-	gui_aligned_container_t *preset_name_table = cont_filter.add_table(2, 0);
-	preset_name_table->new_component<gui_label_t>("Preset name");
-	preset_name_table->add_component(&preset_name_input);
-	cont_filter.end_table();
-	gui_aligned_container_t *preset_buttons = cont_filter.add_table(3, 0);
+	gui_aligned_container_t *preset_buttons = cont_filter.add_table(2, 0);
 	bt_preset_load.init(button_t::roundbox, "Load preset");
 	bt_preset_save.init(button_t::roundbox, "Save preset");
-	bt_preset_delete.init(button_t::roundbox, "Delete preset");
-	bt_preset_load.set_tooltip("Restore the building selection from the selected preset.");
-	bt_preset_save.set_tooltip("Save the currently selected buildings as the named preset.");
-	bt_preset_delete.set_tooltip("Delete the selected building preset.");
+	bt_preset_load.set_tooltip("Load a building preset file.");
+	bt_preset_save.set_tooltip("Save the selected buildings to a preset file.");
 	preset_buttons->add_component(&bt_preset_load);
 	preset_buttons->add_component(&bt_preset_save);
-	preset_buttons->add_component(&bt_preset_delete);
 	cont_filter.end_table();
-	cb_preset.add_listener(this);
 	bt_preset_load.add_listener(this);
 	bt_preset_save.add_listener(this);
-	bt_preset_delete.add_listener(this);
-	citybuilding_preset_load(presets);
-	refresh_preset_list();
 
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
@@ -240,47 +157,21 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 	reset_min_windowsize();
 }
 
-void citybuilding_edit_frame_t::refresh_preset_list(sint32 selection)
+citybuilding_edit_frame_t::~citybuilding_edit_frame_t()
 {
-	cb_preset.clear_elements();
-	if (presets.empty()) {
-		cb_preset.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("<no building presets>"), SYSCOL_TEXT);
-		cb_preset.set_selection(0);
-		preset_name_value[0] = 0;
-		bt_preset_load.disable();
-		bt_preset_delete.disable();
-		return;
-	}
-	for (uint32 i = 0; i < presets.get_count(); ++i) {
-		cb_preset.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(presets[i].name.c_str(), SYSCOL_TEXT);
-	}
-	if (selection < 0) {
-		selection = 0;
-	}
-	if (selection >= 0 && (uint32)selection < presets.get_count()) {
-		cb_preset.set_selection(selection);
-		strncpy(preset_name_value, presets[selection].name.c_str(), sizeof(preset_name_value) - 1);
-		preset_name_value[sizeof(preset_name_value) - 1] = 0;
-	}
-	else {
-		cb_preset.set_selection(-1);
-		preset_name_value[0] = 0;
-	}
-	bt_preset_load.enable(cb_preset.get_selection() >= 0);
-	bt_preset_delete.enable(cb_preset.get_selection() >= 0);
+	destroy_win(magic_citybuilding_preset_confirm);
+	destroy_win(magic_citybuilding_preset_file);
 }
 
-void citybuilding_edit_frame_t::load_preset()
+void citybuilding_edit_frame_t::load_preset(const citybuilding_preset_t &preset)
 {
-	const sint32 preset_index = cb_preset.get_selection();
-	if (preset_index < 0 || (uint32)preset_index >= presets.get_count()) return;
 	for (sint32 i = 0; i < scl.get_count(); ++i) {
 		if (gui_scrolled_list_t::scrollitem_t *item = scl.get_element(i)) item->selected = false;
 	}
 	sint32 first = -1;
 	uint32 selected = 0;
 	for (uint32 i = 0; i < building_list.get_count(); ++i) {
-		for (std::vector<std::string>::const_iterator name = presets[preset_index].buildings.begin(); name != presets[preset_index].buildings.end(); ++name) {
+		for (std::vector<std::string>::const_iterator name = preset.buildings.begin(); name != preset.buildings.end(); ++name) {
 			if (*name == building_list[i]->get_name()) {
 				if (first < 0) {
 					first = (sint32)i;
@@ -293,80 +184,28 @@ void citybuilding_edit_frame_t::load_preset()
 		}
 	}
 	if (first < 0) scl.set_selection(-1);
+	restoring_preset = true;
 	change_item_info(first);
+	restoring_preset = false;
 	cbuffer_t message;
-	message.printf(translator::translate("Preset loaded: %u / %u buildings selected"), selected, (uint32)presets[preset_index].buildings.size());
+	message.printf(translator::translate("Preset loaded: %u / %u buildings selected"), selected, (uint32)preset.buildings.size());
 	create_win(new news_img(message.get_str()), w_time_delete, magic_none);
 }
 
 void citybuilding_edit_frame_t::save_preset()
 {
-	std::string name = preset_name_input.get_text();
-	const std::string::size_type begin = name.find_first_not_of(" \t");
-	const std::string::size_type end = name.find_last_not_of(" \t");
-	if (begin == std::string::npos) {
-		create_win(new news_img(translator::translate("Preset name is required.")), w_time_delete, magic_none);
-		return;
-	}
-	name = name.substr(begin, end - begin + 1);
-	vector_tpl<sint32> selections = scl.get_selections();
-	if (selections.empty()) {
-		create_win(new news_img(translator::translate("Please choose buildings first.")), w_time_delete, magic_none);
-		return;
-	}
 	citybuilding_preset_t preset;
-	preset.name = name;
+	vector_tpl<sint32> selections = scl.get_selections();
 	for (uint32 i = 0; i < selections.get_count(); ++i) {
 		if (selections[i] >= 0 && (uint32)selections[i] < building_list.get_count()) preset.buildings.push_back(building_list[selections[i]]->get_name());
 	}
-	sint32 index = -1;
-	for (uint32 i = 0; i < presets.get_count(); ++i) if (presets[i].name == preset.name) { index = (sint32)i; break; }
-	if (index >= 0) {
-		show_preset_confirmation(citybuilding_preset_confirm_t::overwrite, preset);
+	if (preset.buildings.empty()) {
+		create_win(new news_img(translator::translate("Please choose buildings first.")), w_time_delete, magic_none);
 		return;
 	}
-	commit_preset_save(preset, false);
-}
-
-void citybuilding_edit_frame_t::commit_preset_save(const citybuilding_preset_t &preset, bool require_existing)
-{
-	sint32 index = -1;
-	for (uint32 i = 0; i < presets.get_count(); ++i) if (presets[i].name == preset.name) { index = (sint32)i; break; }
-	if (require_existing && index < 0) return;
-	vector_tpl<citybuilding_preset_t> updated = presets;
-	if (index >= 0) updated[index] = preset; else { index = (sint32)updated.get_count(); updated.append(preset); }
-	if (!citybuilding_preset_save(updated)) {
-		create_win(new news_img(translator::translate("Could not save building presets.")), w_time_delete, magic_none);
-		return;
-	}
-	presets.clear();
-	for (uint32 i = 0; i < updated.get_count(); ++i) presets.append(updated[i]);
-	refresh_preset_list(index);
-	create_win(new news_img(translator::translate("Building preset saved.")), w_time_delete, magic_none);
-}
-
-void citybuilding_edit_frame_t::delete_preset()
-{
-	const sint32 index = cb_preset.get_selection();
-	if (index < 0 || (uint32)index >= presets.get_count()) return;
-	show_preset_confirmation(citybuilding_preset_confirm_t::remove, presets[index]);
-}
-
-void citybuilding_edit_frame_t::commit_preset_delete(const std::string &name)
-{
-	sint32 index = -1;
-	for (uint32 i = 0; i < presets.get_count(); ++i) if (presets[i].name == name) { index = (sint32)i; break; }
-	if (index < 0) return;
-	vector_tpl<citybuilding_preset_t> updated = presets;
-	updated.remove_at(index);
-	if (!citybuilding_preset_save(updated)) {
-		create_win(new news_img(translator::translate("Could not save building presets.")), w_time_delete, magic_none);
-		return;
-	}
-	presets.clear();
-	for (uint32 i = 0; i < updated.get_count(); ++i) presets.append(updated[i]);
-	refresh_preset_list(index < (sint32)presets.get_count() ? index : index - 1);
-	create_win(new news_img(translator::translate("Building preset deleted.")), w_time_delete, magic_none);
+	destroy_win(magic_citybuilding_preset_confirm);
+	destroy_win(magic_citybuilding_preset_file);
+	create_win(new citybuilding_preset_frame_t(this, false, preset), w_info, magic_citybuilding_preset_file);
 }
 // put item in list according to filter/sorter
 void citybuilding_edit_frame_t::put_item_in_list( const building_desc_t* desc )
@@ -462,24 +301,13 @@ bool citybuilding_edit_frame_t::action_triggered( gui_action_creator_t *comp,val
 	else if(  comp==&name_filter_input  ) {
 		fill_list();
 	}
-	else if (comp == &cb_preset) {
-		const sint32 selection = cb_preset.get_selection();
-		const bool valid_selection = selection >= 0 && (uint32)selection < presets.get_count();
-		bt_preset_load.enable(valid_selection);
-		bt_preset_delete.enable(valid_selection);
-		if (valid_selection) {
-			strncpy(preset_name_value, presets[selection].name.c_str(), sizeof(preset_name_value) - 1);
-			preset_name_value[sizeof(preset_name_value) - 1] = 0;
-		}
-	}
 	else if (comp == &bt_preset_load) {
-		load_preset();
+		destroy_win(magic_citybuilding_preset_confirm);
+		destroy_win(magic_citybuilding_preset_file);
+		create_win(new citybuilding_preset_frame_t(this, true, citybuilding_preset_t()), w_info, magic_citybuilding_preset_file);
 	}
 	else if (comp == &bt_preset_save) {
 		save_preset();
-	}
-	else if (comp == &bt_preset_delete) {
-		delete_preset();
 	}
 	else if(  comp==&bt_ind  ) {
 		bt_ind.pressed ^= 1;
@@ -529,6 +357,8 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 				buf.append("\n");
 			}
 
+			// Keep the rotation setting when restoring a preset.
+			const uint8 previous_rotation = get_rotation();
 			// reset combobox
 			cb_rotation.clear_elements();
 			cb_rotation.new_component<gui_rotation_item_t>(gui_rotation_item_t::random);
@@ -541,6 +371,21 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 			}
 			else {
 				cb_rotation.set_selection(2);
+			}
+			if (restoring_preset) {
+				bool found = false;
+				for (sint32 i = 0; i < cb_rotation.count_elements(); ++i) {
+					gui_rotation_item_t *item = dynamic_cast<gui_rotation_item_t *>(cb_rotation.get_element(i));
+					if (item && (uint8)item->get_rotation() == previous_rotation) {
+						cb_rotation.set_selection(i);
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					cb_rotation.new_component<gui_rotation_item_t>(previous_rotation);
+					cb_rotation.set_selection(cb_rotation.count_elements() - 1);
+				}
 			}
 		}
 
@@ -568,8 +413,10 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 		}
 		buf.clear();
 		building_image.init(NULL, 0);
-		cb_rotation.clear_elements();
-		cb_rotation.new_component<gui_rotation_item_t>(gui_rotation_item_t::random);
+		if (!restoring_preset) {
+			cb_rotation.clear_elements();
+			cb_rotation.new_component<gui_rotation_item_t>(gui_rotation_item_t::random);
+		}
 	}
 	info_text.recalc_size();
 	reset_min_windowsize();

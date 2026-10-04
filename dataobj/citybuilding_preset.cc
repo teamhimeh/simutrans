@@ -13,11 +13,6 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-static std::string preset_path(const char *filename)
-{
-	return env_t::pak_dir + "config/" + filename;
-}
-
 static std::string tab_escape(const std::string &value)
 {
 	std::string result;
@@ -61,76 +56,59 @@ static std::string tab_unescape(const char *value)
 	return result;
 }
 
-void citybuilding_preset_load(vector_tpl<citybuilding_preset_t> &out)
+bool citybuilding_preset_load(const std::string &path, citybuilding_preset_t &out)
 {
-	out.clear();
 	tabfile_t file;
-	const std::string path = preset_path("citybuilding_presets.tab");
-	if (!file.open(path.c_str())) {
-		return;
-	}
-
+	if (!file.open(path.c_str())) return false;
 	tabfileobj_t obj;
-	while (file.read(obj)) {
-		const char *raw_name = obj.get("name");
-		if (!*raw_name) {
-			continue;
-		}
-		citybuilding_preset_t preset;
-		preset.name = tab_unescape(raw_name);
-		char key[32];
-		for (int i = 0; ; ++i) {
-			snprintf(key, sizeof(key), "building[%d]", i);
-			const char *building = obj.get(key);
-			if (!*building) break;
-			preset.buildings.push_back(tab_unescape(building));
-		}
-		if (preset.buildings.empty()) {
-			dbg->warning("citybuilding_preset_load", "Preset \"%s\" has no buildings.", preset.name.c_str());
-			continue;
-		}
-		bool replaced = false;
-		for (uint32 i = 0; i < out.get_count(); ++i) {
-			if (out[i].name == preset.name) {
-				out[i] = preset;
-				replaced = true;
-				break;
-			}
-		}
-		if (!replaced) out.append(preset);
+	if (!file.read(obj)) return false;
+	citybuilding_preset_t preset;
+	preset.name = tab_unescape(obj.get("name"));
+	if (preset.name.empty()) return false;
+	char key[32];
+	for (int i = 0; ; ++i) {
+		snprintf(key, sizeof(key), "building[%d]", i);
+		const char *building = obj.get(key);
+		if (!*building) break;
+		preset.buildings.push_back(tab_unescape(building));
 	}
+	if (preset.buildings.empty() || file.read(obj)) return false;
+	out = preset;
+	return true;
 }
 
-bool citybuilding_preset_save(const vector_tpl<citybuilding_preset_t> &presets)
+bool citybuilding_preset_save(const std::string &path, const citybuilding_preset_t &preset)
 {
-	const std::string config_dir = env_t::pak_dir + "config/";
-	if (dr_mkdir(config_dir.c_str()) != 0) {
+	const std::string preset_dir = env_t::pak_dir + "building_preset/";
+	if (dr_mkdir(preset_dir.c_str()) != 0) {
 		struct stat info;
-		if (dr_stat(config_dir.c_str(), &info) != 0) {
+		if (dr_stat(preset_dir.c_str(), &info) != 0 || (info.st_mode & S_IFMT) != S_IFDIR) {
 			return false;
 		}
 	}
 
-	const std::string path = preset_path("citybuilding_presets.tab");
-	const std::string temporary = preset_path("citybuilding_presets.tab.tmp");
+	const std::string temporary = path + ".tmp";
 	FILE *file = dr_fopen(temporary.c_str(), "wb");
 	if (!file) return false;
 
-	for (uint32 i = 0; i < presets.get_count(); ++i) {
-		if (i > 0) fputs("---\n", file);
-		fprintf(file, "name=%s\n", tab_escape(presets[i].name).c_str());
-		for (uint32 j = 0; j < presets[i].buildings.size(); ++j) {
-			fprintf(file, "building[%u]=%s\n", j, tab_escape(presets[i].buildings[j]).c_str());
-		}
+	fprintf(file, "name=%s\n", tab_escape(preset.name).c_str());
+	for (uint32 j = 0; j < preset.buildings.size(); ++j) {
+		fprintf(file, "building[%u]=%s\n", j, tab_escape(preset.buildings[j]).c_str());
 	}
-	if (fclose(file) != 0) {
+	const bool write_failed = ferror(file) != 0;
+	if (fclose(file) != 0 || write_failed) {
 		dr_remove(temporary.c_str());
 		return false;
 	}
-	const std::string backup = preset_path("citybuilding_presets.tab.bak");
-	FILE *existing = dr_fopen(path.c_str(), "rb");
-	const bool has_existing = existing != NULL;
-	if (existing) fclose(existing);
+	const std::string backup = path + ".bak";
+	struct stat existing;
+	const bool has_existing = dr_stat(path.c_str(), &existing) == 0;
+	struct stat backup_info;
+	if (has_existing && dr_stat(backup.c_str(), &backup_info) == 0) {
+		// Preserve a backup left by an interrupted or failed replacement.
+		dr_remove(temporary.c_str());
+		return false;
+	}
 	if (has_existing && dr_rename(path.c_str(), backup.c_str()) != 0) {
 		dr_remove(temporary.c_str());
 		return false;

@@ -971,3 +971,11 @@ Overwrite
 上書き
 Delete preset "%s"?
 プリセット「%s」を削除しますか？
+Load a building preset file.
+ファイルから建物の選択状態を復元します。
+Save the selected buildings to a preset file.
+現在選択している建物をプリセットファイルに保存します。
+Invalid building preset filename.
+プリセットのファイル名が無効です。
+Could not load building preset.
+建築物プリセットを読み込めませんでした。

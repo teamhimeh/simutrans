@@ -92,6 +92,7 @@ target_sources(simutrans PRIVATE
 		gui/baum_edit.cc
 		gui/city_info.cc
 		gui/citybuilding_edit.cc
+		gui/citybuilding_preset_frame.cc
 		gui/citylist_frame_t.cc
 		gui/citylist_stats_t.cc
 		gui/climates.cc

@@ -130,6 +130,7 @@ enum magic_numbers {
 	magic_groundobj_edit,
 	magic_depot_picker,
 	magic_citybuilding_preset_confirm,
+	magic_citybuilding_preset_file,
 	magic_max
 };
 
