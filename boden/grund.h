@@ -675,6 +675,20 @@ public:
 	bool has_two_ways() const { return flags&has_way2; }
 
 	/**
+	* true when both way slots hold the SAME waytype, i.e. two disjoint diagonal legs
+	* (see weg_erweitern()). Unlike has_two_ways(), this is false for tram-on-road,
+	* level crossings and other tiles shared by two different waytypes.
+	*/
+	bool has_two_same_waytype_ways() const {
+		if(  !has_two_ways()  ) {
+			return false;
+		}
+		const weg_t *w0 = get_weg_nr(0);
+		const weg_t *w1 = get_weg_nr(1);
+		return w0  &&  w1  &&  w0->get_waytype()==w1->get_waytype();
+	}
+
+	/**
 	* Like get_weg(typ), but when two ways of the SAME waytype coexist on this tile
 	* (disjoint diagonal legs, see grund_t::weg_erweitern()), disambiguates by which one's
 	* ribi actually contains the single direction bit @p dir - the two legs are never

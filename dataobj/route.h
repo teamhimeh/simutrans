@@ -36,6 +36,11 @@ private:
 
 	koord3d_vector_t route;           // The coordinates for the vehicle route
 
+	/// heading with which the start tile was entered, used by the running search and set from
+	/// next_start_heading (see set_start_heading())
+	ribi_t::ribi start_heading = ribi_t::none;
+	ribi_t::ribi next_start_heading = ribi_t::none;
+
 	void postprocess_water_route(karte_t *welt);
 
 	static inline uint32 calc_distance( const koord3d &p1, const koord3d &target )
@@ -151,6 +156,13 @@ public:
 	 * @param max_depth is the maximum length of a route
 	 */
 	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, const bool length_based = false, bool coupling = false, const uint8 choose_margin=0, const bool ignore_length=false );
+
+	/**
+	 * The heading with which the start tile of the next calc_route() was entered. It tells on
+	 * which leg a route starts on a tile with two same-waytype disjoint diagonal legs (without
+	 * it both legs are tried). Applies to the next calc_route() only.
+	 */
+	void set_start_heading(ribi_t::ribi heading) { next_start_heading = heading; }
 
 	/**
 	 * Calculates the route from @p start to @p target

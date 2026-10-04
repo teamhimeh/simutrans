@@ -418,6 +418,7 @@ void convoi_detail_t::update_labels()
 				if(  d.is_bound()  ) {
 					label_shipping_list.buf().printf( " %s %s", translator::translate("to"), d->get_name() );
 				}
+				label_shipping_list.buf().printf("\n");
 			}
 		}
 		label_shipping.update();
