@@ -86,7 +86,7 @@ int main(int argc, char **argv)
 	env_t::pak_dir = root.u8string() + "/";
 	fs::create_directory(root / "building_preset");
 	const std::string prefix = env_t::pak_dir + "building_preset/";
-	const std::string valid = "name=old\nbuilding[0]=COM_00_01\n";
+	const std::string valid = "building[0]=COM_00_01\n";
 	int count = 0;
 	for (int target = 0; target < 3; ++target) {
 		for (int backup = 0; backup < 3; ++backup) {
@@ -119,11 +119,20 @@ int main(int argc, char **argv)
 	require(citybuilding_preset_recover(path, &archived) == CITYBUILDING_PRESET_RECOVERED);
 	require(archived == path + ".corrupt.2");
 	citybuilding_preset_t loaded;
-	require(citybuilding_preset_load(path, loaded) && loaded.name == "old");
+	require(citybuilding_preset_load(path, loaded) && loaded.name.empty() && loaded.buildings[0] == "COM_00_01");
 	loaded.name = u8"日本語%<>";
+	loaded.buildings.push_back(u8"建物%<>\r\n");
 	require(citybuilding_preset_save(path, loaded));
 	citybuilding_preset_t roundtrip;
-	require(citybuilding_preset_load(path, roundtrip) && roundtrip.name == loaded.name);
+	require(citybuilding_preset_load(path, roundtrip) && roundtrip.name.empty() && roundtrip.buildings == loaded.buildings);
+	std::ifstream saved(native(path), std::ios::binary);
+	const std::string contents((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
+	require(contents.find("name=") == std::string::npos);
+	saved.close();
+	put(path, "name=ignored\n" + valid);
+	require(citybuilding_preset_load(path, roundtrip) && roundtrip.name.empty() && roundtrip.buildings[0] == "COM_00_01");
+	put(path, "name=ignored\n");
+	require(!citybuilding_preset_load(path, roundtrip));
 	for (int fault = 0; fault < 4; ++fault) {
 		path = prefix + "fault" + std::to_string(fault) + ".tab";
 		put(path, "invalid"); put(path + ".bak", valid); put(path + ".tmp", "partial");
@@ -136,7 +145,7 @@ int main(int argc, char **argv)
 		if (fault != 1) require(fs::exists(native(path + ".bak")));
 		fail_stat.clear(); fail_remove.clear(); fail_rename.clear();
 		require(citybuilding_preset_recover(path) == CITYBUILDING_PRESET_RECOVERED);
-		require(citybuilding_preset_load(path, loaded) && loaded.name == "old");
+		require(citybuilding_preset_load(path, loaded) && loaded.buildings[0] == "COM_00_01");
 	}
 	path = prefix + "directory.tab";
 	fs::create_directory(native(path)); put(path + ".tmp", "partial");
@@ -163,13 +172,13 @@ int main(int argc, char **argv)
 	fail_open = path + ".tmp";
 	require(!citybuilding_preset_save(path, loaded));
 	fail_open.clear();
-	require(citybuilding_preset_load(path, loaded) && loaded.name == "old");
+	require(citybuilding_preset_load(path, loaded) && loaded.buildings[0] == "COM_00_01");
 	env_t::pak_dir = (root / "new-pak").u8string() + "/";
 	fs::create_directory(native(env_t::pak_dir));
 	path = env_t::pak_dir + "building_preset/new.tab";
 	require(citybuilding_preset_recover(path) == CITYBUILDING_PRESET_UNCHANGED);
 	require(citybuilding_preset_save(path, loaded));
-	require(citybuilding_preset_load(path, roundtrip) && roundtrip.name == loaded.name);
+	require(citybuilding_preset_load(path, roundtrip) && roundtrip.buildings == loaded.buildings);
 	std::cout << "PASS: 18 recovery states, quarantine collision, Japanese roundtrip, 4 injected failures and retry, non-regular target\n";
 	std::cout << "PASS: rollback failure and retry, backup removal failure, write failure preservation, missing directory/new save\n";
 }

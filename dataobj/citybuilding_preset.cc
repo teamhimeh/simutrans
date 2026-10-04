@@ -64,8 +64,6 @@ static bool read_preset(const std::string &path, citybuilding_preset_t &out)
 	tabfileobj_t obj;
 	if (!file.read(obj)) return false;
 	citybuilding_preset_t preset;
-	preset.name = tab_unescape(obj.get("name"));
-	if (preset.name.empty()) return false;
 	char key[32];
 	for (int i = 0; ; ++i) {
 		snprintf(key, sizeof(key), "building[%d]", i);
@@ -145,7 +143,6 @@ bool citybuilding_preset_save(const std::string &path, const citybuilding_preset
 	FILE *file = dr_fopen(temporary.c_str(), "wb");
 	if (!file) return false;
 
-	fprintf(file, "name=%s\n", tab_escape(preset.name).c_str());
 	for (uint32 j = 0; j < preset.buildings.size(); ++j) {
 		fprintf(file, "building[%u]=%s\n", j, tab_escape(preset.buildings[j]).c_str());
 	}

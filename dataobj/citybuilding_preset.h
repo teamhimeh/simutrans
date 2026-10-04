@@ -12,7 +12,7 @@
 #include "../tpl/vector_tpl.h"
 
 struct citybuilding_preset_t {
-	std::string name;
+	std::string name; // GUI filename/confirmation only; not stored in the tab file.
 	std::vector<std::string> buildings;
 };
 
