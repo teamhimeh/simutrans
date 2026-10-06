@@ -110,6 +110,9 @@ public:
 
 	/// enter server ip
 	static char newserver_name[2048];
+	/// Load/save the address in the active pakset's config directory.
+	static void load_server_address();
+	static void save_server_address();
 
 	/// @} end of Network-related settings
 

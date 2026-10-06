@@ -133,6 +133,7 @@ private:
 
 public:
 	server_frame_t();
+	~server_frame_t();
 
 	void draw(scr_coord pos, scr_size size) OVERRIDE;
 

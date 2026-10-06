@@ -72,6 +72,32 @@ bool env_t::pause_server_no_clients = false;
 
 char env_t::newserver_name[2048] = "";
 
+void env_t::load_server_address()
+{
+	newserver_name[0] = '\0';
+	const std::string path = pak_dir + "config/last-server.txt";
+	if(  FILE *f = dr_fopen(path.c_str(), "r")  ) {
+		if(  fgets(newserver_name, sizeof(newserver_name), f)  ) {
+			newserver_name[strcspn(newserver_name, "\r\n")] = '\0';
+		}
+		fclose(f);
+	}
+}
+
+void env_t::save_server_address()
+{
+	const std::string path = pak_dir + "config/last-server.txt";
+	FILE *f = dr_fopen(path.c_str(), "w");
+	if(  !f  ) {
+		dbg->warning("env_t::save_server_address", "Cannot write %s", path.c_str());
+		return;
+	}
+	const bool written = fprintf(f, "%s\n", newserver_name) >= 0;
+	if(  fclose(f) != 0  ||  !written  ) {
+		dbg->warning("env_t::save_server_address", "Failed to write %s", path.c_str());
+	}
+}
+
 std::string env_t::nickname = "";
 
 // this is explicitly and interactively set by user => we do not touch it on init
@@ -637,14 +663,10 @@ void env_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->get_OTRP_version()>=44  ) {
-		char buf[2048];
-		strncpy(buf, newserver_name, 2048);
+		// Preserve the settings layout with an empty address field.
+		// The address is stored in pak_dir/config/last-server.txt instead.
+		char buf[2048] = "";
 		file->rdwr_str(buf, 2048);
-		if(  file->is_loading()  &&  strlen(newserver_name)==0  ) {
-			// If the server name is already set in simu_main, do not restore the server name.
-			// TODO: copy the buf string into newserver_name after resolving the UI blocking issue on server_frame_t.
-			// strncpy(new_server_name, buf, 2048);
-		}
 	}
 	if(  file->get_OTRP_version()>=52  ) {
 		file->rdwr_bool(show_line_colors);
