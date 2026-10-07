@@ -72,7 +72,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 	button_t bt_extract_schedule_settings, bt_extract_loading_settings, bt_extract_driving_settings;
 	button_t bt_find_parent, bt_wait_for_child, bt_reset_coupling; // convoy coupling
 	button_t bt_wait_for_other_convoy, bt_wait_allow_convoy_depart; // wait for departure allowance granted by another convoy
-	button_t bt_no_go_no_users;
+	button_t bt_no_go_no_users_section_start, bt_no_go_no_users_section_end;
 	// convoy shipping: carrier side (water schedules) and carried side (land schedules)
 	button_t bt_start_shipped;
 	button_t bt_wait_full_load;
