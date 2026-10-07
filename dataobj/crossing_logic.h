@@ -79,8 +79,8 @@ public:
 	// static routines from here
 private:
 	static slist_tpl<const crossing_desc_t *> list;
-	// save all desc' only for waytype0 < waytype1
-	static minivec_tpl<const crossing_desc_t *> can_cross_array[36];
+	// save all desc' only for waytype0 < waytype1 (ordinals 0..9, air_wt included as ordinal 9)
+	static minivec_tpl<const crossing_desc_t *> can_cross_array[45];
 
 public:
 	static void register_desc(crossing_desc_t *desc);
