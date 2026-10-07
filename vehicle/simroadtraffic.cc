@@ -218,7 +218,7 @@ void road_user_t::rdwr(loadsave_t *file)
 	weg_next &= 65535;
 }
 
-void road_user_t::finish_rd()
+void road_user_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	calc_height(NULL);
 	calc_image();
@@ -583,7 +583,7 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 	{
 		const grund_t *gr_current = welt->lookup(get_pos());
 		const roadsign_t *rs_cur = gr_current ? gr_current->find<roadsign_t>() : NULL;
-		if(  rs_cur  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
+		if(  rs_cur  &&  rs_cur->get_governed_waytype() == road_wt  &&  rs_cur->get_desc()->is_single_way()  &&  rs_cur->is_detailed_oneway()  ) {
 			const ribi_t::ribi entry_ribi = ribi_type(pos_prev, get_pos());
 			if(  !(rs_cur->get_detailed_oneway_out_ribi(entry_ribi) & current_direction90)  ) {
 				// Allow U-turn: when find_destination routes the car back because all
@@ -604,7 +604,7 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 	// side road -> main road from passing lane side: vehicle should enter passing lane on main road.
 	next_lane = 0;
 	if(  str->get_overtaking_mode() <= oneway_mode  ) {
-		const strasse_t* str_next = (strasse_t*)(welt->lookup(pos_next)->get_weg(road_wt));
+		const strasse_t* str_next = strasse_at( pos_next );
 		const bool left_driving = welt->get_settings().is_drive_left();
 		if(current_str && str_next && current_str->get_overtaking_mode() > oneway_mode  && str_next->get_overtaking_mode() <= oneway_mode) {
 			if(  (!left_driving  &&  ribi_t::rotate90l(get_90direction()) == calc_direction(pos_next,pos_next_next))  ||  (left_driving  &&  ribi_t::rotate90(get_90direction()) == calc_direction(pos_next,pos_next_next))  ) {
@@ -1108,6 +1108,12 @@ void private_car_t::enter_tile(grund_t* gr)
 	vehicle_base_t::enter_tile(gr);
 	calc_disp_lane();
 	strasse_t* str = (strasse_t*) gr->get_weg(road_wt);
+	if(  str==NULL  ) {
+		// the tile we just entered carries no road (it can be removed under a moving car):
+		// there is nothing to book and no overtaking mode to obey, and the car is doomed anyway
+		time_to_life = 0;
+		return;
+	}
 	str->book(1, WAY_STAT_CONVOIS, enter_direction);
 	update_tiles_overtaking();
 	if(  next_lane==1  ) {
@@ -1198,7 +1204,7 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 	ribi_t::ribi ribi = (weg->get_ribi() & (~ribi_t::backward(direction90)));
 	if(  direction90 != ribi_t::none  ) {
 		const roadsign_t *rs_sign = gr->find<roadsign_t>();
-		if(  rs_sign  &&  rs_sign->get_desc()->is_single_way()  &&  rs_sign->is_detailed_oneway()  ) {
+		if(  rs_sign  &&  rs_sign->get_governed_waytype() == road_wt  &&  rs_sign->get_desc()->is_single_way()  &&  rs_sign->is_detailed_oneway()  ) {
 			ribi = gr->get_weg_ribi_unmasked(road_wt) & rs_sign->get_detailed_oneway_out_ribi(direction90) & (~ribi_t::backward(direction90));
 		}
 	}
@@ -1256,7 +1262,7 @@ koord3d private_car_t::find_destination(uint8 target_index) {
 				// is blocked, causing a U-turn from the far edge of the tile.
 				if(  w->has_sign()  ) {
 					const roadsign_t *rs_to = to->find<roadsign_t>();
-					if(  rs_to  &&  rs_to->get_desc()->is_single_way()  &&  rs_to->is_detailed_oneway()  ) {
+					if(  rs_to  &&  rs_to->get_governed_waytype() == road_wt  &&  rs_to->get_desc()->is_single_way()  &&  rs_to->is_detailed_oneway()  ) {
 						const ribi_t::ribi entry_at_to = ribi_t::nesw[r];
 						const ribi_t::ribi allowed = rs_to->get_detailed_oneway_out_ribi(entry_at_to)
 						                             & w->get_ribi_unmasked()
@@ -1841,7 +1847,7 @@ vehicle_base_t* private_car_t::is_there_car (grund_t *gr) const
 	assert(  gr  );
 	// this function cannot process vehicles on twoway and related mode road.
 	const strasse_t* str = (strasse_t *)gr->get_weg(road_wt);
-	if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode)  ) {
+	if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode  &&  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode)  ) {
 		return NULL;
 	}
 	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
@@ -2018,7 +2024,7 @@ bool private_car_t::is_rerouting_needed() const{
 	// With ribi_maske=0 the normal ribi check above never catches this for 3-way junctions.
 	{
 		const roadsign_t *rs_n = gr_n ? gr_n->find<roadsign_t>() : NULL;
-		if(  rs_n  &&  rs_n->get_desc()->is_single_way()  &&  rs_n->is_detailed_oneway()  ) {
+		if(  rs_n  &&  rs_n->get_governed_waytype() == road_wt  &&  rs_n->get_desc()->is_single_way()  &&  rs_n->is_detailed_oneway()  ) {
 			const ribi_t::ribi entry_at_n = ribi_type(get_pos(), pos_next);
 			if(  !(rs_n->get_detailed_oneway_out_ribi(entry_at_n) & dir)  ) {
 				return true;

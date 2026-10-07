@@ -39,6 +39,9 @@ private:
 	gui_scrollpane_t scrolly;
 
 	gui_label_buf_t label_power, label_odometer, label_resale, label_length, label_speed, label_max_speed_kmh_of_convoi, label_balance_speed_kmh;
+	// convoy shipping: what this convoy carries, or which convoy carries it
+	gui_label_buf_t label_shipping, label_shipping_list;
+	button_t show_carrier_button;
 
 	convoihandle_t cnv;
 	button_t sale_button;

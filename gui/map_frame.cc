@@ -11,6 +11,7 @@
 #include "map_frame.h"
 
 #include "simwin.h"
+#include "messagebox.h"
 #include "../sys/simsys.h"
 
 #include "../simworld.h"
@@ -176,7 +177,7 @@ map_frame_t::map_frame_t() :
 	set_table_layout(1,0);
 
 	// first row of controls
-	add_table(3,1);
+	add_table(4,1);
 	{
 		// first row of controls
 		// selections button
@@ -196,6 +197,12 @@ map_frame_t::map_frame_t() :
 		b_show_scale.set_tooltip("Shows the color code for several selections.");
 		b_show_scale.add_listener(this);
 		add_component(&b_show_scale);
+
+		// export the complete map with the current display settings
+		b_export_map.init(button_t::roundbox, "Export map");
+		b_export_map.set_tooltip("Export the entire map with the current display settings.");
+		b_export_map.add_listener(this);
+		add_component(&b_export_map);
 	}
 	end_table();
 
@@ -489,6 +496,12 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 	}
 	else if(  comp == &b_show_directory  ) {
 		show_hide_directory( !b_show_directory.pressed );
+	}
+	else if(  comp == &b_export_map  ) {
+		std::string filename;
+		const char *message = minimap_t::get_instance()->export_to_png(filename) ?
+			"Map image exported to the screenshot folder." : "Map image export failed.";
+		create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
 	}
 	else if(  comp == &c_show_outlines  ) {
 		if( v.i == 2 ) {

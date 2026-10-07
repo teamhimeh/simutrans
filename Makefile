@@ -23,10 +23,11 @@ HOSTCXX ?=$(CXX)
 SDL_CONFIG       ?= sdl-config
 SDL2_CONFIG      ?= pkg-config sdl2
 #SDL2_CONFIG     ?= sdl2-config
+SDL3_CONFIG      ?= pkg-config sdl3
 FREETYPE_CONFIG  ?= pkg-config freetype2
 #FREETYPE_CONFIG ?= freetype-config
 
-BACKENDS  := gdi sdl sdl2 mixer_sdl mixer_sdl2 posix
+BACKENDS  := gdi sdl sdl2 sdl3 mixer_sdl mixer_sdl2 posix
 OSTYPES   := amiga beos freebsd haiku linux mac mingw openbsd
 
 
@@ -85,6 +86,8 @@ endif
 
 ifeq ($(BACKEND),sdl2)
   SOURCES += sys/clipboard_s2.cc
+else ifeq ($(BACKEND),sdl3)
+  SOURCES += sys/clipboard_s3.cc
 else ifeq ($(OSTYPE),mingw)
   SOURCES += sys/clipboard_w32.cc
 else
@@ -734,6 +737,46 @@ ifeq ($(BACKEND),sdl2)
       SDL_LDFLAGS := $(shell $(SDL2_CONFIG) --static --libs)
     else
       SDL_LDFLAGS := $(shell $(SDL2_CONFIG) --libs)
+    endif
+  endif
+  CFLAGS += $(SDL_CFLAGS)
+  LIBS   += $(SDL_LDFLAGS)
+endif
+
+ifeq ($(BACKEND),sdl3)
+  SOURCES += sys/simsys_s3.cc
+  SOURCES += sound/sdl3_sound.cc
+  ifneq ($(shell expr $(USE_FLUIDSYNTH_MIDI) \>= 1), 1)
+    ifeq ($(OSTYPE),mac)
+      AV_FOUNDATION ?= 0
+      ifeq ($(shell expr $(AV_FOUNDATION) \>= 1), 1)
+        SOURCES += music/AVF_core-audio_midi.mm
+        LIBS    += -framework Foundation -framework AVFoundation
+      else
+        SOURCES += music/core-audio_midi.mm
+        LIBS    += -framework Foundation -framework QTKit
+      endif
+    else ifneq ($(OSTYPE),mingw)
+      SOURCES += music/no_midi.cc
+    else
+      SOURCES += music/w32_midi.cc
+    endif
+  endif
+
+  ifeq ($(SDL3_CONFIG),)
+    ifeq ($(OSTYPE),mac)
+      SDL_CFLAGS  := -F /Library/Frameworks -I/Library/Frameworks/SDL3.framework/Headers
+      SDL_LDFLAGS := -framework SDL3 -F /Library/Frameworks
+    else
+      SDL_CFLAGS  := -I$(MINGDIR)/include
+      SDL_LDFLAGS := -lSDL3
+    endif
+  else
+    SDL_CFLAGS    := $(shell $(SDL3_CONFIG) --cflags)
+    ifeq ($(shell expr $(STATIC) \>= 1), 1)
+      SDL_LDFLAGS := $(shell $(SDL3_CONFIG) --static --libs)
+    else
+      SDL_LDFLAGS := $(shell $(SDL3_CONFIG) --libs)
     endif
   endif
   CFLAGS += $(SDL_CFLAGS)

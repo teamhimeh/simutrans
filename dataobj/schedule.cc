@@ -92,7 +92,6 @@ bool schedule_t::is_stop_allowed(const grund_t *gr) const
  */
 halthandle_t schedule_t::get_next_halt( player_t *player, halthandle_t halt ) const
 {
-	dbg->message("schedule_t::get_next_halt","lets search the next stop");
 	if(  entries.get_count()>1  ) {
 		for(  uint i=1;  i < entries.get_count();  i++  ) {
 			halthandle_t h = haltestelle_t::get_stoppable_halt( entries[ (current_stop+i) % entries.get_count() ].pos, player, get_waytype() );
@@ -813,6 +812,18 @@ void construct_schedule_entry_attributes(cbuffer_t& buf, schedule_entry_t const&
 	}
 	if(  entry.is_wait_for_other_convoy()  ) {
 		str[cnt] = 'O';
+		cnt++;
+	}
+	if(  entry.is_wait_allow_convoy_departure()  ) {
+		str[cnt] = 'o';
+		cnt++;
+	}
+	if(  entry.is_drive_without_reservation()  ) {
+		str[cnt] = 'N';
+		cnt++;
+	}
+	if(  entry.is_start_shipped()  ) {
+		str[cnt] = 'S';
 		cnt++;
 	}
 	// there are at least one attributes.

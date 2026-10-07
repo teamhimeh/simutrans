@@ -145,7 +145,7 @@ void tunnel_t::rdwr(loadsave_t *file)
 }
 
 
-void tunnel_t::finish_rd()
+void tunnel_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	const grund_t *gr = welt->lookup(get_pos());
 	player_t *player=get_owner();

@@ -65,6 +65,7 @@ static const char *cost_type[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 	"Maxspeed",
 	"Road toll",
 	"Freight ton-kilo",
+	"Distance (m)",
 	"Avg. density" // not recorded in financial_history
 };
 
@@ -80,6 +81,7 @@ const uint8 cost_type_color[schedule_list_gui_t::MAX_LINE_COST_GUI] =
 	COL_MAXSPEED,
 	COL_TOLL,
 	COL_TONKILO,
+	COL_DISTANCE,
 	COL_TRANSPORT_DENSITY // not recorded in financial_history
 };
 
@@ -96,7 +98,8 @@ static uint8 statistic[MAX_LINE_COST] = {
 	LINE_DISTANCE,
 	LINE_MAXSPEED,
 	LINE_WAYTOLL,
-	LINE_TONKILO
+	LINE_TONKILO,
+	LINE_DISTANCE_METERS
 };
 
 static uint8 statistic_type[MAX_LINE_COST] = {
@@ -109,6 +112,7 @@ static uint8 statistic_type[MAX_LINE_COST] = {
 	STANDARD,
 	STANDARD,
 	MONEY,
+	STANDARD,
 	STANDARD
 };
 
@@ -395,7 +399,7 @@ schedule_list_gui_t::schedule_list_gui_t(player_t *player_) :
 	bt_show_route_cache.init(button_t::roundbox_state, "Show Route Cache",
 		scr_coord(RIGHT_COLUMN_OFFSET+D_BUTTON_WIDTH+D_H_SPACE, bt_y+D_BUTTON_HEIGHT+D_V_SPACE),
 		scr_size(D_BUTTON_WIDTH, D_BUTTON_HEIGHT));
-	bt_show_route_cache.set_tooltip("Show tiles of this line's cached route.");
+	bt_show_route_cache.set_tooltip("Show tiles of this line's route on the map and minimap.");
 	bt_show_route_cache.set_visible(false);
 	bt_show_route_cache.add_listener(this);
 	bt_show_route_cache.disable();
@@ -720,10 +724,20 @@ void schedule_list_gui_t::draw(scr_coord pos, scr_size size)
 		POP_CLIP();
 	}
 
-	// show route cache update
-	show_route_cache(is_route_cache_show);
-	bt_show_route_cache.pressed = is_route_cache_show;
-	bt_show_route_cache.enable( line.is_bound()  &&  welt->get_settings().is_using_route_cache() );
+	// show route cache update - yield to a whole-schedule route overlay
+	if(  welt->is_schedule_route_active()  ) {
+		if(  is_route_cache_show  ) {
+			is_route_cache_show = false;
+			show_route_cache(false);
+		}
+		bt_show_route_cache.pressed = false;
+		bt_show_route_cache.disable();
+	}
+	else {
+		show_route_cache(is_route_cache_show);
+		bt_show_route_cache.pressed = is_route_cache_show;
+		bt_show_route_cache.enable(  welt->get_settings().is_using_route_cache()  &&  line.is_bound()  &&  line->count_convoys()>0 );
+	}
 }
 
 
@@ -894,7 +908,7 @@ void schedule_list_gui_t::update_lineinfo(linehandle_t new_line)
 		}
 		bt_show_journey_time.enable();
 		bt_goods_waiting_time.enable();
-		bt_show_route_cache.enable( welt->get_settings().is_using_route_cache() );
+		bt_show_route_cache.enable( icnv>0 );
 
 		bt_withdraw_line.pressed = new_line->get_withdraw();
 
@@ -998,47 +1012,60 @@ void schedule_list_gui_t::hide_route_display(void *owner)
 }
 
 
+// clears the ground highlight flags for every tile currently in route_cache_route
+void schedule_list_gui_t::clear_route_tile_flags(route_t &r)
+{
+	for(  uint32 i=0;  i<r.get_count();  i++  ) {
+		if(  grund_t* const gr = welt->lookup(r.at(i))  ) {
+			for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
+				obj_t *obj = gr->obj_bei(idx);
+				obj->clear_flag( obj_t::convoy_way );
+			}
+			gr->set_flag( grund_t::dirty );
+		}
+	}
+}
+
+
 void schedule_list_gui_t::show_route_cache(bool const yesno)
 {
-	if(  !yesno  ||  !line.is_bound()  ||  !welt->get_settings().is_using_route_cache()  ) {
+	if(  !yesno  ||  !line.is_bound()  ) {
 		if(  !route_cache_route.empty()  ) {
-			for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
-				if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
-					for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
-						obj_t *obj = gr->obj_bei(idx);
-						obj->clear_flag( obj_t::convoy_way );
-					}
-					gr->set_flag( grund_t::dirty );
-				}
-			}
+			clear_route_tile_flags(route_cache_route);
 			route_cache_route.clear();
+			minimap_t::get_instance()->clear_highlighted_route();
 		}
 		route_display_t::deactivate(this);
 		return;
 	}
 
-	// collect all currently cached route tiles for this line
+	// this only reads already-computed data (the route cache, or a running
+	// convoy's current route) - no pathfinding here, so it is cheap enough
+	// to redo every draw() call
 	vector_tpl<koord3d> tiles;
-	welt->get_route_cache().get_route_tiles_for_line(line, tiles);
+	if(  welt->get_settings().is_using_route_cache()  ) {
+		welt->get_route_cache().get_route_tiles_for_line(line, tiles);
+	}
+	if(  tiles.empty()  ) {
+		for(  uint32 c=0;  c<line->get_convoys().get_count();  c++  ) {
+			convoihandle_t cnv = line->get_convoy(c);
+			if(  cnv.is_bound()  ) {
+				for(  uint32 i=0;  i<cnv->get_route()->get_count();  i++  ) {
+					tiles.append(cnv->get_route()->at(i));
+				}
+			}
+		}
+	}
 
 	route_display_t::activate(this, &schedule_list_gui_t::hide_route_display);
 
-	// tile count unchanged => assume the cached route is the same and skip the redraw
+	// tile count unchanged => assume the route is the same and skip the redraw
 	if(  tiles.get_count() == route_cache_route.get_count()  ) {
 		return;
 	}
 
-	// clear previously marked tiles before marking the new set
 	if(  !route_cache_route.empty()  ) {
-		for(  uint32 i=0;  i<route_cache_route.get_count();  i++  ) {
-			if(  grund_t* const gr = welt->lookup(route_cache_route.at(i))  ) {
-				for(  uint idx=0;  idx<gr->get_top();  idx++  ) {
-					obj_t *obj = gr->obj_bei(idx);
-					obj->clear_flag( obj_t::convoy_way );
-				}
-				gr->set_flag( grund_t::dirty );
-			}
-		}
+		clear_route_tile_flags(route_cache_route);
 		route_cache_route.clear();
 	}
 
@@ -1058,6 +1085,7 @@ void schedule_list_gui_t::show_route_cache(bool const yesno)
 			}
 		}
 	}
+	minimap_t::get_instance()->set_highlighted_route(route_cache_route.get_route());
 }
 
 

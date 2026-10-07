@@ -489,7 +489,8 @@ public:
 
 	void merge_halt( halthandle_t halt_to_join );
 
-	void change_owner( player_t *player, bool halt_only );
+	// no_cost == true : public undertaking mode : no cost spend
+	void change_owner( player_t *player, bool halt_only, bool no_cost = false );
 
 	vector_tpl<connection_t> const& get_pax_connections()  const { return all_links[goods_manager_t::INDEX_PAS].connections;  }
 	vector_tpl<connection_t> const& get_mail_connections() const { return all_links[goods_manager_t::INDEX_MAIL].connections; }

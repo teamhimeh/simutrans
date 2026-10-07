@@ -95,6 +95,13 @@ public:
 	waytype_t get_finance_waytype() const;
 
 	/**
+	* Maintenance cost scaled by settings_t::maintenance_cost_multiplier_way [%].
+	* Hides obj_desc_transport_related_t::get_maintenance() on purpose, so that
+	* every user of a way_desc_t sees the scaled value.
+	*/
+	sint64 get_maintenance() const;
+
+	/**
 	* returns the system type of this way (mostly used with rails)
 	* @see systemtype_t
 	*/

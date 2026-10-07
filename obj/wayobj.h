@@ -113,7 +113,7 @@ public:
 
 	const char* is_deletable(const player_t *player) OVERRIDE;
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// specific for wayobj
 	void set_dir(ribi_t::ribi d) { dir = d; calc_image(); }

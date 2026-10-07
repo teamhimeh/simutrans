@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include "../simversion.h"
 
 #include "../boden/grund.h"
 #include "../simworld.h"
@@ -188,7 +189,7 @@ const char *wayobj_t::is_deletable(const player_t *player)
 }
 
 
-void wayobj_t::finish_rd()
+void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	// (re)set dir
 	if(dir==dir_unknown) {
@@ -205,14 +206,30 @@ void wayobj_t::finish_rd()
 	// electrify a way if we are a catenary
 	if(desc->is_overhead_line()) {
 		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
-		weg_t *weg = welt->lookup(get_pos())->get_weg(wt);
+		grund_t *gr = welt->lookup(get_pos());
+		weg_t *weg = gr->get_weg(wt, dir);
 		if (wt == any_wt) {
-			weg_t *weg2 = welt->lookup(get_pos())->get_weg_nr(1);
+			weg_t *weg2 = gr->get_weg_nr(1);
 			if (weg2) {
 				weg2->set_electrify(true);
 				if(weg2->get_max_speed()>desc->get_topspeed()) {
 					weg2->set_max_speed(desc->get_topspeed());
 				}
+			}
+		}
+		else if (gr->has_two_ways()) {
+			// two same-waytype disjoint diagonal legs: a catenary built here spans both
+			// (our own dir already covers whichever bits it was built/extended to cover),
+			// so electrify whichever leg(s) our dir actually reaches, not just one
+			weg_t *leg0 = gr->get_weg_nr(0);
+			weg_t *leg1 = gr->get_weg_nr(1);
+			if(  leg0  &&  leg0->get_waytype()==wt  &&  leg0!=weg  &&  (leg0->get_ribi_unmasked() & dir)  ) {
+				leg0->set_electrify(true);
+				leg0->set_max_wayobj_speed(desc->get_topspeed());
+			}
+			if(  leg1  &&  leg1->get_waytype()==wt  &&  leg1!=weg  &&  (leg1->get_ribi_unmasked() & dir)  ) {
+				leg1->set_electrify(true);
+				leg1->set_max_wayobj_speed(desc->get_topspeed());
 			}
 		}
 		if(weg) {
@@ -285,6 +302,16 @@ void wayobj_t::calc_image()
 		if(wt == any_wt) {
 			if (weg_t *sec_w = gr->get_weg_nr(1)) {
 				sec_way_ribi_unmasked = sec_w->get_ribi_unmasked();
+			}
+		}
+		else if (gr->has_two_ways()) {
+			// two same-waytype disjoint diagonal legs: this one wayobj covers both (its dir
+			// mask below is unioned across them, same as the any_wt/powerline case above)
+			weg_t *leg0 = gr->get_weg_nr(0);
+			weg_t *leg1 = gr->get_weg_nr(1);
+			if (leg0 && leg1 && leg0->get_waytype()==wt && leg1->get_waytype()==wt) {
+				w = leg0;
+				sec_way_ribi_unmasked = leg1->get_ribi_unmasked();
 			}
 		}
 
@@ -380,7 +407,7 @@ void wayobj_t::extend_wayobj(koord3d pos, player_t *owner, ribi_t::ribi dir, con
 		// nothing found => make a new one
 		wayobj_t *wo = new wayobj_t(pos,owner,dir,desc);
 		gr->obj_add(wo);
-		wo->finish_rd();
+		wo->finish_rd( OTRP_VERSION_MAJOR );
 		wo->calc_image();
 		wo->mark_image_dirty( wo->get_front_image_test(), 0 );
 		wo->set_flag(obj_t::dirty);

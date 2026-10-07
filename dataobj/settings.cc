@@ -32,6 +32,13 @@
 #define NEVER 0xFFFFU
 
 
+// TODO: define the actual default value for tile_length
+sint32 settings_t::calc_default_tile_length()
+{
+	return 1000;
+}
+
+
 settings_t::settings_t() :
 	filename(""),
 	heightfield("")
@@ -63,6 +70,8 @@ settings_t::settings_t() :
 
 	world_maximum_height = 32;
 	world_minimum_height = -12;
+
+	tile_length = calc_default_tile_length();
 
 	// default climate zones
 	set_default_climates( );
@@ -252,7 +261,13 @@ settings_t::settings_t() :
 
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
+	// convoy shipping: mirrors the way toll by default, and carrying earns only the toll
+	toll_shipping_percentage = 0;
+	shipping_income_percentage = 0;
 	way_toll_waycost_percentage = 0;
+	maintenance_cost_multiplier_way = 100;
+	maintenance_cost_multiplier_overhead = 100;
+	running_cost_multiplier_vehicle = 100;
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
@@ -1147,6 +1162,11 @@ void settings_t::rdwr(loadsave_t *file)
 			penalty_wait_for_two_month = false;
 			base_revenue_from_halt = 0;
 		}
+		if(  file->get_OTRP_version() >= 60  ) {
+			file->rdwr_long(tile_length);
+		} else {
+			tile_length = calc_default_tile_length();
+		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
 			file->rdwr_byte( wind_direction );
@@ -1223,6 +1243,27 @@ void settings_t::rdwr(loadsave_t *file)
 					}
 				}
 			}
+		}
+		if(  file->get_OTRP_version() >= 61  ) {
+			file->rdwr_long( maintenance_cost_multiplier_way );
+			file->rdwr_long( maintenance_cost_multiplier_overhead );
+			file->rdwr_long( running_cost_multiplier_vehicle );
+		}
+		else if(  file->is_loading()  ) {
+			maintenance_cost_multiplier_way = 100;
+			maintenance_cost_multiplier_overhead = 100;
+			running_cost_multiplier_vehicle = 100;
+		}
+		if(  file->get_OTRP_version() >= 62  ) {
+			file->rdwr_long( toll_shipping_percentage );
+			file->rdwr_long( shipping_income_percentage );
+		}
+		else if(  file->is_loading()  ) {
+			// Before v62 the shipping toll shared the way toll's percentage, so an older save
+			// keeps behaving exactly as it did. Carrying earned no share of the transport
+			// income at all, so that starts at zero.
+			toll_shipping_percentage = way_toll_runningcost_percentage;
+			shipping_income_percentage = 0;
 		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
@@ -1871,6 +1912,14 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	way_toll_runningcost_percentage = contents.get_int_clamped("toll_runningcost_percentage", way_toll_runningcost_percentage, 0, 100 );
 	way_toll_waycost_percentage     = contents.get_int_clamped("toll_waycost_percentage",     way_toll_waycost_percentage,     0, 100 );
+	// Convoy shipping. The shipping toll defaults to whatever the way toll is, so a pakset
+	// that only sets toll_runningcost_percentage gets the behaviour it had before this setting
+	// existed; naming toll_shipping_percentage explicitly overrides that.
+	toll_shipping_percentage   = contents.get_int_clamped("toll_shipping_percentage",   way_toll_runningcost_percentage, 0, 100 );
+	shipping_income_percentage = contents.get_int_clamped("shipping_income_percentage", shipping_income_percentage,      0, 100 );
+	maintenance_cost_multiplier_way      = contents.get_int_clamped("maintenance_cost_multiplier_way",      maintenance_cost_multiplier_way,      1, 250 );
+	maintenance_cost_multiplier_overhead = contents.get_int_clamped("maintenance_cost_multiplier_overhead", maintenance_cost_multiplier_overhead, 1, 250 );
+	running_cost_multiplier_vehicle      = contents.get_int_clamped("running_cost_multiplier_vehicle",      running_cost_multiplier_vehicle,      1, 250 );
 
 	/* now the cost section */
 	cst_multiply_dock        = contents.get_int64("cost_multiply_dock",        cst_multiply_dock       /(-100) ) * -100;
@@ -1991,6 +2040,10 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// note: no need to check for min_height < max_height, since -12 < 16
 	world_maximum_height = contents.get_int_clamped("world_maximum_height", world_maximum_height, 16, 127);
 	world_minimum_height = contents.get_int_clamped("world_minimum_height", world_minimum_height, -127, -12);
+
+	tile_length = contents.get_int("tile_length", tile_length);
+
+	env_t::show_yen = contents.get_int("show_yen", env_t::show_yen);
 
 	citycar_max_look_forward = contents.get_int("citycar_max_look_forward", citycar_max_look_forward);
 	citycar_route_weight_crowded = contents.get_int("citycar_route_weight_crowded", citycar_route_weight_crowded);

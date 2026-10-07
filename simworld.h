@@ -19,6 +19,7 @@
 #include "tpl/vector_tpl.h"
 #include "tpl/slist_tpl.h"
 
+#include "dataobj/schedule.h"
 #include "dataobj/settings.h"
 #include "dataobj/loadsave.h"
 #include "dataobj/rect.h"
@@ -1414,6 +1415,28 @@ public:
 		return (slope4_t::corner_SE);
 	}
 
+	/* Route of the schedule that is currently shown by a schedule editor.
+	 * Display only, never saved. Like the deferred move above the route search
+	 * must not run from the GUI, so the editor only asks for it here and it is
+	 * calculated in interactive(). @p owner identifies the asking component, so
+	 * that closing an old window cannot drop the route of a newer one.
+	 */
+	void request_schedule_route(schedule_t *schedule, player_t *pl, uint32 owner, uint16 speed_kmh, bool needs_electrification);
+	void clear_schedule_route(uint32 owner); ///< owner 0 clears unconditionally
+	void step_schedule_route();
+	const vector_tpl<koord3d> &get_schedule_route() const;
+	/// false if any required leg of the shown schedule route had no route
+	/// (the final wrap-around leg that next_line schedules omit does not count)
+	bool is_schedule_route_complete() const;
+	uint32 get_schedule_route_owner() const;
+	uint8 get_schedule_route_player_nr() const;
+	uint32 get_schedule_route_count() const;
+	/// true while a schedule-route overlay is requested or shown; other route
+	/// overlays (convoy route, line route cache) must yield and disable then
+	bool is_schedule_route_active() const;
+	/// true while the requested route has not been calculated by step() yet
+	bool is_schedule_route_pending() const;
+
 
 private:
 	/**
@@ -1469,6 +1492,10 @@ public:
 	 * @note Useful for finish_rd
 	 */
 	uint32 load_version;
+
+	/// OTRP version of the savegame being loaded, so that finish_rd() of map objects can make
+	/// version dependent corrections. OTRP_VERSION_MAJOR while no savegame is being read.
+	uint8 load_otrp_version;
 
 	/**
 	 * Checks if the planquadrat (tile) at coordinate (x,y)
@@ -1576,6 +1603,10 @@ public:
 	void add_convoi(convoihandle_t);
 	void rem_convoi(convoihandle_t);
 	vector_tpl<convoihandle_t> const& convoys() const { return convoi_array; }
+
+	// rescales the stored CONVOI_DISTANCE_METERS/LINE_DISTANCE_METERS history for all convois and
+	// lines by new_tile_length/old_tile_length; called whenever the tile_length setting changes
+	void recalc_distance_new_records(sint32 old_tile_length, sint32 new_tile_length);
 
 	void load_convoy_templates();
 	const vector_tpl<convoi_template_t>& get_convoy_templates() const { return convoy_templates; }
