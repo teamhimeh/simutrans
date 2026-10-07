@@ -2827,14 +2827,26 @@ void fabrik_t::new_month()
 	const uint16 timeline_month = welt->get_timeline_year_month(); // This will be 0 if timeline is disabled.
 	const uint16 retire_month = desc->get_building()->get_retire_year_month();
 	const uint32 latest_retire_month = retire_month + (12 * welt->get_settings().get_factory_max_years_obsolete());//welt->get_settings().get_factory_max_years_obsolete());
-	if(welt->get_settings().is_close_old_factory() && !no_close_factory && !no_close_factory && timeline_month > retire_month)
+	if(welt->get_settings().is_close_old_factory() && !no_close_factory && timeline_month > retire_month)
 	{
 		if(latest_retire_month <= timeline_month || simrand(latest_retire_month - timeline_month) == 0)
 		{
+			// Check whether this factory upgrades to a successor instead of simply closing.
+			pending_upgrade = NULL;
+			const factory_desc_t* upgrade_desc = desc->get_upgrade_to();
+			if(  upgrade_desc  &&  desc->get_upgrade_probability() > 0
+			     &&  simrand(10000) < desc->get_upgrade_probability()  ) {
+				pending_upgrade = upgrade_desc;
+			}
 			welt->closed_factories_this_month.append(this);
 			cbuffer_t buf;
-			buf.printf( translator::translate("Factory %s has closed."), get_name());
-			welt->get_message()->add_message( (const char *)buf, get_pos().get_2d(), message_t::warnings, CITY_KI, get_desc()->get_building()->get_tile(0)->get_background(0, 0, 0));
+			if(  pending_upgrade  ) {
+				buf.printf( translator::translate("Factory %s has been upgraded."), get_name());
+				welt->get_message()->add_message( (const char *)buf, get_pos().get_2d(), message_t::industry, CITY_KI, get_desc()->get_building()->get_tile(0)->get_background(0, 0, 0));
+			} else {
+				buf.printf( translator::translate("Factory %s has closed."), get_name());
+				welt->get_message()->add_message( (const char *)buf, get_pos().get_2d(), message_t::warnings, CITY_KI, get_desc()->get_building()->get_tile(0)->get_background(0, 0, 0));
+			}
 		} else {
 			cbuffer_t buf;
 			buf.printf( translator::translate("Factory %s is retired! Close soon!"), get_name());
