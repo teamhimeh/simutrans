@@ -14,6 +14,67 @@
 #include "../player/simplay.h"
 
 #include "extend_edit.h"
+#include "simwin.h"
+#include "../display/simgraph.h"
+
+static scr_size building_thumbnail_size()
+{
+	// Match the standard railway depot vehicle picker, including pak overrides.
+	const int x_grid = atoi(translator::translate("bahndepot_x_grid"));
+	const int y_grid = atoi(translator::translate("bahndepot_y_grid"));
+	const int raster = get_base_tile_raster_width();
+	return scr_size((x_grid > 0 ? x_grid : 24)*raster/64+4,
+		(y_grid > 0 ? y_grid : 24)*raster/64+6);
+}
+
+building_thumbnail_t::building_thumbnail_t(const building_desc_t *desc, const char *name_) : image(desc, 0), name(name_) {}
+
+scr_size building_thumbnail_t::get_min_size() const
+{
+	return building_thumbnail_size();
+}
+
+void building_thumbnail_t::draw(scr_coord offset)
+{
+	scr_coord p = offset + get_pos();
+	if (selected) {
+		display_fillbox_wh_clip_rgb(p.x, p.y, get_size().w, get_size().h,
+			focused ? SYSCOL_LIST_BACKGROUND_SELECTED_F : SYSCOL_LIST_BACKGROUND_SELECTED_NF, true);
+	}
+	image.draw_scaled(p + scr_coord(2, 2), get_min_size()-scr_size(4, 4));
+	if (get_mouse_x() >= p.x && get_mouse_x() < p.x+get_size().w &&
+		get_mouse_y() >= p.y && get_mouse_y() < p.y+get_size().h) {
+		win_set_tooltip(get_mouse_x() + TOOLTIP_MOUSE_OFFSET_X, p.y + get_size().h + TOOLTIP_MOUSE_OFFSET_Y, name, this);
+	}
+}
+
+void extend_edit_gui_t::update_thumbnail_columns()
+{
+	if (thumbnail_layout != bt_thumbnails.pressed) {
+		thumbnail_layout = bt_thumbnails.pressed;
+		// The legacy layout gives the right panel two of its three columns.
+		// Thumbnail mode uses two equally sized columns instead.
+		remove_all();
+		set_table_layout(thumbnail_layout ? 2 : 3, 0);
+		set_force_equal_columns(thumbnail_layout);
+		add_component(&cont_left);
+		add_component(&cont_right, thumbnail_layout ? 1 : 2);
+	}
+	scl.set_grid_cell_width(bt_thumbnails.pressed ? building_thumbnail_size().w : 0);
+}
+
+
+
+void extend_edit_gui_t::show_selected_building()
+{
+	if (scl.get_selection() >= 0) {
+		scl.show_selection(scl.get_selection());
+		if (bt_thumbnails.pressed) {
+			const scr_coord p = scl.get_element(scl.get_selection())->get_pos();
+			scl.set_scroll_position(p.x, p.y);
+		}
+	}
+}
 
 gui_rotation_item_t::gui_rotation_item_t(uint8 r) : gui_scrolled_list_t::const_text_scrollitem_t(NULL, SYSCOL_TEXT)
 {
@@ -67,6 +128,7 @@ gui_sorting_item_t::gui_sorting_item_t(uint8 s) : gui_scrolled_list_t::const_tex
 extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 	gui_frame_t( name, player_ ),
 	player(player_),
+	thumbnail_layout(false),
 	info_text(&buf, D_BUTTON_WIDTH*4),
 	scrolly(&cont_scrolly, true, true),
 	scl(gui_scrolled_list_t::listskin, gui_scrolled_list_t::scrollitem_t::compare)

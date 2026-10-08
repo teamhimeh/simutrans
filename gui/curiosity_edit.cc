@@ -20,43 +20,6 @@
 
 #include "curiosity_edit.h"
 #include "components/gui_label.h"
-#include "../display/simgraph.h"
-
-static scr_size curiosity_thumbnail_size()
-{
-	// Match the standard railway depot vehicle picker, including pak overrides.
-	const int x_grid = atoi(translator::translate("bahndepot_x_grid"));
-	const int y_grid = atoi(translator::translate("bahndepot_y_grid"));
-	const int raster = get_base_tile_raster_width();
-	return scr_size((x_grid > 0 ? x_grid : 24)*raster/64+4,
-		(y_grid > 0 ? y_grid : 24)*raster/64+6);
-}
-
-/** A selectable preview of the whole building, including multi-tile attractions. */
-class curiosity_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
-{
-	gui_building_t image;
-	const char *name;
-public:
-	curiosity_thumbnail_t(const building_desc_t *desc, const char *name_) : image(desc, 0), name(name_) {}
-	const char *get_text() const OVERRIDE { return name; }
-	scr_size get_min_size() const OVERRIDE {
-		return curiosity_thumbnail_size();
-	}
-	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
-	void draw(scr_coord offset) OVERRIDE {
-		scr_coord p = offset + get_pos();
-		if (selected) {
-			display_fillbox_wh_clip_rgb(p.x, p.y, get_size().w, get_size().h,
-				focused ? SYSCOL_LIST_BACKGROUND_SELECTED_F : SYSCOL_LIST_BACKGROUND_SELECTED_NF, true);
-		}
-		image.draw_scaled(p + scr_coord(2, 2), get_min_size()-scr_size(4, 4));
-		if (get_mouse_x() >= p.x && get_mouse_x() < p.x+get_size().w &&
-			get_mouse_y() >= p.y && get_mouse_y() < p.y+get_size().h) {
-			win_set_tooltip(get_mouse_x() + TOOLTIP_MOUSE_OFFSET_X, p.y + get_size().h + TOOLTIP_MOUSE_OFFSET_Y, name, this);
-		}
-	}
-};
 
 char curiosity_edit_frame_t::name_filter_value[64] = "";
 
@@ -128,8 +91,7 @@ static bool compare_building_desc_size(const building_desc_t* a, const building_
 
 curiosity_edit_frame_t::curiosity_edit_frame_t(player_t* player_) :
 	extend_edit_gui_t(translator::translate("curiosity builder"), player_),
-	building_list(16),
-	thumbnail_layout(false)
+	building_list(16)
 {
 	desc = NULL;
 	haus_tool->set_default_param(NULL);
@@ -245,7 +207,7 @@ void curiosity_edit_frame_t::fill_list()
 		}
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
 		if (bt_thumbnails.pressed) {
-			scl.new_component<curiosity_thumbnail_t>(i, name);
+			scl.new_component<building_thumbnail_t>(i, name);
 		}
 		else {
 			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
@@ -257,31 +219,8 @@ void curiosity_edit_frame_t::fill_list()
 	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
-	if (scl.get_selection() >= 0) {
-		scl.show_selection(scl.get_selection());
-		if (bt_thumbnails.pressed) {
-			const scr_coord p = scl.get_element(scl.get_selection())->get_pos();
-			scl.set_scroll_position(p.x, p.y);
-		}
-	}
+	show_selected_building();
 }
-
-
-void curiosity_edit_frame_t::update_thumbnail_columns()
-{
-	if (thumbnail_layout != bt_thumbnails.pressed) {
-		thumbnail_layout = bt_thumbnails.pressed;
-		// The legacy layout gives the right panel two of its three columns.
-		// Thumbnail mode uses two equally sized columns instead.
-		remove_all();
-		set_table_layout(thumbnail_layout ? 2 : 3, 0);
-		set_force_equal_columns(thumbnail_layout);
-		add_component(&cont_left);
-		add_component(&cont_right, thumbnail_layout ? 1 : 2);
-	}
-	scl.set_grid_cell_width(bt_thumbnails.pressed ? curiosity_thumbnail_size().w : 0);
-}
-
 
 
 bool curiosity_edit_frame_t::action_triggered( gui_action_creator_t *comp,value_t e)
