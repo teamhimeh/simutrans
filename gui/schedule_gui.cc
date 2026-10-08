@@ -1617,6 +1617,9 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 							schedule->move_entry_backward(entry);
 						}
 					}
+					mode = adding;
+					bt_add.pressed = true;
+					bt_make_first.pressed = false;
 				}
 			}
 			update_selection();
