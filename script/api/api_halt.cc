@@ -50,6 +50,14 @@ namespace script_api {
         sq_pushinteger(vm, world()->tick_to_divided_time(v.weight));
         sq_newslot(vm, table_idx, false);
 
+		sq_pushstring(vm, "raw_weight", -1);
+		sq_pushinteger(vm, v.weight);
+		sq_newslot(vm, table_idx, false);
+
+		sq_pushstring(vm, "is_foot_path", -1);
+		sq_pushbool(vm, v.is_foot_path);
+		sq_newslot(vm, table_idx, false);
+
         sq_pushstring(vm, "line", -1);
         int top_before_line = sq_gettop(vm);
 
@@ -83,7 +91,7 @@ namespace script_api {
 
 #ifdef SQAPI_DOC
 	/**
-	 * Connectoin returned by @ref halt_x::get_connections
+	 * Connection returned by @ref halt_x::get_connections
 	 */
 	class connection {
 		public:
@@ -92,9 +100,23 @@ namespace script_api {
 			 */
 			halt_x halt;
 			/**
-			 * Weight of this connection.
+			 * Connection weight converted from ticks to displayed time units.
+			 * This value represents journey time only when time-based routing is
+			 * enabled for the requested goods category. In route-cost mode the raw
+			 * route cost is passed through the time conversion and this value has no
+			 * useful meaning; use @ref raw_weight instead.
 			 */
 			integer weight;
+			/**
+			 * Weight used internally by route search before conversion.
+			 * In route-cost mode this is the route cost. With time-based routing it
+			 * is the journey time in ticks.
+			 */
+			integer raw_weight;
+			/**
+			 * True if passengers traverse this connection on foot.
+			 */
+			bool is_foot_path;
 			/**
 			 * Line that is used for this connection.
 			 */
@@ -358,7 +380,7 @@ void export_halt(HSQUIRRELVM vm)
 	 */
 	register_method(vm, &halt_get_capacity, "get_capacity", true);
 	/**
-	 * Returns list of connected halts for the specific @p freight type.
+	 * Returns connection details for halts reachable with the specific @p freight type.
 	 * @param freight freight type
 	 */
 	register_method(vm, &halt_get_connections, "get_connections", true);

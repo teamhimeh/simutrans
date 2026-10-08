@@ -14,6 +14,9 @@
 #include "simimg.h"
 #include "scr_coord.h"
 
+#include <string>
+
+class raw_image_t;
 
 #if COLOUR_DEPTH != 0
 
@@ -370,6 +373,10 @@ void display_pop_clip_wh(CLIP_NUM_DEF0);
 
 
 bool display_snapshot( const scr_rect &area );
+/// Capture a screen area as PNG data without writing a screenshot file.
+bool display_snapshot_png(const scr_rect &area, std::string &png_data);
+/// Copy a screen area into an RGB888 image at the given destination position.
+bool display_snapshot(const scr_rect &area, raw_image_t &image, const scr_coord &destination);
 
 #if COLOUR_DEPTH != 0
 extern uint8 display_day_lights[  LIGHT_COUNT * 3];

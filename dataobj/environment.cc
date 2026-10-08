@@ -89,6 +89,7 @@ bool env_t::mute_midi = false;
 bool env_t::shuffle_midi = true;
 sint16 env_t::window_snap_distance = 8;
 scr_size env_t::iconsize( 32, 32 );
+bool env_t::iconsize_set_by_pak = false;
 uint8 env_t::chat_window_transparency = 100;
 bool env_t::hide_rail_return_ticket = true;
 bool env_t::show_delete_buttons = false;
@@ -713,6 +714,3 @@ sint8 env_t::driveleft_base_offsets[8][2];
 // the reading method is in setting_t, and these parameters are used in vehicle_t.
 sint8 env_t::overtaking_base_offsets[8][2];
 
-// Graphical offsets for reverseing vehicles
-// the reading method is in setting_t, and these parameters are used in vehicle_t.
-sint8 env_t::reverse_base_offsets[8][3];

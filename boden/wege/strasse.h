@@ -108,15 +108,24 @@ public:
 	* loading_only_mode = overtaking a loading convoy only
 	* prohibited_mode = overtaking is completely forbidden
 	* inverted_mode = vehicles can go only on passing lane
+	* exclusive_area_mode = drives like prohibited_mode, only one convoy at a time in the connected area
+	* passing_lane_stop_only_mode = drives like prohibited_mode, but a convoy may stop on the passing lane
+	*
+	* The last two are restrictions on top of prohibited_mode and are mapped onto it here, so that
+	* the ordering comparisons all over the driving logic keep working. Everything that shows, saves
+	* or builds a mode has to use get_overtaking_mode_raw() instead.
 	* @author teamhimeH
 	*/
-	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; };
+	overtaking_mode_t get_overtaking_mode() const { return effective_overtaking_mode(overtaking_mode); };
+	overtaking_mode_t get_overtaking_mode_raw() const { return overtaking_mode; };
 	void set_overtaking_mode(overtaking_mode_t o) { overtaking_mode = o; };
 
 	void set_ribi_mask_oneway(ribi_t::ribi ribi) { ribi_mask_oneway = (uint8)ribi; }
 	// used in wegbauer. param @allow is ribi in which vehicles can go. without this, ribi cannot be updated correctly at intersections.
 	void update_ribi_mask_oneway(ribi_t::ribi mask, ribi_t::ribi allow);
 	ribi_t::ribi get_ribi_mask_oneway() const { return (ribi_t::ribi)ribi_mask_oneway; }
+	// ribi_mask_oneway when it is in effect (oneway_mode or halt_mode), ribi_t::none otherwise
+	ribi_t::ribi get_active_ribi_mask_oneway() const { return overtaking_mode<=oneway_mode ? get_ribi_mask_oneway() : (ribi_t::ribi)ribi_t::none; }
 	virtual ribi_t::ribi get_ribi() const OVERRIDE;
 
 	virtual void rotate90() OVERRIDE;
@@ -140,6 +149,9 @@ public:
 	bool unreserve(vehicle_base_t* r);
 	void unreserve_all();
 	bool is_reserved_by_others(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next);
+	// The first vehicle whose reservation conflicts with the given transit, or NULL if there is none.
+	// Lets a caller decide that a particular blocker is acceptable after reserve() refused.
+	vehicle_base_t* get_reserver(vehicle_base_t* r, bool is_overtaking, koord3d pos_prev, koord3d pos_next) const;
 	
 	uint8 get_street_flag() const { return street_flags; }
 	void set_street_flag(uint8 s) { street_flags = s; }
@@ -158,5 +170,17 @@ public:
 
 
 };
+
+
+/**
+ * The road on the tile at @p pos, or NULL when there is no tile there or the tile carries no
+ * road. Road logic all over the game looks a road up by position and then dereferences it right
+ * away, but a road is not guaranteed to be there: a convoy aboard a carrier reports the
+ * carrier's tile (water!), a convoy in a depot reports its home depot, a way can be missing or
+ * mismatched after loading an old savegame, and a way can be removed under a standing vehicle.
+ * Dereferencing the NULL then crashes inside strasse_t::get_overtaking_mode(), which is where
+ * such a bug surfaces because that accessor is what the caller usually wants first.
+ */
+strasse_t *strasse_at(const koord3d &pos);
 
 #endif

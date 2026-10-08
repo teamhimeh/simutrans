@@ -631,8 +631,7 @@ void stadt_t::remove_gebaeude_from_stadt(gebaeude_t* gb)
 	for (grund_t* gr : gb_tiles) {
 		gebaeude_t* remove_gb = gr->find<gebaeude_t>();
 		remove_gb->set_stadt(NULL);
-		bool ok = buildings.remove(remove_gb);
-		assert(ok);
+		buildings.remove(remove_gb);
 	}
 	recalc_city_size();
 }
@@ -1171,7 +1170,7 @@ void stadt_t::rdwr(loadsave_t* file)
 	lo.y = lob;
 	ur.x = lre;
 	ur.y = lun;
-	file->rdwr_long(owner_n);
+	file->rdwr_player_nr(owner_n);
 	file->rdwr_long(bev);
 	file->rdwr_long(arb);
 	file->rdwr_long(won);
@@ -1959,7 +1958,7 @@ void stadt_t::step_passagiere()
 			ware_t return_pax(wtyp);
 
 			// now, finally search a route; this consumes most of the time
-			int const route_result = haltestelle_t::search_route( &start_halts[0], start_halts.get_count(), welt->get_settings().is_no_routing_over_overcrowding(), pax, &return_pax);
+			int const route_result = haltestelle_t::search_route( &start_halts[0], start_halts.get_count(), welt->get_settings().is_no_routing_over_overcrowding(), pax, &return_pax, origin_pos);
 			halthandle_t start_halt = return_pax.get_ziel();
 			if(  route_result==haltestelle_t::ROUTE_OK  ) {
 				// so we have happy traveling passengers

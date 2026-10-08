@@ -11,6 +11,7 @@
 
 #include <cassert>
 #include <stdio.h>
+#include <string>
 
 
 /**
@@ -72,6 +73,8 @@ public:
 
 	/// @returns true on success
 	bool write_png(const char *filename) const;
+	/// Write a PNG image to memory.
+	bool write_png(std::string &data) const;
 	bool write_bmp(const char *filename) const;
 	bool write_ppm(const char *filename) const;
 
@@ -92,6 +95,30 @@ private:
 
 
 void swap(raw_image_t &lhs, raw_image_t &rhs);
+
+
+/**
+ * Incremental PNG writer for images that are too large to keep entirely in memory.
+ * Rows must be supplied from top to bottom.
+ */
+class raw_image_png_writer_t
+{
+private:
+	struct impl_t;
+	impl_t *impl;
+
+	raw_image_png_writer_t(const raw_image_png_writer_t &);
+	raw_image_png_writer_t &operator=(const raw_image_png_writer_t &);
+	void close(bool keep_file);
+
+public:
+	raw_image_png_writer_t(const char *filename, uint32 width, uint32 height, raw_image_t::format_t format);
+	~raw_image_png_writer_t();
+
+	bool is_valid() const;
+	bool write_rows(const raw_image_t &image, uint32 row_count);
+	bool finish();
+};
 
 
 #endif

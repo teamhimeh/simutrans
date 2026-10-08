@@ -6,9 +6,12 @@
 #include "../simline.h"
 #include "../simcolor.h"
 #include "../simhalt.h"
+#include "../simlinemgmt.h"
+#include "../simline.h"
 #include "../simworld.h"
 #include "../simmenu.h"
 #include "../simconvoi.h"
+#include "../bauer/goods_manager.h"
 #include "../display/simgraph.h"
 #include "../display/viewport.h"
 #include "components/gui_divider.h"
@@ -39,6 +42,115 @@
 #include "minimap.h"
 
 static karte_ptr_t welt;
+
+// spacing_shift and delay_tolerance are stored as fractions of a month (0..spacing_shift_divisor),
+// which map linearly onto a virtual 24h day (86400 "seconds").
+static void linear_raw_to_hms(uint16 raw, uint16 divisor, uint8 &h, uint8 &m, uint8 &s)
+{
+	uint32 seconds = divisor>0 ? (uint32)( ((uint64)raw * 86400ull) / divisor ) : 0;
+	if(  seconds > 86400  ) {
+		seconds = 86400;
+	}
+	h = (uint8)(seconds / 3600);
+	m = (uint8)((seconds % 3600) / 60);
+	s = (uint8)(seconds % 60);
+}
+
+static uint16 linear_hms_to_raw(uint8 h, uint8 m, uint8 s, uint16 divisor)
+{
+	const uint32 seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	// round to nearest, since a divisor step may not evenly divide a second
+	const uint64 raw = ( (uint64)seconds * divisor + 43200ull ) / 86400ull;
+	return (uint16)min(raw, (uint64)0xFFFFu);
+}
+
+// waiting_time_shift is a frequency: the actual waiting period is (a virtual month)/waiting_time_shift.
+static void wait_raw_to_hms(uint16 raw, uint8 &h, uint8 &m, uint8 &s)
+{
+	const uint32 seconds = raw>0 ? 86400u / raw : 86400u;
+	h = (uint8)(seconds / 3600);
+	m = (uint8)((seconds % 3600) / 60);
+	s = (uint8)(seconds % 60);
+}
+
+static uint16 wait_hms_to_raw(uint8 h, uint8 m, uint8 s)
+{
+	const uint32 seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	if(  seconds == 0  ) {
+		// no waiting time requested -> shortest possible period
+		return 65535;
+	}
+	const uint32 raw = (86400u + seconds/2) / seconds; // round to nearest
+	return (uint16)clamp(raw, 1u, 65535u);
+}
+
+// Plain rounding can leave the raw value unchanged when a 1-second h:m:s edit is smaller than
+// one divisor step - which looks like the input did nothing. These variants compare against the
+// previously stored raw value and nudge the result by (at least) one step in the same direction
+// the requested time actually moved, so every edit is perceptible.
+static uint16 linear_hms_to_raw_monotonic(uint8 h, uint8 m, uint8 s, uint16 divisor, uint16 old_raw)
+{
+	const uint32 new_seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	uint8 oh, om, os;
+	linear_raw_to_hms(old_raw, divisor, oh, om, os);
+	const uint32 old_seconds = (uint32)oh*3600u + (uint32)om*60u + (uint32)os;
+	uint16 new_raw = linear_hms_to_raw(h, m, s, divisor);
+	if(  new_seconds > old_seconds  &&  new_raw <= old_raw  ) {
+		new_raw = (uint16)min((uint32)old_raw+1u, (uint32)divisor);
+	}
+	else if(  new_seconds < old_seconds  &&  new_raw >= old_raw  &&  old_raw>0  ) {
+		new_raw = old_raw-1;
+	}
+	return new_raw;
+}
+
+// waiting_time_shift is inverse to time (bigger raw = shorter wait), so "later" h:m:s must
+// translate to a *smaller* raw value, and vice versa.
+static uint16 wait_hms_to_raw_monotonic(uint8 h, uint8 m, uint8 s, uint16 old_raw)
+{
+	const uint32 new_seconds = (uint32)h*3600u + (uint32)m*60u + (uint32)s;
+	uint8 oh, om, os;
+	wait_raw_to_hms(old_raw, oh, om, os);
+	const uint32 old_seconds = (uint32)oh*3600u + (uint32)om*60u + (uint32)os;
+	uint16 new_raw = wait_hms_to_raw(h, m, s);
+	if(  new_seconds > old_seconds  &&  new_raw >= old_raw  &&  old_raw>1  ) {
+		new_raw = old_raw-1;
+	}
+	else if(  new_seconds < old_seconds  &&  new_raw <= old_raw  ) {
+		new_raw = (uint16)min((uint32)old_raw+1u, 65535u);
+	}
+	return new_raw;
+}
+
+static uint32 pack_hms(uint8 h, uint8 m, uint8 s)
+{
+	return (uint32)h*10000u + (uint32)m*100u + (uint32)s;
+}
+
+// A single decimal number entered/scrolled as "hhmmss" has no notion of "60" at the widget level,
+// so a typed or incremented value can carry a minute/second field past 59 (or even past 99, since
+// each 2-digit slot is otherwise unconstrained). Normalize those carries here; an hour part beyond
+// 24 is invalid and gets clamped to the largest representable time of day.
+static void unpack_hms(uint32 packed, uint8 &h, uint8 &m, uint8 &s)
+{
+	uint32 sec = packed % 100;
+	uint32 min = (packed / 100) % 100;
+	uint32 hour = packed / 10000;
+	if(  sec >= 60  ) {
+		min += sec/60;
+		sec %= 60;
+	}
+	if(  min >= 60  ) {
+		hour += min/60;
+		min %= 60;
+	}
+	if(  hour > 23  ) {
+		hour = 0;
+	}
+	h = (uint8)hour;
+	m = (uint8)min;
+	s = (uint8)sec;
+}
 
 /**
  * One entry in the list of schedule entries.
@@ -245,6 +357,7 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 	gui_frame_t( translator::translate("Fahrplan"), NULL),
 	line_selector(line_color_line_scroll_item_t::compare),
 	next_line_selector(non_color_line_scroll_item_t::compare),
+	allow_depart_line_selector(non_color_line_scroll_item_t::compare),
 	departure_slot_group_selector(company_color_line_scroll_item_t::compare),
 	lb_waitlevel(SYSCOL_TEXT_HIGHLIGHT, gui_label_t::right),
 	lb_wait("1/"),
@@ -270,6 +383,7 @@ schedule_gui_t::schedule_gui_t(schedule_t* schedule_, player_t* player_, convoih
 
 schedule_gui_t::~schedule_gui_t()
 {
+	route_overlay.hide();
 	if(  player  ) {
 		update_tool( false );
 		// hide schedule on minimap (may not current, but for safe)
@@ -382,7 +496,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		add_component(&bt_full_load_acceleration);
 
 		bt_full_load_time.init(button_t::square_state, "Full Get on/off Time");
-		bt_full_load_time.set_tooltip("Always use maximum boarding and alighting time, regardless of boardings and alightings.");
+		bt_full_load_time.set_tooltip(translator::translate("Always use maximum boarding and alighting time, regardless of boardings and alightings."));
 		bt_full_load_time.add_listener(this);
 		bt_full_load_time.pressed = schedule->is_full_load_time();
 		add_component(&bt_full_load_time);
@@ -429,15 +543,16 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 		bt_reverse_default.init(button_t::square_state, "Reverse by Default");
 		bt_reverse_default.set_tooltip(translator::translate("When the next destination is in the opposite direction, it will automatically reverse."));
+		bt_reverse_default.pressed = schedule->is_reverse_default();
 		bt_reverse_default.add_listener(this);
 		add_component(&bt_reverse_default);
-		add_component(&sp_schedule_reverse_settings);
+		add_component(&sp_schedule_reverse_settings,2);
 
 		bt_no_use_electric.init(button_t::square_state, "Not use electricity");
 		bt_no_use_electric.set_tooltip(translator::translate("Not use electricity in this schedule"));
 		bt_no_use_electric.add_listener(this);
 		add_component(&bt_no_use_electric);
-		add_component(&sp_coupling_settings);
+		add_component(&sp_coupling_settings,2);
 	}
 	end_table();
 
@@ -487,9 +602,26 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		numimp_wait_load.add_listener(this);
 		add_component(&numimp_wait_load);
 		end_table();
-		sprintf(lb_wait_load_time_str,"");
-		lb_wait_load_time.set_text_pointer(lb_wait_load_time_str);
-		add_component(&lb_wait_load_time);
+
+		add_table(3, 1);
+		{
+			numimp_wait_load_divisor.set_width( 60 );
+			numimp_wait_load_divisor.set_value( 0 );
+			numimp_wait_load_divisor.set_limits( 0, world()->get_settings().get_spacing_shift_divisor() );
+			numimp_wait_load_divisor.set_increment_mode(1);
+			numimp_wait_load_divisor.add_listener(this);
+			numimp_wait_load_divisor.disable();
+			add_component(&numimp_wait_load_divisor);
+
+			numimp_wait_load_hms.init(0, 0, 235959, 1, false, 8);
+			numimp_wait_load_hms.set_show_arrows(false);
+			numimp_wait_load_hms.set_pad_digits(6);
+			numimp_wait_load_hms.add_listener(this);
+			numimp_wait_load_hms.disable();
+			add_component(&numimp_wait_load_hms);
+			new_component<gui_label_t>("hhmmss");
+		}
+		end_table();
 
 		// load and unload settings
 		bt_no_load.init(button_t::square_state, "No Load");
@@ -625,6 +757,24 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_reset_coupling.disable();
 		add_component(&bt_reset_coupling);
 
+		bt_wait_for_other_convoy.init(button_t::square_state, "Wait for other convoy");
+		bt_wait_for_other_convoy.set_tooltip(translator::translate("This convoy waits here until another convoy grants it departure allowance."));
+		bt_wait_for_other_convoy.add_listener(this);
+		bt_wait_for_other_convoy.disable();
+		add_component(&bt_wait_for_other_convoy);
+
+		allow_depart_line_selector.clear_elements();
+		init_allow_depart_line_selector();
+		allow_depart_line_selector.add_listener(this);
+		allow_depart_line_selector.disable();
+		add_component(&allow_depart_line_selector);
+
+		bt_wait_allow_convoy_depart.init(button_t::square_state, "Wait allow other convoy depart");
+		bt_wait_allow_convoy_depart.set_tooltip(translator::translate("Waiting until make another convoy depart"));
+		bt_wait_allow_convoy_depart.add_listener(this);
+		bt_wait_allow_convoy_depart.disable();
+		add_component(&bt_wait_allow_convoy_depart);
+
 		bt_uncouple_child.init(button_t::square_state, "End couple");
 		bt_uncouple_child.set_tooltip("It will uncouple the child convoy here.");
 		bt_uncouple_child.add_listener(this);
@@ -675,10 +825,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		lb_spacing.set_text_pointer(lb_spacing_str);
 		add_component(&lb_spacing);
 		
-		lb_spacing_shift.set_align(gui_label_t::align_t::centered);
-		sprintf(lb_spacing_shift_str,"");
-		lb_spacing_shift.set_text_pointer(lb_spacing_shift_str);
-		add_component(&lb_spacing_shift);
+		add_component(&sp_departure_settings);
 		
 		lb_title1.set_text("Spacing cnv/month, shift");
 		add_component(&lb_title1);
@@ -693,24 +840,46 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		numimp_spacing.add_listener(this);
 		add_component(&numimp_spacing);
 		
-		numimp_spacing_shift.set_width( 90 );
-		numimp_spacing_shift.set_value( 0 );
-		numimp_spacing_shift.set_limits( 0, spacing_divisor );
-		numimp_spacing_shift.set_increment_mode(1);
-		numimp_spacing_shift.add_listener(this);
-		numimp_spacing_shift.disable();
-		add_component(&numimp_spacing_shift);
-		
+		add_table(2, 1);
+		{
+			numimp_spacing_shift.set_width( 60 );
+			numimp_spacing_shift.set_value( 0 );
+			numimp_spacing_shift.set_limits( 0, spacing_divisor );
+			numimp_spacing_shift.set_increment_mode(1);
+			numimp_spacing_shift.add_listener(this);
+			numimp_spacing_shift.disable();
+			add_component(&numimp_spacing_shift);
+
+			numimp_spacing_shift_hms.init(0, 0, 235959, 1, false, 8);
+			numimp_spacing_shift_hms.set_show_arrows(false);
+			numimp_spacing_shift_hms.set_pad_digits(6);
+			numimp_spacing_shift_hms.add_listener(this);
+			numimp_spacing_shift_hms.disable();
+			add_component(&numimp_spacing_shift_hms);
+		}
+		end_table();
+
 		lb_title2.set_text("Delay tolerance");
 		add_component(&lb_title2);
-		
-		numimp_delay_tolerance.set_width( 90 );
-		numimp_delay_tolerance.set_value( 0 );
-		numimp_delay_tolerance.set_increment_mode(1);
-		numimp_delay_tolerance.disable();
-		numimp_delay_tolerance.add_listener(this);
-		add_component(&numimp_delay_tolerance);
-		
+
+		add_table(2, 1);
+		{
+			numimp_delay_tolerance.set_width( 60 );
+			numimp_delay_tolerance.set_value( 0 );
+			numimp_delay_tolerance.set_increment_mode(1);
+			numimp_delay_tolerance.disable();
+			numimp_delay_tolerance.add_listener(this);
+			add_component(&numimp_delay_tolerance);
+
+			numimp_delay_tolerance_hms.init(0, 0, 235959, 1, false, 8);
+			numimp_delay_tolerance_hms.set_show_arrows(false);
+			numimp_delay_tolerance_hms.set_pad_digits(6);
+			numimp_delay_tolerance_hms.add_listener(this);
+			numimp_delay_tolerance_hms.disable();
+			add_component(&numimp_delay_tolerance_hms);
+		}
+		end_table();
+
 		add_component(&sp_departure_settings);
 
 		// departure setting detail
@@ -738,8 +907,23 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_no_overtake.set_tooltip("Do not overtake other cars until this stop.");
 		bt_no_overtake.add_listener(this);
 		add_component(&bt_no_overtake);
+
+		bt_start_shipped.init(button_t::square_automatic, "Wait to be shipped");
+		bt_start_shipped.set_tooltip("Wait here until a carrier convoy takes this convoy to its next stop. The convoy will not depart on its own.");
+		bt_start_shipped.add_listener(this);
+		add_component(&bt_start_shipped);
 		add_component(&sp_road_settings);
 		add_component(&sp_road_settings);
+
+		bt_drive_without_reservation.init(button_t::square_automatic, "Without Reservation");
+		bt_drive_without_reservation.set_tooltip("Drive without reservation until next signal");
+		bt_drive_without_reservation.add_listener(this);
+		add_component(&bt_drive_without_reservation);
+		bt_all_without_reservation.init(button_t::roundbox, "apply for all");
+		bt_all_without_reservation.set_tooltip("apply driving with reservation setting for all stops");
+		bt_all_without_reservation.add_listener(this);
+		add_component(&bt_all_without_reservation);
+
 	}
 	end_table();
 
@@ -793,6 +977,21 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	bt_remove.add_listener(this);
 	bt_remove.pressed = false;
 	add_component(&bt_remove);
+	end_table();
+
+	// whole-route overlay toggle (not available for air, which routes itself)
+	bt_show_line_route.init(button_t::roundbox_state | button_t::flexible, "Show Line Route");
+	bt_show_line_route.set_tooltip("Show the whole route of this schedule on the map and minimap.");
+	bt_show_line_route.add_listener(this);
+	bt_show_line_route.pressed = false;
+	is_line_route_show = false;
+	last_route_schedule_count = 0xFFFFFFFFu;
+	if(  schedule->get_waytype() == air_wt  ) {
+		bt_show_line_route.disable();
+	}
+	add_table(2,1);
+	add_component(&bt_show_line_route);
+	add_component(&lb_route_time);
 	end_table();
 
 	scrolly.set_show_scroll_x(true);
@@ -849,6 +1048,8 @@ void schedule_gui_t::update_selection()
 	// First, disable all.
 	lb_wait.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 	numimp_wait_load.disable();
+	numimp_wait_load_hms.disable();
+	numimp_wait_load_divisor.disable();
 	bt_wait_load.disable();
 	lb_load.set_color( SYSCOL_BUTTON_TEXT_DISABLED );
 	numimp_load.disable();
@@ -856,6 +1057,8 @@ void schedule_gui_t::update_selection()
 	bt_wait_full_load.disable();
 	bt_find_parent.disable();
 	bt_wait_for_child.disable();
+	bt_wait_for_other_convoy.disable();
+	allow_depart_line_selector.disable();
 	bt_uncouple_child.disable();
 	bt_reset_coupling.disable();
 	bt_no_load.disable();
@@ -865,7 +1068,9 @@ void schedule_gui_t::update_selection()
 	bt_wait_coupling_done.disable();
 	numimp_spacing.disable();
 	numimp_spacing_shift.disable();
+	numimp_spacing_shift_hms.disable();
 	numimp_delay_tolerance.disable();
+	numimp_delay_tolerance_hms.disable();
 	bt_load_before_departure.disable();
 	bt_transfer_interval.disable();
 	bt_reverse_convoy.disable();
@@ -874,11 +1079,14 @@ void schedule_gui_t::update_selection()
 	numimp_max_load.set_value(100);
 	bt_max_load_all_stops.disable();
 	bt_no_overtake.disable();
+	bt_start_shipped.disable();
 	bt_max_speed_kmh_of_convoi.disable();
 	bt_no_go_no_users.disable();
 	numimp_max_speed_kmh_of_convoi.disable();
 	bt_balance_speed_kmh_of_convoi.disable();
 	numimp_balance_speed_kmh_of_convoi.disable();
+	bt_drive_without_reservation.disable();
+	bt_all_without_reservation.disable();
 	bt_temp_load.disable();
 	bt_temp_unload.disable();
 	bt_temp_unload_all.disable();
@@ -899,6 +1107,13 @@ void schedule_gui_t::update_selection()
     
 		bt_no_overtake.enable();
 		bt_no_overtake.pressed = schedule->at(current_stop).is_no_overtake();
+		
+		bt_start_shipped.enable();
+		bt_start_shipped.pressed = schedule->at(current_stop).is_start_shipped();
+
+		bt_drive_without_reservation.enable();
+		bt_drive_without_reservation.pressed = schedule->at(current_stop).is_drive_without_reservation();
+		bt_all_without_reservation.enable();
 
 		if(  current_stop!=0  &&  (!schedule->get_next_line().is_bound()  ||  current_stop!=schedule->get_count()-1)  ) {
 			bt_up.enable();
@@ -923,11 +1138,20 @@ void schedule_gui_t::update_selection()
 		bt_pass_stop.pressed = schedule->at(current_stop).is_pass_stop();
 		// if the next_line is set, the last entry is same as the next_line->get_schedule()->at(0)
 		// so, the flags of last entry can not be editted.
-		if( haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()).is_bound() && ( (current_stop != schedule->get_count()-1) || !schedule->get_next_line().is_bound() ) && !schedule->at(current_stop).is_pass_stop() ) {			bt_find_parent.enable();
+		if( haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()).is_bound() && ( (current_stop != schedule->get_count()-1) || !schedule->get_next_line().is_bound() ) ) {
+			allow_depart_line_selector.enable();
+			init_allow_depart_line_selector();
+		}
+		if( haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()).is_bound() && ( (current_stop != schedule->get_count()-1) || !schedule->get_next_line().is_bound() ) && !schedule->at(current_stop).is_pass_stop() ) {
+			bt_find_parent.enable();
 			bt_find_parent.pressed = schedule->at(current_stop).is_try_coupling();
 			bt_wait_for_child.enable();
 			bt_wait_for_child.pressed = schedule->at(current_stop).is_wait_for_coupling();
 			bt_reset_coupling.enable();
+			bt_wait_for_other_convoy.enable();
+			bt_wait_for_other_convoy.pressed = schedule->at(current_stop).is_wait_for_other_convoy();
+			bt_wait_allow_convoy_depart.enable(schedule->at(current_stop).get_allow_depart_line().is_bound());
+			bt_wait_allow_convoy_depart.pressed = schedule->at(current_stop).is_wait_allow_convoy_departure();
 			bt_no_load.enable();
 			bt_no_load.pressed = schedule->at(current_stop).is_no_load();
 			bt_no_unload.enable();
@@ -962,21 +1186,16 @@ void schedule_gui_t::update_selection()
 				uint8 minute = (second - hour * 3600)/60;
 				second = second % 60;
 				sprintf(lb_spacing_str, "%d (%02d:%02d:%02d)", divisor/schedule->at(current_stop).spacing,hour,minute,second);
-
-				uint32 second_shift = schedule->at(current_stop).spacing_shift * month_ratio_second;
-				uint8 hour_shift = second_shift/3600;
-				uint8 minute_shift = (second_shift - hour_shift * 3600)/60;
-				second_shift = second_shift % 60;
-				sprintf(lb_spacing_shift_str, "(%02d:%02d:%02d)", hour_shift,minute_shift,second_shift);
 				numimp_spacing.enable();
 				numimp_spacing_shift.enable();
+				numimp_spacing_shift_hms.enable();
 				numimp_delay_tolerance.enable();
+				numimp_delay_tolerance_hms.enable();
 				bt_load_before_departure.enable();
 				bt_wait_coupling_done.enable(); // this button is always enable because waiting convoy is not always itself(child convoy also can be wait for coupling).
 				bt_wait_coupling_done.pressed = schedule->at(current_stop).is_wait_coupling_done();
 			} else {
 				sprintf(lb_spacing_str, "off");
-				sprintf(lb_spacing_shift_str,"");
 			}
 			lb_load.set_color( SYSCOL_TEXT );
 			numimp_load.enable();
@@ -998,31 +1217,50 @@ void schedule_gui_t::update_selection()
 				if(  wait>0  ) {
 					lb_wait.set_color( SYSCOL_TEXT );
 					numimp_wait_load.enable();
+					numimp_wait_load_hms.enable();
+					numimp_wait_load_divisor.enable();
 					if(  schedule->at(current_stop).minimum_loading  >  100  ){
 						bt_load_before_departure.enable();
 					}
-					const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
-					const uint16 month_ratio_second = 86400/divisor;
-					uint32 second = (86400/wait)/month_ratio_second*month_ratio_second;
-					uint8 hour = second/3600;
-					uint8 minute = (second - hour * 3600)/60;
-					second = second % 60;
-					sprintf(lb_wait_load_time_str, "%d (%02d:%02d:%02d)", divisor/wait,hour,minute,second);
 				} else {
-					sprintf(lb_wait_load_time_str,"");
+					numimp_wait_load_hms.disable();
+					numimp_wait_load_divisor.disable();
 				}
 			} else {
-				sprintf(lb_wait_load_time_str,"");
+				numimp_wait_load_hms.disable();
+				numimp_wait_load_divisor.disable();
 			}
-			
+
 			numimp_load.set_value( schedule->at(current_stop).minimum_loading );
 			numimp_wait_load.set_value( max(1, schedule->at(current_stop).waiting_time_shift) );
 			numimp_spacing.set_value( schedule->at(current_stop).spacing );
 			numimp_spacing_shift.set_value( schedule->at(current_stop).spacing_shift );
 			numimp_delay_tolerance.set_value( schedule->at(current_stop).delay_tolerance );
 			numimp_max_load.set_value(  schedule->at(current_stop).maximum_loading  );
+			update_labels();
 		}
 	}
+}
+
+
+void schedule_gui_t::update_labels()
+{
+	if(  schedule->empty()  ) {
+		return;
+	}
+	const schedule_entry_t &entry = schedule->at( schedule->get_current_stop() );
+	const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+	uint8 h, m, s;
+
+	linear_raw_to_hms( entry.spacing_shift, divisor, h, m, s );
+	numimp_spacing_shift_hms.set_value( pack_hms(h, m, s) );
+
+	linear_raw_to_hms( entry.delay_tolerance, divisor, h, m, s );
+	numimp_delay_tolerance_hms.set_value( pack_hms(h, m, s) );
+
+	wait_raw_to_hms( entry.waiting_time_shift, h, m, s );
+	numimp_wait_load_hms.set_value( pack_hms(h, m, s) );
+	numimp_wait_load_divisor.set_value( linear_hms_to_raw( h, m, s, divisor ) );
 }
 
 
@@ -1135,14 +1373,19 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_find_parent) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_try_coupling(!bt_find_parent.pressed);
-			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			if(schedule->get_waytype()!=water_wt)
+			{
+				schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			}
 			update_selection();
 		}
 	}
 	else if(comp == &bt_wait_for_child) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_wait_for_coupling(!bt_wait_for_child.pressed);
-			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			if(schedule->get_waytype()!=water_wt){
+				schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(false);
+			}
 			update_selection();
 		}
 	}
@@ -1150,6 +1393,31 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).reset_coupling();
 			schedule->at(schedule->get_current_stop()).set_uncouple_child(false);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_wait_for_other_convoy) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_wait_for_other_convoy(!bt_wait_for_other_convoy.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &bt_wait_allow_convoy_depart) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_wait_allow_convoy_departure(!bt_wait_allow_convoy_depart.pressed);
+			update_selection();
+		}
+	}
+	else if(comp == &allow_depart_line_selector) {
+		if(!schedule->empty()) {
+			uint32 selection = p.i;
+			if(  line_scrollitem_t *li = dynamic_cast<line_scrollitem_t*>(allow_depart_line_selector.get_element(selection))  ) {
+				schedule->at(schedule->get_current_stop()).set_allow_depart_line(li->get_line());
+			}
+			else {
+				schedule->at(schedule->get_current_stop()).set_allow_depart_line(linehandle_t());
+				allow_depart_line_selector.set_selection(0);
+			}
 			update_selection();
 		}
 	}
@@ -1162,12 +1430,23 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(comp == &bt_reverse_coupling) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_reverse_convoi_coupling(!bt_reverse_coupling.pressed);
-			if(  bt_wait_for_child.pressed  ) {
+			if(  schedule->get_waytype()!=water_wt  &&  (bt_wait_for_child.pressed || bt_find_parent.pressed)  ) {
 				schedule->at(schedule->get_current_stop()).reset_coupling();
-			} 
-			if(  bt_find_parent.pressed  ) {
-				schedule->at(schedule->get_current_stop()).reset_coupling();
-			} 
+			}
+			update_selection();
+		}
+	}
+	else if(comp == &bt_drive_without_reservation) {
+		if(!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_drive_without_reservation(!schedule->at(schedule->get_current_stop()).is_drive_without_reservation());
+			update_selection();
+		}
+	}
+	else if(comp == &bt_all_without_reservation) {
+		if(!schedule->empty()) {
+			for(uint8 i=0; i<schedule->get_count(); i++) {
+				schedule->at(i).set_drive_without_reservation(bt_drive_without_reservation.pressed);
+			}
 			update_selection();
 		}
 	}
@@ -1225,6 +1504,25 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
+	else if(comp == &numimp_wait_load_hms && bt_wait_load.pressed) {
+		if(!schedule->empty()) {
+			schedule_entry_t &entry = schedule->at(schedule->get_current_stop());
+			uint8 h, m, s;
+			unpack_hms( (uint32)p.i, h, m, s );
+			entry.waiting_time_shift = wait_hms_to_raw_monotonic( h, m, s, entry.waiting_time_shift );
+			update_selection();
+		}
+	}
+	else if(comp == &numimp_wait_load_divisor && bt_wait_load.pressed) {
+		if(!schedule->empty()) {
+			schedule_entry_t &entry = schedule->at(schedule->get_current_stop());
+			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+			uint8 h, m, s;
+			linear_raw_to_hms( (uint16)p.i, divisor, h, m, s );
+			entry.waiting_time_shift = wait_hms_to_raw_monotonic( h, m, s, entry.waiting_time_shift );
+			update_selection();
+		}
+	}
 	else if(comp == &bt_uncouple_child) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_uncouple_child(!bt_uncouple_child.pressed);
@@ -1233,6 +1531,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	}
 	else if(comp == &bt_return) {
 		schedule->add_return_way();
+	}
+	else if(comp == &bt_show_line_route) {
+		is_line_route_show = !is_line_route_show  &&  schedule->get_waytype() != air_wt;
+		last_route_schedule_count = 0xFFFFFFFFu; // force a fresh request
+		update_line_route_overlay();
+		should_set_schedule_tool = false;
 	}
 	else if(comp == &line_selector) {
 		uint32 selection = p.i;
@@ -1374,12 +1678,40 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
+	else if(comp == &numimp_spacing_shift_hms) {
+		if (!schedule->empty()) {
+			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+			uint8 h, m, s;
+			unpack_hms( (uint32)p.i, h, m, s );
+			const uint16 raw = linear_hms_to_raw_monotonic( h, m, s, divisor, schedule->at(schedule->get_current_stop()).spacing_shift );
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_spacing_shift_for_all(raw);
+			} else {
+				schedule->at(schedule->get_current_stop()).spacing_shift = raw;
+			}
+			update_selection();
+		}
+	}
 	else if(comp == &numimp_delay_tolerance) {
 		if (!schedule->empty()) {
 			if(  schedule->is_same_dep_time()  ) {
 				schedule->set_delay_tolerance_for_all((uint16)p.i);
 			} else {
 				schedule->at(schedule->get_current_stop()).delay_tolerance = (uint16)p.i;
+			}
+			update_selection();
+		}
+	}
+	else if(comp == &numimp_delay_tolerance_hms) {
+		if (!schedule->empty()) {
+			const uint16 divisor = world()->get_settings().get_spacing_shift_divisor();
+			uint8 h, m, s;
+			unpack_hms( (uint32)p.i, h, m, s );
+			const uint16 raw = linear_hms_to_raw_monotonic( h, m, s, divisor, schedule->at(schedule->get_current_stop()).delay_tolerance );
+			if(  schedule->is_same_dep_time()  ) {
+				schedule->set_delay_tolerance_for_all(raw);
+			} else {
+				schedule->at(schedule->get_current_stop()).delay_tolerance = raw;
 			}
 			update_selection();
 		}
@@ -1479,6 +1811,12 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 			update_selection();
 		}
 	}
+	else if(comp == &bt_start_shipped) {
+		if (!schedule->empty()) {
+			schedule->at(schedule->get_current_stop()).set_start_shipped(bt_start_shipped.pressed);
+			update_selection();
+		}
+	}
 	else if(comp == &bt_pass_stop) {
 		if(!schedule->empty()) {
 			schedule->at(schedule->get_current_stop()).set_pass_stop(!schedule->at(schedule->get_current_stop()).is_pass_stop());
@@ -1488,6 +1826,8 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 	else if(  comp == &name_filter_input  ) {
 		if(  strcmp(old_schedule_filter,schedule_filter)  ) {
 			init_line_selector();
+			init_next_line_selector();
+			init_departure_slot_group_selector();
 			strcpy(old_schedule_filter,schedule_filter);
 		}
 	}
@@ -1534,7 +1874,7 @@ void schedule_gui_t::init_line_selector()
 	line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("<no line>"), SYSCOL_TEXT ) ;
 
 	FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
-		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ) {
+		if(  !*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  (new_line.is_bound() && new_line==line)  ) {
 			if(  env_t::show_line_colors  ) {
 				line_selector.new_component<line_color_line_scroll_item_t>(line);
 			}
@@ -1596,6 +1936,44 @@ void schedule_gui_t::init_next_line_selector()
 	last_schedule_count = schedule->get_count();
 }
 
+void schedule_gui_t::init_allow_depart_line_selector()
+{
+	if(  schedule->empty()  ) {
+		return;
+	}
+	allow_depart_line_selector.clear_elements();
+	uint16 selection = 0;
+
+	const uint8 current_stop = schedule->get_current_stop();
+	const linehandle_t allow_depart_line = schedule->at(current_stop).get_allow_depart_line();
+
+	int offset = 1;
+	allow_depart_line_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate("Select Line Allow Departure"), SYSCOL_TEXT ) ;
+
+	halthandle_t h = haltestelle_t::get_stoppable_halt(schedule->at(current_stop).pos, player, schedule->get_waytype()==tram_wt?track_wt:schedule->get_waytype());
+	
+	if(  h.is_bound()  ) 
+	{
+		vector_tpl<linehandle_t> lines = h->registered_lines;
+		FOR(  vector_tpl<linehandle_t>, const line,  lines  ) {
+			// only show leader lines (lines that are their own departure slot group)
+			if(  line->get_schedule()->get_departure_slot_group_id() != line  ) {
+				continue;
+			}
+			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  schedule->get_departure_slot_group_id() == line) {
+				allow_depart_line_selector.new_component<company_color_line_scroll_item_t>(line);
+			}
+			if(  allow_depart_line==line->get_schedule()->get_departure_slot_group_id()  &&  selection==0  ) {
+				selection = allow_depart_line_selector.count_elements()-1;
+			}
+		}
+	}
+
+	allow_depart_line_selector.set_selection( selection );
+	line_scrollitem_t::sort_mode = line_scrollitem_t::SORT_BY_NAME;
+	allow_depart_line_selector.sort( offset );
+}
+
 
 void schedule_gui_t::init_departure_slot_group_selector()
 {
@@ -1635,7 +2013,7 @@ void schedule_gui_t::init_departure_slot_group_selector()
 			if(  line->get_schedule()->get_departure_slot_group_id() != line  ) {
 				continue;
 			}
-			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)) {
+			if(!*schedule_filter  ||  utf8caseutf8(line->get_name(), schedule_filter)  ||  schedule->get_departure_slot_group_id() == line) {
 				if(  player == this->player &&  schedule->matches(world(), line->get_schedule())  ) {
 					this_schedule_index = departure_slot_group_selector.count_elements();
 				}
@@ -1655,8 +2033,96 @@ void schedule_gui_t::init_departure_slot_group_selector()
 	// departure_slot_group_selector.sort( offset );
 }
 
+void schedule_gui_t::hide_line_route_overlay(void *win)
+{
+	schedule_gui_t *sg = static_cast<schedule_gui_t *>(win);
+	sg->is_line_route_show = false;
+	sg->route_overlay.hide();
+	sg->bt_show_line_route.pressed = false;
+}
+
+
+convoihandle_t schedule_gui_t::get_route_reference_convoi() const
+{
+	if(  cnv.is_bound()  ) {
+		return cnv;
+	}
+	if(  new_line.is_bound()  &&  new_line->count_convoys() > 0  ) {
+		return new_line->get_convoy( 0 );
+	}
+	return convoihandle_t();
+}
+
+
+void schedule_gui_t::update_line_route_overlay()
+{
+	const bool air = schedule->get_waytype() == air_wt;
+	bt_show_line_route.enable( !air );
+	bt_show_line_route.pressed = is_line_route_show && !air;
+	if(  air  ) {
+		is_line_route_show = false;
+	}
+	if(  !is_line_route_show  ) {
+		if(  route_overlay.is_shown()  ) {
+			route_overlay.hide();
+		}
+		last_route_schedule_count = 0xFFFFFFFFu;
+		return;
+	}
+
+	// only (re)issue the request when first shown or when the schedule changed,
+	// otherwise every frame would wipe the pending result before step() runs
+	if(  route_overlay.is_shown()  &&  schedule->get_count() == last_route_schedule_count  ) {
+		return;
+	}
+	last_route_schedule_count = schedule->get_count();
+
+	// derive the driving speed and catenary need from a convoy running this
+	// schedule, if there is one; otherwise fall back to a plain estimate
+	uint16 speed_kmh = 60;
+	bool   electric  = false;
+	convoihandle_t ref = get_route_reference_convoi();
+	if(  ref.is_bound()  ) {
+		speed_kmh = (uint16)speed_to_kmh( ref->get_min_top_speed() );
+		electric  = ref->get_use_electric();
+	}
+	route_overlay.show( schedule, player, speed_kmh, electric, this, &schedule_gui_t::hide_line_route_overlay );
+}
+
+
+void schedule_gui_t::update_route_time_label()
+{
+	lb_route_time.buf().clear();
+	if(  is_line_route_show  ) {
+		convoihandle_t ref = get_route_reference_convoi();
+		if(  !route_overlay.route_ready()  ||  !ref.is_bound()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else if(  !welt->is_schedule_route_complete()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT_STRONG );
+			lb_route_time.buf().append( translator::translate("NO ROUTE!") );
+		}
+		else if(  welt->get_schedule_route().empty()  ) {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			lb_route_time.buf().append( "..." );
+		}
+		else {
+			lb_route_time.set_color( SYSCOL_TEXT );
+			const uint32 ticks = convoi_t::calc_ticks_until_arrival( ref, &welt->get_schedule_route(), true );
+			lb_route_time.buf().printf( "%s: %s, %u %s", translator::translate("Route time"), format_route_time_hours( ticks ), welt->get_schedule_route_count(), translator::translate("tiles") );
+		}
+	}
+	lb_route_time.update();
+}
+
+
 void schedule_gui_t::draw(scr_coord pos, scr_size size)
 {
+	update_line_route_overlay();
+	route_overlay.poll();
+	update_route_time_label();
+
 	if(  player->simlinemgmt.get_line_count()!=old_line_count  ||  last_schedule_count!=schedule->get_count()  ) {
 		// lines added or deleted
 		init_line_selector();
@@ -1753,12 +2219,12 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	next_line_selector.set_visible(yesno);
 	sp_schedule_settings.set_visible(yesno);
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
-	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
+	const bool show_reverse_settings = reversible_waytype && schedule->get_waytype()!=water_wt && schedule->get_waytype()!=road_wt && !welt->get_settings().is_default_reverse(); // water convoy does not reverse default!
 	bt_reverse_default.set_visible(show_reverse_settings&&yesno);
 	sp_schedule_reverse_settings.set_visible(show_reverse_settings&&yesno);
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt; // water convoy does not use electricity
 	bt_no_use_electric.set_visible(coupling_waytype&&yesno);
-	sp_coupling_settings.set_visible(coupling_waytype&&yesno);	
+	sp_coupling_settings.set_visible(coupling_waytype&&yesno);
 }
 void schedule_gui_t::extract_loading_settings(bool yesno) {
 	bt_extract_loading_settings.set_typ(yesno? button_t::arrowup: button_t::arrowdown);
@@ -1779,12 +2245,13 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	bt_extract_driving_settings.set_typ(yesno ? button_t::arrowup : button_t::arrowdown);
 	bt_wait_for_time.set_visible(yesno);
 	lb_spacing.set_visible(yesno);
-	lb_spacing_shift.set_visible(yesno);
 	lb_title1.set_visible(yesno);
 	lb_title2.set_visible(yesno);
 	numimp_spacing.set_visible(yesno);
 	numimp_spacing_shift.set_visible(yesno);
+	numimp_spacing_shift_hms.set_visible(yesno);
 	numimp_delay_tolerance.set_visible(yesno);
+	numimp_delay_tolerance_hms.set_visible(yesno);
 	bt_same_dep_time.set_visible(yesno);
 	bt_load_before_departure.set_visible(yesno);
 	bt_max_speed_kmh_of_convoi.set_visible(yesno);
@@ -1793,14 +2260,18 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	numimp_balance_speed_kmh_of_convoi.set_visible(yesno);
 	sp_departure_settings.set_visible(yesno);
 	bt_pass_stop.set_visible(yesno);
-	
-	const bool coupling_waytype = schedule->get_waytype()!=road_wt  &&  schedule->get_waytype()!=air_wt  &&  schedule->get_waytype()!=water_wt;
+	bt_wait_for_other_convoy.set_visible(yesno);
+	allow_depart_line_selector.set_visible(yesno);
+	bt_wait_allow_convoy_depart.set_visible(yesno);
+
+	const bool coupling_waytype = schedule->get_waytype()!=air_wt;
 	const bool reversible_waytype = env_t::reversible_waytype(schedule->get_waytype());
+	const bool track_waytype = schedule->get_waytype()!=road_wt && schedule->get_waytype()!=water_wt && schedule->get_waytype()!=air_wt;
 	bt_wait_for_child.set_visible(coupling_waytype  &&  yesno);
 	bt_find_parent.set_visible(coupling_waytype  &&  yesno);
 	bt_reset_coupling.set_visible(coupling_waytype && yesno);
 	bt_reverse_convoy.set_visible(reversible_waytype  &&  yesno);
-	bt_reverse_coupling.set_visible(reversible_waytype  &&  yesno);
+	bt_reverse_coupling.set_visible(coupling_waytype  &&  yesno);
 	sp_reverse_settings.set_visible(reversible_waytype && yesno);
 	bt_wait_coupling_done.set_visible(coupling_waytype && yesno);
 	bt_uncouple_child.set_visible(coupling_waytype && yesno);
@@ -1809,4 +2280,13 @@ void schedule_gui_t::extract_driving_settings(bool yesno) {
 	sp_coupling_settings.set_visible(coupling_waytype && yesno);
 	bt_no_overtake.set_visible(schedule->get_waytype()==road_wt && yesno); // only for road vehicle
 	sp_road_settings.set_visible(schedule->get_waytype()==road_wt && yesno);
+	bt_drive_without_reservation.set_visible(track_waytype && yesno);
+	bt_all_without_reservation.set_visible(track_waytype && yesno);
+
+	// Convoy shipping needs no carrier-side flag: carrying is decided by the ship's capacity
+	// and its schedule. Only the carried side declares itself, and only where this pakset
+	// actually defines a shipping good, so the option never appears where it cannot work.
+	const bool is_shippable_waytype = schedule->get_waytype()!=air_wt
+		&&  goods_manager_t::get_shipping_goods(schedule->get_waytype())!=NULL;
+	bt_start_shipped.set_visible(is_shippable_waytype && yesno);
 }

@@ -25,7 +25,7 @@
 
 
 uint8 convoi_to_line_catgory_[convoi_t::MAX_CONVOI_COST] = {
-	LINE_CAPACITY, LINE_TRANSPORTED_GOODS, LINE_REVENUE, LINE_OPERATIONS, LINE_PROFIT, LINE_DISTANCE, LINE_MAXSPEED, LINE_WAYTOLL, LINE_TONKILO
+	LINE_CAPACITY, LINE_TRANSPORTED_GOODS, LINE_REVENUE, LINE_OPERATIONS, LINE_PROFIT, LINE_DISTANCE, LINE_MAXSPEED, LINE_WAYTOLL, LINE_TONKILO, LINE_DISTANCE_METERS
 };
 
 
@@ -333,6 +333,17 @@ void simline_t::rdwr(loadsave_t *file)
 		}
 		for (size_t k = MAX_MONTHS; k-- != 0;) {
 			financial_history[k][LINE_TONKILO] = 0;
+			financial_history[k][LINE_DISTANCE_METERS] = 0;
+		}
+	}
+	else if(  file->get_OTRP_version()<60  ) {
+		for (int j = 0; j<LINE_DISTANCE_METERS; j++) {
+			for (size_t k = MAX_MONTHS; k-- != 0;) {
+				file->rdwr_longlong(financial_history[k][j]);
+			}
+		}
+		for (size_t k = MAX_MONTHS; k-- != 0;) {
+			financial_history[k][LINE_DISTANCE_METERS] = financial_history[k][LINE_DISTANCE] * welt->get_settings().get_tile_length();
 		}
 	}
 	else {
@@ -393,7 +404,7 @@ void simline_t::register_stops(schedule_t * schedule)
 DBG_DEBUG("simline_t::register_stops()", "%d schedule entries in schedule %p", schedule->get_count(),schedule);
 	FOR(minivec_tpl<schedule_entry_t>, const& i, schedule->get_entries()) {
 		halthandle_t const halt = haltestelle_t::get_stoppable_halt(i.pos, player, schedule->get_waytype());
-		if(halt.is_bound()) {
+		if(halt.is_bound()&&!i.is_pass_stop()) {
 //DBG_DEBUG("simline_t::register_stops()", "halt not null");
 			halt->add_line(self);
 		}

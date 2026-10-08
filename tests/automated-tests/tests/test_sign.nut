@@ -178,19 +178,23 @@ function test_sign_build_oneway()
 				"........"
 			])
 
-		// change direction of sign on road crossing, should fail
-		local error_caught = false
-		try {
-			ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 3, 0), sign), null)
-		}
-		catch (e) {
-			ASSERT_EQUAL(e, "Tool has no effects")
-			error_caught = true
-		}
-		ASSERT_TRUE(error_caught)
+		// change direction of sign on road crossing, should now succeed
+		ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 3, 0), sign), null)
+		// on a road/road crossing the sign direction cycles but ribi_maske resets to 0
+		ASSERT_WAY_PATTERN_MASKED(wt_road, coord3d(0, 0, 0),
+			[
+				"........",
+				"..4.....",
+				"..5.....",
+				".2F8....",
+				"..1.....",
+				"........",
+				"........",
+				"........"
+			])
 	}
 
-	// remove sign, try to build again (should fail because of crossing)
+	// remove sign, try to build again (should success after v56)
 	{
 		ASSERT_EQUAL(remover.work(pl, coord3d(2, 3, 0)), null)
 		ASSERT_WAY_PATTERN(wt_road, coord3d(0, 0, 0),
@@ -215,7 +219,7 @@ function test_sign_build_oneway()
 			ASSERT_EQUAL(e, "Tool has no effects")
 			error_caught = true
 		}
-		ASSERT_TRUE(error_caught)
+		ASSERT_FALSE(error_caught)
 	}
 
 	ASSERT_EQUAL(wayremover.work(pl, coord3d(1, 3, 0), coord3d(3, 3, 0), "" + wt_road), null)
@@ -979,6 +983,99 @@ function test_sign_build_signal_multiple()
 		ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(0, 2, 0), coord3d(7, 2, 0), "" + wt_rail), null)
 	}
 
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_sign_remove_signal_route()
+{
+	local pl = player_x(0)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	local signal = sign_desc_x.get_available_signs(wt_rail).filter(@(idx, sign) sign.is_signal())[0]
+	local signal_remover = command_x(tool_remove_signal)
+
+	ASSERT_TRUE(rail != null)
+	ASSERT_TRUE(signal != null)
+
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(0, 10, 0), coord3d(7, 10, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 10, 0), signal), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(4, 10, 0), signal), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(6, 10, 0), signal), null)
+
+	ASSERT_EQUAL(signal_remover.work(pl, coord3d(0, 10, 0), coord3d(7, 10, 0), ""), null)
+
+	ASSERT_EQUAL(tile_x(2, 10, 0).find_object(mo_signal), null)
+	ASSERT_EQUAL(tile_x(4, 10, 0).find_object(mo_signal), null)
+	ASSERT_EQUAL(tile_x(6, 10, 0).find_object(mo_signal), null)
+	ASSERT_TRUE(tile_x(2, 10, 0).find_object(mo_way) != null)
+	ASSERT_TRUE(tile_x(4, 10, 0).find_object(mo_way) != null)
+	ASSERT_TRUE(tile_x(6, 10, 0).find_object(mo_way) != null)
+
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(0, 10, 0), coord3d(7, 10, 0), "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_sign_remove_signal_area_ctrl()
+{
+	local pl = player_x(0)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	local signal = sign_desc_x.get_available_signs(wt_rail).filter(@(idx, sign) sign.is_signal())[0]
+	local signal_remover = command_x(tool_remove_signal)
+
+	ASSERT_TRUE(rail != null)
+	ASSERT_TRUE(signal != null)
+
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(2, 1, 0), coord3d(2, 5, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(6, 1, 0), coord3d(6, 5, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 2, 0), signal), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(2, 4, 0), signal), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl, coord3d(6, 3, 0), signal), null)
+
+	signal_remover.set_flags(2)
+	ASSERT_EQUAL(signal_remover.work(pl, coord3d(1, 1, 0), coord3d(5, 5, 0), ""), null)
+	signal_remover.set_flags(0)
+
+	ASSERT_EQUAL(tile_x(2, 2, 0).find_object(mo_signal), null)
+	ASSERT_EQUAL(tile_x(2, 4, 0).find_object(mo_signal), null)
+	ASSERT_TRUE(tile_x(6, 3, 0).find_object(mo_signal) != null)
+	ASSERT_TRUE(tile_x(2, 2, 0).find_object(mo_way) != null)
+	ASSERT_TRUE(tile_x(2, 4, 0).find_object(mo_way) != null)
+	ASSERT_TRUE(tile_x(6, 3, 0).find_object(mo_way) != null)
+
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(2, 1, 0), coord3d(2, 5, 0), "" + wt_rail), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(6, 1, 0), coord3d(6, 5, 0), "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+function test_sign_remove_signal_keeps_other_player_signal()
+{
+	local pl = player_x(0)
+	local public_pl = player_x(1)
+	local rail = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	local signal = sign_desc_x.get_available_signs(wt_rail).filter(@(idx, sign) sign.is_signal())[0]
+	local signal_remover = command_x(tool_remove_signal)
+
+	ASSERT_TRUE(rail != null)
+	ASSERT_TRUE(signal != null)
+
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(0, 12, 0), coord3d(7, 12, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl,        coord3d(2, 12, 0), signal), null)
+	ASSERT_EQUAL(command_x.build_sign_at(public_pl, coord3d(4, 12, 0), signal), null)
+	ASSERT_EQUAL(command_x.build_sign_at(pl,        coord3d(6, 12, 0), signal), null)
+
+	ASSERT_EQUAL(signal_remover.work(pl, coord3d(0, 12, 0), coord3d(7, 12, 0), ""), null)
+
+	ASSERT_EQUAL(tile_x(2, 12, 0).find_object(mo_signal), null)
+	ASSERT_TRUE(tile_x(4, 12, 0).find_object(mo_signal) != null)
+	ASSERT_EQUAL(tile_x(6, 12, 0).find_object(mo_signal), null)
+	ASSERT_TRUE(tile_x(2, 12, 0).find_object(mo_way) != null)
+	ASSERT_TRUE(tile_x(4, 12, 0).find_object(mo_way) != null)
+	ASSERT_TRUE(tile_x(6, 12, 0).find_object(mo_way) != null)
+
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(4, 12, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(0, 12, 0), coord3d(7, 12, 0), "" + wt_rail), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
 

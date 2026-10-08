@@ -9,6 +9,7 @@
 
 #include "../tpl/vector_tpl.h"
 #include "../tpl/stringhashtable_tpl.h"
+#include "../simtypes.h"
 
 class goods_desc_t;
 
@@ -27,6 +28,14 @@ private:
 
 	// number of different good classes;
 	static uint8 max_catg_index;
+
+	/**
+	 * Convoy shipping: the dummy good that represents "space aboard a carrier convoy for a
+	 * convoy of waytype wt", indexed by waytype. Resolved once from the pakset by name in
+	 * successfully_loaded(); NULL for every waytype the pakset does not define a good for,
+	 * in which case convoys of that waytype simply cannot be shipped.
+	 */
+	static const goods_desc_t *shipping_goods[16];
 
 public:
 	enum {
@@ -62,6 +71,16 @@ public:
 
 	// good by catg_index
 	static const goods_desc_t *get_info_catg_index(const uint8 catg_index);
+
+	/**
+	 * Convoy shipping: the dummy good representing space for a convoy of waytype `wt` aboard
+	 * a carrier convoy, or NULL when this pakset cannot ship that waytype.
+	 * A vehicle whose freight type is this good contributes its capacity as shipping space.
+	 */
+	static const goods_desc_t *get_shipping_goods(waytype_t wt);
+
+	/// true if `desc` is one of the shipping dummy goods (never real cargo)
+	static bool is_shipping_goods(const goods_desc_t *desc);
 
 	/*
 	 * allow to multiply all prices, 1000=1.0

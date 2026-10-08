@@ -17,6 +17,17 @@
 #include "fabrik_info.h"
 #include "simwin.h"
 #include "minimap.h"
+
+#include "../display/simgraph.h"
+#include "../io/raw_image.h"
+#include "../pathes.h"
+
+#ifdef _MSC_VER
+#include <io.h>
+#define W_OK 2
+#else
+#include <unistd.h>
+#endif
 #include "schedule_gui.h"
 
 #include "../dataobj/translator.h"
@@ -28,6 +39,7 @@
 
 #include "../boden/wege/schiene.h"
 #include "../obj/leitung2.h"
+#include "../obj/label.h"
 #include "../utils/cbuffer_t.h"
 #include "../display/scr_coord.h"
 #include "../display/simgraph.h"
@@ -59,6 +71,7 @@ minimap_t::MAP_DISPLAY_MODE minimap_t::mode = MAP_TOWN;
 minimap_t::MAP_DISPLAY_MODE minimap_t::last_mode = MAP_TOWN;
 bool minimap_t::is_visible = false;
 bool minimap_t::circle_halts = false;
+bool minimap_t::show_convoi = true;
 
 #define MAX_MAP_TYPE_LAND 31
 #define MAX_MAP_TYPE_WATER 5
@@ -251,7 +264,7 @@ void minimap_t::add_to_schedule_cache( convoihandle_t cnv, bool with_waypoints )
 		//cycle on stops
 		//try to read station's coordinates if there's a station at this schedule stop
 		halthandle_t station = haltestelle_t::get_stoppable_halt( cur.pos, cnv->get_owner(), schedule->get_waytype() );
-		if(  station.is_bound()  ) {
+		if(  station.is_bound()  &&  !cur.is_pass_stop()  ) {
 			stop_cache.append_unique( station );
 			temp_stop = station->get_basis_pos();
 			stops ++;
@@ -338,7 +351,7 @@ void minimap_t::add_to_schedule_cache_without_cnv( schedule_t* schedule, player_
 		//cycle on stops
 		//try to read station's coordinates if there's a station at this schedule stop
 		halthandle_t station = haltestelle_t::get_stoppable_halt( cur.pos, owner, schedule->get_waytype() );
-		if(  station.is_bound()  ) {
+		if(  station.is_bound()  &&  !cur.is_pass_stop()  ) {
 			if (  is_highlighted  ) route_search_highlighted_halts.append_unique(station);
 			stop_cache.append_unique( station );
 			temp_stop = station->get_basis_pos();
@@ -913,7 +926,7 @@ void minimap_t::calc_map_pixel(const koord k)
 	}
 	const grund_t *gr=plan->get_boden_bei(plan->get_boden_count()-1);
 
-	if(  mode!=MAP_PAX_DEST  &&  gr->get_convoi_vehicle()  ) {
+	if(  show_convoi  &&  mode!=MAP_PAX_DEST  &&  gr->get_convoi_vehicle()  ) {
 		set_map_color( k, COL_VEHICLE );
 		return;
 	}
@@ -1110,6 +1123,68 @@ void minimap_t::calc_map_size()
 }
 
 
+bool minimap_t::export_to_png(std::string &filename)
+{
+	filename.clear();
+	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
+		return false;
+	}
+
+	const scr_size export_size = get_max_size();
+	const scr_size screen_size(display_get_width(), display_get_height());
+	if (export_size.w <= 0 || export_size.h <= 0 || screen_size.w <= 0 || screen_size.h <= 0) {
+		return false;
+	}
+
+	static int number = 0;
+	char path[80];
+	do {
+		snprintf(path, lengthof(path), SCREENSHOT_PATH_X "simmap%02d.png", number++);
+	} while (access(path, W_OK) != -1);
+
+	raw_image_png_writer_t writer(path, (uint32)export_size.w, (uint32)export_size.h, raw_image_t::FMT_RGB888);
+	if (!writer.is_valid()) {
+		return false;
+	}
+
+	// Bound temporary RGB memory independently of the total exported image size.
+	static const uint64 max_strip_bytes = 32ULL * 1024ULL * 1024ULL;
+	const uint64 row_bytes = (uint64)export_size.w * 3ULL;
+	const uint64 rows_per_strip = max_strip_bytes / row_bytes > 0 ? max_strip_bytes / row_bytes : 1;
+	const scr_coord_val strip_height = min(screen_size.h, (scr_coord_val)rows_per_strip);
+	raw_image_t strip((uint32)export_size.w, (uint32)strip_height, raw_image_t::FMT_RGB888);
+	const scr_coord saved_new_off = new_off;
+	const scr_size saved_new_size = new_size;
+	const clip_dimension saved_clip = display_get_clip_wh();
+	bool ok = true;
+
+	for (scr_coord_val y = 0; ok && y < export_size.h; y += strip_height) {
+		const scr_coord_val tile_height = min(strip_height, export_size.h - y);
+		for (scr_coord_val x = 0; ok && x < export_size.w; x += screen_size.w) {
+			const scr_coord_val tile_width = min(screen_size.w, export_size.w - x);
+			set_xy_offset_size(scr_coord(x, y), scr_size(tile_width, tile_height));
+			display_set_clip_wh(0, 0, tile_width, tile_height);
+			display_fillbox_wh_clip_rgb(0, 0, tile_width, tile_height, color_idx_to_rgb(COL_BLACK), false);
+			draw(scr_coord(-x, -y));
+			ok &= display_snapshot(scr_rect(0, 0, tile_width, tile_height), strip, scr_coord(x, 0));
+		}
+		ok = ok && writer.write_rows(strip, (uint32)tile_height);
+	}
+
+	new_off = saved_new_off;
+	new_size = saved_new_size;
+	needs_redraw = true;
+	display_set_clip_wh(saved_clip.x, saved_clip.y, saved_clip.w, saved_clip.h);
+	mark_screen_dirty();
+
+	if (!ok || !writer.finish()) {
+		return false;
+	}
+	filename = path;
+	return true;
+}
+
+
 void minimap_t::calc_map()
 {
 	// only use bitmap size like screen size
@@ -1128,7 +1203,14 @@ void minimap_t::calc_map()
 	if(  !isometric  ) {
 		koord k;
 		koord start_off = koord( (cur_off.x*zoom_out)/zoom_in, (cur_off.y*zoom_out)/zoom_in );
-		koord end_off = start_off+koord( ( map_data->get_width()*zoom_out)/zoom_in+1, ( map_data->get_height()*zoom_out)/zoom_in+1 );
+		// cur_off need not be aligned to zoom_in (notably when exporting the map in
+		// memory-bounded strips).  Calculate the absolute far edge and round it up;
+		// deriving it only from the bitmap size can leave the final partial tile
+		// unpainted and retain pixels from the preceding strip.
+		koord end_off = koord(
+			((cur_off.x + map_data->get_width()) * zoom_out + zoom_in - 1) / zoom_in,
+			((cur_off.y + map_data->get_height()) * zoom_out + zoom_in - 1) / zoom_in
+		);
 		for(  k.y=start_off.y;  k.y<end_off.y;  k.y+=zoom_out  ) {
 			for(  k.x=start_off.x;  k.x<end_off.x;  k.x+=zoom_out  ) {
 				calc_map_pixel(k);
@@ -1194,6 +1276,7 @@ void minimap_t::init()
 	last_schedule_counter = world->get_schedule_counter()-1;
 	set_selected_cnv(convoihandle_t());
 	set_selected_route(nullptr, nullptr);
+	highlighted_route_tiles.clear();
 }
 
 
@@ -1883,13 +1966,16 @@ void minimap_t::draw(scr_coord pos)
 
 	if(  mode & MAP_DEPOT  ) {
 		FOR(  slist_tpl<depot_t*>,  const d,  depot_t::get_depot_list()  ) {
-			if(  d->get_owner() == world->get_active_player()  ) {
-				scr_coord depot_pos = map_to_screen_coord( d->get_pos().get_2d() );
-				depot_pos = depot_pos + pos;
-				// offset of one to avoid
-				static uint8 depot_typ_to_color[19]={ COL_ORANGE, COL_YELLOW, COL_RED, 0, 0, 0, 0, 0, 0, COL_PURPLE, COL_DARK_RED, COL_DARK_ORANGE, 0, 0, 0, 0, 0, 0, COL_LIGHT_RED };
-				display_filled_circle_rgb( depot_pos.x, depot_pos.y, 4, color_idx_to_rgb(depot_typ_to_color[d->get_typ() - obj_t::bahndepot]) );
-				display_circle_rgb( depot_pos.x, depot_pos.y, 4, color_idx_to_rgb(COL_BLACK) );
+			scr_coord depot_pos = map_to_screen_coord( d->get_pos().get_2d() );
+			depot_pos = depot_pos + pos;
+			// offset of one to avoid
+			const bool has_filter = !highlighted_depot_positions.empty();
+			const bool highlighted = !has_filter || highlighted_depot_positions.is_contained(d->get_pos().get_2d());
+			const sint16 r = highlighted ? 4 : 2;
+			display_filled_circle_rgb( depot_pos.x, depot_pos.y, r, color_idx_to_rgb(d->get_owner()->get_player_color1()+4) );
+			display_circle_rgb( depot_pos.x, depot_pos.y, r, color_idx_to_rgb(COL_BLACK) );
+			if(  highlighted && has_filter  ) {
+				display_circle_rgb( depot_pos.x, depot_pos.y, r + 3, color_idx_to_rgb(COL_WHITE) );
 			}
 		}
 	}
@@ -1961,7 +2047,7 @@ void minimap_t::draw(scr_coord pos)
 	}
 
 	// draw convoy positions for the displayed line
-	if(  displayed_line.is_bound()  ) {
+	if(  show_convoi  &&  displayed_line.is_bound()  ) {
 		const skin_desc_t *waytype_icon = NULL;
 		switch(  displayed_line->get_schedule()->get_waytype()  ) {
 			case track_wt:        waytype_icon = skinverwaltung_t::zughaltsymbol;          break;
@@ -2029,6 +2115,71 @@ void minimap_t::draw(scr_coord pos)
 			scr_coord p = map_to_screen_coord( stadt->get_pos() );
 			p += pos;
 			display_proportional_clip_rgb( p.x, p.y, name, ALIGN_LEFT, col, true );
+		}
+	}
+
+	// draw depot names on top so they are not erased by vehicles
+	if(  mode & MAP_DEPOT  ) {
+		const bool has_filter = !highlighted_depot_positions.empty();
+		FOR(  slist_tpl<depot_t*>,  const d,  depot_t::get_depot_list()  ) {
+			if(  has_filter && !highlighted_depot_positions.is_contained(d->get_pos().get_2d())  ) {
+				continue;
+			}
+			scr_coord p = map_to_screen_coord( d->get_pos().get_2d() );
+			p += pos;
+
+			// resolve waytype icon
+			const skin_desc_t *wt_skin = NULL;
+			switch(  d->get_waytype()  ) {
+				case track_wt:        wt_skin = skinverwaltung_t::zughaltsymbol;          break;
+				case water_wt:        wt_skin = skinverwaltung_t::schiffshaltsymbol;      break;
+				case road_wt:         wt_skin = skinverwaltung_t::autohaltsymbol;         break;
+				case air_wt:          wt_skin = skinverwaltung_t::airhaltsymbol;          break;
+				case monorail_wt:     wt_skin = skinverwaltung_t::monorailhaltsymbol;     break;
+				case tram_wt:         wt_skin = skinverwaltung_t::tramhaltsymbol;         break;
+				case maglev_wt:       wt_skin = skinverwaltung_t::maglevhaltsymbol;       break;
+				case narrowgauge_wt:  wt_skin = skinverwaltung_t::narrowgaugehaltsymbol;  break;
+				default: break;
+			}
+			const image_id icon_img = (wt_skin ? wt_skin->get_image_id(0) : IMG_EMPTY);
+			scr_coord_val icon_xoff = 0, icon_yoff = 0, icon_xw = 12, icon_yw = 12;
+			if(  icon_img != IMG_EMPTY  ) {
+				display_get_image_offset(icon_img, &icon_xoff, &icon_yoff, &icon_xw, &icon_yw);
+				display_color_img(icon_img, p.x + 6 - icon_xoff, p.y - icon_yoff - icon_yw / 2, d->get_owner()->get_player_nr(), false, true);
+			}
+			const scr_coord_val name_x = p.x + 6 + (icon_img != IMG_EMPTY ? icon_xw + 2 : 0);
+			display_proportional_clip_rgb( name_x, p.y - LINESPACE / 2, d->get_name(), ALIGN_LEFT, color_idx_to_rgb(COL_WHITE), true );
+		}
+	}
+
+	// draw player-placed map markers (labels)
+	if(  mode & MAP_LABELS  ) {
+		FOR(  slist_tpl<koord>,  const k,  world->get_label_list()  ) {
+			grund_t *gr = world->lookup_kartenboden(k);
+			if(  !gr  ) continue;
+			label_t *lb = gr->find<label_t>();
+			if(  !lb  ) continue;
+			scr_coord p = map_to_screen_coord(k);
+			p += pos;
+			const PIXVAL pcol = color_idx_to_rgb(lb->get_owner()->get_player_color1() + 3);
+			// draw a small diamond as the pin marker
+			display_fillbox_wh_clip_rgb( p.x - 3, p.y - 1, 7, 3, pcol, true );
+			display_fillbox_wh_clip_rgb( p.x - 1, p.y - 3, 3, 7, pcol, true );
+			const char *text = gr->get_text();
+			if(  text  ) {
+				display_proportional_clip_rgb( p.x + 6, p.y - LINESPACE / 2, text, ALIGN_LEFT, pcol, true );
+			}
+		}
+	}
+
+	// draw highlighted convoy/line route (from convoi_info_t / schedule_list_gui_t "show route" button)
+	if(  !highlighted_route_tiles.empty()  ) {
+		const PIXVAL route_col = color_idx_to_rgb(COL_SOFT_BLUE);
+		const scr_coord_val tile_size = max( 2, zoom_in );
+		FOR(  vector_tpl<koord3d>,  const &k3d,  highlighted_route_tiles  ) {
+			scr_coord p = map_to_screen_coord(k3d.get_2d());
+			p += pos;
+			display_fillbox_wh_clip_rgb( p.x, p.y, tile_size, tile_size, route_col, true );
 		}
 	}
 }
