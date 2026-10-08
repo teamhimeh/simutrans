@@ -30,6 +30,7 @@ private:
 	button_t bt_land_attraction;
 	button_t bt_monuments;
 	button_t bt_thumbnails;
+	bool thumbnail_layout;
 
 	gui_label_t lb_name_filter_input;
 	static char name_filter_value[64];

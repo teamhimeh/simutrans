@@ -128,7 +128,8 @@ static bool compare_building_desc_size(const building_desc_t* a, const building_
 
 curiosity_edit_frame_t::curiosity_edit_frame_t(player_t* player_) :
 	extend_edit_gui_t(translator::translate("curiosity builder"), player_),
-	building_list(16)
+	building_list(16),
+	thumbnail_layout(false)
 {
 	desc = NULL;
 	haus_tool->set_default_param(NULL);
@@ -268,6 +269,16 @@ void curiosity_edit_frame_t::fill_list()
 
 void curiosity_edit_frame_t::update_thumbnail_columns()
 {
+	if (thumbnail_layout != bt_thumbnails.pressed) {
+		thumbnail_layout = bt_thumbnails.pressed;
+		// The legacy layout gives the right panel two of its three columns.
+		// Thumbnail mode uses two equally sized columns instead.
+		remove_all();
+		set_table_layout(thumbnail_layout ? 2 : 3, 0);
+		set_force_equal_columns(thumbnail_layout);
+		add_component(&cont_left);
+		add_component(&cont_right, thumbnail_layout ? 1 : 2);
+	}
 	scl.set_grid_cell_width(bt_thumbnails.pressed ? curiosity_thumbnail_size().w : 0);
 }
 
