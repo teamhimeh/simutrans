@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <limits.h>
 
 static std::string tab_escape(const std::string &value)
 {
@@ -65,13 +66,14 @@ static bool read_preset(const std::string &path, citybuilding_preset_t &out)
 	if (!file.read(obj)) return false;
 	citybuilding_preset_t preset;
 	char key[32];
-	for (int i = 0; ; ++i) {
+	for (int i = 0; i < INT_MAX; ++i) {
 		snprintf(key, sizeof(key), "building[%d]", i);
 		const char *building = obj.get(key);
 		if (!*building) break;
 		preset.buildings.push_back(tab_unescape(building));
 	}
-	if (preset.buildings.empty() || file.read(obj)) return false;
+	// Reject a preset that reached the loop limit instead of accepting a partial read.
+	if (preset.buildings.empty() || preset.buildings.size() == (size_t)INT_MAX || file.read(obj)) return false;
 	out = preset;
 	return true;
 }
