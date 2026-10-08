@@ -29,6 +29,7 @@ private:
 	button_t bt_city_attraction;
 	button_t bt_land_attraction;
 	button_t bt_monuments;
+	button_t bt_thumbnails;
 
 	gui_label_t lb_name_filter_input;
 	static char name_filter_value[64];
@@ -36,6 +37,7 @@ private:
 
 	void fill_list() OVERRIDE;
 	void put_item_in_list(const building_desc_t* desc );
+	void update_thumbnail_columns();
 
 	void change_item_info( sint32 i ) OVERRIDE;
 
