@@ -107,7 +107,7 @@ bool citybuilding_preset_frame_t::recover(const std::string &path, cbuffer_t &fa
 		create_win(new news_img(message.get_str()), w_info, magic_none);
 	}
 	if (result == CITYBUILDING_PRESET_RECOVERY_FAILED) {
-		failures.printf("\n%s", get_filename(path.c_str()));
+		failures.printf("\n%s", get_filename(path.c_str()).c_str());
 		return false;
 	}
 	return true;
