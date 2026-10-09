@@ -122,7 +122,7 @@ void extend_edit_gui_t::update_thumbnail_columns()
 void extend_edit_gui_t::show_selected_building()
 {
 	if (scl.get_selection() >= 0) {
-		scl.show_selection(scl.get_selection());
+		scl.show_focused();
 		if (bt_thumbnails.pressed) {
 			const scr_coord p = scl.get_element(scl.get_selection())->get_pos();
 			scl.set_scroll_position(p.x, p.y);
