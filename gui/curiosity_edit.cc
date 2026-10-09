@@ -116,9 +116,7 @@ curiosity_edit_frame_t::curiosity_edit_frame_t(player_t* player_) :
 	cont_filter.add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
 
-	bt_thumbnails.init(button_t::square_state, "Thumbnails");
-	bt_thumbnails.add_listener(this);
-	cont_filter.add_component(&bt_thumbnails);
+	init_thumbnail_options();
 
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
@@ -207,7 +205,7 @@ void curiosity_edit_frame_t::fill_list()
 		}
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
 		if (bt_thumbnails.pressed) {
-			scl.new_component<building_thumbnail_t>(i, name);
+			scl.new_component<building_thumbnail_t>(i, name, get_thumbnail_size());
 		}
 		else {
 			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);

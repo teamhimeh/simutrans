@@ -52,9 +52,7 @@ baum_edit_frame_t::baum_edit_frame_t(player_t* player_) :
 	tree_list(16)
 {
 	cont_timeline.set_visible(false);
-	bt_thumbnails.init(button_t::square_state, "Thumbnails");
-	bt_thumbnails.add_listener(this);
-	cont_filter.add_component(&bt_thumbnails);
+	init_thumbnail_options();
 
 	bt_randomage.init( button_t::square_state, "Random age");
 	bt_randomage.add_listener(this);
@@ -98,7 +96,7 @@ void baum_edit_frame_t::fill_list()
 	FOR(vector_tpl<tree_desc_t const*>, const i, tree_list) {
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
 		if (bt_thumbnails.pressed) {
-			scl.new_component<image_thumbnail_t>(i->get_image_id(0, 3), name);
+			scl.new_component<image_thumbnail_t>(i->get_image_id(0, 3), name, get_thumbnail_size());
 		}
 		else {
 			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, SYSCOL_TEXT);

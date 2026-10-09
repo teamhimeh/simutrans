@@ -144,9 +144,7 @@ factory_edit_frame_t::factory_edit_frame_t(player_t* player_) :
 	// add water to climate selection
 	cb_climates.new_component<gui_climates_item_t>(climate::water_climate);
 
-	bt_thumbnails.init(button_t::square_state, "Thumbnails");
-	bt_thumbnails.add_listener(this);
-	cont_filter.add_component(&bt_thumbnails);
+	init_thumbnail_options();
 
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
@@ -237,7 +235,7 @@ void factory_edit_frame_t::fill_list()
 			SYSCOL_TEXT;
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
 		if (bt_thumbnails.pressed) {
-			scl.new_component<building_thumbnail_t>(i->get_building(), name);
+			scl.new_component<building_thumbnail_t>(i->get_building(), name, get_thumbnail_size());
 		}
 		else {
 			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);

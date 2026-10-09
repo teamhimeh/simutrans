@@ -27,11 +27,11 @@ static scr_size building_thumbnail_size()
 		(y_grid > 0 ? y_grid : 24)*raster/64+6);
 }
 
-building_thumbnail_t::building_thumbnail_t(const building_desc_t *desc, const char *name_) : image(desc, 0), name(name_) {}
+building_thumbnail_t::building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_) : image(desc, 0), name(name_), cell_size(cell_size_) {}
 
 scr_size building_thumbnail_t::get_min_size() const
 {
-	return building_thumbnail_size();
+	return cell_size;
 }
 
 void building_thumbnail_t::draw(scr_coord offset)
@@ -50,7 +50,7 @@ void building_thumbnail_t::draw(scr_coord offset)
 
 scr_size image_thumbnail_t::get_min_size() const
 {
-	return building_thumbnail_size();
+	return cell_size;
 }
 
 void image_thumbnail_t::draw(scr_coord offset)
@@ -79,19 +79,42 @@ void image_thumbnail_t::draw(scr_coord offset)
 	}
 }
 
+void extend_edit_gui_t::init_thumbnail_options()
+{
+	cont_thumbnail_options.set_table_layout(2, 1);
+	cont_thumbnail_options.set_force_equal_columns(false);
+	bt_thumbnails.init(button_t::square_state, "Thumbnails");
+	bt_thumbnails.add_listener(this);
+	cont_thumbnail_options.add_component(&bt_thumbnails);
+	bt_large_thumbnails.init(button_t::square_state, "Large thumbnails");
+	bt_large_thumbnails.add_listener(this);
+	bt_large_thumbnails.set_visible(false);
+	cont_thumbnail_options.add_component(&bt_large_thumbnails);
+	cont_filter.add_component(&cont_thumbnail_options);
+}
+
+scr_size extend_edit_gui_t::get_thumbnail_size() const
+{
+	const int raster = get_base_tile_raster_width();
+	return bt_large_thumbnails.pressed ? scr_size(raster+4, raster+4) : building_thumbnail_size();
+}
+
 void extend_edit_gui_t::update_thumbnail_columns()
 {
-	if (thumbnail_layout != bt_thumbnails.pressed) {
-		thumbnail_layout = bt_thumbnails.pressed;
-		// The legacy layout gives the right panel two of its three columns.
-		// Thumbnail mode uses two equally sized columns instead.
+	bt_large_thumbnails.set_visible(bt_thumbnails.pressed);
+	const uint8 layout = !bt_thumbnails.pressed ? 0 : bt_large_thumbnails.pressed ? 2 : 1;
+	if (thumbnail_layout != layout) {
+		thumbnail_layout = layout;
+		// Preserve panel focus while changing spans: legacy 1:2, small 1:1, large 2:1.
+		gui_component_t *const focused_panel = comp_focus;
 		remove_all();
-		set_table_layout(thumbnail_layout ? 2 : 3, 0);
-		set_force_equal_columns(thumbnail_layout);
-		add_component(&cont_left);
-		add_component(&cont_right, thumbnail_layout ? 1 : 2);
+		set_table_layout(layout == 1 ? 2 : 3, 0);
+		set_force_equal_columns(layout != 0);
+		add_component(&cont_left, layout == 2 ? 2 : 1);
+		add_component(&cont_right, layout == 0 ? 2 : 1);
+		comp_focus = focused_panel;
 	}
-	scl.set_grid_cell_width(bt_thumbnails.pressed ? building_thumbnail_size().w : 0);
+	scl.set_grid_cell_width(bt_thumbnails.pressed ? get_thumbnail_size().w : 0);
 }
 
 
@@ -299,7 +322,11 @@ void extend_edit_gui_t::set_windowsize( scr_size s )
 
 bool extend_edit_gui_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 {
-	if (comp == &scl) {
+	if (comp == &bt_large_thumbnails) {
+		bt_large_thumbnails.pressed = !bt_large_thumbnails.pressed;
+		fill_list();
+	}
+	else if (comp == &scl) {
 		// select an item of scroll list ?
 		change_item_info(scl.get_selection());
 	}
@@ -390,12 +417,14 @@ void extend_edit_gui_t::rdwr(loadsave_t *file)
 	bt_pressed_flags |= bt_timeline_custom.pressed << 3;
 	bt_pressed_flags |= sort_order.pressed << 4;
 	bt_pressed_flags |= bt_thumbnails.pressed << 5;
+	bt_pressed_flags |= bt_large_thumbnails.pressed << 6;
 	file->rdwr_byte(bt_pressed_flags);
 	bt_obsolete.pressed = bt_pressed_flags & 1;
 	bt_timeline.pressed = (bt_pressed_flags & (1 << 1)) > 0;
 	bt_climates.pressed = (bt_pressed_flags & (1 << 2)) > 0;
 	bt_timeline_custom.pressed = (bt_pressed_flags & (1 << 3)) > 0;
 	sort_order.pressed = (bt_pressed_flags & (1 << 4)) > 0;
+	bt_large_thumbnails.pressed = (bt_pressed_flags & (1 << 6)) > 0;
 	// Building editors already store this mode in their own button flags.
 	if (get_rdwr_id() == magic_baum_edit || get_rdwr_id() == magic_groundobj_edit) {
 		bt_thumbnails.pressed = (bt_pressed_flags & (1 << 5)) > 0;
