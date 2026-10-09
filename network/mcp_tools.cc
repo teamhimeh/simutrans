@@ -34,6 +34,7 @@
 #include "../boden/grund.h"
 #include "../obj/simobj.h"
 #include "../player/simplay.h"
+#include "../gui/minimap.h"
 
 
 // ---------------------------------------------------------------------------
@@ -302,6 +303,23 @@ static std::string tool_capture_screen()
 		+ ",\"mimeType\":\"image/png\"}]}";
 }
 
+// Renders the whole minimap (entire world, not just the visible viewport) to
+// a PNG file on disk, using the same bounded-memory strip export the "Export
+// map image" button in the map window uses. The map can be far larger than
+// the screen, so unlike capture_screen this does not embed the image inline.
+static std::string tool_export_minimap(karte_t *welt)
+{
+	if (!welt) {
+		return text_content("{\"error\":\"world not ready\"}");
+	}
+
+	std::string filename;
+	if (!minimap_t::get_instance()->export_to_png(filename)) {
+		return text_content("{\"error\":\"failed to export minimap\"}");
+	}
+	return text_content("{\"result\":" + jstr(filename) + "}");
+}
+
 
 // ---------------------------------------------------------------------------
 // Tool registry
@@ -334,6 +352,13 @@ static const tool_def_t TOOL_DEFS[] = {
 		"capture_screen",
 		"Capture the current Simutrans window as a PNG image. "
 		"Use this to inspect the actual on-screen game view and GUI state.",
+		"{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+	},
+	{
+		"export_minimap",
+		"Render the entire minimap (the whole world, not just what fits on screen) "
+		"to a PNG file in the screenshot folder and return its path. "
+		"Use this to inspect the full map layout rather than the current viewport.",
 		"{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
 	},
 	{
@@ -401,6 +426,10 @@ std::string mcp_tools::tools_call(const std::string &name,
 
 	if (name == "capture_screen") {
 		return tool_capture_screen();
+	}
+
+	if (name == "export_minimap") {
+		return tool_export_minimap(welt);
 	}
 
 	if (name == "get_tile_info") {
