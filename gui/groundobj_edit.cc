@@ -61,6 +61,9 @@ groundobj_edit_frame_t::groundobj_edit_frame_t(player_t* player_) :
 	groundobj_list(16)
 {
 	cont_timeline.set_visible(false);
+	bt_thumbnails.init(button_t::square_state, "Thumbnails");
+	bt_thumbnails.add_listener(this);
+	cont_filter.add_component(&bt_thumbnails);
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_REMOVAL);
 
 	desc = NULL;
@@ -107,15 +110,32 @@ void groundobj_edit_frame_t::fill_list()
 	scl.set_selection(-1);
 	FOR(vector_tpl<groundobj_desc_t const*>, const i, groundobj_list) {
 		char const* const name = sortedby==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
-		scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, SYSCOL_TEXT);
+		if (bt_thumbnails.pressed) {
+			scl.new_component<image_thumbnail_t>(i->get_image_id(i->get_seasons() > 2 ? 2 : 0, 0), name);
+		}
+		else {
+			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, SYSCOL_TEXT);
+		}
 		if (i == desc) {
 			scl.set_selection(scl.get_count()-1);
 		}
 	}
+	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
+	show_selected_building();
 }
 
+
+
+bool groundobj_edit_frame_t::action_triggered(gui_action_creator_t *comp, value_t e)
+{
+	if (comp == &bt_thumbnails) {
+		bt_thumbnails.pressed = !bt_thumbnails.pressed;
+		fill_list();
+	}
+	return extend_edit_gui_t::action_triggered(comp, e);
+}
 
 
 void groundobj_edit_frame_t::change_item_info(sint32 entry)

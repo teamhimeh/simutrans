@@ -48,6 +48,37 @@ void building_thumbnail_t::draw(scr_coord offset)
 	}
 }
 
+scr_size image_thumbnail_t::get_min_size() const
+{
+	return building_thumbnail_size();
+}
+
+void image_thumbnail_t::draw(scr_coord offset)
+{
+	const scr_coord p = offset + get_pos();
+	if (selected) {
+		display_fillbox_wh_clip_rgb(p.x, p.y, get_size().w, get_size().h,
+			focused ? SYSCOL_LIST_BACKGROUND_SELECTED_F : SYSCOL_LIST_BACKGROUND_SELECTED_NF, true);
+	}
+	if (image != IMG_EMPTY) {
+		scr_coord_val x, y, w, h;
+		display_get_base_image_offset(image, &x, &y, &w, &h);
+		const scr_size bounds = get_min_size()-scr_size(4, 4);
+		if (w > 0 && h > 0) {
+			// Fit the original sprite, ignoring its map offset and preserving aspect ratio.
+			const int denominator = max(max(w, h), 1);
+			const int numerator = min(denominator, min(bounds.w*denominator/w, bounds.h*denominator/h));
+			const scr_size scaled(max(1, w*numerator/denominator), max(1, h*numerator/denominator));
+			display_base_img_scaled(image, scr_rect(p + scr_coord(2 + (bounds.w-scaled.w)/2,
+				2 + (bounds.h-scaled.h)/2), scaled));
+		}
+	}
+	if (get_mouse_x() >= p.x && get_mouse_x() < p.x+get_size().w &&
+		get_mouse_y() >= p.y && get_mouse_y() < p.y+get_size().h) {
+		win_set_tooltip(get_mouse_x() + TOOLTIP_MOUSE_OFFSET_X, p.y + get_size().h + TOOLTIP_MOUSE_OFFSET_Y, name, this);
+	}
+}
+
 void extend_edit_gui_t::update_thumbnail_columns()
 {
 	if (thumbnail_layout != bt_thumbnails.pressed) {
@@ -358,12 +389,17 @@ void extend_edit_gui_t::rdwr(loadsave_t *file)
 	bt_pressed_flags |= bt_climates.pressed << 2;
 	bt_pressed_flags |= bt_timeline_custom.pressed << 3;
 	bt_pressed_flags |= sort_order.pressed << 4;
+	bt_pressed_flags |= bt_thumbnails.pressed << 5;
 	file->rdwr_byte(bt_pressed_flags);
 	bt_obsolete.pressed = bt_pressed_flags & 1;
 	bt_timeline.pressed = (bt_pressed_flags & (1 << 1)) > 0;
 	bt_climates.pressed = (bt_pressed_flags & (1 << 2)) > 0;
 	bt_timeline_custom.pressed = (bt_pressed_flags & (1 << 3)) > 0;
 	sort_order.pressed = (bt_pressed_flags & (1 << 4)) > 0;
+	// Building editors already store this mode in their own button flags.
+	if (get_rdwr_id() == magic_baum_edit || get_rdwr_id() == magic_groundobj_edit) {
+		bt_thumbnails.pressed = (bt_pressed_flags & (1 << 5)) > 0;
+	}
 
 	sint32 ni_timeline_year_value = ni_timeline_year.get_value();
 	file->rdwr_long(ni_timeline_year_value);

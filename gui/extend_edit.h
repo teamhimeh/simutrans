@@ -110,6 +110,19 @@ public:
 	void draw(scr_coord offset) OVERRIDE;
 };
 
+/** A selectable preview for trees and ground objects. */
+class image_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
+{
+	image_id image;
+	const char *name;
+public:
+	image_thumbnail_t(image_id image_, const char *name_) : image(image_), name(name_) {}
+	const char *get_text() const OVERRIDE { return name; }
+	scr_size get_min_size() const OVERRIDE;
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+	void draw(scr_coord offset) OVERRIDE;
+};
+
 /**
  * Base class map editor dialogues to select object to place on map.
  */
