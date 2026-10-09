@@ -171,6 +171,10 @@ void display_set_actual_width(scr_coord_val);
 // force a certain size on a image (for rescaling tool images)
 void display_fit_img_to_width( const image_id n, sint16 new_w );
 
+/// Draw the base image into a rectangle, without modifying its cached zoom.
+/// The rectangle describes the image pixels, excluding the image's offsets.
+void display_base_img_scaled(image_id n, scr_rect area CLIP_NUM_DEF CLIP_NUM_DEFAULT_ZERO);
+
 void display_day_night_shift(int night);
 
 // scrolls horizontally, will ignore clipping etc.
