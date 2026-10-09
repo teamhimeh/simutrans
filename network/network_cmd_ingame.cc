@@ -563,33 +563,39 @@ void nwc_game_t::rdwr()
 
 bool nwc_auth_player_t::execute(karte_t *welt)
 {
-	dbg->message("nwc_auth_player_t::execute","plnr = %d  unlock = %d  our_client_id = %d", player_nr, player_unlocked, our_client_id);
+	dbg->message("nwc_auth_player_t::execute","plnr = %d  unlock = %llu  our_client_id = %u", player_nr, (unsigned long long)player_unlocked, our_client_id);
 
 	if(  env_t::server  &&  !(our_client_id==0  &&  player_nr==255)) {
 		// sent to server, and not sent to player playing on server
 		if (socket_list_t::is_valid_client_id(our_client_id)) {
 
+			// requested company (NULL for invalid number or empty slot)
+			player_t *player = player_nr < PLAYER_UNOWNED ? welt->get_player(player_nr) : NULL;
+
 			// player activated for this client? or admin connection via nettool?
 			socket_info_t &info = socket_list_t::get_client(our_client_id);
-			if (info.is_player_unlocked(player_nr)  ||  info.state == socket_info_t::admin) {
+			if (player == NULL) {
+				dbg->warning("nwc_auth_player_t::execute","no company with number %d", player_nr);
+			}
+			else if (info.is_player_unlocked(player_nr)  ||  info.state == socket_info_t::admin) {
 				dbg->message("nwc_auth_player_t::execute","set pwd for plnr = %d", player_nr);
 
 				// change password
-				if (welt->get_player(player_nr)->access_password_hash() != hash) {
-					welt->get_player(player_nr)->access_password_hash() = hash;
+				if (player->access_password_hash() != hash) {
+					player->access_password_hash() = hash;
 					// unlock all clients if new password is empty
 					// otherwise lock all
 					socket_list_t::unlock_player_all(player_nr, hash.empty(), our_client_id);
 				}
 			}
-			else if (player_nr < PLAYER_UNOWNED) {
+			else {
 				// public service player access: may set / clear the password of any company
 				// without knowing the old one (proxy administration)
 				if(  set_password  &&  info.is_player_unlocked(1)  &&  welt->get_settings().get_allow_unlock_by_public()  ) {
 					dbg->message("nwc_auth_player_t::execute","set pwd for plnr = %d via public access", player_nr);
 
-					if (welt->get_player(player_nr)->access_password_hash() != hash) {
-						welt->get_player(player_nr)->access_password_hash() = hash;
+					if (player->access_password_hash() != hash) {
+						player->access_password_hash() = hash;
 						// unlock all clients if new password is empty
 						// otherwise lock all
 						socket_list_t::unlock_player_all(player_nr, hash.empty(), our_client_id);
@@ -597,7 +603,7 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 					info.unlock_player(player_nr);
 				}
 				// check password
-				else if (welt->get_player(player_nr)->access_password_hash() == hash) {
+				else if (player->access_password_hash() == hash) {
 
 					dbg->message("nwc_auth_player_t::execute","unlock plnr = %d at our_client_id = %d", player_nr, our_client_id);
 
@@ -608,7 +614,9 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 			// report back to client who sent the command
 			if (our_client_id == 0) {
 				// unlock player on the server and clear unlock_pending flag
-				welt->get_player(player_nr)->unlock(info.is_player_unlocked(player_nr), false);
+				if (player) {
+					player->unlock(info.is_player_unlocked(player_nr), false);
+				}
 			}
 			else {
 				// send unlock-info to player on the client (to clear unlock_pending flag)
