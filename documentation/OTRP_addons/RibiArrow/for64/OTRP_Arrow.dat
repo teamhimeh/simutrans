@@ -1,0 +1,19 @@
+#Arrow Object For OTRPatch
+Obj=misc
+Name=RibiArrow
+Image[0]=OTRP_Arrows.0.0
+Image[1]=OTRP_Arrows.0.1
+Image[2]=OTRP_Arrows.0.2
+Image[3]=OTRP_Arrows.0.3
+Image[4]=OTRP_Arrows.1.0
+Image[5]=OTRP_Arrows.1.1
+Image[6]=OTRP_Arrows.1.2
+Image[7]=OTRP_Arrows.1.3
+Image[8]=OTRP_Arrows.2.0
+Image[9]=OTRP_Arrows.2.1
+Image[10]=OTRP_Arrows.2.2
+Image[11]=OTRP_Arrows.2.3
+Image[12]=OTRP_Arrows.3.0
+Image[13]=OTRP_Arrows.3.1
+Image[14]=OTRP_Arrows.3.2
+Image[15]=OTRP_Arrows.3.3

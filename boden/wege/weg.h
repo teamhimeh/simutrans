@@ -322,7 +322,7 @@ public:
 
 
 	// correct maintenance
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	virtual bool is_clipping_below_needed() const OVERRIDE;
 } GCC_PACKED;

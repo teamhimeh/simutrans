@@ -240,8 +240,7 @@ obj_desc_t * way_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->axle_load = 9999;
 	}
 	if(  version < 8  ) {
-				desc->clip_below = desc->wtyp != powerline_wt;
-
+		desc->clip_below = desc->wtyp != powerline_wt;
 	}
 	// front images from version 5 on
 	desc->front_images = version > 4;

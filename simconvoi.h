@@ -36,6 +36,7 @@ class vehicle_desc_t;
 class schedule_t;
 class cbuffer_t;
 class signal_t;
+class goods_desc_t;
 
 // A struct to represent the directly reachable halts
 struct convoi_reachable_halt_t {
@@ -64,6 +65,7 @@ public:
 		CONVOI_MAXSPEED,           // average max. possible speed
 		CONVOI_WAYTOLL,			   // waytoll
 		CONVOI_TONKILO,			   // the amount of transported ware integrated by transported distance.
+		CONVOI_DISTANCE_METERS,       // total distance traveled this month, in meters (CONVOI_DISTANCE * settings_t::tile_length)
 		MAX_CONVOI_COST            // Total number of cost items
 	};
 
@@ -93,6 +95,12 @@ public:
 		WAITING_FOR_LEAVING_DEPOT,
 		SUSPENSION,
 		SUSPENSION_LOADING,
+		// The convoy is aboard another convoy (see "convoy shipping" below). It is not on the
+		// map, holds no way reservation and is not sync-stepped.
+		// NOTE: SHIPPED must stay the last real state. Several places compare states ordinally
+		// (e.g. `state > EDIT_SCHEDULE`, `state >= LEAVING_DEPOT`); those sites explicitly
+		// exclude SHIPPED, and appending here keeps `is_waiting()`'s range check correct.
+		SHIPPED,
 		MAX_STATES
 	};
 
@@ -252,6 +260,37 @@ private:
 	convoihandle_t parent_convoi;
 
 	/**
+	* Convoy shipping: the convoys this convoy currently carries aboard.
+	* Only the most-parent convoy of each coupled chain is listed here; the rest of a
+	* chain is reached through coupling_convoi, exactly as betrete_depot() does.
+	* Only a most-parent convoy ever carries; a coupled child never does.
+	*/
+	vector_tpl<convoihandle_t> shipped_convois;
+
+	/**
+	* Convoy shipping: the convoy that carries me, if I am SHIPPED.
+	* Only set on the most-parent convoy of a shipped chain.
+	*/
+	convoihandle_t carrier_convoi;
+
+	/**
+	* Convoy shipping: the convoy that just carried me, kept only until the revenue for that
+	* leg has been settled. Revenue is booked at the stop AFTER disembarking (calc_revenue()
+	* measures from last_stop_pos, which is still the port we boarded at), so the carrier has
+	* to stay reachable that long to be paid its share. Cleared as soon as the split is done.
+	*/
+	convoihandle_t shipping_income_carrier;
+
+	/// pay `carrier`'s share of a shipped leg's revenue and return what is left for us
+	sint64 deduct_shipping_income_share(sint64 revenue, const vehicle_t *v);
+
+	/**
+	* Convoy shipping: ticks at which this convoy began waiting for a carrier, so that a
+	* convoy nobody ever comes to fetch can eventually be reported instead of hanging forever.
+	*/
+	uint32 shipping_wait_since;
+
+	/**
 	* a convoy that is coupling now.
 	*/
 	convoihandle_t convoi_coupling_in_progress;
@@ -343,6 +382,14 @@ private:
 
 	bool coupling_done;
 
+	/**
+	 * True while this convoy is blocked at its current stop, waiting for
+	 * another convoy (of the schedule entry's allow_depart_line) to grant
+	 * it departure allowance.
+	 */
+	bool waiting_for_departure_allowance_by_other_convoy;
+
+	bool waiting_for_departure_make_another_convoy_depart;
 
 	/**
 	 * Time when convoi arrived at the current stop
@@ -411,6 +458,7 @@ private:
 	bool reversing_needed;// Whether this convoy's vehicles will be arranged in reverse order.
 	bool reversing_coupling_needed;// Whether these convoys coupling reversing is needed or not. Only using waypoint!
 	bool reverse_coupling_done;// avoid reverse coupling loop in same stop
+	bool reversing_lane_hold;// lane was deliberately forced by a physical reversal in vorfahren(); protects it from the CAN_START/WAITING_FOR_CLEARANCE stale-lane safety reset until the next tile is entered.
 
 	bool unloading_done;//unload once in stop
 
@@ -434,6 +482,13 @@ private:
 	 * no load/ no engine.
 	 */
 	bool invalid_convoy;
+
+	/**
+	 *  driving without reservation
+	 *  for train (track, monorail_track,...)
+	 *  if reach the signal or stop, this flag reset
+	 */
+	bool drive_without_reservation;
 
 	/**
 	* Initialize all variables with default values.
@@ -584,6 +639,18 @@ public:
 	void set_reversed(bool yesno) { reversed = yesno; }
 	bool is_reversing_needed() const { return reversing_needed; }
 	void set_reversing_needed(bool yesno) { reversing_needed = yesno; }
+	bool is_reversing_lane_hold() const { return reversing_lane_hold; }
+	void set_reversing_lane_hold(bool yesno) { reversing_lane_hold = yesno; }
+	// number of tiles a road convoy has to stay on the lane it was forced onto by a physical
+	// reversal: its own length plus one, so the lane-change safety check in
+	// road_vehicle_t::enter_tile() runs once the whole convoy has cleared the tile it departed from.
+	sint8 calc_reversing_lane_tiles() const;
+
+	// Coupled convoys are one physical vehicle chain, but the lane (tiles_overtaking) is stored per
+	// convoy and only the leading convoy ever decides it - the front vehicles of the children are
+	// not 'leading', so none of the lane logic runs for them. Hand the leading convoy's lane down,
+	// so the children are drawn on, and treated as being on, the same lane.
+	void broadcast_lane_to_coupling_convois();
 	// Reorder the vehicle array
 	// Can be executed even with a vehicle array that does not belong to convoy for UI
 	
@@ -675,9 +742,11 @@ public:
 	sint64 get_fixed_cost() const { return -sum_fixed_costs; }
 
 	/**
-	 * returns the total running cost for all vehicles in convoi
+	 * returns the total running cost for all vehicles in convoi,
+	 * scaled by the running cost multiplier setting (see add_running_cost())
+	 * -- unlike vehicle_desc_t::get_running_cost(), which is the unscaled base value
 	 */
-	sint32 get_running_cost() const { return -base_sum_running_costs; }
+	sint32 get_running_cost_scaled() const;
 
 	/**
 	 * returns the total new purchase cost for all vehicles in convoy
@@ -950,6 +1019,12 @@ public:
 	void set_invalid_convoy(bool y) { invalid_convoy = y; }
 
 	/**
+	 *  driving without reservation: for track
+	 */
+	bool is_drive_without_reservation() const {return drive_without_reservation;}
+	void set_drive_without_reservation(bool y=false) { drive_without_reservation=y; }
+
+	/**
 	* loading_level was minimum_loading before. Actual percentage loaded of loadable
 	* vehicles.
 	*/
@@ -1002,6 +1077,7 @@ public:
 	* return a specified element from the financial history
 	*/
 	sint64 get_finance_history(int month, int cost_type) const { return financial_history[month][cost_type]; }
+	void set_finance_history(int month, int cost_type, sint64 value) { financial_history[month][cost_type] = value; }
 	sint64 get_stat_converted(int month, int cost_type) const;
 
 	/**
@@ -1064,6 +1140,18 @@ public:
 	void reserve_pos(koord3d pos) {reserved_tiles.append(pos); }
 	bool is_reservation_empty() const { return reserved_tiles.empty(); }
 	vector_tpl<koord3d>& get_reserved_tiles() { return reserved_tiles; }
+
+	/**
+	 * The corner set (see route_t::get_corner_set()) of reserved_tiles[index]: reserved tiles
+	 * are held in route order, so the neighbouring entries give the bits this convoy occupies
+	 * there. Pass it to grund_t::get_weg(waytype, dir) so the reservation is looked up on the
+	 * leg actually reserved when two same-waytype disjoint diagonal legs share that tile.
+	 */
+	ribi_t::ribi get_reserved_tiles_corner_set(uint32 index) const;
+
+	/// heading with which the reserved tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_reserved_tiles_travel_dir(uint32 index) const;
+
 	void clear_reserved_tiles();
 	/**
 	 * the index and steps of the coupling point.
@@ -1115,8 +1203,23 @@ public:
 	// just a guess of the speed
 	uint32 get_average_kmh() const;
 
+	/**
+	 * Rough estimate (in ticks == ms) of the travel time for a route driven by @p cnv.
+	 * - route_tiles == NULL: the remaining tiles of the convoy's current route
+	 *   (used by the halt departure board); @p add_stop_time is ignored.
+	 * - route_tiles != NULL: the given tiles (koord3d::invalid entries are leg
+	 *   separators and skipped). When @p add_stop_time is set, an estimated dwell
+	 *   time is added for every halt the route passes through - the longest
+	 *   loading time among the convoy's vehicles, or a default when unknown.
+	 */
+	static uint32 calc_ticks_until_arrival( convoihandle_t cnv, const vector_tpl<koord3d> *route_tiles = NULL, bool add_stop_time = false );
+
 	// Overtaking for convois
 	virtual bool can_overtake(overtaker_t *other_overtaker, sint32 other_speed, sint16 steps_other) OVERRIDE;
+
+	// passing_lane_stop_only_mode: may this convoy pull onto the passing lane in order to come to a
+	// stand beside the standing convoy in front of it? Grants the lane (set_tiles_overtaking) if so.
+	bool can_stop_on_passing_lane(sint32 other_speed, sint16 steps_other);
 
 	/*
 	 * Functions related to requested_change_lane
@@ -1152,10 +1255,22 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
+
+	/**
+	 * Re-anchor route_index of every vehicle of this convoy and of all convoys coupled
+	 * behind it, against the route each of those convoys holds. A coupled child keeps
+	 * its own copy of the route but is driven by its parent, so its vehicles' route_index
+	 * can run arbitrarily far past its route (vehicle_t::hop() has no upper bound there).
+	 * Coupling and uncoupling hand those indices to a different convoy, so they have to
+	 * be made meaningful again at both boundaries.
+	 */
+	void reanchor_chain_route_indices();
 	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }
 	bool is_waiting_for_coupling() const;
+	// true if self or any coupling child is currently blocked waiting for departure allowance by another convoy.
+	bool is_waiting_for_departure_allowance() const;
 	void set_convoi_coupling_in_progress(convoihandle_t);
 	convoihandle_t get_convoi_coupling_in_progress() const { return convoi_coupling_in_progress; }
 	void unset_convoi_coupling_in_progress();
@@ -1163,8 +1278,168 @@ public:
 	bool can_continue_coupling() const;
 	bool can_start_coupling(convoi_t* parent) const;
 
+	/* ---------------------------------------------------------------------------
+	 * Convoy shipping: carrying whole convoys of another waytype aboard a convoy.
+	 *
+	 * A "carrier" is a water convoy with vehicles whose freight type is one of the
+	 * shipping goods (see shipping_goods_t). A "shipped" convoy leaves the map
+	 * entirely while aboard: it holds no way reservation, occupies no tile, is not
+	 * sync-stepped, and keeps its coupling chain intact.
+	 * --------------------------------------------------------------------------- */
+
+	bool is_shipped() const { return state==SHIPPED; }
+
+	/// true if this convoy currently has at least one convoy aboard
+	bool is_carrying_convoys() const { return !shipped_convois.empty(); }
+
+	const vector_tpl<convoihandle_t> &get_shipped_convois() const { return shipped_convois; }
+
+	/// the raw carrier link. Only ever set on the head of a shipped chain - callers that just
+	/// want "who is carrying me" should use get_shipping_carrier() instead.
+	convoihandle_t get_carrier_convoi() const { return carrier_convoi; }
+
+	/**
+	 * The convoy carrying me, resolved through the coupling chain, or an unbound handle.
+	 * A carried chain keeps its coupling and every convoy in it is SHIPPED, but only the head
+	 * holds the link to the carrier - so anything asking on behalf of a coupled child has to
+	 * walk up to the head first.
+	 */
+	convoihandle_t get_shipping_carrier() const { return get_most_parent_convoi()->carrier_convoi; }
+
+	/**
+	 * The halt where I am to be put ashore, or an unbound handle.
+	 *
+	 * Deliberately derived, never stored. board_carrier() advances my schedule to the
+	 * destination entry, so my own current schedule entry already *is* the drop-off point -
+	 * and a schedule holds a position, not a halt. Storing a halthandle would drift out of
+	 * sync with that position the moment halts merge, split or are rebuilt: the handle would
+	 * go stale even though the position still has a perfectly usable station, and the convoy
+	 * would be "rescued" to a depot for no reason. Resolving the position afresh on every
+	 * call, the way the rest of the code does, cannot drift.
+	 */
+	halthandle_t get_shipping_dest_halt() const;
+
+	/// total shipping capacity of this convoy for the given waytype, in convoy length units
+	uint32 get_shipping_capacity(waytype_t wt) const;
+
+	/// shipping capacity for `wt` currently taken up by the convoys aboard
+	uint32 get_shipping_load(waytype_t wt) const;
+
+	/// as get_shipping_load(), but keyed on the shipping good itself (rail and tram share one)
+	uint32 get_shipping_load_for_goods(const goods_desc_t *g) const;
+
+	/// total capacity of the vehicles offering space for this shipping good
+	uint32 get_shipping_capacity_for_goods(const goods_desc_t *g) const;
+
+	// NOTE on capacity: a convoy boards whenever ANY shipping space is left, even if it is
+	// longer than that space, so the load may exceed the capacity by up to one convoy. That
+	// overshoot is deliberate - it is what carries the loading level past minimum_loading and
+	// releases the ferry, and it removes the deadlock a strict "does it fit" test creates when
+	// the gap left over happens to match no waiting convoy.
+
+	/**
+	 * true if this trip actually delivers a carried convoy to `dest`: the carrier stops there,
+	 * unloads there, and gets there without first putting everything ashore (UNLOAD_ALL) or
+	 * returning to the stop it is at now. Re-evaluated at every stop, so editing the carrier's
+	 * schedule (or its line's) while convoys are aboard strands nobody silently.
+	 */
+	bool can_deliver_shipped_to(halthandle_t dest) const;
+
+	/// true if any vehicle of this convoy offers space for carrying convoys
+	bool has_shipping_capacity() const;
+
+	/// the halt a convoy with START_SHIPPED needs to be carried to (its next scheduled halt)
+	halthandle_t get_shipping_target_halt() const;
+
+	/// length this convoy (including its coupled children) occupies aboard a carrier
+	uint32 get_shipping_length() const;
+
+	/// total weight of this convoy and its coupled children, as it rides aboard a carrier
+	sint64 get_shipping_weight() const;
+
+	/// combined weight of everything this convoy is carrying aboard
+	sint64 get_carried_weight() const;
+
+	/// true if this convoy is a carrier that could in principle take `c` aboard right now
+	bool can_ship(convoihandle_t c) const;
+
+	/// summed running cost of just the vehicles offering space for this shipping good
+	sint64 get_shipping_running_cost(const goods_desc_t *g) const;
+
+	/**
+	 * true if `v` - a vehicle of this convoy offering shipping space - should be drawn with
+	 * its loaded image. The deck fills from the front, so a car only looks loaded once every
+	 * car ahead of it carrying the same shipping good is full.
+	 */
+	bool is_shipping_vehicle_loaded(const vehicle_t *v) const;
+
+	/// mark the carrier's vehicles for an image update after boarding/disembarking
+	void recalc_shipping_images();
+
+	/**
+	 * Charge the convoys we carry for one tile of the ride, booked as CONVOI_WAYTOLL against
+	 * them and as toll received by us - the carrier is the "way" they are travelling on.
+	 * Called from add_running_cost(), so it accrues per tile like the way toll does.
+	 */
+	void book_shipping_toll();
+
+	/**
+	 * Take `c` (a most-parent convoy, together with its coupled children) aboard this
+	 * carrier, to be put ashore at `dest`. Removes `c` from the map and releases every
+	 * reservation it holds. Returns false if it does not fit or the state is wrong.
+	 */
+	bool board_carrier(convoihandle_t c, halthandle_t dest);
+
+	/**
+	 * Put `c` ashore at `halt`, on a tile of its own waytype. Returns false when there is
+	 * no usable tile, in which case `c` simply stays aboard and we retry at a later stop.
+	 */
+	bool disembark_convoy(convoihandle_t c, halthandle_t halt);
+
+	/// called on the carrier when it has stopped at `halt`: drop off and pick up convoys
+	void handle_shipping_at_halt(halthandle_t halt);
+
+	/// called on a convoy standing at `halt` with START_SHIPPED set: look for a carrier
+	bool try_start_shipping(halthandle_t halt);
+
+	/// true while this convoy is waiting at a stop for a carrier that has not arrived yet
+	bool is_waiting_for_carrier() const;
+
+	/**
+	 * Last resort for every convoy still aboard: put it in a depot, or destroy it if there
+	 * is none. Used when the carrier is destroyed, enters a depot, or can no longer reach
+	 * the drop-off halt. Never leaves a convoy in a half-shipped state.
+	 */
+	void disembark_all_forced();
+
+	/**
+	 * Send this convoy straight to the nearest suitable depot without a route search.
+	 * send_to_depot_immediately() cannot be used for a shipped convoy: it route-searches
+	 * from get_pos(), and a land convoy in the middle of the sea can never find a route.
+	 */
+	bool teleport_to_nearest_depot(bool announce = true);
+
+	/// release every way reservation held by this convoy and take it off the map
+	void withdraw_from_map_for_shipping();
+
+	// Whether this convoy can reach other_cnv's position by water (same river, same sea,
+	// or a sea connected to a river etc.) - used to find valid TRY_COUPLING partners at a
+	// halt without relying on both convoys occupying the exact same tile.
+	bool is_same_waterway(convoihandle_t other_cnv) const;
+
 	bool is_coupling_done() const { return coupling_done; }
 	void set_coupling_done(bool tf) { coupling_done = tf; }
+
+	bool is_waiting_for_departure_allowance_by_other_convoy() const { return waiting_for_departure_allowance_by_other_convoy; }
+	void set_waiting_for_departure_allowance_by_other_convoy(bool tf) { waiting_for_departure_allowance_by_other_convoy = tf; }
+	bool is_waiting_for_departure_make_another_convoy_depart() const { return waiting_for_departure_make_another_convoy_depart; }
+	void set_waiting_for_departure_make_another_convoy_depart(bool tf) { waiting_for_departure_make_another_convoy_depart = tf; }
+	/**
+	 * Grant departure allowance to one waiting convoy of the given line, if any,
+	 * that is currently loading at halt. Only one convoy is released per call.
+	 */
+	bool allow_other_convoy_to_depart(halthandle_t halt) const;
+
 
 	void set_arrived_time(uint32 t) { arrived_time = t; }
 	uint32 get_arrived_time() const { return arrived_time; }

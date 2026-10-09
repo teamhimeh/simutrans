@@ -16,6 +16,8 @@
 #include "../tpl/vector_tpl.h"
 #include "../dataobj/translator.h"
 
+#include <string>
+
 
 class karte_ptr_t;
 class fabrik_t;
@@ -189,6 +191,8 @@ private:
 
 	vector_tpl<koord> highlighted_depot_positions;
 
+	vector_tpl<koord3d> highlighted_route_tiles;
+
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
 
@@ -250,6 +254,12 @@ public:
 	/// calculates the current size of the map (but do not change anything else)
 	void calc_map_size();
 
+	/**
+	 * Export the complete minimap using the current zoom and display settings.
+	 * @param filename receives the relative output path on success
+	 */
+	bool export_to_png(std::string &filename);
+
 	~minimap_t();
 
 	void init();
@@ -310,6 +320,12 @@ public:
 		for (koord const& k : positions) { highlighted_depot_positions.append(k); }
 	}
 	void clear_highlighted_depots() { highlighted_depot_positions.clear(); }
+
+	void set_highlighted_route(const vector_tpl<koord3d> &tiles) {
+		highlighted_route_tiles.clear();
+		for (koord3d const& k : tiles) { highlighted_route_tiles.append(k); }
+	}
+	void clear_highlighted_route() { highlighted_route_tiles.clear(); }
 	void set_from_dest_halt(halthandle_t from_halt, halthandle_t dest_halt) {
 		if (  from_halt.is_bound() && dest_halt.is_bound()  ) {
 			route_search_from_halt = from_halt;

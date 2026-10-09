@@ -625,7 +625,7 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 	else {
 		for(uint8 i=0; i<PLAYER_UNOWNED; i++) {
 			if (player_t *player = welt->get_player(i)) {
-				player->unlock( player_unlocked & (1<<i), false);
+				player->unlock( (player_unlocked & ((uint64)1<<i)) != 0, false);
 			}
 		}
 		// remember which players have a password stored on the server,
@@ -641,13 +641,13 @@ bool nwc_auth_player_t::execute(karte_t *welt)
 }
 
 
-uint16 nwc_auth_player_t::get_player_password_set_bits(karte_t *welt)
+uint64 nwc_auth_player_t::get_player_password_set_bits(karte_t *welt)
 {
-	uint16 bits = 0;
+	uint64 bits = 0;
 	for(uint8 i=0; i<PLAYER_UNOWNED; i++) {
 		player_t *player = welt->get_player(i);
 		if (player  &&  player->is_password_hash()) {
-			bits |= 1<<i;
+			bits |= (uint64)1<<i;
 		}
 	}
 	return bits;
@@ -656,21 +656,21 @@ uint16 nwc_auth_player_t::get_player_password_set_bits(karte_t *welt)
 
 void nwc_auth_player_t::init_player_lock_server(karte_t *welt)
 {
-	uint16 player_unlocked = 0;
+	uint64 player_unlocked = 0;
 	for(uint8 i=0; i<PLAYER_UNOWNED; i++) {
 		// player not activated or password matches stored password
 		player_t *player = welt->get_player(i);
 		if (player == NULL  ||  player->access_password_hash() == welt->get_player_password_hash(i) ) {
-			player_unlocked |= 1<<i;
+			player_unlocked |= (uint64)1<<i;
 		}
 		if (player) {
-			player->unlock( player_unlocked & (1<<i), false);
+			player->unlock( (player_unlocked & ((uint64)1<<i)) != 0, false);
 		}
 	}
 	// get the local server socket
 	socket_info_t &info = socket_list_t::get_client(0);
 	info.player_unlocked = player_unlocked;
-	dbg->message("nwc_auth_player_t::init_player_lock_server", "new = %d", player_unlocked);
+	dbg->message("nwc_auth_player_t::init_player_lock_server", "new = %llu", (unsigned long long)player_unlocked);
 
 	nwc_clientlist_t::broadcast(welt);
 }
@@ -740,11 +740,11 @@ void nwc_sync_t::do_command(karte_t *welt)
 	// save active player
 	const uint8 active_player = welt->get_active_player_nr();
 	// save lock state
-	uint16 player_unlocked = 0;
+	uint64 player_unlocked = 0;
 	for(uint8 i=0; i<PLAYER_UNOWNED; i++) {
 		if (player_t *player = welt->get_player(i)) {
 			if (!player->is_locked()) {
-				player_unlocked |= 1<<i;
+				player_unlocked |= (uint64)1<<i;
 			}
 		}
 	}
@@ -785,11 +785,11 @@ void nwc_sync_t::do_command(karte_t *welt)
 
 		// remove passwords before transfer on the server and set default client mask
 		// they will be restored in karte_t::laden
-		uint16 unlocked_players = 0;
+		uint64 unlocked_players = 0;
 		for(  int i=0;  i<PLAYER_UNOWNED; i++  ) {
 			player_t *player = welt->get_player(i);
 			if(  player==NULL  ||  player->access_password_hash().empty()  ) {
-				unlocked_players |= (1<<i);
+				unlocked_players |= (uint64)1<<i;
 			}
 			else {
 				player->access_password_hash().clear();
@@ -850,7 +850,7 @@ void nwc_sync_t::do_command(karte_t *welt)
 	// restore lock state
 	for(uint8 i=0; i<PLAYER_UNOWNED; i++) {
 		if (player_t *player = welt->get_player(i)) {
-			player->unlock(player_unlocked & (1<<i));
+			player->unlock((player_unlocked & ((uint64)1<<i)) != 0);
 		}
 	}
 }

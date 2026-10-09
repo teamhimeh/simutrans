@@ -14,6 +14,7 @@
 #include "../tpl/stringhashtable_tpl.h"
 
 template<class T> class vector_tpl;
+class weg_t;
 class tool_selector_t;
 
 /**
@@ -52,7 +53,8 @@ protected:
 		skip_default_route 	= 1U<<6,// use default calc_route() before call find_route().
 		start_signal		= 1U<<7,// if the next signal is start signal and state is RED, convoy stay there (not move to the end of the steps of signal tile).
 		length_based		= 1U<<8, // in choose signal, length based find_route(do not enter the first found tile, the shortest halt which can enter the convoys).
-		detailed_oneway	= 1U<<9  // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
+		detailed_oneway	= 1U<<9, // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
+		ignore_length = 1U<<10 	 // ignore length (for track)
 	};
 
 	uint8 choose_signal_margin_length;
@@ -62,6 +64,8 @@ protected:
 	// 0 = not fixed, 1 = only fix left lane, 2 = only fix right lane, 3 = fix both lane, 4 = not applied
 	uint8 lane_affinity;
 	koord3d intersection_pos;
+
+	uint64 private_way_mask = 0ll;
 
 	const roadsign_desc_t *desc;
 
@@ -95,12 +99,21 @@ public:
 	const char* get_name() const OVERRIDE { return "Roadsign"; }
 
 	// assuming this is a private way sign
-	uint16 get_player_mask() const { return (ticks_ow<<8)|ticks_ns; }
+	uint64 get_player_mask() const { return private_way_mask; }
+	void set_player_mask(uint64 mask) { private_way_mask = mask; }
 
 	/**
 	 * waytype associated with this object
 	 */
 	waytype_t get_waytype() const OVERRIDE { return desc ? desc->get_wtyp() : invalid_wt; }
+
+	/**
+	 * Waytype of the way this sign actually sits on and governs.
+	 * Same as get_waytype(), except tram signs govern the track_wt way.
+	 * Use this to test whether a sign is relevant to a given vehicle/route
+	 * (compare against vehicle_t::get_waytype() / weg_t::get_waytype()).
+	 */
+	waytype_t get_governed_waytype() const { return get_waytype() != tram_wt ? get_waytype() : track_wt; }
 
 	roadsign_t(loadsave_t *file);
 	roadsign_t(player_t *player, koord3d pos, ribi_t::ribi dir, const roadsign_desc_t* desc, bool preview = false);
@@ -198,6 +211,8 @@ public:
 	void set_length_based(bool tf) { tf? choose_sign_flag|=length_based:choose_sign_flag&=~length_based; }
 	bool is_detailed_oneway() const;
 	void set_detailed_oneway(bool tf) { tf? choose_sign_flag|=detailed_oneway:choose_sign_flag&=~detailed_oneway; }
+	bool is_ignore_length() const {return (choose_sign_flag&ignore_length)>0;}
+	void set_ignore_length(bool tf) { tf? choose_sign_flag|=ignore_length: choose_sign_flag&=~ignore_length; }
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
 	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
@@ -234,6 +249,14 @@ public:
 	// Recompute ribi_maske on the underlying way to reflect detailed_oneway settings.
 	void update_ribi_maske();
 
+	/**
+	 * The way this sign belongs to. On a tile carrying two ways of the same waytype (the
+	 * disjoint legs of a closed diagonal) the sign belongs to the leg its own dir runs along:
+	 * a plain get_weg(waytype) would always answer weg_nr(0) and so count the sign on, or mask,
+	 * the wrong leg. Identical to get_weg(waytype) on every ordinary tile.
+	 */
+	weg_t *get_weg_here() const;
+
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
 	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
@@ -257,7 +280,7 @@ public:
 	// subtracts cost
 	void cleanup(player_t *player) OVERRIDE;
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// static routines from here
 private:

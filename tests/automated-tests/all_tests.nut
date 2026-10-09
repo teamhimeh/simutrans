@@ -47,11 +47,14 @@ include("tests/test_schedule")
 include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
+include("tests/test_priority_signal_crossing")
 include("tests/test_otrp_signal_options")
 include("tests/test_reroute_reservation")
 include("tests/test_remove_house")
 include("tests/test_pillar")
 include("tests/test_crossing_reservation")
+include("tests/test_diagonal_two_waytypes")
+include("tests/test_diagonal_two_waytypes_same_desc")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -265,6 +268,7 @@ all_tests <- [
 	test_stop_before_check_choose_signal_convoy_stops,
 	test_stop_before_check_false_convoy_does_not_stop,
 	test_priority_signal_reserve,
+	test_priority_signal_before_crossing_no_slowdown,
 	test_longblock_open_no_prefix_signal,
 	test_longblock_blocked_no_prefix_signal,
 	test_longblock_open_pre_signal,
@@ -325,6 +329,12 @@ all_tests <- [
 	test_crossing_four_way_ns_sequential_prohibited,
 	test_crossing_four_way_ne_ne_sequential_prohibited,
 	test_crossing_four_way_ne_se_sequential_prohibited,
+	test_diagonal_two_waytypes_rail_and_air,
+	test_diagonal_two_waytypes_same_waytype,
+	test_diagonal_two_waytypes_split_to_threeway,
+	test_diagonal_two_waytypes_partial_leg,
+	test_diagonal_two_waytypes_same_desc,
+	test_diagonal_two_waytypes_same_desc_partial_leg,
 ]
 
 

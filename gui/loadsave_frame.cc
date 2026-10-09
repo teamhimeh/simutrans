@@ -10,10 +10,13 @@
 #include "loadsave_frame.h"
 #include "unused_addons_frame.h"
 #include "simwin.h"
+#include "messagebox.h"
 
 #include "../sys/simsys.h"
 #include "../simworld.h"
 #include "../simversion.h"
+#include "../simmenu.h"
+#include "../player/simplay.h"
 #include "../pathes.h"
 
 #include "../dataobj/loadsave.h"
@@ -26,6 +29,7 @@
 #include "../network/network_socket_list.h"
 
 #include "../utils/simstring.h"
+#include "../simevent.h"
 
 
 stringhashtable_tpl<sve_info_t *> loadsave_frame_t::cached_info;
@@ -110,6 +114,53 @@ bool loadsave_frame_t::item_action(const char *filename)
 			// older OTRP version: index 1 => v(OTRP_VERSION_MAJOR-1), index 2 => v(OTRP_VERSION_MAJOR-2), ...
 			sprintf( otrp_ver_str, "0." QUOTEME(SIM_VERSION_MAJOR) "." QUOTEME(SIM_SAVE_MINOR) ".%d", OTRP_VERSION_MAJOR - sel );
 			env_t::savegame_version_str = otrp_ver_str;
+		}
+		if(  OTRP_VERSION_MAJOR - sel < 59  ) {
+			// older save formats only support player slots 0..14
+			const uint8 old_player_count = 15;
+			bool has_extra_players = false;
+			for(  uint8 i=old_player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+				player_t *player = welt->get_player(i);
+				if(  player != NULL  &&  !player->is_public_service()  ) {
+					has_extra_players = true;
+					break;
+				}
+			}
+			if(  has_extra_players  ) {
+				if(  env_t::networkmode  ) {
+					// In network mode merging companies would sync to the server and destroy them for all players.
+					// obj_t::rdwr only remaps the PLAYER_UNOWNED sentinel, not real owner ids >=15, so silently
+					// saving in the old format would corrupt ownership on reload. Forbid the old format here and
+					// fall back to the current, fully player-64-aware format instead.
+					create_win( new news_img(translator::translate("Players 16+ exist; this save cannot use the selected older format.\nSaving in the current format instead.\nServer state is unaffected.")), w_info, magic_none );
+					env_t::savegame_version_str = original_version_str;
+				}
+				else if(  (event_get_last_control_shift() & 1) == 0  ) {
+					// Merging is immediate and irreversible (welt->set_tool runs synchronously), so a failed
+					// save afterwards cannot restore the original companies. Require an explicit SHIFT+click
+					// to confirm, matching the SHIFT+delete convention used elsewhere in this dialog, and
+					// abort this save attempt otherwise.
+					create_win( new news_img(translator::translate("Players 16+ exist and must be merged into company 0 to use this older format.\nThis cannot be undone. Hold SHIFT and click Save again to confirm.")), w_info, magic_none );
+					if(  version_overridden  ) {
+						env_t::savegame_version_str = original_version_str;
+					}
+					return false;
+				}
+				else {
+					// single-player: merge extra companies into company 0 before saving
+					player_t *const public_player = welt->get_public_player();
+					for(  uint8 i=old_player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+						player_t *player = welt->get_player(i);
+						if(  player==NULL  ||  player->is_public_service()  ) {
+							continue;
+						}
+						static char merge_param[32];
+						sprintf( merge_param, "%hhi,%hhi", i, (uint8)0 );
+						tool_t::simple_tool[TOOL_MERGE_PLAYER]->set_default_param( merge_param );
+						welt->set_tool( tool_t::simple_tool[TOOL_MERGE_PLAYER], public_player );
+					}
+				}
+			}
 		}
 		long start_save = dr_time();
 		welt->save( filename, loadsave_t::save_mode, env_t::savegame_version_str, false );

@@ -177,6 +177,15 @@ weg_t::~weg_t()
 
 bool weg_t::needs_crossing(const way_desc_t* other) const
 {
+	// two ways of the SAME waytype can never form a crossing: they are the disjoint diagonal
+	// legs of a closed diagonal (see grund_t::weg_erweitern()). crossing_logic_t::get_crossing()
+	// has no entry for a waytype with itself and returns NULL, which the callers turn into a
+	// dbg->fatal() -- that used to abort loading of a save containing such a tile whenever the
+	// disjoint-leg test below did not recognize it (e.g. a leg that is still a single direction).
+	if(  other->get_waytype() == desc->get_waytype()  ) {
+		return false;
+	}
+
 	// certain way always needs crossing (or never)
 	switch (desc->get_waytype()) {
 		case powerline_wt:
@@ -216,7 +225,7 @@ void weg_t::rdwr(loadsave_t *file)
 	// save owner
 	if(  file->is_version_atleast(99, 6)  ) {
 		sint8 spnum=get_owner_nr();
-		file->rdwr_byte(spnum);
+		file->rdwr_player_nr(spnum);
 		set_owner_nr(spnum);
 	}
 
@@ -281,9 +290,20 @@ void append_platform_length_string_if_needed(cbuffer_t & buf, const weg_t* weg) 
 	}
 	// proceed to the edge
 	while(true) {
-		gr->get_neighbour(gr, weg->get_waytype(), dir);
-		if(  !gr  ) { break; }
-		const weg_t* w = gr->get_weg(weg->get_waytype());
+		// NOTE: get_neighbour() only ever writes its output ('gr' here) on SUCCESS -- it never
+		// nulls it out on failure. The previous version of this loop aliased the same variable
+		// as both receiver and output (`gr->get_neighbour(gr, ...)`) and then checked `!gr`,
+		// which is never true on failure, causing an infinite loop whenever get_neighbour()
+		// legitimately returns false (e.g. entering a same-waytype disjoint-diagonal-leg tile
+		// where `dir` belongs to the OTHER leg). Check the return value directly instead.
+		grund_t *next;
+		if(  !gr->get_neighbour(next, weg->get_waytype(), dir)  ) {
+			break;
+		}
+		gr = next;
+		// direction-aware: gr was reached via dir, so the leg actually being walked is the one
+		// owning the backward bit (relevant on a same-waytype disjoint-diagonal-leg tile)
+		const weg_t* w = gr->get_weg(weg->get_waytype(), ribi_t::backward(dir));
 		const halthandle_t h = gr->get_halt();
 		if(  !w  ||  !h.is_bound()  ||  h.get_id()!=halt.get_id()   ||  gr->get_pos()==start_pos ) { break; }
 		// now, the halt and the way exist on the new tile.
@@ -320,13 +340,27 @@ void weg_t::info(cbuffer_t & buf) const
 	buf.printf("%s%u",    translator::translate("\nRibi (unmasked)"), get_ribi_unmasked());
 	buf.printf("%s%u\n",  translator::translate("\nRibi (masked)"),   get_ribi());
 
+	// two ways of the SAME waytype can share this tile as disjoint diagonal legs (each is its
+	// own separate way, not connected to the other) -- make that explicit here, since
+	// otherwise this info window looks identical to an ordinary single-way tile.
+	if(  g->has_two_ways()  ) {
+		weg_t *other = g->get_weg_nr(0)==this ? g->get_weg_nr(1) : g->get_weg_nr(0);
+		if(  other  &&  other->get_waytype()==get_waytype()  ) {
+			buf.printf("%s\n", translator::translate("This tile has a second, disconnected way of the same type:"));
+			buf.printf("  %s (%s%u, %s %u%s)\n",
+				translator::translate(other->get_desc()->get_name()),
+				translator::translate("Ribi (unmasked)"), other->get_ribi_unmasked(),
+				translator::translate("Max. speed:"), other->get_max_speed(), translator::translate("km/h"));
+		}
+	}
+
 	buf.printf("%s%i (%s %s)\n",	translator::translate("\nVehicle offset: "), get_vehicle_offset(), translator::translate("Offset mode:"), get_vehicle_offset_mode()?translator::translate("Direction"):translator::translate("Absolute"));
 	
 	if(  get_waytype() == road_wt  ) {
 		const strasse_t* str = (const strasse_t*) this;
 		assert(str);
 		// Display overtaking_info
-		switch (str->get_overtaking_mode()) {
+		switch (str->get_overtaking_mode_raw()) {
 			case halt_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("halt mode"));
 				break;
@@ -345,8 +379,14 @@ void weg_t::info(cbuffer_t & buf) const
 			case inverted_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("inverted"));
 				break;
+			case exclusive_area_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("exclusive area"));
+				break;
+			case passing_lane_stop_only_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("passing lane stop only"));
+				break;
 			default:
-				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode());
+				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode_raw());
 				break;
 		}
 
@@ -1100,6 +1140,19 @@ void weg_t::check_diagonal()
 	}
 
 	grund_t *from = welt->lookup(get_pos());
+
+	// sibling way on this same tile forming a disjoint leg => always diagonal, regardless of
+	// what the neighbouring tiles look like (the two bends must always be drawn through
+	// opposite corners so they don't visually overlap). The sibling may be of the same waytype
+	// (closed diagonal) and it may still be a single direction while its second tile is missing.
+	if(  from->has_two_ways()  ) {
+		weg_t *other = from->get_weg_nr(0)==this ? from->get_weg_nr(1) : from->get_weg_nr(0);
+		if(  other  &&  ribi_t::are_disjoint_legs(ribi, other->get_ribi_unmasked())  ) {
+			flags |= IS_DIAGONAL;
+			return;
+		}
+	}
+
 	grund_t *to;
 
 	ribi_t::ribi r1 = ribi_t::none;
@@ -1139,7 +1192,7 @@ void weg_t::new_month()
 
 
 // correct speed and maintenance
-void weg_t::finish_rd()
+void weg_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	player_t *player = get_owner();
 	if(  player  &&  desc  ) {

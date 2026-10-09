@@ -32,6 +32,13 @@
 #define NEVER 0xFFFFU
 
 
+// TODO: define the actual default value for tile_length
+sint32 settings_t::calc_default_tile_length()
+{
+	return 1000;
+}
+
+
 settings_t::settings_t() :
 	filename(""),
 	heightfield("")
@@ -63,6 +70,8 @@ settings_t::settings_t() :
 
 	world_maximum_height = 32;
 	world_minimum_height = -12;
+
+	tile_length = calc_default_tile_length();
 
 	// default climate zones
 	set_default_climates( );
@@ -252,10 +261,18 @@ settings_t::settings_t() :
 
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
+	// convoy shipping: mirrors the way toll by default, and carrying earns only the toll
+	toll_shipping_percentage = 0;
+	shipping_income_percentage = 0;
 	way_toll_waycost_percentage = 0;
+	maintenance_cost_multiplier_way = 100;
+	maintenance_cost_multiplier_overhead = 100;
+	running_cost_multiplier_vehicle = 100;
 
 	allow_underground_transformers = true;
 	disable_make_way_public = false;
+	penalty_wait_for_two_month = false;
+	base_revenue_from_halt = 0;
 
 	// stop buildings
 	cst_multiply_dock=-50000;
@@ -676,7 +693,9 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_str(language_code_names, lengthof(language_code_names) );
 
 			// restore AI state
-			for(  int i=0;  i<15;  i++  ) {
+			const int old_player_type_count = 15;
+			const int player_type_count = file->get_OTRP_version() < 59 ? old_player_type_count : MAX_PLAYER_COUNT-1;
+			for(  int i=0;  i<player_type_count;  i++  ) {
 				if(file->is_version_less(122,1)) {
 					bool player_active = true;
 					file->rdwr_bool(player_active);
@@ -685,6 +704,11 @@ void settings_t::rdwr(loadsave_t *file)
 				if(  file->is_version_less(102, 3)  ) {
 					char dummy[2] = { 0, 0 };
 					file->rdwr_str(dummy, lengthof(dummy) );
+				}
+			}
+			if(  file->is_loading()  &&  player_type_count < MAX_PLAYER_COUNT-1  ) {
+				for(  int i=player_type_count;  i<MAX_PLAYER_COUNT-1;  i++  ) {
+					player_type[i] = player_t::EMPTY;
 				}
 			}
 
@@ -864,9 +888,17 @@ void settings_t::rdwr(loadsave_t *file)
 
 		if(  file->is_version_atleast(110, 1)  ) {
 			file->rdwr_bool( default_player_color_random );
-			for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			const int old_player_count = 16;
+			const int player_count = file->get_OTRP_version()<59 ? old_player_count : MAX_PLAYER_COUNT;
+			for(  int i=0;  i<player_count;  i++  ) {
 				file->rdwr_byte( default_player_color[i][0] );
 				file->rdwr_byte( default_player_color[i][1] );
+			}
+			if(  file->is_loading()  &&  player_count<MAX_PLAYER_COUNT  ) {
+				for(  int i=player_count;  i<MAX_PLAYER_COUNT;  i++  ) {
+					default_player_color[i][0] = 255;
+					default_player_color[i][1] = 255;
+				}
 			}
 		}
 		else if(  file->is_loading()  ) {
@@ -1121,7 +1153,19 @@ void settings_t::rdwr(loadsave_t *file)
 			transit_by_foot = false;
 			foot_path_weight = 24;
 			foot_path_time_ticks = 1800;
-			walk_cost_to_halt = false;			
+			walk_cost_to_halt = false;
+		}
+		if(  file->get_OTRP_version() >= 59  ) {
+			file->rdwr_bool(penalty_wait_for_two_month);
+			file->rdwr_long(base_revenue_from_halt);
+		} else {
+			penalty_wait_for_two_month = false;
+			base_revenue_from_halt = 0;
+		}
+		if(  file->get_OTRP_version() >= 60  ) {
+			file->rdwr_long(tile_length);
+		} else {
+			tile_length = calc_default_tile_length();
 		}
  		if(  file->is_version_atleast(122, 1)  ) {
 			file->rdwr_enum(climate_generator);
@@ -1199,6 +1243,27 @@ void settings_t::rdwr(loadsave_t *file)
 					}
 				}
 			}
+		}
+		if(  file->get_OTRP_version() >= 61  ) {
+			file->rdwr_long( maintenance_cost_multiplier_way );
+			file->rdwr_long( maintenance_cost_multiplier_overhead );
+			file->rdwr_long( running_cost_multiplier_vehicle );
+		}
+		else if(  file->is_loading()  ) {
+			maintenance_cost_multiplier_way = 100;
+			maintenance_cost_multiplier_overhead = 100;
+			running_cost_multiplier_vehicle = 100;
+		}
+		if(  file->get_OTRP_version() >= 62  ) {
+			file->rdwr_long( toll_shipping_percentage );
+			file->rdwr_long( shipping_income_percentage );
+		}
+		else if(  file->is_loading()  ) {
+			// Before v62 the shipping toll shared the way toll's percentage, so an older save
+			// keeps behaving exactly as it did. Carrying earned no share of the transport
+			// income at all, so that starts at zero.
+			toll_shipping_percentage = way_toll_runningcost_percentage;
+			shipping_income_percentage = 0;
 		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
@@ -1460,6 +1525,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	roadsign_reverse_front_back    = contents.get_int( "roadsign_reverse_front_back",    roadsign_reverse_front_back ) != 0;
 	allow_underground_transformers = contents.get_int( "allow_underground_transformers", allow_underground_transformers ) != 0;
 	disable_make_way_public        = contents.get_int( "disable_make_way_public",        disable_make_way_public ) != 0;
+	penalty_wait_for_two_month     = contents.get_int( "penalty_wait_for_two_month",     penalty_wait_for_two_month ) != 0;
+	base_revenue_from_halt = contents.get_int( "base_revenue_from_halt", base_revenue_from_halt );
 
 	env_t::use_old_friction		   = contents.get_int( "use_old_friction",				 env_t::use_old_friction ) != 0;
 
@@ -1845,6 +1912,14 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	way_toll_runningcost_percentage = contents.get_int_clamped("toll_runningcost_percentage", way_toll_runningcost_percentage, 0, 100 );
 	way_toll_waycost_percentage     = contents.get_int_clamped("toll_waycost_percentage",     way_toll_waycost_percentage,     0, 100 );
+	// Convoy shipping. The shipping toll defaults to whatever the way toll is, so a pakset
+	// that only sets toll_runningcost_percentage gets the behaviour it had before this setting
+	// existed; naming toll_shipping_percentage explicitly overrides that.
+	toll_shipping_percentage   = contents.get_int_clamped("toll_shipping_percentage",   way_toll_runningcost_percentage, 0, 100 );
+	shipping_income_percentage = contents.get_int_clamped("shipping_income_percentage", shipping_income_percentage,      0, 100 );
+	maintenance_cost_multiplier_way      = contents.get_int_clamped("maintenance_cost_multiplier_way",      maintenance_cost_multiplier_way,      1, 250 );
+	maintenance_cost_multiplier_overhead = contents.get_int_clamped("maintenance_cost_multiplier_overhead", maintenance_cost_multiplier_overhead, 1, 250 );
+	running_cost_multiplier_vehicle      = contents.get_int_clamped("running_cost_multiplier_vehicle",      running_cost_multiplier_vehicle,      1, 250 );
 
 	/* now the cost section */
 	cst_multiply_dock        = contents.get_int64("cost_multiply_dock",        cst_multiply_dock       /(-100) ) * -100;
@@ -1965,6 +2040,10 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// note: no need to check for min_height < max_height, since -12 < 16
 	world_maximum_height = contents.get_int_clamped("world_maximum_height", world_maximum_height, 16, 127);
 	world_minimum_height = contents.get_int_clamped("world_minimum_height", world_minimum_height, -127, -12);
+
+	tile_length = contents.get_int("tile_length", tile_length);
+
+	env_t::show_yen = contents.get_int("show_yen", env_t::show_yen);
 
 	citycar_max_look_forward = contents.get_int("citycar_max_look_forward", citycar_max_look_forward);
 	citycar_route_weight_crowded = contents.get_int("citycar_route_weight_crowded", citycar_route_weight_crowded);
