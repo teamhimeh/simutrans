@@ -64,6 +64,8 @@ private:
 	uint8 clients; // currently connected players
 
 public:
+	/// empty info, to be filled by network_gameinfo()
+	gameinfo_t();
 	gameinfo_t( karte_t *welt );
 	gameinfo_t( loadsave_t *file );
 
