@@ -930,7 +930,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 	extract_driving_settings(false);
 
 
-	add_table(6,1);
+	add_table(7,1);
 	{
 		// return tickets
 		if(  !env_t::hide_rail_return_ticket  ||  schedule->get_waytype()==road_wt  ||  schedule->get_waytype()==air_wt  ||  schedule->get_waytype()==water_wt  ) {
@@ -943,6 +943,11 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		else {
 			new_component<gui_fill_t>();
 		}
+		bt_make_first.init(button_t::roundbox_state, "Make first");
+		bt_make_first.set_tooltip("Reorder the schedule so the selected entry comes first.");
+		bt_make_first.add_listener(this);
+		bt_make_first.pressed = false;
+		add_component(&bt_make_first);
 		new_component<gui_fill_t>();
 
 		bt_up.init(button_t::arrowup, "up");
@@ -1016,7 +1021,7 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 
 void schedule_gui_t::update_tool(bool set)
 {
-	if(!set  ||  mode==removing  ||  mode==undefined_mode) {
+	if(!set  ||  mode==removing  ||  mode==making_first  ||  mode==undefined_mode) {
 		// reset tools, if still selected ...
 		if(welt->get_tool(player->get_player_nr())==tool_t::general_tool[TOOL_SCHEDULE_ADD]) {
 			if(tool_t::general_tool[TOOL_SCHEDULE_ADD]->get_default_param()==(const char *)schedule) {
@@ -1344,18 +1349,29 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		bt_add.pressed = true;
 		bt_insert.pressed = false;
 		bt_remove.pressed = false;
+		bt_make_first.pressed = false;
 	}
 	else if(comp == &bt_insert) {
 		mode = inserting;
 		bt_add.pressed = false;
 		bt_insert.pressed = true;
 		bt_remove.pressed = false;
+		bt_make_first.pressed = false;
 	}
 	else if(comp == &bt_remove) {
 		mode = removing;
 		bt_add.pressed = false;
 		bt_insert.pressed = false;
 		bt_remove.pressed = true;
+		bt_make_first.pressed = false;
+		should_set_schedule_tool = false;
+	}
+	else if(comp == &bt_make_first) {
+		mode = making_first;
+		bt_add.pressed = false;
+		bt_insert.pressed = false;
+		bt_remove.pressed = false;
+		bt_make_first.pressed = true;
 		should_set_schedule_tool = false;
 	}
 	else if(comp == &bt_up) {
@@ -1589,6 +1605,21 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 				if(  !schedule->get_next_line().is_bound() || line < schedule->get_count()-1  ) {
 					stats->highlight_schedule( false );
 					schedule->remove();
+				}
+			}
+			else if(  mode == making_first  ) {
+				// Keep a next-line dummy entry at the end while rotating all real entries.
+				const uint8 entry_count = schedule->get_count() - (schedule->get_next_line().is_bound() ? 1 : 0);
+				if(  line < entry_count  ) {
+					stats->highlight_schedule( false );
+					for(  int rotation=0;  rotation<line;  rotation++  ) {
+						for(  uint8 entry=1;  entry<entry_count;  entry++  ) {
+							schedule->move_entry_backward(entry);
+						}
+					}
+					mode = adding;
+					bt_add.pressed = true;
+					bt_make_first.pressed = false;
 				}
 			}
 			update_selection();
