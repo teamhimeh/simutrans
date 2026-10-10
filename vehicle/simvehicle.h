@@ -895,6 +895,18 @@ protected:
 	// find a route and reserve the stop position
 	bool find_route_to_stop_position();
 
+	// true, if gr is a runway end where a plane coming from approach can land
+	bool is_landing_runway_end(const grund_t *gr, ribi_t::ribi approach) const;
+
+	// appends the approach to the runway end end_pos (straight line, holding circle, landing roll)
+	// returns the indices of touchdown and search for stop within route
+	bool append_landing_route(route_t *route, koord3d end_pos, uint32 &touchdown_idx, uint32 &search_idx) const;
+
+	// while circling: search another free runway connected to the target halt,
+	// reroute to it from the current position and reserve it
+	// must be called in a step (uses the route finder)
+	bool find_runway();
+
 public:
 	void increment_route_index(sint16 i){route_index+=i;}
 	air_vehicle_t(loadsave_t *file, bool is_first, bool is_last);
