@@ -151,7 +151,7 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 					if(  remaining_amount > 0  ) {
 						// reached goods amount limit, have to discard amount and track category totals separatly
 						if(  categories_goods_amount_lost == NULL  ) {
-							categories_goods_amount_lost = new uint64[256](); // this should be tied to a category index limit constant
+							categories_goods_amount_lost = new uint64[goods_manager_t::get_max_catg_index()]();
 						}
 						categories_goods_amount_lost[wi.get_desc()->get_catg_index()]+= remaining_amount;
 					}

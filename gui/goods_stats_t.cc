@@ -53,7 +53,7 @@ void goods_stats_t::update_goodslist(vector_tpl<const goods_desc_t*>goods, int b
 		lb->buf().printf("%dKg", wtyp->get_weight_per_unit());
 		lb->update();
 
-		const uint8 goods_catg_index = wtyp->get_catg_index();
+		const uint16 goods_catg_index = wtyp->get_catg_index();
 		gui_combobox_t* routing_box = new_component<gui_combobox_t>();
 		goods_catg_indexes.set(routing_box, goods_catg_index);
 		routing_box->add_listener(this);
@@ -68,7 +68,7 @@ void goods_stats_t::update_goodslist(vector_tpl<const goods_desc_t*>goods, int b
 
 
 bool goods_stats_t::action_triggered(gui_action_creator_t* cmp, value_t value) {
-	uint8* goods_catg_index = goods_catg_indexes.access(cmp);
+	uint16* goods_catg_index = goods_catg_indexes.access(cmp);
 	if(  !goods_catg_index  ) {
 		return true;
 	}
@@ -83,7 +83,7 @@ void goods_stats_t::draw(scr_coord offset) {
 	for(auto iter = goods_catg_indexes.begin(); iter != goods_catg_indexes.end(); ++iter) {
 		gui_combobox_t* box = static_cast<gui_combobox_t*>(iter->key);
 		is_routing_selection_enabled ? box->enable() : box->disable();
-		const uint8 goods_catg_index = iter->value;
+		const uint16 goods_catg_index = iter->value;
 		box->set_selection(welt->get_settings().get_time_based_routing_enabled(goods_catg_index));
 	}
 	gui_aligned_container_t::draw(offset);

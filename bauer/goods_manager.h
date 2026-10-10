@@ -27,7 +27,7 @@ private:
 	static goods_desc_t *load_none;
 
 	// number of different good classes;
-	static uint8 max_catg_index;
+	static uint16 max_catg_index;
 
 	/**
 	 * Convoy shipping: the dummy good that represents "space aboard a carrier convoy for a
@@ -44,6 +44,15 @@ public:
 		INDEX_NONE = 2
 	};
 
+	/**
+	 * Goods and category indices are uint16, so at most 65535 different goods can be
+	 * registered; 65535 itself stays free to be used as an "invalid index" marker.
+	 */
+	enum {
+		MAX_GOODS_COUNT     = 65535,
+		INVALID_GOODS_INDEX = 65535
+	};
+
 	static const goods_desc_t *passengers;
 	static const goods_desc_t *mail;
 	static const goods_desc_t *none;
@@ -51,7 +60,7 @@ public:
 	static bool successfully_loaded();
 	static bool register_desc(goods_desc_t *desc);
 
-	static uint8 get_max_catg_index() { return max_catg_index; }
+	static uint16 get_max_catg_index() { return max_catg_index; }
 
 	/**
 	* Search the good 'name' information and return
@@ -64,13 +73,13 @@ public:
 
 	static const goods_desc_t *get_info(uint16 idx) { return goods[idx]; }
 
-	static uint8 get_count() { return (uint8)goods.get_count(); }
+	static uint16 get_count() { return (uint16)goods.get_count(); }
 
 	// good by catg
 	static const goods_desc_t *get_info_catg(const uint8 catg);
 
 	// good by catg_index
-	static const goods_desc_t *get_info_catg_index(const uint8 catg_index);
+	static const goods_desc_t *get_info_catg_index(const uint16 catg_index);
 
 	/**
 	 * Convoy shipping: the dummy good representing space for a convoy of waytype `wt` aboard

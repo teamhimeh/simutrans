@@ -22,7 +22,7 @@
 
 
 
-const goods_desc_t *ware_t::index_to_desc[256];
+const goods_desc_t **ware_t::index_to_desc = NULL;
 
 ware_t::ware_t() : ziel(), zielpos(-1, -1)
 {
