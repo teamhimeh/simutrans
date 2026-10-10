@@ -1775,9 +1775,8 @@ void convoi_t::step()
 					}
 
 					// release departure slot if needed.
-					if(  h.is_bound()  &&  scheduled_departure_time>0  ) {
-						h->erase_departure(scheduled_departure_time, self);
-						scheduled_departure_time = 0;
+					if(  h.is_bound()  ) {
+						release_departure_slot(h);
 					}
 				}
 			}
@@ -4407,6 +4406,18 @@ sint32 subtract_ticks(uint32 v1, uint32 v2) {
 bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint32 time_to_load, bool &coupling_cond, uint32 &go_on_ticks) {
 	convoihandle_t c = cnv;
 	coupling_cond = false;
+
+	// Only the most parent convoy judges the departure and books a departure slot.
+	// A child departs together with its parent, so it must not hold a slot of its own.
+	// If it still holds one (e.g. it booked as the parent before the coupling order was
+	// reversed), give it back so that only one slot is booked for the whole convoy.
+	// NOTE: go_on_ticks is the caller's scheduled_departure_time, so release before resetting it.
+	if(  cnv->get_most_parent_convoi()!=cnv  ) {
+		cnv->release_departure_slot(halt);
+		go_on_ticks = 0;
+		return false;
+	}
+
 	go_on_ticks = 0;
 	bool loading_cond = true;
 	bool coupling_done_cond = true;
@@ -7281,6 +7292,20 @@ convoihandle_t convoi_t::find_most_child_convoi() const
 }
 
 
+void convoi_t::release_departure_slot(halthandle_t halt) {
+	if(  scheduled_departure_time==0  ) {
+		return;
+	}
+	if(  !halt.is_bound()  &&  anz_vehikel>0  ) {
+		halt = haltestelle_t::get_stoppable_halt(get_pos(), get_owner(), front()->get_waytype());
+	}
+	if(  halt.is_bound()  ) {
+		halt->erase_departure(scheduled_departure_time, self);
+	}
+	scheduled_departure_time = 0;
+}
+
+
 void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled()  ) {
 		return;
@@ -7297,7 +7322,9 @@ void convoi_t::next_stop_button_pressed() {
 			c->push_convoy_stopping_time();
 			c->set_coupling_done(false);
 			c->set_waiting_for_departure_allowance_by_other_convoy(false);
-			c->reset_departure_time();
+			c->set_waiting_for_departure_make_another_convoy_depart(false);
+			// the convoy does not depart in the booked slot. give it back to the halt.
+			c->release_departure_slot();
 		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();
@@ -7766,6 +7793,34 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 		return false;
 	}
 
+	// Going aboard ends the stop like a departure does, so clear what hat_gehalten() and
+	// vorfahren() would clear. The schedule is not advanced yet, so the statistics are pushed
+	// to the boarding stop. disembark_convoy() goes straight to ziel_erreicht() without
+	// vorfahren(), so the per-stop flags must be reset here or they leak into the drop-off stop.
+	{
+		convoihandle_t k = c;
+		while(  k.is_bound()  ) {
+			k->push_goods_waiting_time_if_needed();
+			k->push_convoy_stopping_time();
+			// the convoy is still on the map, so the halt is found from its position.
+			k->release_departure_slot();
+			k->loading_limit = 0;
+			k->loading_waiting_time = 0;
+			k->coupling_done = false;
+			k->cease_coupling_due_to_length_over = false;
+			k->waiting_for_departure_allowance_by_other_convoy = false;
+			k->waiting_for_departure_make_another_convoy_depart = false;
+			k->uncouple_done = false;
+			k->reverse_coupling_done = false;
+			k->reversing_coupling_needed = false;
+			k->unloading_done = false;
+			k->next_stop_index = 65535;
+			k->next_coupling_index = route_t::INVALID_INDEX;
+			k->unset_convoi_coupling_in_progress();
+			k = k->get_coupling_convoi();
+		}
+	}
+
 	// Going aboard is this convoy's departure from this stop, so its schedule has to advance
 	// exactly as it would on a normal departure. Without this, the convoy would be put ashore
 	// at the far end still pointing at the port it came from, and would promptly try to find a
@@ -7803,12 +7858,9 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 	// the whole chain rides; every convoy in it stops being driven
 	convoihandle_t k = c;
 	while(  k.is_bound()  ) {
+		// the per-stop flags and the departure slot are already cleared above
 		k->state = SHIPPED;
 		k->wait_lock = 0;
-		k->scheduled_departure_time = 0;
-		k->loading_limit = 0;
-		k->loading_waiting_time = 0;
-		k->unloading_done = false;
 		k = k->get_coupling_convoi();
 	}
 	// but only the head holds the link to the carrier, exactly as only the head holds

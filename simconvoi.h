@@ -1445,6 +1445,14 @@ public:
 	uint32 get_arrived_time() const { return arrived_time; }
 	uint32 get_departure_time() const { return scheduled_departure_time; } // in ticks.
 	void reset_departure_time() { scheduled_departure_time = 0; }
+	/**
+	 * Give the booked departure slot back to the halt and forget it.
+	 * Use this when the convoy leaves the stop WITHOUT departing in its slot (next stop button,
+	 * schedule change, boarding a carrier). A normal departure must keep the slot booked
+	 * until it expires, so that a delayed convoy cannot take the same slot again.
+	 * If halt is unbound, the halt at the current position is used.
+	 */
+	void release_departure_slot(halthandle_t halt = halthandle_t());
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
 
 	// register journey time to the current schedule entry
