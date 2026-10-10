@@ -1539,6 +1539,9 @@ int simu_main(int argc, char** argv)
 	if(  const char *ref_str = args.gimme_arg("-ip", 1)  ){
 		strcpy(env_t::newserver_name, ref_str);
 	}
+	else {
+		env_t::load_server_address();
+	}
 
 	// set start user
 	if(  const char *ref_str = args.gimme_arg("-player", 1)  ){

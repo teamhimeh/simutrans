@@ -254,29 +254,22 @@ server_frame_t::server_frame_t() :
 		end_table();
 	}
 
-	if (  env_t::newserver_name[0] != '\0'  ) {
-		join.disable();
+	// Keep the remembered address in the input without querying it on opening.
+	// Querying an unavailable server here would block the dialog.
+	// The Query server button (or Enter in the input) validates it before joining.
 
-		dbg->warning("action_triggered()", "newserver_name: %s", env_t::newserver_name);
-
-		display_show_load_pointer(1);
-		const char *err = network_gameinfo( env_t::newserver_name, &gi );
-		if (  err == NULL  ) {
-			custom_valid = true;
-			update_info();
-		}
-		else {
-			custom_valid = false;
-			join.disable();
-			update_info();
-			// update_error( "Server did not respond!" );
-		}
-		display_show_load_pointer(0);
-		serverlist.set_selection( -1 );
-	}
-	
 	set_resizemode( diagonal_resize );
 	reset_min_windowsize();
+}
+
+
+server_frame_t::~server_frame_t()
+{
+	// Only the server picker owns an address input; the connected-game
+	// information window must not overwrite the remembered address.
+	if(  addinput.get_text()  ) {
+		env_t::save_server_address();
+	}
 }
 
 
