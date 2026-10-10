@@ -118,6 +118,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)descriptor\reader\text_reader.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)descriptor\reader\tree_reader.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)descriptor\reader\tunnel_reader.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\citybuilding_preset.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)descriptor\reader\vehicle_reader.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)descriptor\reader\way_obj_reader.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)descriptor\reader\way_reader.cc" />
@@ -133,6 +134,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\baum_edit.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\city_info.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\citybuilding_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\citybuilding_preset_frame.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\citylist_frame_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\citylist_stats_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\climates.cc" />
@@ -478,6 +480,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)descriptor\reader\vehicle_reader.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)descriptor\reader\way_obj_reader.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)descriptor\reader\way_reader.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\citybuilding_preset.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)descriptor\reader\xref_reader.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)display\clip_num.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)display\font.h" />
@@ -495,6 +498,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\baum_edit.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\city_info.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\citybuilding_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\citybuilding_preset_frame.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\citylist_frame_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\citylist_stats_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\climates.h" />

@@ -11,10 +11,12 @@
 #include "simwin.h"
 
 #include "components/gui_building.h"
+#include "../dataobj/citybuilding_preset.h"
 #include "../utils/cbuffer_t.h"
 
 class building_desc_t;
 class tool_build_house_t;
+class citybuilding_preset_frame_t;
 
 
 /*
@@ -22,6 +24,8 @@ class tool_build_house_t;
  */
 class citybuilding_edit_frame_t : public extend_edit_gui_t
 {
+	friend class citybuilding_preset_frame_t;
+
 private:
 	static tool_build_house_t* haus_tool;
 	static cbuffer_t param_str;
@@ -34,17 +38,21 @@ private:
 	button_t bt_com;
 	button_t bt_ind;
 
-	gui_label_t lb_name_filter_input;
 	static char name_filter_value[64];
 	gui_textinput_t name_filter_input;
+	button_t bt_preset_load, bt_preset_save;
+	bool restoring_preset = false;
 
 	void fill_list() OVERRIDE;
 	void put_item_in_list( const building_desc_t* desc );
 
 	void change_item_info( sint32 i ) OVERRIDE;
+	void load_preset(const citybuilding_preset_t &preset);
+	void save_preset();
 
 public:
 	citybuilding_edit_frame_t(player_t* player);
+	~citybuilding_edit_frame_t();
 
 	static bool sortreverse;
 

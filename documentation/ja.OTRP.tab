@@ -937,3 +937,35 @@ Map image export failed.
 マップ画像の出力に失敗しました。
 This tile has a second, disconnected way of the same type:
 このタイルは2種類の線路等があります
+Load preset
+プリセットを読込
+Save preset
+プリセットを保存
+Preset loaded: %u / %u buildings selected
+プリセットを読み込みました: %u / %u 件を選択
+Preset name is required.
+プリセット名を入力してください。
+Please choose buildings first.
+先に建築物を選択してください。
+Could not save building presets.
+建築物プリセットを保存できませんでした。
+Building preset saved.
+建築物プリセットを保存しました。
+Overwrite preset
+プリセットの上書き
+Overwrite preset "%s"?
+プリセット「%s」を上書きしますか？
+Overwrite
+上書き
+Load a building preset file.
+ファイルから建物の選択状態を復元します。
+Save the selected buildings to a preset file.
+現在選択している建物をプリセットファイルに保存します。
+Invalid building preset filename.
+プリセットのファイル名が無効です。
+Could not load building preset.
+建築物プリセットを読み込めませんでした。
+Could not recover building presets:
+次の建築物プリセットを復旧できませんでした：
+Corrupt building preset preserved at:\n%s
+不正な建築物プリセットを次の場所に退避しました：\n%s
