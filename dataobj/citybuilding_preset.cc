@@ -106,13 +106,15 @@ citybuilding_preset_recovery_t citybuilding_preset_recover(const std::string &pa
 			if (target_state) {
 				quarantine = path + ".corrupt";
 				unsigned int index = 0;
-				struct stat info;
-				while (dr_stat(quarantine.c_str(), &info) == 0) {
+				int quarantine_state = regular_file_state(quarantine);
+				while (quarantine_state == 1) {
+					if (index == UINT_MAX) return CITYBUILDING_PRESET_RECOVERY_FAILED;
 					char suffix[32];
 					snprintf(suffix, sizeof(suffix), ".corrupt.%u", ++index);
 					quarantine = path + suffix;
+					quarantine_state = regular_file_state(quarantine);
 				}
-				if (errno != ENOENT || dr_rename(path.c_str(), quarantine.c_str()) != 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
+				if (quarantine_state < 0 || dr_rename(path.c_str(), quarantine.c_str()) != 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
 				if (archived) *archived = quarantine;
 			}
 			if (dr_rename(backup.c_str(), path.c_str()) != 0) {
@@ -154,10 +156,10 @@ bool citybuilding_preset_save(const std::string &path, const citybuilding_preset
 		return false;
 	}
 	const std::string backup = path + ".bak";
-	struct stat existing;
-	const bool has_existing = dr_stat(path.c_str(), &existing) == 0;
-	struct stat backup_info;
-	if (has_existing && dr_stat(backup.c_str(), &backup_info) == 0) {
+	const int target_state = regular_file_state(path);
+	const int backup_state = regular_file_state(backup);
+	const bool has_existing = target_state == 1;
+	if (target_state < 0 || backup_state != 0) {
 		// Preserve a backup left by an interrupted or failed replacement.
 		dr_remove(temporary.c_str());
 		return false;

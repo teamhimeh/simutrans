@@ -13,16 +13,19 @@
 #include <set>
 #include <sys/stat.h>
 #include <ctype.h>
+#include <errno.h>
 
 static void preset_message(const char *text)
 {
 	create_win(new news_img(translator::translate(text)), w_time_delete, magic_none);
 }
 
-static bool exists(const std::string &path)
+// Missing files are not errors; inaccessible and non-regular files are.
+static int regular_file_state(const std::string &path)
 {
 	struct stat info;
-	return dr_stat(path.c_str(), &info) == 0;
+	if (dr_stat(path.c_str(), &info) != 0) return errno == ENOENT ? 0 : -1;
+	return (info.st_mode & S_IFMT) == S_IFREG ? 1 : -1;
 }
 
 static void recovery_failure(const cbuffer_t &failures)
@@ -121,10 +124,8 @@ void citybuilding_preset_frame_t::fill_list()
 	FOR(searchfolder_t, const &name, files) {
 		std::string filename(name);
 		if (filename.size() <= 8 || (filename.substr(filename.size() - 8) != ".tab.tmp" && filename.substr(filename.size() - 8) != ".tab.bak")) continue;
-		struct stat info;
-		if (dr_stat((directory + filename).c_str(), &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG) {
-			targets.insert(directory + filename.substr(0, filename.size() - 4));
-		}
+		// Let recovery report inaccessible and non-regular sidecar files too.
+		targets.insert(directory + filename.substr(0, filename.size() - 4));
 	}
 	cbuffer_t failures;
 	for (std::set<std::string>::const_iterator i = targets.begin(); i != targets.end(); ++i) recover(*i, failures);
@@ -146,9 +147,8 @@ bool citybuilding_preset_frame_t::infowin_event(const event_t *event)
 bool citybuilding_preset_frame_t::check_file(const char *path, const char *)
 {
 	const std::string name = get_filename(path);
-	struct stat info;
 	return name.size() > 4 && name.substr(name.size() - 4) == ".tab" &&
-		dr_stat(path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG;
+		regular_file_state(path) == 1;
 }
 
 bool citybuilding_preset_frame_t::ok_action(const char *)
@@ -198,7 +198,9 @@ bool citybuilding_preset_frame_t::request(const std::string &filename)
 		return true;
 	}
 	preset.name = name;
-	if (exists(path)) {
+	const int target_state = regular_file_state(path);
+	if (target_state < 0) { preset_message("Could not save building presets."); return false; }
+	if (target_state == 1) {
 		create_win(new citybuilding_preset_confirm_t(this, path, preset), w_info, magic_citybuilding_preset_confirm);
 		return false;
 	}
@@ -212,7 +214,9 @@ bool citybuilding_preset_frame_t::write_confirmed(const std::string &path, const
 	if (win_get_magic(magic_edit_house) != owner) return false;
 	cbuffer_t failures;
 	if (!recover(path, failures)) { recovery_failure(failures); return false; }
-	if (!exists(path)) return false;
+	const int target_state = regular_file_state(path);
+	if (target_state < 0) { preset_message("Could not save building presets."); return false; }
+	if (target_state == 0) return false;
 	if (!citybuilding_preset_save(path, snapshot)) { preset_message("Could not save building presets."); return false; }
 	preset_message("Building preset saved.");
 	return true;
