@@ -563,7 +563,7 @@ void nwc_game_t::rdwr()
 
 bool nwc_auth_player_t::execute(karte_t *welt)
 {
-	dbg->message("nwc_auth_player_t::execute","plnr = %d  unlock = %llu  our_client_id = %u", player_nr, (unsigned long long)player_unlocked, our_client_id);
+	dbg->message("nwc_auth_player_t::execute","plnr = %d  unlock = %llx  has_password = %llx  our_client_id = %u", player_nr, (unsigned long long)player_unlocked, (unsigned long long)player_has_password, our_client_id);
 
 	if(  env_t::server  &&  !(our_client_id==0  &&  player_nr==255)) {
 		// sent to server, and not sent to player playing on server
@@ -1488,7 +1488,7 @@ bool nwc_service_t::execute(karte_t *welt)
 			if (player) {
 				player->access_password_hash().clear();
 				// unlock all clients
-				socket_list_t::unlock_player_all(player_nr, true, packet->get_sender());
+				socket_list_t::unlock_player_all(player_nr, true, sender_id);
 				// unlock player on the server
 				player->unlock(true, false);
 			}
