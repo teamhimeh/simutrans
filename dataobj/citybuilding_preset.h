@@ -16,6 +16,9 @@ struct citybuilding_preset_t {
 	std::vector<std::string> buildings;
 };
 
+// Returns 1 for a regular file, 0 for a missing file, and -1 for access errors or non-regular files.
+int citybuilding_preset_file_state(const std::string &path);
+
 // Read and safely replace a single preset file.
 enum citybuilding_preset_recovery_t {
 	CITYBUILDING_PRESET_UNCHANGED,

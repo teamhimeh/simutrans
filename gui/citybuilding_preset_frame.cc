@@ -11,21 +11,11 @@
 #include "../utils/cbuffer_t.h"
 #include "../utils/searchfolder.h"
 #include <set>
-#include <sys/stat.h>
 #include <ctype.h>
-#include <errno.h>
 
 static void preset_message(const char *text)
 {
 	create_win(new news_img(translator::translate(text)), w_time_delete, magic_none);
-}
-
-// Missing files are not errors; inaccessible and non-regular files are.
-static int regular_file_state(const std::string &path)
-{
-	struct stat info;
-	if (dr_stat(path.c_str(), &info) != 0) return errno == ENOENT ? 0 : -1;
-	return (info.st_mode & S_IFMT) == S_IFREG ? 1 : -1;
 }
 
 static void recovery_failure(const cbuffer_t &failures)
@@ -148,7 +138,7 @@ bool citybuilding_preset_frame_t::check_file(const char *path, const char *)
 {
 	const std::string name = get_filename(path);
 	return name.size() > 4 && name.substr(name.size() - 4) == ".tab" &&
-		regular_file_state(path) == 1;
+		citybuilding_preset_file_state(path) == 1;
 }
 
 bool citybuilding_preset_frame_t::ok_action(const char *)
@@ -198,7 +188,7 @@ bool citybuilding_preset_frame_t::request(const std::string &filename)
 		return true;
 	}
 	preset.name = name;
-	const int target_state = regular_file_state(path);
+	const int target_state = citybuilding_preset_file_state(path);
 	if (target_state < 0) { preset_message("Could not save building presets."); return false; }
 	if (target_state == 1) {
 		create_win(new citybuilding_preset_confirm_t(this, path, preset), w_info, magic_citybuilding_preset_confirm);
@@ -214,7 +204,7 @@ bool citybuilding_preset_frame_t::write_confirmed(const std::string &path, const
 	if (win_get_magic(magic_edit_house) != owner) return false;
 	cbuffer_t failures;
 	if (!recover(path, failures)) { recovery_failure(failures); return false; }
-	const int target_state = regular_file_state(path);
+	const int target_state = citybuilding_preset_file_state(path);
 	if (target_state < 0) { preset_message("Could not save building presets."); return false; }
 	if (target_state == 0) return false;
 	if (!citybuilding_preset_save(path, snapshot)) { preset_message("Could not save building presets."); return false; }

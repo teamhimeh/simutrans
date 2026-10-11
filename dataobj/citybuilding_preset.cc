@@ -79,7 +79,7 @@ static bool read_preset(const std::string &path, citybuilding_preset_t &out)
 }
 
 // Missing files are not errors; inaccessible and non-regular files are.
-static int regular_file_state(const std::string &path)
+int citybuilding_preset_file_state(const std::string &path)
 {
 	struct stat info;
 	if (dr_stat(path.c_str(), &info) != 0) return errno == ENOENT ? 0 : -1;
@@ -90,9 +90,9 @@ citybuilding_preset_recovery_t citybuilding_preset_recover(const std::string &pa
 {
 	if (archived) archived->clear();
 	const std::string temporary = path + ".tmp", backup = path + ".bak";
-	const int target_state = regular_file_state(path);
-	const int backup_state = regular_file_state(backup);
-	const int temporary_state = regular_file_state(temporary);
+	const int target_state = citybuilding_preset_file_state(path);
+	const int backup_state = citybuilding_preset_file_state(backup);
+	const int temporary_state = citybuilding_preset_file_state(temporary);
 	if (target_state < 0 || backup_state < 0 || temporary_state < 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
 	if (!backup_state && !temporary_state) return CITYBUILDING_PRESET_UNCHANGED;
 	if (backup_state) {
@@ -106,13 +106,13 @@ citybuilding_preset_recovery_t citybuilding_preset_recover(const std::string &pa
 			if (target_state) {
 				quarantine = path + ".corrupt";
 				unsigned int index = 0;
-				int quarantine_state = regular_file_state(quarantine);
+				int quarantine_state = citybuilding_preset_file_state(quarantine);
 				while (quarantine_state == 1) {
 					if (index == UINT_MAX) return CITYBUILDING_PRESET_RECOVERY_FAILED;
 					char suffix[32];
 					snprintf(suffix, sizeof(suffix), ".corrupt.%u", ++index);
 					quarantine = path + suffix;
-					quarantine_state = regular_file_state(quarantine);
+					quarantine_state = citybuilding_preset_file_state(quarantine);
 				}
 				if (quarantine_state < 0 || dr_rename(path.c_str(), quarantine.c_str()) != 0) return CITYBUILDING_PRESET_RECOVERY_FAILED;
 				if (archived) *archived = quarantine;
@@ -156,8 +156,8 @@ bool citybuilding_preset_save(const std::string &path, const citybuilding_preset
 		return false;
 	}
 	const std::string backup = path + ".bak";
-	const int target_state = regular_file_state(path);
-	const int backup_state = regular_file_state(backup);
+	const int target_state = citybuilding_preset_file_state(path);
+	const int backup_state = citybuilding_preset_file_state(backup);
 	const bool has_existing = target_state == 1;
 	if (target_state < 0 || backup_state != 0) {
 		// Preserve a backup left by an interrupted or failed replacement.
