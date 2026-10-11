@@ -120,6 +120,8 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 	cont_filter.add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
 
+	init_thumbnail_options();
+
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_MAIL);
@@ -168,6 +170,12 @@ void citybuilding_edit_frame_t::put_item_in_list( const building_desc_t* desc )
 // fill the current building_list
 void citybuilding_edit_frame_t::fill_list()
 {
+	vector_tpl<const building_desc_t *> selected_buildings;
+	FOR(vector_tpl<sint32>, idx, scl.get_selections()) {
+		if (idx >= 0 && (uint32)idx < building_list.get_count()) {
+			selected_buildings.append(building_list[idx]);
+		}
+	}
 	building_list.clear();
 
 	if(bt_res.pressed) {
@@ -207,13 +215,24 @@ void citybuilding_edit_frame_t::fill_list()
 			default:                        color = SYSCOL_TEXT;                                                    break;
 		}
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
-		scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		if (bt_thumbnails.pressed) {
+			scl.new_component<building_thumbnail_t>(i, name, get_thumbnail_size());
+		}
+		else {
+			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		}
 		if (i == desc) {
 			scl.set_selection(scl.get_count()-1);
 		}
 	}
+	// Restore all selected buildings after rebuilding the view.
+	for (sint32 idx = 0; idx < scl.get_count(); idx++) {
+		scl.get_element(idx)->selected = selected_buildings.is_contained(building_list[idx]);
+	}
+	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
+	show_selected_building();
 
 	reset_min_windowsize();
 }
@@ -223,7 +242,11 @@ void citybuilding_edit_frame_t::fill_list()
 bool citybuilding_edit_frame_t::action_triggered( gui_action_creator_t *comp,value_t e)
 {
 	// only one chain can be shown
-	if(  comp==&bt_res  ) {
+	if (comp == &bt_thumbnails) {
+		bt_thumbnails.pressed = !bt_thumbnails.pressed;
+		fill_list();
+	}
+	else if(  comp==&bt_res  ) {
 		bt_res.pressed ^= 1;
 		fill_list();
 	}
@@ -332,7 +355,9 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 void citybuilding_edit_frame_t::rdwr( loadsave_t *file )
 {
 	uint8 button_pressed_flags = bt_res.pressed | (bt_com.pressed<<1) | (bt_ind.pressed<<2);
+	button_pressed_flags |= bt_thumbnails.pressed << 3;
 	file->rdwr_byte(button_pressed_flags);
+	bt_thumbnails.pressed = (button_pressed_flags >> 3) & 1;
 	bt_res.pressed = button_pressed_flags & 1;
 	bt_com.pressed = (button_pressed_flags >> 1) & 1;
 	bt_ind.pressed = (button_pressed_flags >> 2) & 1;

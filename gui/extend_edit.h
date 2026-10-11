@@ -97,6 +97,34 @@ public:
 
 
 
+/** A selectable, depot-sized preview shared by building editors. */
+class building_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
+{
+	gui_building_t image;
+	const char *name;
+	scr_size cell_size;
+public:
+	building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_);
+	const char *get_text() const OVERRIDE { return name; }
+	scr_size get_min_size() const OVERRIDE;
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+	void draw(scr_coord offset) OVERRIDE;
+};
+
+/** A selectable preview for trees and ground objects. */
+class image_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
+{
+	image_id image;
+	const char *name;
+	scr_size cell_size;
+public:
+	image_thumbnail_t(image_id image_, const char *name_, scr_size cell_size_) : image(image_), name(name_), cell_size(cell_size_) {}
+	const char *get_text() const OVERRIDE { return name; }
+	scr_size get_min_size() const OVERRIDE;
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+	void draw(scr_coord offset) OVERRIDE;
+};
+
 /**
  * Base class map editor dialogues to select object to place on map.
  */
@@ -106,6 +134,13 @@ class extend_edit_gui_t :
 {
 protected:
 	player_t *player;
+	button_t bt_thumbnails, bt_large_thumbnails;
+	gui_aligned_container_t cont_thumbnail_options;
+	void init_thumbnail_options();
+	scr_size get_thumbnail_size() const;
+	uint8 thumbnail_layout;
+	void update_thumbnail_columns();
+	void show_selected_building();
 	/// cont_left: left column, cont_right: right column
 	gui_aligned_container_t cont_left, cont_right;
 	/// cont_filter: Settings about the content of the list (above list)
