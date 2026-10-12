@@ -84,7 +84,7 @@ private:
 	/**
 	 * a list of all catg_index, which can be transported by this line.
 	 */
-	minivec_tpl<uint8> goods_catg_index;
+	vector_tpl<uint16> goods_catg_index;
 
 	/**
 	 * struct holds new financial history for line
@@ -214,7 +214,7 @@ public:
 	static linetype waytype_to_linetype( const waytype_t wt );
 	static const char *get_linetype_name( const linetype lt );
 
-	const minivec_tpl<uint8> &get_goods_catg_index() const { return goods_catg_index; }
+	const vector_tpl<uint16> &get_goods_catg_index() const { return goods_catg_index; }
 
 	// recalculates the good transported by this line and (in case of changes) will start schedule recalculation
 	void recalc_catg_index();

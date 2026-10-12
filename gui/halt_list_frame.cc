@@ -280,7 +280,7 @@ static bool passes_filter_special(haltestelle_t const& s, player_t* player)
 	}
 
 	if (halt_list_frame_t::get_filter(halt_list_frame_t::ohneverb_filter)) {
-		for (uint8 i = 0; i < goods_manager_t::get_max_catg_index(); ++i) {
+		for (uint32 i = 0; i < goods_manager_t::get_max_catg_index(); ++i) {
 			if (!s.get_connections(i).empty()) return false; // only display stations with NO connection
 		}
 		return true;
@@ -529,49 +529,60 @@ void halt_list_frame_t::rdwr(loadsave_t* file)
 	file->rdwr_short(sort_mode);
 	file->rdwr_bool(sortreverse);
 	file->rdwr_byte(filter_flags);
+	// The filters can hold one entry per good, which no longer fits into a byte since OTRP version 62.
+	const bool short_good_nr = file->get_OTRP_version() >= 62;
 	if (file->is_saving()) {
-		uint8 good_nr = waren_filter_ab.get_count();
-		file->rdwr_byte(good_nr);
-		if (good_nr > 0) {
-			FOR(slist_tpl<const goods_desc_t*>, const i, waren_filter_ab) {
+		// old format: the count has to fit into a byte, so drop the surplus entries
+		auto save_filter = [&](const slist_tpl<const goods_desc_t*> &filter) {
+			uint32 good_nr = filter.get_count();
+			if(  short_good_nr  ) {
+				uint16 n = (uint16)good_nr;
+				file->rdwr_short(n);
+			}
+			else {
+				good_nr = min( good_nr, (uint32)255 );
+				uint8 n = (uint8)good_nr;
+				file->rdwr_byte(n);
+			}
+			uint32 written = 0;
+			FOR(slist_tpl<const goods_desc_t*>, const i, filter) {
+				if(  written++ >= good_nr  ) {
+					break;
+				}
 				char* name = const_cast<char*>(i->get_name());
 				file->rdwr_str(name, 256);
 			}
-		}
-		good_nr = waren_filter_an.get_count();
-		file->rdwr_byte(good_nr);
-		if (good_nr > 0) {
-			FOR(slist_tpl<const goods_desc_t*>, const i, waren_filter_an) {
-				char* name = const_cast<char*>(i->get_name());
-				file->rdwr_str(name, 256);
-			}
-		}
+		};
+		save_filter(waren_filter_ab);
+		save_filter(waren_filter_an);
 	}
 	else {
 		// restore warenfilter
-		uint8 good_nr;
-		file->rdwr_byte(good_nr);
-		if (good_nr > 0) {
-			waren_filter_ab.clear();
-			for (sint16 i = 0; i < good_nr; i++) {
-				char name[256];
-				file->rdwr_str(name, lengthof(name));
-				if (const goods_desc_t* gd = goods_manager_t::get_info(name)) {
-					waren_filter_ab.append(gd);
+		auto load_filter = [&](slist_tpl<const goods_desc_t*> &filter) {
+			uint32 good_nr;
+			if(  short_good_nr  ) {
+				uint16 n;
+				file->rdwr_short(n);
+				good_nr = n;
+			}
+			else {
+				uint8 n;
+				file->rdwr_byte(n);
+				good_nr = n;
+			}
+			if (good_nr > 0) {
+				filter.clear();
+				for (uint32 i = 0; i < good_nr; i++) {
+					char name[256];
+					file->rdwr_str(name, lengthof(name));
+					if (const goods_desc_t* gd = goods_manager_t::get_info(name)) {
+						filter.append(gd);
+					}
 				}
 			}
-		}
-		file->rdwr_byte(good_nr);
-		if (good_nr > 0) {
-			waren_filter_an.clear();
-			for (sint16 i = 0; i < good_nr; i++) {
-				char name[256];
-				file->rdwr_str(name, lengthof(name));
-				if (const goods_desc_t* gd = goods_manager_t::get_info(name)) {
-					waren_filter_an.append(gd);
-				}
-			}
-		}
+		};
+		load_filter(waren_filter_ab);
+		load_filter(waren_filter_an);
 
 		sortby = (sort_mode_t)sort_mode;
 		m_player = welt->get_player(player_nr);
