@@ -256,9 +256,24 @@ public:
 
 	/**
 	 * Export the complete minimap using the current zoom and display settings.
+	 * The map is rendered with @p export_mode; the current display mode (and the
+	 * visibility state of the map) is restored afterwards, so this works without
+	 * an open map window and does not disturb it.
 	 * @param filename receives the relative output path on success
 	 */
+	bool export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);
+
+	/// same as above, with the mode stored in env_t::default_mapmode (i.e. the mode of the map window)
 	bool export_to_png(std::string &filename);
+
+	/**
+	 * Parses a display mode. Accepts a number (decimal or 0x hex bit mask) or
+	 * mode names separated by '|', '+', ',' or spaces, e.g. "MAP_TOWN|MAP_LINES"
+	 * or "town+lines" (case insensitive, the MAP_ prefix is optional).
+	 * An empty string or "default" yields env_t::default_mapmode.
+	 * @returns false if @p str could not be parsed
+	 */
+	static bool parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out);
 
 	~minimap_t();
 

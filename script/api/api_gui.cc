@@ -111,6 +111,16 @@ plainstring export_minimap()
 	return filename.c_str();
 }
 
+plainstring export_minimap_with_mode(const char *mapmode)
+{
+	minimap_t::MAP_DISPLAY_MODE export_mode;
+	std::string filename;
+	if (!minimap_t::parse_display_mode(mapmode, export_mode)  ||  !minimap_t::get_instance()->export_to_png(filename, export_mode)) {
+		return plainstring();
+	}
+	return filename.c_str();
+}
+
 void_t set_zoom(uint8 val)
 {
 	set_zoom_factor_safe(val);
@@ -518,6 +528,15 @@ void export_gui(HSQUIRRELVM vm, bool scenario)
 	* @return path to the exported file, or empty/null string on failure.
 	*/
 	STATIC register_method(vm, &export_minimap, "export_minimap");
+
+	/**
+	* Render the entire minimap with the given map mode to a PNG file in the
+	* screenshot folder. The map mode of the map window is not changed.
+	* @param mapmode bit mask as string, or mode names joined by '|',
+	*                e.g. "MAP_TOWN|MAP_LINES" (MAP_ prefix optional, case insensitive).
+	* @return path to the exported file, or empty/null string on failure (also for an invalid mode).
+	*/
+	STATIC register_method(vm, &export_minimap_with_mode, "export_minimap_with_mode");
 
 	/**
 	* Set zoom factor.

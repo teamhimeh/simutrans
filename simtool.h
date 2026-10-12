@@ -956,7 +956,7 @@ public:
 class tool_export_minimap_t : public tool_t {
 public:
 	tool_export_minimap_t() : tool_t(TOOL_EXPORT_MINIMAP | SIMPLE_TOOL) {}
-	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Export map image"); }
+	char const* get_tooltip(player_t const*) const OVERRIDE;
 	bool init(player_t * ) OVERRIDE;
 	bool is_init_network_safe() const OVERRIDE { return true; }
 	bool is_work_network_safe() const OVERRIDE { return true; }
