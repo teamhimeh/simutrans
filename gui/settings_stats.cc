@@ -517,7 +517,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->passenger_multiplier );
 	READ_NUM_VALUE( sets->mail_multiplier );
 	READ_NUM_VALUE( sets->goods_multiplier );
-	READ_NUM_VALUE( sets->set_electricity_multiplier );
+	READ_NUM_VALUE( sets->electricity_multiplier );
 	READ_NUM_VALUE( sets->growthfactor_small );
 	READ_NUM_VALUE( sets->growthfactor_medium );
 	READ_NUM_VALUE( sets->growthfactor_large );
