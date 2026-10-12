@@ -1210,6 +1210,61 @@ bool minimap_t::parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out)
 }
 
 
+// names of all set bits, joined by '|'
+static std::string display_mode_to_string(uint32 bits)
+{
+	std::string str;
+	for(  size_t i = 0;  i < lengthof(display_mode_names);  i++  ) {
+		if(  display_mode_names[i].mode != minimap_t::PLAIN  &&  (bits & display_mode_names[i].mode)  ) {
+			if(  !str.empty()  ) {
+				str += "|";
+			}
+			str += display_mode_names[i].name;
+			bits &= ~display_mode_names[i].mode; // skip aliases
+		}
+	}
+	return str;
+}
+
+
+bool minimap_t::check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &conflicts)
+{
+	const uint32 terrain_flags = MAP_HIDE_CONTOUR | MAP_CLIMATES;
+	const uint32 base = mode_to_check & ~(MAP_MODE_FLAGS | terrain_flags);
+	const uint32 terrain = mode_to_check & terrain_flags;
+	const uint32 halt = mode_to_check & MAP_MODE_HALT_FLAGS;
+	const uint32 city = mode_to_check & MAP_MODE_CITY_FLAGS;
+
+	conflicts.clear();
+	// calc_map_pixel() only handles a single base mode without terrain flags
+	if(  base & (base - 1)  ) {
+		conflicts += "exclusive map modes " + display_mode_to_string(base) + ": none of them is drawn";
+	}
+	else if(  base  &&  terrain  ) {
+		conflicts += "exclusive map modes " + display_mode_to_string(base) + " and " + display_mode_to_string(terrain) + ": " + display_mode_to_string(base) + " is not drawn";
+	}
+	if(  terrain == terrain_flags  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "; ";
+		}
+		conflicts += "exclusive map modes " + display_mode_to_string(terrain) + ": only MAP_HIDE_CONTOUR is used";
+	}
+	if(  halt & (halt - 1)  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "; ";
+		}
+		conflicts += "exclusive halt map modes " + display_mode_to_string(halt) + ": only one of them is drawn";
+	}
+	if(  city & (city - 1)  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "; ";
+		}
+		conflicts += "exclusive city map modes " + display_mode_to_string(city) + ": the circles overlap";
+	}
+	return conflicts.empty();
+}
+
+
 bool minimap_t::export_to_png(std::string &filename)
 {
 	return export_to_png(filename, (MAP_DISPLAY_MODE)env_t::default_mapmode);
@@ -1219,6 +1274,10 @@ bool minimap_t::export_to_png(std::string &filename)
 bool minimap_t::export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
 {
 	filename.clear();
+	std::string conflicts;
+	if(  !check_display_mode(export_mode, conflicts)  ) {
+		dbg->warning("minimap_t::export_to_png()", "you set exclusive map options (0x%x): %s", (uint32)export_mode, conflicts.c_str());
+	}
 	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
 		return false;
 	}

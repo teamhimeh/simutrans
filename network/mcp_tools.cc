@@ -331,6 +331,11 @@ static std::string tool_export_minimap(karte_t *welt, const std::string &args_js
 	if (!minimap_t::get_instance()->export_to_png(filename, export_mode)) {
 		return text_content("{\"error\":\"failed to export minimap\"}");
 	}
+	// exclusive modes still export, but the image may lack some of them
+	std::string conflicts;
+	if (!minimap_t::check_display_mode(export_mode, conflicts)) {
+		return text_content("{\"result\":" + jstr(filename) + ",\"warning\":" + jstr("you set exclusive map options: " + conflicts) + "}");
+	}
 	return text_content("{\"result\":" + jstr(filename) + "}");
 }
 
@@ -378,7 +383,10 @@ static const tool_def_t TOOL_DEFS[] = {
 		 "\"properties\":{"
 		   "\"mapmode\":{\"type\":[\"string\",\"integer\"],"
 		                 "\"description\":\"optional map mode for this export; default is the map window's mode. "
-		                 "Either a bit mask or names joined by '|', e.g. 'MAP_TOWN|MAP_LINES'. Names (MAP_ prefix optional, "
+		                 "Either a bit mask or names joined by '|', e.g. 'MAP_TOWN|MAP_LINES'. "
+		                 "Exclusive modes (e.g. two of PASSENGER/MAIL/FREIGHT/TRAFFIC/TRACKS/SPEEDLIMIT/POWERLINES/FOREST/OWNER/LEVEL, "
+		                 "two halt modes STATUS/SERVICE/WAITING/WAITCHANGE/ORIGIN/TRANSFER, or such a base mode with "
+		                 "HIDE_CONTOUR/CLIMATES) still export, but a 'warning' is returned. Names (MAP_ prefix optional, "
 		                 "case insensitive): PLAIN, TOWN, PASSENGER, MAIL, FREIGHT, STATUS, SERVICE, TRAFFIC, ORIGIN, "
 		                 "TRANSFER, WAITING, TRACKS, SPEEDLIMIT, POWERLINES, TOURIST, FACTORIES, DEPOT, FOREST, CITYLIMIT, "
 		                 "PAX_DEST, OWNER, LINES, LEVEL, WAITCHANGE, HIDE_CONTOUR, CLIMATES, CITIZENS, CITY_GROWTH, LABELS\"}"

@@ -275,6 +275,14 @@ public:
 	 */
 	static bool parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out);
 
+	/**
+	 * Checks for map modes that cannot be shown together (e.g. two base modes
+	 * like MAP_PASSENGER|MAP_TRAFFIC, or two halt modes).
+	 * @param conflicts receives a description of all conflicts
+	 * @returns true if there are no conflicts
+	 */
+	static bool check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &conflicts);
+
 	~minimap_t();
 
 	void init();
