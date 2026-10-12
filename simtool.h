@@ -903,6 +903,15 @@ public:
 	bool is_init_network_safe() const OVERRIDE { return true; }
 };
 
+
+class tool_change_halt_init_pos_t : public tool_t {
+public:
+	tool_change_halt_init_pos_t() : tool_t(TOOL_CHANGE_HALT_INIT_POS | GENERAL_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Set halt reference tile"); }
+	char const* work(player_t*, koord3d) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+};
+
 /********************* one click tools ****************************/
 
 class tool_pause_t : public tool_t {
