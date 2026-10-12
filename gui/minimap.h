@@ -193,6 +193,9 @@ private:
 
 	vector_tpl<koord3d> highlighted_route_tiles;
 
+	/// renders the whole map with @p export_mode into a new png file in the screenshot folder
+	bool render_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);
+
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
 
@@ -256,9 +259,34 @@ public:
 
 	/**
 	 * Export the complete minimap using the current zoom and display settings.
+	 * The map is rendered with @p export_mode; the current display mode (and the
+	 * visibility state of the map) is restored afterwards, so this works without
+	 * an open map window and does not disturb it.
+	 * If @p export_mode contains exclusive map options, a warning is written to
+	 * the log and shown in a message window (together with the export result).
 	 * @param filename receives the relative output path on success
 	 */
+	bool export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);
+
+	/// same as above, with the mode stored in env_t::default_mapmode (i.e. the mode of the map window)
 	bool export_to_png(std::string &filename);
+
+	/**
+	 * Parses a display mode. Accepts a number (decimal or 0x hex bit mask) or
+	 * mode names separated by '|', '+', ',' or spaces, e.g. "MAP_TOWN|MAP_LINES"
+	 * or "town+lines" (case insensitive, the MAP_ prefix is optional).
+	 * An empty string or "default" yields env_t::default_mapmode.
+	 * @returns false if @p str could not be parsed
+	 */
+	static bool parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out);
+
+	/**
+	 * Checks for map modes that cannot be shown together (e.g. two base modes
+	 * like MAP_PASSENGER|MAP_TRAFFIC, or two halt modes).
+	 * @param conflicts receives a description of all conflicts
+	 * @returns true if there are no conflicts
+	 */
+	static bool check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &conflicts);
 
 	~minimap_t();
 
