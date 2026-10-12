@@ -193,6 +193,9 @@ private:
 
 	vector_tpl<koord3d> highlighted_route_tiles;
 
+	/// renders the whole map with @p export_mode into a new png file in the screenshot folder
+	bool render_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);
+
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
 
@@ -259,6 +262,8 @@ public:
 	 * The map is rendered with @p export_mode; the current display mode (and the
 	 * visibility state of the map) is restored afterwards, so this works without
 	 * an open map window and does not disturb it.
+	 * If @p export_mode contains exclusive map options, a warning is written to
+	 * the log and shown in a message window (together with the export result).
 	 * @param filename receives the relative output path on success
 	 */
 	bool export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);

@@ -16,6 +16,7 @@
 #include "../simcity.h"
 #include "fabrik_info.h"
 #include "simwin.h"
+#include "messagebox.h"
 #include "minimap.h"
 
 #include "../display/simgraph.h"
@@ -1245,19 +1246,19 @@ bool minimap_t::check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &
 	}
 	if(  terrain == terrain_flags  ) {
 		if(  !conflicts.empty()  ) {
-			conflicts += "; ";
+			conflicts += "\n";
 		}
 		conflicts += "exclusive map modes " + display_mode_to_string(terrain) + ": only MAP_HIDE_CONTOUR is used";
 	}
 	if(  halt & (halt - 1)  ) {
 		if(  !conflicts.empty()  ) {
-			conflicts += "; ";
+			conflicts += "\n";
 		}
 		conflicts += "exclusive halt map modes " + display_mode_to_string(halt) + ": only one of them is drawn";
 	}
 	if(  city & (city - 1)  ) {
 		if(  !conflicts.empty()  ) {
-			conflicts += "; ";
+			conflicts += "\n";
 		}
 		conflicts += "exclusive city map modes " + display_mode_to_string(city) + ": the circles overlap";
 	}
@@ -1273,11 +1274,30 @@ bool minimap_t::export_to_png(std::string &filename)
 
 bool minimap_t::export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
 {
-	filename.clear();
 	std::string conflicts;
-	if(  !check_display_mode(export_mode, conflicts)  ) {
+	const bool has_conflicts = !check_display_mode(export_mode, conflicts);
+	if(  has_conflicts  ) {
 		dbg->warning("minimap_t::export_to_png()", "you set exclusive map options (0x%x): %s", (uint32)export_mode, conflicts.c_str());
 	}
+
+	const bool ok = render_to_png(filename, export_mode);
+
+	if(  has_conflicts  ) {
+		// also tell the user, since scripts and MCP clients have no window of their own
+		std::string text = translator::translate(ok ? "Map image exported to the screenshot folder." : "Map image export failed.");
+		text += "\n\n";
+		text += translator::translate("You set exclusive map options:");
+		text += "\n";
+		text += conflicts;
+		create_win(new news_img(text.c_str()), w_time_delete, magic_none);
+	}
+	return ok;
+}
+
+
+bool minimap_t::render_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
+{
+	filename.clear();
 	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
 		return false;
 	}

@@ -9573,9 +9573,13 @@ bool tool_export_minimap_t::init( player_t * )
 		message = "Map image export failed.";
 	}
 	else {
-		std::string filename;
-		message = minimap_t::get_instance()->export_to_png(filename, export_mode) ?
-			"Map image exported to the screenshot folder." : "Map image export failed.";
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename, export_mode);
+		if(  !minimap_t::check_display_mode(export_mode, conflicts)  ) {
+			// export_to_png() already showed the result together with the warning
+			return false;
+		}
+		message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
 	}
 	create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
 
