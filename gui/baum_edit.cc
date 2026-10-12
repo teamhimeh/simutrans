@@ -52,6 +52,7 @@ baum_edit_frame_t::baum_edit_frame_t(player_t* player_) :
 	tree_list(16)
 {
 	cont_timeline.set_visible(false);
+	init_thumbnail_options();
 
 	bt_randomage.init( button_t::square_state, "Random age");
 	bt_randomage.add_listener(this);
@@ -94,18 +95,29 @@ void baum_edit_frame_t::fill_list()
 	scl.set_selection(-1);
 	FOR(vector_tpl<tree_desc_t const*>, const i, tree_list) {
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
-		scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, SYSCOL_TEXT);
+		if (bt_thumbnails.pressed) {
+			scl.new_component<image_thumbnail_t>(i->get_image_id(0, 3), name, get_thumbnail_size());
+		}
+		else {
+			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, SYSCOL_TEXT);
+		}
 		if (i == desc) {
 			scl.set_selection(scl.get_count()-1);
 		}
 	}
+	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
+	show_selected_building();
 }
 
 bool baum_edit_frame_t::action_triggered( gui_action_creator_t *comp,value_t e)
 {
-	if(  comp==&bt_randomage  ) {
+	if (comp == &bt_thumbnails) {
+		bt_thumbnails.pressed = !bt_thumbnails.pressed;
+		fill_list();
+	}
+	else if(  comp==&bt_randomage  ) {
 		bt_randomage.pressed ^= 1;
 		change_item_info( scl.get_selection() );
 	}

@@ -81,6 +81,8 @@ gui_scrolled_list_t::gui_scrolled_list_t(enum type type, item_compare_func cmp) 
 	size = scr_size(0,0);
 	pos = scr_coord(0,0);
 	multiple_selection = false;
+	grid_cell_width = 0;
+	grid_columns = 1;
 	maximize = false;
 }
 
@@ -167,6 +169,13 @@ void gui_scrolled_list_t::sort( int offset )
 void gui_scrolled_list_t::set_size(scr_size size)
 {
 	cleanup_elements();
+	if (grid_cell_width > 0) {
+		// Compute from the requested viewport, not the previous content width.
+		// Reserve the vertical scrollbar even when it is temporarily hidden.
+		grid_columns = max(1, (size.w-D_SCROLLBAR_WIDTH-D_H_SPACE)/(grid_cell_width+D_H_SPACE));
+		container.set_table_layout(grid_columns, 0);
+		reset_container_size();
+	}
 
 	gui_scrollpane_t::set_size(size);
 
@@ -197,6 +206,28 @@ void gui_scrolled_list_t::reset_container_size()
 bool gui_scrolled_list_t::infowin_event(const event_t *ev)
 {
 	scrollitem_t* focus = dynamic_cast<scrollitem_t*>( comp->get_focus() );
+	if (grid_cell_width > 0 && ev->ev_class == EVENT_KEYBOARD &&
+		(ev->ev_code == SIM_KEY_LEFT || ev->ev_code == SIM_KEY_RIGHT ||
+		 ev->ev_code == SIM_KEY_UP || ev->ev_code == SIM_KEY_DOWN)) {
+		const sint32 selected = get_selection();
+		sint32 next = selected;
+		switch (ev->ev_code) {
+			case SIM_KEY_LEFT:  next = selected-1; break;
+			case SIM_KEY_RIGHT: next = selected+1; break;
+			case SIM_KEY_UP:    next = selected-grid_columns; break;
+			case SIM_KEY_DOWN:  next = selected+grid_columns; break;
+			default: break;
+		}
+		if (selected >= 0 && next >= 0 && (uint32)next < item_list.get_count()) {
+			container.set_focus(item_list[next]);
+			scrollitem_t* new_focus = dynamic_cast<scrollitem_t*>(item_list[next]);
+			calc_selection(focus, new_focus, *ev);
+			show_focused();
+			call_listeners((long)next);
+		}
+		// Keep focus in the picker when there is no item in that direction.
+		return true;
+	}
 
 	event_t ev2 = *ev;
 	// translate key up/down to tab/shift-tab
