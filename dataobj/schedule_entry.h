@@ -60,7 +60,10 @@ public:
 		NO_OVERTAKE       = 1U << 12,// Do not overtake(for road)
 		UNCOUPLE_CHILD    = 1U << 13,// The convoy uncouple its child convoy (only its child: this convoy will be the most child convoy).
 		PASS_STOP		  = 1U << 14,// pass this stop even if halt is.
-		NO_GO_NO_USERS	  = 1U << 15,// do not go to this stop if no users
+		// Legacy single-stop flag, kept only to decode savegames older than OTRP v62.
+		// On load, this bit is migrated into a one-entry section (both of the flags below
+		// set on the same entry) and is never written out again. See schedule_t::rdwr().
+		NO_GO_NO_USERS	  = 1U << 15,
 		TEMP_LOAD         = 1U << 16,// load temporary(not use for goods routing)
 		TEMP_UNLOAD       = 1U << 17,// unload temporary(not use for goods routing)
 		TEMP_UNLOAD_ALL   = 1U << 18,// unload all only for goods routing
@@ -73,7 +76,16 @@ public:
 		// vehicles' shipping capacity and from its schedule - so a carrier needs no flag of
 		// its own. Only the carried convoy has to declare itself, because otherwise it would
 		// simply drive off. (NO_LOAD on a carrier's entry doubles as "do not pick up here".)
-		START_SHIPPED     = 1U<<23 // This convoy waits here to be taken aboard a carrier convoy.
+		START_SHIPPED     = 1U<<23,// This convoy waits here to be taken aboard a carrier convoy.
+		// Marks the first entry of a demand-based skip section. A section is the run of
+		// entries from a NO_GO_NO_USERS_SECTION_START entry up to (and including) the next
+		// NO_GO_NO_USERS_SECTION_END entry, or up to the entry just before the next START
+		// entry if no END is found first. A single entry with both START and END set forms
+		// a one-entry section (this is what old NO_GO_NO_USERS savegames are migrated to).
+		// See schedule_t::get_no_go_no_users_section().
+		NO_GO_NO_USERS_SECTION_START = 1U<<24,
+		// Marks the last entry of a demand-based skip section. See NO_GO_NO_USERS_SECTION_START.
+		NO_GO_NO_USERS_SECTION_END   = 1U<<25
 	};
 
 	/**
@@ -201,8 +213,12 @@ public:
 	void set_no_overtake(bool y) { y? stop_flags|=NO_OVERTAKE : stop_flags &= ~NO_OVERTAKE;}
 	bool is_pass_stop() const { return (stop_flags&PASS_STOP)>0; }
 	void set_pass_stop( bool y ) { y? stop_flags|=(PASS_STOP+NO_LOAD+NO_UNLOAD) : stop_flags &= ~PASS_STOP; }
-	bool is_no_go_no_users() const {return (stop_flags&NO_GO_NO_USERS)>0;}
-	void set_no_go_no_users(bool y) {y? stop_flags|=NO_GO_NO_USERS: stop_flags &= ~NO_GO_NO_USERS; }
+	bool is_no_go_no_users_section_start() const {return (stop_flags&NO_GO_NO_USERS_SECTION_START)>0;}
+	void set_no_go_no_users_section_start(bool y) {y? stop_flags|=NO_GO_NO_USERS_SECTION_START: stop_flags &= ~NO_GO_NO_USERS_SECTION_START; }
+	bool is_no_go_no_users_section_end() const {return (stop_flags&NO_GO_NO_USERS_SECTION_END)>0;}
+	void set_no_go_no_users_section_end(bool y) {y? stop_flags|=NO_GO_NO_USERS_SECTION_END: stop_flags &= ~NO_GO_NO_USERS_SECTION_END; }
+	// True for any entry that takes part in a demand-based skip section (start, end, or both).
+	bool is_no_go_no_users_section_member() const {return (stop_flags&(NO_GO_NO_USERS_SECTION_START|NO_GO_NO_USERS_SECTION_END))>0;}
 	bool is_temp_load() const {return (stop_flags&TEMP_LOAD)>0;}
 	bool is_temp_unload() const {return (stop_flags&TEMP_UNLOAD)>0;}
 	void set_temp_load(bool y) {y? stop_flags|=TEMP_LOAD: stop_flags&= ~TEMP_LOAD;}
