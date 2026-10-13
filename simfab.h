@@ -481,6 +481,7 @@ private:
 	 * if this flag is true, this factory cannot close even after retire year
 	 */
 	bool no_close_factory=false;
+	const factory_desc_t* pending_upgrade=NULL; // set when upgrading instead of closing
 
 	/**
 	 * the shipment size
@@ -742,6 +743,7 @@ public:
 	*/
 	const bool is_no_close_factory() {return no_close_factory;}
 	void set_no_close_factory(bool yesno) { no_close_factory = yesno;}
+	const factory_desc_t* get_pending_upgrade() const { return pending_upgrade; }
 
 	/**
 	 * get and set shipment size
