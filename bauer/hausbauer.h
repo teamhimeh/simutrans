@@ -194,7 +194,8 @@ public:
 
 	/**
 	 * Called after loading (after all objects are finished):
-	 * checks all tiles of multitile buildings and removes invalid objects there.
+	 * checks all tiles of multitile buildings and of townhalls, factories, attractions, monuments
+	 * and headquarters (any size): corrects their way flags and removes invalid objects there.
 	 */
 	static void cleanup_multitile_buildings_finish_rd();
 

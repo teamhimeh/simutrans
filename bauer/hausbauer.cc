@@ -12,6 +12,7 @@
 #include "../boden/boden.h"
 #include "../boden/wasser.h"
 #include "../boden/fundament.h"
+#include "../boden/wege/weg.h"
 
 #include "../dataobj/ribi.h"
 #include "../dataobj/scenario.h"
@@ -546,6 +547,55 @@ uint32 hausbauer_t::remove_invalid_objects_on_multitile_building(const gebaeude_
 }
 
 
+// Ways on neighbouring tiles must not lead into a building tile without ways
+// (e.g. the building was built over a road and the road below got lost).
+// Removes these directions from the ways of the neighbours.
+// @return number of corrected ways
+static uint32 disconnect_ways_into_building_tile(grund_t *gr)
+{
+	uint32 corrected = 0;
+	for(  uint8 r = 0;  r < 4;  r++  ) {
+		const planquadrat_t *plan = world()->access( gr->get_pos().get_2d() + koord(ribi_t::nesw[r]) );
+		if(  plan == NULL  ) {
+			continue;
+		}
+		// direction from the neighbour towards our tile
+		const ribi_t::ribi back = ribi_t::backward( ribi_t::nesw[r] );
+		for(  uint8 i = 0;  i < plan->get_boden_count();  i++  ) {
+			grund_t *nb = plan->get_boden_bei(i);
+			bool changed = false;
+			for(  uint8 w = 0;  w < 2;  w++  ) {
+				weg_t *weg = nb->get_weg_nr(w);
+				if(  weg == NULL  ||  (weg->get_ribi_unmasked() & back) == 0  ) {
+					continue;
+				}
+				// does this way really lead onto our tile (respecting heights and slopes)?
+				grund_t *to = NULL;
+				if(  nb->get_neighbour( to, invalid_wt, back )  &&  to == gr  ) {
+					const koord3d bpos = gr->get_pos();
+					dbg->warning( "hausbauer_t::cleanup_multitile_buildings_finish_rd()", "way at (%s) led into building at (%d,%d,%d), direction removed", nb->get_pos().get_str(), bpos.x, bpos.y, bpos.z );
+					weg->ribi_rem( back );
+					changed = true;
+					corrected++;
+				}
+			}
+			if(  changed  ) {
+				nb->calc_image();
+			}
+		}
+	}
+	return corrected;
+}
+
+
+// buildings whose tiles are checked after loading: all multitile buildings and all special buildings
+static bool is_checked_after_loading(const building_desc_t *desc)
+{
+	return desc->get_area() > 1  ||  desc->is_townhall()  ||  desc->is_factory()  ||  desc->is_attraction()
+		||  desc->is_monument()  ||  desc->is_headquarters();
+}
+
+
 void hausbauer_t::cleanup_multitile_buildings_finish_rd()
 {
 	uint32 removed = 0;
@@ -554,19 +604,27 @@ void hausbauer_t::cleanup_multitile_buildings_finish_rd()
 			const planquadrat_t *plan = welt->access(x, y);
 			for(  uint8 i = 0;  i < plan->get_boden_count();  i++  ) {
 				grund_t *gr = plan->get_boden_bei(i);
-				if(  gr->hat_wege()  ) {
-					continue;
-				}
-				// is there a tile of a multitile building?
-				bool multitile = false;
-				for(  uint8 n = 0;  n < gr->get_top()  &&  !multitile;  n++  ) {
+				// is there a tile of a multitile building, townhall, factory, landmark, ...?
+				bool check = false;
+				for(  uint8 n = 0;  n < gr->get_top()  &&  !check;  n++  ) {
 					if(  gebaeude_t const* const gb = obj_cast<gebaeude_t>(gr->obj_bei(n))  ) {
-						multitile = gb->get_tile()  &&  gb->get_tile()->get_desc()->get_area() > 1;
+						check = gb->get_tile()  &&  is_checked_after_loading( gb->get_tile()->get_desc() );
 					}
 				}
-				if(  !multitile  ) {
+				if(  !check  ) {
 					continue;
 				}
+				// the way flags must match the ways really on this tile
+				if(  gr->update_way_flags()  ) {
+					dbg->warning("hausbauer_t::cleanup_multitile_buildings_finish_rd()", "corrected way flags at (%s)", gr->get_pos().get_str());
+					gr->calc_image();
+				}
+				if(  gr->hat_wege()  ) {
+					// ways, signs and the like are handled by the stop building routines
+					continue;
+				}
+				// no way here => no way on the neighbour tiles may lead onto this tile
+				disconnect_ways_into_building_tile(gr);
 				// the building found by find<gebaeude_t>() is the one used everywhere else => keep it
 				gebaeude_t *keep = gr->find<gebaeude_t>();
 				if(  uint32 n = remove_invalid_objects_on_building_tile(gr, keep, NULL)  ) {
@@ -578,7 +636,7 @@ void hausbauer_t::cleanup_multitile_buildings_finish_rd()
 		}
 	}
 	if(  removed  ) {
-		dbg->warning("hausbauer_t::cleanup_multitile_buildings_finish_rd()", "removed %u invalid objects from multitile building tiles", removed);
+		dbg->warning("hausbauer_t::cleanup_multitile_buildings_finish_rd()", "removed %u invalid objects from building tiles", removed);
 	}
 }
 
