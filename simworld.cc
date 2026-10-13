@@ -5554,7 +5554,10 @@ DBG_MESSAGE("karte_t::load()", "%d ways loaded",weg_t::get_alle_wege().get_count
 	world_xy_loop(&karte_t::plans_finish_rd, SYNCX_FLAG);
 
 	// correct way flags and remove invalid objects on tiles of multitile and special buildings (not multithread safe, so after plans_finish_rd)
-	hausbauer_t::cleanup_multitile_buildings_finish_rd();
+	// only on the server (or offline): a network client must keep the server's game state
+	if(  !env_t::networkmode  ||  env_t::server  ) {
+		hausbauer_t::cleanup_multitile_buildings_finish_rd();
+	}
 
 	// update power nets with correct power
 	powernet_t::step_all(1);

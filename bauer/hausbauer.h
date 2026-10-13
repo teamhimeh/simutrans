@@ -171,7 +171,9 @@ public:
 	/**
 	 * Removes all objects from a building tile which must not share a tile with a building.
 	 * Kept are: @p keep (the building of this tile), power lines/transformers, bridge pillars,
-	 * labels, smoke and moving objects (vehicles). Other buildings, trees, etc. are deleted.
+	 * labels, smoke and moving objects (vehicles). Trees etc. are deleted. Other buildings are removed
+	 * completely (all their tiles, using remove()), so no broken pieces of them remain.
+	 * If @p keep is NULL, the ground @p gr may be replaced (natural ground restored): look it up again.
 	 * Tiles with ways are not touched (stops have their own rules).
 	 * @param keep the building to keep on this tile, may be NULL (i.e. before a new building is placed)
 	 * @return number of removed objects

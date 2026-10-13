@@ -667,7 +667,9 @@ void stadt_t::remove_gebaeude_from_stadt(gebaeude_t* gb)
 void stadt_t::remove_gebaeude_tile_from_stadt(gebaeude_t* gb)
 {
 	gb->set_stadt(NULL);
-	buildings.remove(gb);
+	if(  buildings.remove(gb)  ) {
+		recalc_city_size();
+	}
 }
 
 
@@ -3371,10 +3373,6 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 				// exchange building; try to face it to street in front
 				oldgb->mark_images_dirty();
 				oldgb->set_tile(h->get_tile(rotation, x, y), true);
-				if(  h->get_area() > 1  ) {
-					// only the new multitile building may remain on this tile
-					hausbauer_t::remove_invalid_objects_on_building_tile(gr, oldgb, welt->get_public_player());
-				}
 				update_gebaeude_from_stadt(oldgb);
 				org = oldgb;
 			}
@@ -3403,6 +3401,17 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 			}
 		}
 	}
+	// only the new multitile building may remain on its tiles; other buildings are removed completely
+	// (done after all tiles are built: removing another building may restore the ground of its tiles)
+	if (h->get_area() > 1) {
+		for (int x = 0; x < h->get_x(rotation); x++) {
+			for (int y = 0; y < h->get_y(rotation); y++) {
+				grund_t* gr = welt->lookup_kartenboden(base_pos.get_2d() + koord(x, y));
+				hausbauer_t::remove_invalid_objects_on_building_tile(gr, gr->find<gebaeude_t>(), welt->get_public_player());
+			}
+		}
+	}
+
 	// we may need to recalculate vertical walls
 	if (recalc_foundations) {
 		for (int x = 0; x < h->get_x(rotation); x++) {
@@ -3852,10 +3861,6 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 				// exchange building; try to face it to street in front
 				oldgb->mark_images_dirty();
 				oldgb->set_tile( h->get_tile(rotation, x, y), true );
-				if(  h->get_area() > 1  ) {
-					// only the new multitile building may remain on this tile
-					hausbauer_t::remove_invalid_objects_on_building_tile(gr, oldgb, welt->get_public_player());
-				}
 				welt->lookup_kartenboden(kpos)->calc_image();
 				update_gebaeude_from_stadt(oldgb);
 				update_city_street(kpos);
@@ -3864,6 +3869,17 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 					case building_desc_t::city_com: arb += h->get_level() * 20; break;
 					case building_desc_t::city_ind: arb += h->get_level() * 20; break;
 					default: break;
+				}
+			}
+		}
+
+		// only the new multitile building may remain on its tiles; other buildings are removed completely
+		// (done after all tiles are replaced: removing another building may restore the ground of its tiles)
+		if(  h->get_area() > 1  ) {
+			for(  int x=0;  x<h->get_x(rotation);  x++  ) {
+				for(  int y=0;  y<h->get_y(rotation);  y++  ) {
+					grund_t *gr = welt->lookup_kartenboden(k+koord(x,y));
+					hausbauer_t::remove_invalid_objects_on_building_tile(gr, gr->find<gebaeude_t>(), welt->get_public_player());
 				}
 			}
 		}
