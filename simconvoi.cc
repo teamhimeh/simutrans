@@ -2937,7 +2937,7 @@ bool convoi_t::insert_route_to_draw_diagonal()
 koord3d const convoi_t::find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir) {
 	grund_t* gn;
 	g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-	if(  !gn  ) {
+	if(  !gn || !gn->get_weg(front()->get_waytype())  ) {
 		return koord3d::invalid;
 	}
 	if( find_convoy_on_tile(gn, inspecting) ) {
