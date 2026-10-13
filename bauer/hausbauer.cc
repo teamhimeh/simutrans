@@ -385,13 +385,13 @@ void hausbauer_t::remove( player_t *player, gebaeude_t *gb )
 			welt->get_height_slope_from_grid(newk, new_hgt, new_slope);
 
 			// test for ground at new height
-			const grund_t *gr2 = welt->lookup(koord3d(newk,new_hgt));
+			const grund_t *gr2 = welt->lookup_no_dummy(koord3d(newk,new_hgt));
 
 			if(  (gr2==NULL  ||  gr2==gr) &&  new_slope!=slope_t::flat  ) {
 				// and for ground above new sloped tile
-				gr2 = welt->lookup(koord3d(newk, new_hgt+1));
+				gr2 = welt->lookup_no_dummy(koord3d(newk, new_hgt+1));
 				if(  gr==0  && slope_t::max_diff(new_slope) == 2  ) {
-					gr2 = welt->lookup(koord3d(newk, new_hgt + 2));
+					gr2 = welt->lookup_no_dummy(koord3d(newk, new_hgt + 2));
 				}
 			}
 
@@ -442,6 +442,147 @@ void hausbauer_t::remove( player_t *player, gebaeude_t *gb )
 }
 
 
+// objects which can legally share a tile with a building
+static bool is_valid_on_building_tile(const obj_t *obj)
+{
+	if(  obj->is_moving()  ) {
+		// vehicles (e.g. aircraft) can move everywhere
+		return true;
+	}
+	switch(  obj->get_typ()  ) {
+		case obj_t::leitung:
+		case obj_t::pumpe:
+		case obj_t::senke:
+		case obj_t::pillar:
+		case obj_t::label:
+		case obj_t::zeiger: // local only (tool marker), must not influence the game state
+		case obj_t::wolke:
+		case obj_t::sync_wolke:
+		case obj_t::async_wolke:
+			return true;
+		default:
+			return false;
+	}
+}
+
+
+bool hausbauer_t::has_way_objects(const grund_t *gr)
+{
+	if(  gr->hat_wege()  ) {
+		return true;
+	}
+	for(  uint8 i = 0;  i < gr->get_top();  i++  ) {
+		if(  gr->obj_bei(i)->get_typ() == obj_t::way  ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
+// true, if no building tile will be built there (see hausbauer_t::build)
+static bool is_empty_building_tile(const building_desc_t *desc, const building_tile_desc_t *tile)
+{
+	return tile == NULL  ||  (
+		!(desc->get_type() == building_desc_t::dock  ||  desc->get_type() == building_desc_t::flat_dock)  &&
+		tile->get_background(0, 0, 0) == IMG_EMPTY  &&
+		tile->get_foreground(0, 0) == IMG_EMPTY
+	);
+}
+
+
+uint32 hausbauer_t::remove_invalid_objects_on_building_tile(grund_t *gr, const gebaeude_t *keep, player_t *player)
+{
+	if(  gr->hat_wege()  ) {
+		// ways, signs and the like are handled by the stop building routines
+		return 0;
+	}
+
+	vector_tpl<obj_t *> invalid_objs;
+	for(  uint8 i = 0;  i < gr->get_top();  i++  ) {
+		obj_t *const obj = gr->obj_bei(i);
+		if(  obj  &&  obj != keep  &&  !is_valid_on_building_tile(obj)  ) {
+			invalid_objs.append(obj);
+		}
+	}
+
+	FOR( vector_tpl<obj_t *>, obj, invalid_objs ) {
+		if(  keep  ) {
+			if(  gebaeude_t *gb = obj_cast<gebaeude_t>(obj)  ) {
+				// A second building on this tile: remove only this tile from its city,
+				// otherwise its destructor would remove the other tiles of its building
+				// (or the kept building) from the city.
+				if(  stadt_t *city = gb->get_stadt()  ) {
+					city->remove_gebaeude_tile_from_stadt(gb);
+				}
+			}
+		}
+		gr->obj_remove(obj);
+		obj->cleanup(player);
+		obj->set_flag(obj_t::not_on_map);
+		if(  !obj->has_managed_lifecycle()  ) {
+			delete obj;
+		}
+	}
+	return invalid_objs.get_count();
+}
+
+
+uint32 hausbauer_t::remove_invalid_objects_on_multitile_building(const gebaeude_t *gb, player_t *player)
+{
+	if(  gb == NULL  ||  gb->get_tile()->get_desc()->get_area() <= 1  ) {
+		return 0;
+	}
+	uint32 removed = 0;
+	vector_tpl<grund_t *> gb_tiles;
+	gb->get_tile_list( gb_tiles );
+	FOR( vector_tpl<grund_t *>, gr, gb_tiles ) {
+		if(  uint32 n = remove_invalid_objects_on_building_tile( gr, gr->find<gebaeude_t>(), player )  ) {
+			removed += n;
+			gr->calc_image();
+		}
+	}
+	return removed;
+}
+
+
+void hausbauer_t::cleanup_multitile_buildings_finish_rd()
+{
+	uint32 removed = 0;
+	for(  sint16 y = 0;  y < welt->get_size().y;  y++  ) {
+		for(  sint16 x = 0;  x < welt->get_size().x;  x++  ) {
+			const planquadrat_t *plan = welt->access(x, y);
+			for(  uint8 i = 0;  i < plan->get_boden_count();  i++  ) {
+				grund_t *gr = plan->get_boden_bei(i);
+				if(  gr->hat_wege()  ) {
+					continue;
+				}
+				// is there a tile of a multitile building?
+				bool multitile = false;
+				for(  uint8 n = 0;  n < gr->get_top()  &&  !multitile;  n++  ) {
+					if(  gebaeude_t const* const gb = obj_cast<gebaeude_t>(gr->obj_bei(n))  ) {
+						multitile = gb->get_tile()  &&  gb->get_tile()->get_desc()->get_area() > 1;
+					}
+				}
+				if(  !multitile  ) {
+					continue;
+				}
+				// the building found by find<gebaeude_t>() is the one used everywhere else => keep it
+				gebaeude_t *keep = gr->find<gebaeude_t>();
+				if(  uint32 n = remove_invalid_objects_on_building_tile(gr, keep, NULL)  ) {
+					dbg->warning("hausbauer_t::cleanup_multitile_buildings_finish_rd()", "removed %u invalid objects at (%s)", n, gr->get_pos().get_str());
+					removed += n;
+					gr->calc_image();
+				}
+			}
+		}
+	}
+	if(  removed  ) {
+		dbg->warning("hausbauer_t::cleanup_multitile_buildings_finish_rd()", "removed %u invalid objects from multitile building tiles", removed);
+	}
+}
+
+
 gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, const building_desc_t* desc, void* param)
 {
 	gebaeude_t* first_building = NULL;
@@ -475,7 +616,7 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 			for( k.x = 0; k.x < dim.x; k.x++ ) {
 				if( grund_t* gr = welt->lookup_kartenboden( pos + k ) ) {
 					base_h = max( base_h, gr->get_hoehe() );
-					if( gr->get_hoehe()!=base_h  &&  welt->lookup( koord3d( pos+k, base_h ) ) ) {
+					if( gr->get_hoehe()!=base_h  &&  welt->lookup_no_dummy( koord3d( pos+k, base_h ) ) ) {
 						// there is already a ground here!
 						dbg->error("hausbauer_t::build","Will create new ground at (%s) where there is ground above!", pos.get_str() );
 						return NULL;
@@ -493,6 +634,26 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 		base_h = gr->get_hoehe() + +slope_t::max_diff( gr->get_grund_hang() );
 
 	}
+	// Final check of all tiles before anything is changed: a building must never be built on ways or stops.
+	// (The ways would be kept below the foundation, i.e. the building would stand on a road.)
+	if(  desc->get_type() != building_desc_t::dock  &&  desc->get_type() != building_desc_t::flat_dock  ) {
+		for(  k.y = 0;  k.y < dim.y;  k.y++  ) {
+			for(  k.x = 0;  k.x < dim.x;  k.x++  ) {
+				if(  is_empty_building_tile( desc, desc->get_tile(layout, k.x, k.y) )  ) {
+					continue;
+				}
+				const grund_t *gr = welt->lookup_kartenboden( pos + k );
+				if(  !gr->is_water()  &&  (has_way_objects(gr)  ||  gr->is_halt())  ) {
+					dbg->error( "hausbauer_t::build()", "%s: way or stop on tile (%s)", desc->get_name(), gr->get_pos().get_str() );
+					if(  !desc->is_factory()  ) {
+						// factories cannot fail here (the factory exists already); their place is checked more strictly before
+						return NULL;
+					}
+				}
+			}
+		}
+	}
+
 	// now we must raise all grounds to base_h during construction
 
 	for(k.y = 0; k.y < dim.y; k.y ++) {
@@ -501,11 +662,7 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 			const building_tile_desc_t *tile = desc->get_tile(layout, k.x, k.y);
 
 			// skip empty tiles
-			if (tile == NULL || (
-						!(desc->get_type() == building_desc_t::dock  ||  desc->get_type() == building_desc_t::flat_dock)  &&
-						tile->get_background(0, 0, 0) == IMG_EMPTY &&
-						tile->get_foreground(0, 0)    == IMG_EMPTY
-					)) {
+			if(  is_empty_building_tile(desc, tile)  ) {
 						// may have a rotation that is not recoverable
 						DBG_MESSAGE("hausbauer_t::build()","get_tile() empty at %i,%i",k.x,k.y);
 				continue;
@@ -525,6 +682,10 @@ gebaeude_t* hausbauer_t::build(player_t* player, koord pos, int org_layout, cons
 			}
 
 			grund_t *gr = welt->lookup_kartenboden(pos + k);
+			if(  desc->get_area() > 1  ) {
+				// multitile building: remove everything which must not share a tile with it (including other buildings)
+				remove_invalid_objects_on_building_tile(gr, NULL, player);
+			}
 			if(gr->is_water()) {
 				gr->obj_add(gb);
 			}
