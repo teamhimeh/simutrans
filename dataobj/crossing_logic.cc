@@ -178,15 +178,28 @@ void crossing_logic_t::set_state( crossing_state_t new_state )
 
 
 /**
- * nothing can cross airways, so waytype 0..7 is enough
- * only save this entries:
- * way0 way1
- *  0 .. 1 2 3 4 5 6 7 8
- *  1 ..   2 3 4 5 6 7 8
- *  2 ..     3 4 5 6 7 8
- * ..          ...
+ * waytypes 0..8 are contiguous (ignore..narrowgauge); air_wt is remapped to
+ * ordinal 9 by crossing_ordinal() so it can share this table.
+ * only save this entries (o0 < o1, ordinals 0..9):
+ * o0 o1
+ *  0 .. 1 2 3 4 5 6 7 8 9
+ *  1 ..   2 3 4 5 6 7 8 9
+ *  2 ..     3 4 5 6 7 8 9
+ * ..            ...
  */
-minivec_tpl<const crossing_desc_t *> crossing_logic_t::can_cross_array[36];
+minivec_tpl<const crossing_desc_t *> crossing_logic_t::can_cross_array[45];
+
+
+/**
+ * maps a waytype to its ordinal slot in can_cross_array (0..9), or 0xFF if unsupported
+ */
+static uint8 crossing_ordinal(waytype_t wt)
+{
+	if(  wt == air_wt  ) {
+		return 9;
+	}
+	return wt <= narrowgauge_wt ? (uint8)wt : 0xFF;
+}
 
 
 /**
@@ -209,11 +222,11 @@ int compare_crossing(const crossing_desc_t *c0, const crossing_desc_t *c1)
 void crossing_logic_t::register_desc(crossing_desc_t *desc)
 {
 	// mark if crossing possible
-	const waytype_t way0 = (waytype_t)min(desc->get_waytype(0), desc->get_waytype(1));
-	const waytype_t way1 = (waytype_t)max(desc->get_waytype(0), desc->get_waytype(1));
-	if(way0<8  &&  way1<9  &&  way0<way1) {
-		uint8 index = way0 * 9 + way1 - ((way0+2)*(way0+1))/2;
-		// max index = 7*9 + 8 - 9*4 = 71-36 = 35
+	const uint8 o0 = min(crossing_ordinal(desc->get_waytype(0)), crossing_ordinal(desc->get_waytype(1)));
+	const uint8 o1 = max(crossing_ordinal(desc->get_waytype(0)), crossing_ordinal(desc->get_waytype(1)));
+	if(o0<9  &&  o1<10  &&  o0<o1) {
+		uint8 index = o0 * 10 + o1 - ((o0+1)*(o0+2))/2;
+		// max index = 8*10 + 9 - 9*10/2 = 89-45 = 44
 		// .. overwrite double entries
 		minivec_tpl<const crossing_desc_t *> &vec = can_cross_array[index];
 		// first check for existing crossing with the same name
@@ -239,13 +252,15 @@ DBG_DEBUG( "crossing_logic_t::register_desc()","%s", desc->get_name() );
 const crossing_desc_t *crossing_logic_t::get_crossing(const waytype_t ns, const waytype_t ow, sint32 way_0_speed, sint32 way_1_speed, uint16 timeline_year_month)
 {
 	// mark if crossing possible
-	const waytype_t way0 = ns <  ow ? ns : ow;
-	const waytype_t way1 = ns >= ow ? ns : ow;
+	const uint8 o_ns = crossing_ordinal(ns);
+	const uint8 o_ow = crossing_ordinal(ow);
+	const uint8 way0 = o_ns < o_ow ? o_ns : o_ow;
+	const uint8 way1 = o_ns >= o_ow ? o_ns : o_ow;
 	const crossing_desc_t *best = NULL;
-	// index 8 is narrowgauge, only air_wt and powerline_wt have higher indexes
-	if(  way0 <= 8  &&  way1 <= 8  &&  way0 != way1  ) {
+	// ordinal 9 is air_wt; powerline_wt has no ordinal (0xFF) and is never supported
+	if(  way0 <= 9  &&  way1 <= 9  &&  way0 != way1  ) {
 
-		const uint8 index = way0 * 9 + way1 - ((way0+2)*(way0+1))/2;
+		const uint8 index = way0 * 10 + way1 - ((way0+1)*(way0+2))/2;
 		FOR(  minivec_tpl<crossing_desc_t const*>,  const i,  can_cross_array[index]  ) {
 			if(  !i->is_available(timeline_year_month)  ) {
 				continue;
@@ -253,14 +268,14 @@ const crossing_desc_t *crossing_logic_t::get_crossing(const waytype_t ns, const 
 			// better matching speed => take this
 			if(  best  ) {
 				// match maxspeed of first way
-				uint8  const way0_nr = (way0 == ow);
+				uint8  const way0_nr = (way0 == o_ow);
 				sint32 const imax0   =    i->get_maxspeed(way0_nr);
 				sint32 const bmax0   = best->get_maxspeed(way0_nr);
 				if(  (imax0 < way_0_speed || bmax0 < imax0)  &&  (way_0_speed < bmax0  ||  imax0 < bmax0)  ) {
 					continue;
 				}
 				// match maxspeed of second way
-				uint8  const way1_nr = (way1 == ow);
+				uint8  const way1_nr = (way1 == o_ow);
 				sint32 const imax1   =    i->get_maxspeed(way1_nr);
 				sint32 const bmax1   = best->get_maxspeed(way1_nr);
 				if(  (imax1 < way_1_speed  ||  bmax1 < imax1)  &&  (way_1_speed < bmax1  ||  imax1 < bmax1)  ) {
