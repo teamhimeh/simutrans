@@ -25,6 +25,7 @@
 #include "themeselector.h"
 #include "loadfont_frame.h"
 #include "simwin.h"
+#include "base_info.h"
 
 // display text label in player colors
 void display_text_label(sint16 xpos, sint16 ypos, const char* text, const player_t *player, bool dirty); // grund.cc
@@ -564,6 +565,191 @@ bool traffic_settings_t::action_triggered( gui_action_creator_t *comp, value_t v
 
 
 
+// Fixed minimum column widths keep every operation aligned. Long descriptions
+// can be read in full through the tooltip instead of widening the whole dialog.
+class shortcut_cell_t : public gui_label_t
+{
+	int width_units;
+	bool stretch;
+public:
+	shortcut_cell_t(int units, bool flexible = false) : width_units(units), stretch(flexible) {}
+	scr_size get_min_size() const OVERRIDE { return scr_size(D_BUTTON_WIDTH * width_units / 2, D_LABEL_HEIGHT); }
+	scr_size get_max_size() const OVERRIDE { return scr_size(stretch ? scr_size::inf.w : get_min_size().w, D_LABEL_HEIGHT); }
+};
+
+class shortcut_conflict_window_t : public base_infowin_t, private action_listener_t
+{
+	button_t acknowledge;
+public:
+	shortcut_conflict_window_t(const char *message) : base_infowin_t(translator::translate("Key binding conflict"))
+	{
+		buf.append(message);
+		acknowledge.init(button_t::roundbox | button_t::flexible, "Ok");
+		acknowledge.add_listener(this);
+		add_component(&acknowledge);
+		recalc_size();
+	}
+	bool action_triggered(gui_action_creator_t *, value_t) OVERRIDE
+	{
+		destroy_win(this);
+		return true;
+	}
+	bool infowin_event(const event_t *ev) OVERRIDE
+	{
+		// Consume repeated keys while the warning is open.
+		if (ev->ev_class == EVENT_KEYBOARD) {
+			if (ev->ev_code == SIM_KEY_ESCAPE || ev->ev_code == 13) { destroy_win(this); }
+			return true;
+		}
+		if (ev->ev_class == EVENT_STRING) { return true; }
+		return base_infowin_t::infowin_event(ev);
+	}
+};
+
+class shortcut_row_t
+{
+public:
+	std::string name, key;
+	shortcut_cell_t description, binding;
+	button_t change, clear;
+	shortcut_row_t(uint32 index, player_t *player) : description(5, true), binding(3)
+	{
+		tool_t *tool = tool_t::get_shortcut_tool(index);
+		const char *tooltip = tool->get_tooltip(player);
+		name = tooltip && *tooltip ? tooltip : tool_t::get_shortcut_name(index);
+		if (strncmp(tool_t::get_shortcut_name(index), "toolbar[", 8) == 0) {
+			name += " (" + std::string(translator::translate("Toolbar")) + ")";
+		}
+		description.set_text_pointer(name.c_str(), false);
+		description.set_tooltip(name.c_str());
+		change.init(button_t::roundbox, "Change keybind");
+		clear.init(button_t::roundbox, "Clear key");
+	}
+};
+
+shortcut_settings_t::shortcut_settings_t() : rows_scroll(&rows_table), capturing_row(-1)
+{
+	set_table_layout(1, 0);
+	reset.init(button_t::roundbox | button_t::flexible, "Restore default keys");
+	reset.add_listener(this);
+	add_component(&reset);
+	new_component<gui_label_t>("Key changes are saved automatically to menuconf.tab.");
+	add_component(&status);
+	rows_table.set_table_layout(4, 0);
+	rows_table.set_margin(scr_size(0, 0), scr_size(0, 0));
+	rows_table.new_component<shortcut_cell_t>(5, true)->set_text("Shortcut action", false);
+	rows_table.new_component<shortcut_cell_t>(3)->set_text("Current key", false);
+	rows_table.new_component<shortcut_cell_t>(2)->set_text("Change keybind", false);
+	rows_table.new_component<shortcut_cell_t>(2)->set_text("Clear key", false);
+	for (uint32 i = 0; i < tool_t::get_shortcut_count(); i++) {
+		rows.emplace_back(new shortcut_row_t(i, world()->get_active_player()));
+		shortcut_row_t &row = *rows.back();
+		row.change.add_listener(this);
+		row.clear.add_listener(this);
+		rows_table.add_component(&row.description);
+		rows_table.add_component(&row.binding);
+		rows_table.add_component(&row.change);
+		rows_table.add_component(&row.clear);
+	}
+	rows_scroll.set_min_width(rows_table.get_min_size().w + D_SCROLLBAR_WIDTH);
+	rows_scroll.set_scroll_amount_y(D_BUTTON_HEIGHT + D_V_SPACE);
+	add_component(&rows_scroll);
+	refresh();
+}
+
+shortcut_settings_t::~shortcut_settings_t() {}
+
+void shortcut_settings_t::refresh()
+{
+	for (uint32 i = 0; i < rows.size(); i++) {
+		shortcut_row_t &row = *rows[i];
+		tool_t *tool = tool_t::get_shortcut_tool(i);
+		row.key = tool_t::get_shortcut_key_name(tool->command_key, tool->command_flags);
+		row.binding.set_text_pointer(row.key.c_str(), false);
+		row.binding.set_tooltip(row.key.c_str());
+		row.clear.enable(tool->command_key != 0 && tool->command_key != 0xFFFF);
+	}
+}
+
+void shortcut_settings_t::reload()
+{
+ cancel_capture();
+ const bool ok = tool_t::reload_shortcuts();
+ refresh();
+ status.set_text(ok ? "" : "Could not read menuconf.tab.", false);
+}
+
+void shortcut_settings_t::draw(scr_coord offset)
+{
+	status.set_size(scr_size(get_size().w, status.get_size().h));
+	gui_aligned_container_t::draw(offset);
+}
+
+void shortcut_settings_t::cancel_capture()
+{
+	if (capturing_row < 0) { return; }
+	rows[capturing_row]->change.pressed = false;
+	capturing_row = -1;
+	status.set_text("", false);
+}
+
+bool shortcut_settings_t::action_triggered(gui_action_creator_t *comp, value_t)
+{
+	cancel_capture();
+	if (comp == &reset) {
+		const bool ok = tool_t::reset_shortcuts();
+		refresh();
+		status.set_text(ok ? "Key settings saved." : "Could not save key settings.", false);
+		return true;
+	}
+	for (uint32 i = 0; i < rows.size(); i++) {
+		shortcut_row_t &row = *rows[i];
+		if (comp == &row.change) {
+			capturing_row = (sint32)i;
+			row.change.pressed = true;
+			status_text = row.name + ": " + translator::translate("Press a key. Esc cancels.");
+			status.set_text_pointer(status_text.c_str(), false);
+			return true;
+		}
+		if (comp == &row.clear) {
+			const bool ok = tool_t::set_shortcut(i, 0, 0);
+			refresh();
+			status.set_text(ok ? "Key settings saved." : "Could not save key settings.", false);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool shortcut_settings_t::capture_event(const event_t *ev)
+{
+	if (capturing_row < 0) { return false; }
+	if (ev->ev_class == EVENT_STRING) { return true; }
+	if (ev->ev_class != EVENT_KEYBOARD) { return false; }
+	if (ev->ev_code == SIM_KEY_ESCAPE) { cancel_capture(); return true; }
+	const uint16 key = (uint16)ev->ev_code;
+	const uint8 modifiers = ev->ev_key_mod & (SIM_MOD_SHIFT | SIM_MOD_CTRL);
+	const sint32 conflict = tool_t::find_shortcut_conflict(capturing_row, key, modifiers);
+	if (!tool_t::is_shortcut_key_allowed(key, modifiers)) {
+		status.set_text("This key is reserved by the game.", false);
+	}
+	else if (conflict >= 0) {
+		const std::string message = std::string(translator::translate("Conflicting key:")) + " "
+			+ tool_t::get_shortcut_key_name(key, modifiers) + "\n\n"
+			+ translator::translate("Key already assigned:") + " " + rows[conflict]->name + "\n\n"
+			+ translator::translate("The binding was not changed. Choose another key, or clear the existing binding first.");
+		cancel_capture();
+		create_win(new shortcut_conflict_window_t(message.c_str()), w_info, magic_none);
+	}
+	else {
+		const bool ok = tool_t::set_shortcut(capturing_row, key, modifiers);
+		cancel_capture();
+		refresh();
+		status.set_text(ok ? "Key settings saved." : "Could not save key settings.", false);
+	}
+	return true;
+}
+
 color_gui_t::color_gui_t() :
 	gui_frame_t( translator::translate( "Helligk. u. Farben" ) ),
 	scrolly_gui(&gui_settings),
@@ -585,6 +771,8 @@ color_gui_t::color_gui_t() :
 	tabs.add_tab(&scrolly_transparency, translator::translate("transparencies"));
 	tabs.add_tab(&scrolly_station, translator::translate("station labels"));
 	tabs.add_tab(&scrolly_traffic, translator::translate("traffic settings"));
+	tabs.add_tab(&shortcut_settings, translator::translate("Keybindings"));
+	tabs.add_listener(this);
 	add_component(&tabs);
 
 	for( int i = 0; i < COLORS_MAX_BUTTONS; i++ ) {
@@ -597,13 +785,18 @@ color_gui_t::color_gui_t() :
 	gui_settings.put_below_others.add_listener(this);
 
 	set_resizemode(diagonal_resize);
-	set_min_windowsize( scr_size(D_DEFAULT_WIDTH,get_min_windowsize().h+map_settings.get_size().h) );
-	set_windowsize( scr_size(D_DEFAULT_WIDTH,get_min_windowsize().h+map_settings.get_size().h) );
+	set_min_windowsize( scr_size(max(D_DEFAULT_WIDTH, shortcut_settings.get_min_size().w + 2 * D_MARGIN_LEFT),get_min_windowsize().h+map_settings.get_size().h) );
+	set_windowsize( scr_size(max(D_DEFAULT_WIDTH, shortcut_settings.get_min_size().w + 2 * D_MARGIN_LEFT),get_min_windowsize().h+map_settings.get_size().h) );
 	resize( scr_coord( 0, 0 ) );
 }
 
 bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 {
+	if (comp == &tabs) {
+		shortcut_settings.cancel_capture();
+		if (tabs.get_active_tab_index() == 5) { shortcut_settings.reload(); }
+		return true;
+	}
 	if(  comp == &gui_settings.toolbar_pos  ) {
 		env_t::menupos++;
 		env_t::menupos &= 3;
@@ -823,6 +1016,21 @@ void color_gui_t::draw(scr_coord pos, scr_size size)
 	gui_frame_t::draw(pos, size);
 }
 
+
+bool color_gui_t::infowin_event(const event_t *ev)
+{
+	if (ev->ev_class == INFOWIN && (ev->ev_code == WIN_UNTOP || ev->ev_code == WIN_CLOSE)) {
+		shortcut_settings.cancel_capture();
+	}
+	if (tabs.get_active_tab_index() == 5 && shortcut_settings.capture_event(ev)) {
+		set_dirty();
+		return true;
+	}
+	if (ev->ev_class == INFOWIN && ev->ev_code == WIN_OPEN && tabs.get_active_tab_index() == 5) { shortcut_settings.reload(); }
+	const bool handled = gui_frame_t::infowin_event(ev);
+	if (handled && tabs.get_active_tab_index() == 5) { set_dirty(); }
+	return handled;
+}
 
 void color_gui_t::rdwr(loadsave_t *f)
 {

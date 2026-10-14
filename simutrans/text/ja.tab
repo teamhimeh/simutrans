@@ -2251,3 +2251,39 @@ New world record for ship: %.1f km/h by %s.
 元%s%s
 7center
 %s大通り%s
+
+# In-game keyboard settings
+Keybindings
+キー設定
+Change keybind
+キー変更
+Clear key
+割り当て解除
+Restore default keys
+初期設定に戻す
+Current key
+現在のキー
+Unassigned
+未設定
+Press a key. Esc cancels.
+キーを押してください。Escでキャンセル。
+Key changes are saved automatically to menuconf.tab.
+変更はmenuconf.tabに自動保存されます。
+Key settings saved.
+キー設定を保存しました。
+Could not save key settings.
+キー設定を保存できませんでした。
+This key is reserved by the game.
+このキーはゲームの固定操作で使用されています。
+Key already assigned:
+割り当て済みの操作：
+Shortcut action
+操作内容
+Key binding conflict
+警告：キーの競合
+Conflicting key:
+競合したキー：
+The binding was not changed. Choose another key, or clear the existing binding first.
+キー設定は変更されていません。別のキーを指定するか、割り当て済みの操作のキーを解除してから設定してください。
+Could not read menuconf.tab.
+menuconf.tabを読み込めませんでした。
