@@ -37,6 +37,8 @@ private:
 
 	gui_scrolled_list_t serverlist;
 	button_t add, join, find_mismatch;
+	button_t save_server, remove_server;
+	cbuffer_t listed_servers;
 	button_t show_mismatched, show_offline;
 	gui_label_t pak_version;
 	gui_label_buf_t revision, date, label_size;
@@ -57,12 +59,15 @@ private:
 		cbuffer_t serverdns;
 		cbuffer_t server_altdns;
 		bool status;
+		bool saved;
+		std::string saved_name;
 	public:
-		server_scrollitem_t (const cbuffer_t& name, const cbuffer_t& dns, const cbuffer_t& altdns, bool status, PIXVAL col) :
+		// Status 2 identifies an editable pakset entry; 0/1 are public entries.
+		server_scrollitem_t (const cbuffer_t& name, const cbuffer_t& dns, const cbuffer_t& altdns, int status, PIXVAL col) :
 			gui_scrolled_list_t::const_text_scrollitem_t( NULL, col ),
 			servername( name ), serverdns( dns ),
 			server_altdns(altdns),
-			status( status )
+			status( status != 0 ), saved( status == 2 ), saved_name(name.get_str())
 		{
 			servername.append( " (" );
 			servername.append( serverdns.get_str() );
@@ -77,6 +82,8 @@ private:
 		char const* get_altdns() const { return server_altdns.get_str(); }
 		void set_text (char const* newtext) OVERRIDE { servername.clear(); servername.append( newtext ); serverdns.clear(); serverdns.append( newtext ); }
 		bool online () { return status; }
+		bool is_saved() const { return saved; }
+		const std::string &get_saved_name() const { return saved_name; }
 	};
 
 	/**
@@ -130,6 +137,7 @@ private:
 
 	/// Load servers from pak_dir/config/servers.tab
 	void load_pakset_servers();
+	bool edit_pakset_servers(const std::string &name, const std::string &address);
 
 public:
 	server_frame_t();

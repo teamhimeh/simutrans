@@ -2251,3 +2251,18 @@ New world record for ship: %.1f km/h by %s.
 元%s%s
 7center
 %s大通り%s
+
+Add entered address to server list
+入力中の接続先をリストに追加
+Remove selected saved server
+選択中の接続先をリストから削除
+Cannot read servers.tab
+接続先リストを読み込めません
+Cannot write servers.tab
+接続先リストを保存できません
+Server address is invalid or already saved
+接続先が無効、または登録済みです
+Saved server no longer exists
+選択した接続先は既に削除されています
+Server list saved
+接続先リストを保存しました
