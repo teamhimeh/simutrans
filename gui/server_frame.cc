@@ -29,6 +29,8 @@
 
 #include <thread>
 #include <mutex>
+#include <cerrno>
+#include "../utils/serverlist_edit.h"
 
 static char nick_buf[256];
 
@@ -91,34 +93,71 @@ void server_frame_t::load_pakset_servers()
 	if(  !f  ) {
 		return;
 	}
-	char line[512];
-	while(  fgets(line, sizeof(line), f)  ) {
-		// skip leading whitespace
-		char *p = line;
-		while(  *p == ' '  ||  *p == '\t'  ) { p++; }
-		// skip comments and empty lines
-		if(  *p == '#'  ||  *p == '\0'  ||  *p == '\n'  ||  *p == '\r'  ) {
-			continue;
+	std::string line;
+	int ch;
+	do {
+		ch = fgetc(f);
+		if(  ch == '\n' || ch == EOF  ) {
+			std::string name, dns;
+			if(  serverlist_edit::parse(line, name, dns)  ) {
+				pakset_servers.push_back({ name, dns });
+			}
+			line.clear();
 		}
-		// find '='
-		char *eq = strchr(p, '=');
-		if(  !eq  ) { continue; }
-		// trim name (right-trim up to '=')
-		char *name_end = eq - 1;
-		while(  name_end > p  &&  (*name_end == ' '  ||  *name_end == '\t')  ) { name_end--; }
-		std::string name(p, name_end - p + 1);
-		// trim address (left-trim after '=')
-		char *addr = eq + 1;
-		while(  *addr == ' '  ||  *addr == '\t'  ) { addr++; }
-		// right-trim address
-		char *addr_end = addr + strlen(addr) - 1;
-		while(  addr_end > addr  &&  (*addr_end == ' '  ||  *addr_end == '\t'  ||  *addr_end == '\n'  ||  *addr_end == '\r')  ) { addr_end--; }
-		std::string dns(addr, addr_end - addr + 1);
-		if(  !name.empty()  &&  !dns.empty()  ) {
-			pakset_servers.push_back({ name, dns });
+		else {
+			line += (char)ch;
 		}
-	}
+	} while(  ch != EOF  );
 	fclose(f);
+}
+
+
+bool server_frame_t::edit_pakset_servers(const std::string &name, const std::string &address)
+{
+	const std::string path = env_t::pak_dir + "config/servers.tab";
+	std::string contents;
+	FILE *f = dr_fopen(path.c_str(), "rb");
+	if(  f  ) {
+		char chunk[4096];
+		size_t count;
+		while(  (count = fread(chunk, 1, sizeof(chunk), f)) != 0  ) { contents.append(chunk, count); }
+		const bool failed = ferror(f) != 0;
+		fclose(f);
+		if(  failed  ) { update_error(translator::translate("Cannot read servers.tab")); return false; }
+	}
+	else if(  errno != ENOENT  ) {
+		update_error(translator::translate("Cannot read servers.tab"));
+		return false;
+	}
+	if(  !serverlist_edit::edit(contents, name, address)  ) {
+		update_error(translator::translate(name.empty() ? "Server address is invalid or already saved" : "Saved server no longer exists"));
+		return false;
+	}
+	// Replace only after a successful write, retaining the original on failure.
+	const std::string temporary = path + ".tmp";
+	f = dr_fopen(temporary.c_str(), "wb");
+	if(  !f  ) { update_error(translator::translate("Cannot write servers.tab")); return false; }
+	const bool written = fwrite(contents.data(), 1, contents.size(), f) == contents.size();
+	const bool closed = fclose(f) == 0;
+	bool replaced = false;
+	if(  written && closed  ) {
+#ifdef _WIN32
+		replaced = dr_rename(temporary.c_str(), path.c_str()) == 0;
+#else
+		// POSIX rename replaces atomically; dr_rename removes the target first.
+		replaced = rename(temporary.c_str(), path.c_str()) == 0;
+#endif
+	}
+	if(  !replaced  ) {
+		dr_remove(temporary.c_str());
+		update_error(translator::translate("Cannot write servers.tab"));
+		return false;
+	}
+	custom_valid = false;
+	load_pakset_servers();
+	handle_serverlist_request_result(listed_servers);
+	update_error(translator::translate("Server list saved"));
+	return true;
 }
 
 
@@ -176,6 +215,17 @@ server_frame_t::server_frame_t() :
 			add.init( button_t::roundbox, "Query server");
 			add.add_listener( this );
 			add_component( &add );
+		}
+		end_table();
+		add_table(1, 0);
+		{
+			save_server.init(button_t::roundbox, "Add entered address to server list");
+			save_server.add_listener(this);
+			add_component(&save_server);
+			remove_server.init(button_t::roundbox, "Remove selected saved server");
+			remove_server.add_listener(this);
+			remove_server.disable();
+			add_component(&remove_server);
 		}
 		end_table();
 		new_component<gui_divider_t>();
@@ -395,6 +445,9 @@ void server_frame_t::update_serverlist_threaded () {
 
 
 void server_frame_t::handle_serverlist_request_result(cbuffer_t network_buf) {
+	listed_servers = network_buf;
+	serverlist.clear_elements();
+	remove_server.disable();
 	buf.clear();
 
 	// Add servers defined in pak_dir/config/servers.tab first
@@ -402,7 +455,7 @@ void server_frame_t::handle_serverlist_request_result(cbuffer_t network_buf) {
 		cbuffer_t name, dns, altdns;
 		name.append( s.name.c_str() );
 		dns.append(  s.dns.c_str()  );
-		serverlist.new_component<server_scrollitem_t>( name, dns, altdns, true, color_idx_to_rgb(COL_BLUE) );
+		serverlist.new_component<server_scrollitem_t>( name, dns, altdns, 2, color_idx_to_rgb(COL_BLUE) );
 	}
 
 	// Parse listing into CSV_t object
@@ -543,8 +596,23 @@ bool server_frame_t::infowin_event (const event_t *ev)
 
 bool server_frame_t::action_triggered (gui_action_creator_t *comp, value_t p)
 {
+	if(  &save_server == comp  ) {
+		edit_pakset_servers("", serverlist_edit::trim(env_t::newserver_name));
+		return true;
+	}
+	if(  &remove_server == comp  ) {
+		const server_scrollitem_t *item = static_cast<server_scrollitem_t*>(serverlist.get_selected_item());
+		if(  item && item->is_saved()  ) {
+			// Copy before rebuilding the list destroys its items.
+			const std::string name = item->get_saved_name(), address = item->get_dns();
+			edit_pakset_servers(name, address);
+		}
+		return true;
+	}
 	// Selection has changed
 	if(  &serverlist == comp  ) {
+		const server_scrollitem_t *selected = static_cast<server_scrollitem_t*>(serverlist.get_selected_item());
+		remove_server.enable(selected && selected->is_saved());
 		if(  p.i <= -1  ) {
 			join.disable();
 			gi = gameinfo_t(welt);
