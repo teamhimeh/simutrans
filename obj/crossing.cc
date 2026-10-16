@@ -163,21 +163,26 @@ void crossing_t::rdwr(loadsave_t *file)
 void crossing_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	grund_t *gr=welt->lookup(get_pos());
-	if(gr==NULL  ||  !gr->hat_weg(desc->get_waytype(0))  ||  !gr->hat_weg(desc->get_waytype(1))) {
+	// the two ways of a crossing always have different waytypes, so a plain get_weg() lookup
+	// picks the right one even on a tile that carries two ways of the same waytype
+	weg_t *w1 = gr ? gr->get_weg(desc->get_waytype(0)) : NULL;
+	weg_t *w2 = gr ? gr->get_weg(desc->get_waytype(1)) : NULL;
+	if(  w1==NULL  ||  w2==NULL  ) {
+		// nothing to attach to: stay inert and invisible instead of dereferencing a missing way
 		dbg->error("crossing_t::finish_rd","way/ground missing at %i,%i => ignore", get_pos().x, get_pos().y );
+		image = IMG_EMPTY;
+		foreground_image = IMG_EMPTY;
 	}
-	else if(  ribi_t::are_disjoint_bends( gr->get_weg(desc->get_waytype(0))->get_ribi_unmasked(), gr->get_weg(desc->get_waytype(1))->get_ribi_unmasked() )  ) {
+	else if(  ribi_t::are_disjoint_legs( w1->get_ribi_unmasked(), w2->get_ribi_unmasked() )  ) {
 		// the two ways never actually meet at the tile center (e.g. a stale crossing_t
-		// left over from an old save, now built as disjoint diagonal bends instead) --
+		// left over from an old save, now built as disjoint diagonal legs instead) --
 		// stay inert and invisible rather than compute a bogus straight-crossing image
-		dbg->warning("crossing_t::finish_rd","ways at %i,%i are disjoint diagonal bends => no crossing image", get_pos().x, get_pos().y );
+		dbg->warning("crossing_t::finish_rd","ways at %i,%i are disjoint diagonal legs => no crossing image", get_pos().x, get_pos().y );
 		image = IMG_EMPTY;
 		foreground_image = IMG_EMPTY;
 	}
 	else {
 		// try to find crossing that matches way max speed
-		weg_t *w1=gr->get_weg(desc->get_waytype(0));
-		weg_t *w2=gr->get_weg(desc->get_waytype(1));
 		const crossing_desc_t *test = crossing_logic_t::get_crossing( desc->get_waytype(0), desc->get_waytype(1), w1->get_desc()->get_topspeed(), w2->get_desc()->get_topspeed(), welt->get_timeline_year_month());
 		if (test  &&  test!=desc) {
 			desc = test;

@@ -323,7 +323,7 @@ void convoi_info_t::update_labels()
 	profit_label.update();
 
 	running_cost_label.buf().append("(");
-	running_cost_label.append_money(cnv->get_running_cost()/100.0);
+	running_cost_label.append_money(cnv->get_running_cost_scaled()/100.0);
 	running_cost_label.buf().append("/km)");
 	running_cost_label.update();
 

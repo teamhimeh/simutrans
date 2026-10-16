@@ -177,6 +177,15 @@ weg_t::~weg_t()
 
 bool weg_t::needs_crossing(const way_desc_t* other) const
 {
+	// two ways of the SAME waytype can never form a crossing: they are the disjoint diagonal
+	// legs of a closed diagonal (see grund_t::weg_erweitern()). crossing_logic_t::get_crossing()
+	// has no entry for a waytype with itself and returns NULL, which the callers turn into a
+	// dbg->fatal() -- that used to abort loading of a save containing such a tile whenever the
+	// disjoint-leg test below did not recognize it (e.g. a leg that is still a single direction).
+	if(  other->get_waytype() == desc->get_waytype()  ) {
+		return false;
+	}
+
 	// certain way always needs crossing (or never)
 	switch (desc->get_waytype()) {
 		case powerline_wt:
@@ -351,7 +360,7 @@ void weg_t::info(cbuffer_t & buf) const
 		const strasse_t* str = (const strasse_t*) this;
 		assert(str);
 		// Display overtaking_info
-		switch (str->get_overtaking_mode()) {
+		switch (str->get_overtaking_mode_raw()) {
 			case halt_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("halt mode"));
 				break;
@@ -370,8 +379,14 @@ void weg_t::info(cbuffer_t & buf) const
 			case inverted_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("inverted"));
 				break;
+			case exclusive_area_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("exclusive area"));
+				break;
+			case passing_lane_stop_only_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("passing lane stop only"));
+				break;
 			default:
-				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode());
+				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode_raw());
 				break;
 		}
 
@@ -1126,12 +1141,13 @@ void weg_t::check_diagonal()
 
 	grund_t *from = welt->lookup(get_pos());
 
-	// sibling way of a different type on this same tile, disjoint bend => always diagonal,
-	// regardless of what the neighbouring tiles look like (the two bends must always be
-	// drawn through opposite corners so they don't visually overlap)
+	// sibling way on this same tile forming a disjoint leg => always diagonal, regardless of
+	// what the neighbouring tiles look like (the two bends must always be drawn through
+	// opposite corners so they don't visually overlap). The sibling may be of the same waytype
+	// (closed diagonal) and it may still be a single direction while its second tile is missing.
 	if(  from->has_two_ways()  ) {
 		weg_t *other = from->get_weg_nr(0)==this ? from->get_weg_nr(1) : from->get_weg_nr(0);
-		if(  other  &&  other->get_waytype()!=get_waytype()  &&  ribi_t::are_disjoint_bends(ribi, other->get_ribi_unmasked())  ) {
+		if(  other  &&  ribi_t::are_disjoint_legs(ribi, other->get_ribi_unmasked())  ) {
 			flags |= IS_DIAGONAL;
 			return;
 		}

@@ -742,9 +742,11 @@ public:
 	sint64 get_fixed_cost() const { return -sum_fixed_costs; }
 
 	/**
-	 * returns the total running cost for all vehicles in convoi
+	 * returns the total running cost for all vehicles in convoi,
+	 * scaled by the running cost multiplier setting (see add_running_cost())
+	 * -- unlike vehicle_desc_t::get_running_cost(), which is the unscaled base value
 	 */
-	sint32 get_running_cost() const { return -base_sum_running_costs; }
+	sint32 get_running_cost_scaled() const;
 
 	/**
 	 * returns the total new purchase cost for all vehicles in convoy
@@ -1215,6 +1217,10 @@ public:
 	// Overtaking for convois
 	virtual bool can_overtake(overtaker_t *other_overtaker, sint32 other_speed, sint16 steps_other) OVERRIDE;
 
+	// passing_lane_stop_only_mode: may this convoy pull onto the passing lane in order to come to a
+	// stand beside the standing convoy in front of it? Grants the lane (set_tiles_overtaking) if so.
+	bool can_stop_on_passing_lane(sint32 other_speed, sint16 steps_other);
+
 	/*
 	 * Functions related to requested_change_lane
 	 * @author teamhimeH
@@ -1249,6 +1255,16 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
+
+	/**
+	 * Re-anchor route_index of every vehicle of this convoy and of all convoys coupled
+	 * behind it, against the route each of those convoys holds. A coupled child keeps
+	 * its own copy of the route but is driven by its parent, so its vehicles' route_index
+	 * can run arbitrarily far past its route (vehicle_t::hop() has no upper bound there).
+	 * Coupling and uncoupling hand those indices to a different convoy, so they have to
+	 * be made meaningful again at both boundaries.
+	 */
+	void reanchor_chain_route_indices();
 	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }

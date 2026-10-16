@@ -604,7 +604,7 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 	// side road -> main road from passing lane side: vehicle should enter passing lane on main road.
 	next_lane = 0;
 	if(  str->get_overtaking_mode() <= oneway_mode  ) {
-		const strasse_t* str_next = (strasse_t*)(welt->lookup(pos_next)->get_weg(road_wt));
+		const strasse_t* str_next = strasse_at( pos_next );
 		const bool left_driving = welt->get_settings().is_drive_left();
 		if(current_str && str_next && current_str->get_overtaking_mode() > oneway_mode  && str_next->get_overtaking_mode() <= oneway_mode) {
 			if(  (!left_driving  &&  ribi_t::rotate90l(get_90direction()) == calc_direction(pos_next,pos_next_next))  ||  (left_driving  &&  ribi_t::rotate90(get_90direction()) == calc_direction(pos_next,pos_next_next))  ) {
@@ -1108,6 +1108,12 @@ void private_car_t::enter_tile(grund_t* gr)
 	vehicle_base_t::enter_tile(gr);
 	calc_disp_lane();
 	strasse_t* str = (strasse_t*) gr->get_weg(road_wt);
+	if(  str==NULL  ) {
+		// the tile we just entered carries no road (it can be removed under a moving car):
+		// there is nothing to book and no overtaking mode to obey, and the car is doomed anyway
+		time_to_life = 0;
+		return;
+	}
 	str->book(1, WAY_STAT_CONVOIS, enter_direction);
 	update_tiles_overtaking();
 	if(  next_lane==1  ) {
@@ -1841,7 +1847,7 @@ vehicle_base_t* private_car_t::is_there_car (grund_t *gr) const
 	assert(  gr  );
 	// this function cannot process vehicles on twoway and related mode road.
 	const strasse_t* str = (strasse_t *)gr->get_weg(road_wt);
-	if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode)  ) {
+	if(  !str  ||  (str->get_overtaking_mode()>=twoway_mode  &&  str->get_overtaking_mode()<inverted_mode  &&  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode)  ) {
 		return NULL;
 	}
 	for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {

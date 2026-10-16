@@ -125,3 +125,40 @@ function test_diagonal_two_waytypes_split_to_threeway()
 	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(cx - 1, cy, 0), coord3d(cx, cy, 0), "" + wt_rail), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
+
+
+// The second leg is built one tile at a time, so in between it is a single direction only.
+// Saving in that state and loading it used to go wrong for two DIFFERENT waytypes as well:
+// the load code recognized a disjoint diagonal only when both ways were full bends, so it
+// created a crossing for a tile that never had one -- and aborted loading outright
+// ("requested for waytypes 2 and 16 but nothing defined!") when the pakset has no crossing
+// for that waytype pair, as for rail and air.
+function test_diagonal_two_waytypes_partial_leg()
+{
+	local pl = player_x(0)
+	local rail = way_desc_x("sand_track")
+	local air_ways = way_desc_x.get_available_ways(wt_air, st_flat)
+	ASSERT_TRUE(air_ways.len() > 0)
+	local air = air_ways[0]
+
+	local cx = 5
+	local cy = 5
+
+	// rail: a full SE bend
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(cx, cy + 1, 0), coord3d(cx, cy, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(cx, cy, 0), coord3d(cx + 1, cy, 0), rail, true), null)
+
+	// air: leg left half finished, a single direction (west) only
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(cx - 1, cy, 0), coord3d(cx, cy, 0), air, true), null)
+
+	ASSERT_TRUE(tile_x(cx, cy, 0).has_two_ways())
+	ASSERT_EQUAL(tile_x(cx, cy, 0).get_way_dirs(wt_rail), dir.south | dir.east)
+	ASSERT_EQUAL(tile_x(cx, cy, 0).get_way_dirs(wt_air), dir.west)
+	// the ways do not meet at the tile center, so no crossing object may be created
+	ASSERT_FALSE(way_x(cx, cy, 0).is_crossing())
+
+	// clean up
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(cx - 1, cy, 0), coord3d(cx, cy, 0), "" + wt_air), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(cx, cy + 1, 0), coord3d(cx + 1, cy, 0), "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}

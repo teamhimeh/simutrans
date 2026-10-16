@@ -332,7 +332,9 @@ all_tests <- [
 	test_diagonal_two_waytypes_rail_and_air,
 	test_diagonal_two_waytypes_same_waytype,
 	test_diagonal_two_waytypes_split_to_threeway,
+	test_diagonal_two_waytypes_partial_leg,
 	test_diagonal_two_waytypes_same_desc,
+	test_diagonal_two_waytypes_same_desc_partial_leg,
 ]
 
 

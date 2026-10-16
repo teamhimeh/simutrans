@@ -491,7 +491,7 @@ bool savegame_frame_t::action_triggered(gui_action_creator_t *component, value_t
 			}
 		}
 		ok_action(buf);
-		destroy_win(this);
+		if (close_after_ok()) destroy_win(this);
 
 	}
 	else if(component == &cancelbutton) {

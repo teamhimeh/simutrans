@@ -33,3 +33,34 @@ function test_diagonal_two_waytypes_same_desc()
 	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(cx - 1, cy, 0), coord3d(cx, cy - 1, 0), "" + wt_rail), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
+
+
+// A second leg is built one tile at a time, so between the two build calls it consists of a
+// single direction only. That half-finished state can be saved, and loading it used to abort
+// with "requested for waytypes 1 and 1 but nothing defined!": the load code recognized a
+// disjoint diagonal only when BOTH ways were full bends, so it tried to create a level
+// crossing for two ways of the same waytype, for which no crossing exists.
+function test_diagonal_two_waytypes_same_desc_partial_leg()
+{
+	local pl = player_x(0)
+	local rail = way_desc_x("sand_track")
+
+	local cx = 5
+	local cy = 5
+
+	// first leg: a full bend (south + east)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(cx, cy + 1, 0), coord3d(cx, cy, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(cx, cy, 0), coord3d(cx + 1, cy, 0), rail, true), null)
+
+	// second leg of the same waytype, left half finished: a single direction (west)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(cx - 1, cy, 0), coord3d(cx, cy, 0), rail, true), null)
+
+	ASSERT_TRUE(tile_x(cx, cy, 0).has_two_ways())
+	// no crossing object may be created for two ways of the same waytype
+	ASSERT_FALSE(way_x(cx, cy, 0).is_crossing())
+
+	// clean up
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(cx - 1, cy, 0), coord3d(cx, cy, 0), "" + wt_rail), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(cx, cy + 1, 0), coord3d(cx + 1, cy, 0), "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}

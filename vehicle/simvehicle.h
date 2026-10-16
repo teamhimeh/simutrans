@@ -23,6 +23,7 @@ class schedule_t;
 class signal_t;
 class ware_t;
 class route_t;
+class strasse_t;
 struct schedule_entry_t;
 
 /*----------------------- Movables ------------------------------------*/
@@ -353,9 +354,10 @@ public:
 	const vehicle_desc_t *get_desc() const {return desc; }
 
 	/**
-	* @return die running_cost in Cr/100Km
+	* @return die running_cost in Cr/100Km, scaled by the running cost multiplier setting
+	* (see convoi_t::add_running_cost())
 	*/
-	sint64 get_operating_cost() const { return desc->get_running_cost(); }
+	sint64 get_operating_cost() const;
 
 	/**
 	* Play sound, when the vehicle is visible on screen
@@ -376,6 +378,21 @@ public:
 	 * route_index, which would make route_t::at() run off the end.
 	 */
 	void clamp_route_index();
+
+	/**
+	 * Re-derive route_index from the tile this vehicle actually stands on, against the
+	 * route its convoy currently holds. hop() increments route_index without an upper
+	 * bound once the vehicle has passed the end of its own route - a coupled child that
+	 * is dragged along keeps hopping on its parent's behalf while indexing into its own
+	 * (possibly shorter) copy of the route - so the index can be arbitrarily far past
+	 * get_count(). Coupling and uncoupling hand that index to a different convoy, so it
+	 * must be re-anchored there.
+	 * pos_next is deliberately left alone: it is the tile the vehicle is physically
+	 * moving onto, and hop() re-derives it from route_index at the next tile change.
+	 * @returns true if get_pos() was found in the route; false means the vehicle is not
+	 *          on its own route at all and route_index was clamped instead.
+	 */
+	bool reanchor_route_index();
 
 	vehicle_t();
 	vehicle_t(koord3d pos, const vehicle_desc_t* desc, player_t* player);
@@ -552,6 +569,7 @@ protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
 	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	koord3d pos_prev; //used in enter_tile()
 
@@ -630,6 +648,15 @@ public:
 	// true if v belongs to the coupling chain of the convoy we are currently approaching to couple
 	// with. Such a vehicle must not be treated as blocking, otherwise we could never drive up to it.
 	bool is_coupling_partner(const vehicle_base_t* v) const;
+
+	// exclusive_area_mode: the connected area of tiles carrying that mode takes one convoy at a time.
+	// Returns a convoy already inside that area which keeps us out, or NULL when we may enter.
+	// A convoy waiting to be coupled with us does not keep us out - we are going there to join it.
+	convoi_t* get_blocking_convoi_in_exclusive_area(const grund_t* entry) const;
+
+	// passing_lane_stop_only_mode: true while this convoy holds the passing lane under the
+	// permission can_overtake() gave it to come to a stand beside a convoy in the traffic lane.
+	bool holds_passing_lane_to_stop(const strasse_t* str) const;
 };
 
 
@@ -792,6 +819,8 @@ protected:
 
 	bool check_next_tile(const grund_t *bd, const bool) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE {return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -856,6 +885,8 @@ protected:
 
 	bool check_next_tile(const grund_t *bd, const bool) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE {return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -883,6 +914,9 @@ public:
 
 	// return valid direction
 	ribi_t::ribi get_ribi(const grund_t* ) const OVERRIDE;
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE;
+	// valid direction on way w (may be NULL) for the current flight state
+	ribi_t::ribi get_ribi_of_way(const weg_t *w) const;
 
 	// how expensive to go here (for way search)
 	int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const OVERRIDE;

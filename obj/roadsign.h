@@ -14,6 +14,7 @@
 #include "../tpl/stringhashtable_tpl.h"
 
 template<class T> class vector_tpl;
+class weg_t;
 class tool_selector_t;
 
 /**
@@ -247,6 +248,14 @@ public:
 	}
 	// Recompute ribi_maske on the underlying way to reflect detailed_oneway settings.
 	void update_ribi_maske();
+
+	/**
+	 * The way this sign belongs to. On a tile carrying two ways of the same waytype (the
+	 * disjoint legs of a closed diagonal) the sign belongs to the leg its own dir runs along:
+	 * a plain get_weg(waytype) would always answer weg_nr(0) and so count the sign on, or mask,
+	 * the wrong leg. Identical to get_weg(waytype) on every ordinary tile.
+	 */
+	weg_t *get_weg_here() const;
 
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}

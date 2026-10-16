@@ -415,8 +415,8 @@ void grund_t::rdwr(loadsave_t *file)
 						weg->set_pos(pos);
 						// check illegal overtaking_mode
 						if(  wtyp==road_wt  ) {
-							const overtaking_mode_t ov = ((strasse_t*)weg)->get_overtaking_mode();
-							if(  ov<halt_mode  ||  ov>inverted_mode  ) {
+							const overtaking_mode_t ov = ((strasse_t*)weg)->get_overtaking_mode_raw();
+							if(  ov<halt_mode  ||  ov>passing_lane_stop_only_mode  ) {
 								dbg->error( "grund_t::rdwr()", "Road %s has illegal overtaking mode %d.", get_pos().get_str(), ov );
 							}
 						}
@@ -455,9 +455,13 @@ void grund_t::rdwr(loadsave_t *file)
 	if (file->is_loading()  &&  has_two_ways()) {
 		const weg_t* w1 = ((weg_t*)obj_bei(0));
 		const weg_t* w2 = ((weg_t*)obj_bei(1));
-		// two different waytypes on non-crossing diagonal bends never share the tile
-		// center, so no crossing_t is needed even if the waytype pair normally requires one
-		const bool disjoint_diagonal = ribi_t::are_disjoint_bends(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
+		// two waytypes on non-crossing diagonal legs never share the tile center, so no
+		// crossing_t is needed even if the waytype pair normally requires one. Use the
+		// leg (not the strict bend) test: a leg may have been saved while it was still just a
+		// single direction (second tile not built yet, or removed again), and demanding two
+		// full bends here made us try to build a crossing for a tile that never had one --
+		// for two legs of the same waytype that even aborted loading with a fatal error.
+		const bool disjoint_diagonal = ribi_t::are_disjoint_legs(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
 		if(w1->needs_crossing(w2->get_desc())  &&  !disjoint_diagonal){
 			if (crossing_t* cr = get_crossing()) {
 				cr->finish_rd( file->get_OTRP_version() );
@@ -468,12 +472,19 @@ void grund_t::rdwr(loadsave_t *file)
 					dbg->warning("crossing_t::rdwr()", "requested for waytypes %i and %i not available, try to load object without timeline", w1->get_waytype(), w2->get_waytype());
 					cr_desc = crossing_logic_t::get_crossing(w1->get_waytype(), w2->get_waytype(), 0, 0, 0);
 				}
-				if (cr_desc == 0) {
-					dbg->fatal("crossing_t::crossing_t()", "requested for waytypes %i and %i but nothing defined!", w1->get_waytype(), w2->get_waytype());
+				// the ways of the crossing must both be found again, otherwise we cannot even
+				// tell the orientation. Never abort loading here: the savegame describes a
+				// world that was running fine, so rather leave the tile without a crossing
+				// object than throw the player's game away.
+				const weg_t* cr_way1 = cr_desc ? get_weg(cr_desc->get_waytype(1)) : NULL;
+				if (cr_desc == NULL  ||  cr_way1 == NULL) {
+					dbg->error("grund_t::rdwr()", "no crossing for waytypes %i and %i at %s => tile stays without crossing", w1->get_waytype(), w2->get_waytype(), pos.get_str());
 				}
-				cr = new crossing_t(w1->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(get_weg(cr_desc->get_waytype(1))->get_ribi_unmasked()));
-				objlist.add(cr);
-				cr->finish_rd( file->get_OTRP_version() ); // or else not multithred safe!
+				else {
+					cr = new crossing_t(w1->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(cr_way1->get_ribi_unmasked()));
+					objlist.add(cr);
+					cr->finish_rd( file->get_OTRP_version() ); // or else not multithred safe!
+				}
 			}
 		}
 		else {
@@ -2069,7 +2080,7 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 			// bend disjoint from our (possibly partial) ribi -- once the second leg is built
 			// this reduces to the same "both full bends, disjoint" check as elsewhere.
 			const ribi_t::ribi other_ribi = other->get_ribi_unmasked();
-			const bool disjoint_diagonal = ribi_t::is_bend(other_ribi)  &&  (ribi & other_ribi)==0;
+			const bool disjoint_diagonal = ribi_t::are_disjoint_legs(ribi, other_ribi);
 			if (weg->needs_crossing(other->get_desc()) && !disjoint_diagonal) {
 				//crossing needed!
 				waytype_t w2 =  other->get_waytype();
