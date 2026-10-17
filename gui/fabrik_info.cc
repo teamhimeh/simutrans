@@ -178,6 +178,10 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 	bt_no_close_factory.add_listener(this);
 	bt_no_close_factory.enable();
 	container_details.add_component(&bt_no_close_factory);
+	bt_no_expand_factory.init(button_t::square_state, "Do not automatically expand this factory");
+	bt_no_expand_factory.set_tooltip(translator::translate("Prevents new fields and automatic production increases. Existing fields and production are retained."));
+	bt_no_expand_factory.add_listener(this);
+	container_details.add_component(&bt_no_expand_factory);
 	// Numeric settings are staged until their own Set button is pressed.
 	container_details.add_table(3,0);
 	{
@@ -320,6 +324,10 @@ bool fabrik_info_t::action_triggered( gui_action_creator_t *comp, value_t)
 	{
 		fab->call_factory_tool( 'd', NULL );
 	}
+	else if (comp == &bt_no_expand_factory && fab->can_auto_expand() && fab->get_owner() == welt->get_active_player())
+	{
+		fab->call_factory_tool('e', fab->is_no_expand_factory() ? "0" : "1");
+	}
 	else if (comp == &bt_set_shipment_size && fab->get_owner() == welt->get_active_player())
 	{
 		const sint32 shipment_size = numinp_shipment_size.get_value();
@@ -446,6 +454,8 @@ void fabrik_info_t::update_components()
 		numinp_production.set_value(welt->scale_with_month_length(old_base_production));
 	}
 	bt_no_close_factory.disable();
+	bt_no_expand_factory.disable();
+	bt_no_expand_factory.pressed = fab->is_no_expand_factory();
 	numinp_shipment_size.disable();
 	numinp_production.disable();
 	bt_set_shipment_size.disable();
@@ -457,6 +467,9 @@ void fabrik_info_t::update_components()
 	}
 	if(  fab->get_owner() == welt->get_active_player()  ) {
 		bt_no_close_factory.enable();
+		if (fab->can_auto_expand()) {
+			bt_no_expand_factory.enable();
+		}
 		numinp_shipment_size.enable();
 		numinp_production.enable();
 		bt_set_shipment_size.enable();

@@ -817,6 +817,10 @@ Factory Type
 産業の種類
 no close this factory
 この産業を閉鎖しない
+Do not automatically expand this factory
+この産業を自動拡張しない
+Prevents new fields and automatic production increases. Existing fields and production are retained.
+畑の追加と生産量の自動増加を停止します。既存の畑と生産量は維持されます。
 close_old_factory
 古い産業を閉鎖する
 Factory %s is retired! Close soon!

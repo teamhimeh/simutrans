@@ -684,6 +684,16 @@ void fabrik_t::clear_target_cities()
 }
 
 
+bool fabrik_t::can_auto_expand() const
+{
+	if (const field_group_desc_t *fields = desc->get_field_group()) {
+		return fields->get_probability() > 0 && fields->get_max_fields() > 0;
+	}
+	return desc->get_expand_probability() > 0 && desc->get_expand_times() > 0 &&
+		(desc->get_expand_minimum() > 0 || desc->get_expand_range() > 1);
+}
+
+
 void fabrik_t::set_base_production(sint32 p)
 {
 	prodbase = p;
@@ -1594,6 +1604,12 @@ DBG_DEBUG("fabrik_t::rdwr()","loading factory '%s'",s);
 		file->rdwr_long(shipment_size);
 	} else {
 		shipment_size = SHIPMENT_MAX_SIZE;
+	}
+	if (file->get_OTRP_version() >= 63) {
+		file->rdwr_bool(no_expand_factory);
+	}
+	else if (file->is_loading()) {
+		no_expand_factory = false;
 	}
 
 	// save name
@@ -2518,7 +2534,7 @@ void fabrik_t::step(uint32 delta_t)
 			smoke();
 
 			// chance to expand every 256 rounds of activities, after which activity count will return to 0 (overflow behaviour)
-			if(  (++activity_count)==0  ) {
+			if(  (++activity_count)==0 && !no_expand_factory  ) {
 				if(  desc->get_field_group()  ) {
 					if(  fields.get_count()<desc->get_field_group()->get_max_fields()  ) {
 						// spawn new field with given probability

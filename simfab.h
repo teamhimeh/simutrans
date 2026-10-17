@@ -482,6 +482,7 @@ private:
 	 * if this flag is true, this factory cannot close even after retire year
 	 */
 	bool no_close_factory=false;
+	bool no_expand_factory = false;
 
 	/**
 	 * the shipment size
@@ -745,6 +746,9 @@ public:
 	*/
 	const bool is_no_close_factory() {return no_close_factory;}
 	void set_no_close_factory(bool yesno) { no_close_factory = yesno;}
+	bool can_auto_expand() const;
+	bool is_no_expand_factory() const { return no_expand_factory; }
+	void set_no_expand_factory(bool value) { no_expand_factory = value; }
 
 	/**
 	 * get and set shipment size

@@ -11568,7 +11568,7 @@ bool tool_change_factory_t::init( player_t* player )
 	}
 	int header_length = 0;
 	if (sscanf( p, "%c,%hi,%hi%n", &tool, &pos2d.x, &pos2d.y, &header_length ) != 3 ||
-		(tool == 'p' && p[header_length] != ',')) {
+		((tool == 'p' || tool == 'e') && p[header_length] != ',')) {
 		return false;
 	}
 
@@ -11591,6 +11591,15 @@ bool tool_change_factory_t::init( player_t* player )
 		return false;
 	}	
 	switch (tool) {
+		case 'e': // prohibit automatic expansion
+		{
+			if (z != 0 || (strcmp(p, "0") != 0 && strcmp(p, "1") != 0) ||
+				factory->get_owner() != player || !factory->can_auto_expand()) {
+				return false;
+			}
+			factory->set_no_expand_factory(*p == '1');
+		}
+		break;
 		case 'p': // set monthly base production
 		{
 			if (z != 0 || !*p) {
