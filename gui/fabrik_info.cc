@@ -79,7 +79,6 @@ fabrik_info_t::fabrik_info_t(fabrik_t* fab_, const gebaeude_t* gb) :
 	view(scr_size( max(64, get_base_tile_raster_width()), max(56, (get_base_tile_raster_width() * 7) / 8))),
 	prod(&prod_buf),
 	txt(&info_buf),
-	lb_shipment_size("shipment size:"),
 	scroll_info(&container_info)
 {
 	if (fab) {
@@ -112,25 +111,12 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 	// top part: production number & details, boost indicators, factory view
 	add_table(6,0)->set_alignment(ALIGN_LEFT | ALIGN_TOP);
 	{
-		add_table(1,3);
+		add_table(1,2);
 		{
 			bt_no_close_factory.init(button_t::square_state, "no close this factory");
 			bt_no_close_factory.add_listener(this);
 			bt_no_close_factory.enable();
 			add_component(&bt_no_close_factory);
-			add_table(2,1);
-			{
-				lb_shipment_size.set_tooltip(translator::translate("Set shipment size.(default:10)"));
-				add_component(&lb_shipment_size);
-				numinp_shipment_size.set_width(90);
-				numinp_shipment_size.set_value(10);
-				numinp_shipment_size.set_limits(1,200);
-				numinp_shipment_size.set_increment_mode(gui_numberinput_t::PROGRESS);
-				numinp_shipment_size.add_listener(this);
-				add_component(&numinp_shipment_size);
-			}
-			end_table();
-
 			// production details per input/output
 			fab->info_prod( prod_buf );
 			prod.recalc_size();
@@ -186,11 +172,40 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 	old_stops_count = 0;
 	old_cities_count = 0;
 
-	update_info();
-
 	// take-over chart tabs into our
 	chart.set_factory(fab);
 	switch_mode.take_tabs(chart.get_tab_panel());
+
+	// Each factory setting is staged until its own Set button is pressed.
+	switch_mode.add_tab(&container_details, translator::translate("Details"));
+	container_details.set_table_layout(1,0);
+	container_details.add_table(3,0);
+	{
+		lb_shipment_size.set_tooltip(translator::translate("Set shipment size.(default:10)"));
+		container_details.add_component(&lb_shipment_size);
+		numinp_shipment_size.set_width(90);
+		numinp_shipment_size.set_limits(1,200);
+		old_shipment_size = fab->get_shipment_size();
+		numinp_shipment_size.set_value(old_shipment_size);
+		numinp_shipment_size.set_increment_mode(gui_numberinput_t::PROGRESS);
+		container_details.add_component(&numinp_shipment_size);
+		bt_set_shipment_size.init(button_t::roundbox | button_t::flexible, "Set shipment size");
+		bt_set_shipment_size.add_listener(this);
+		container_details.add_component(&bt_set_shipment_size);
+
+		lb_production.set_tooltip(translator::translate("Monthly base production before boosts. For consumers, sets consumption capacity."));
+		container_details.add_component(&lb_production);
+		numinp_production.set_limits(0, welt->scale_with_month_length(65536));
+		old_base_production = fab->get_base_production();
+		numinp_production.set_value(welt->scale_with_month_length(old_base_production));
+		numinp_production.set_width(90);
+		numinp_production.set_increment_mode(max(1, (sint32)welt->scale_with_month_length(1)));
+		container_details.add_component(&numinp_production);
+		bt_set_production.init(button_t::roundbox | button_t::flexible, "Set base production");
+		bt_set_production.add_listener(this);
+		container_details.add_component(&bt_set_production);
+	}
+	container_details.end_table();
 
 	// factory description in tab
 	{
@@ -213,12 +228,11 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 		}
 
 		if (add_tab) {
-			switch_mode.add_tab(&container_details, translator::translate("Details"));
-			container_details.set_table_layout(1,0);
 			gui_flowtext_t* f = container_details.new_component<gui_flowtext_t>();
 			f->set_text( (const char*)details_buf);
 		}
 	}
+	update_info();
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize());
 	set_resizemode(gui_frame_t::diagonal_resize);
@@ -287,7 +301,7 @@ bool fabrik_info_t::is_weltpos()
  * Returns true, if action is done and no more
  * components should be triggered.
  */
-bool fabrik_info_t::action_triggered( gui_action_creator_t *comp, value_t p)
+bool fabrik_info_t::action_triggered( gui_action_creator_t *comp, value_t)
 {
 	if(  comp == &input  ) {
 		rename_factory();
@@ -306,12 +320,24 @@ bool fabrik_info_t::action_triggered( gui_action_creator_t *comp, value_t p)
 	{
 		fab->call_factory_tool( 'd', NULL );
 	}
-	else if (comp == &numinp_shipment_size)
+	else if (comp == &bt_set_shipment_size && fab->get_owner() == welt->get_active_player())
 	{
-		if(p.i>0) {
+		const sint32 shipment_size = numinp_shipment_size.get_value();
+		if (shipment_size != fab->get_shipment_size()) {
 			cbuffer_t buf;
-			buf.printf("%d", (uint16)numinp_shipment_size.get_value() );
+			buf.printf("%d", shipment_size);
 			fab->call_factory_tool( 's', buf );
+		}
+	}
+	else if (comp == &bt_set_production && fab->get_owner() == welt->get_active_player())
+	{
+		const sint32 production = numinp_production.get_value();
+		if (production != welt->scale_with_month_length(fab->get_base_production())) {
+			cbuffer_t buf;
+			buf.printf("%d", production);
+			fab->call_factory_tool('p', buf);
+			old_base_production = -1; // refresh the normalized monthly value, including rounding
+			update_info();
 		}
 	}
 	return true;
@@ -341,6 +367,12 @@ void fabrik_info_t::update_info()
 // update all buffers
 void fabrik_info_t::update_components()
 {
+	// Show the applied settings separately from the editable values.
+	lb_shipment_size.buf().printf("%s %u", translator::translate("shipment size:"), fab->get_shipment_size());
+	lb_shipment_size.update();
+	lb_production.buf().printf("%s %d", translator::translate("Base production:"), (sint32)welt->scale_with_month_length(fab->get_base_production()));
+	lb_production.update();
+
 	// update texts
 	fab->info_prod( prod_buf );
 	fab->info_conn( info_buf );
@@ -408,13 +440,26 @@ void fabrik_info_t::update_components()
 		old_cities_count = fab->get_target_cities().get_count();
 	}
 	container_info.set_size(container_info.get_min_size());
+	if (old_base_production != fab->get_base_production()) {
+		old_base_production = fab->get_base_production();
+		numinp_production.set_value(welt->scale_with_month_length(old_base_production));
+	}
 	bt_no_close_factory.disable();
 	numinp_shipment_size.disable();
+	numinp_production.disable();
+	bt_set_shipment_size.disable();
+	bt_set_production.disable();
 	bt_no_close_factory.pressed = fab->is_no_close_factory();
-	numinp_shipment_size.set_value(fab->get_shipment_size());
+	if (old_shipment_size != fab->get_shipment_size()) {
+		old_shipment_size = fab->get_shipment_size();
+		numinp_shipment_size.set_value(old_shipment_size);
+	}
 	if(  fab->get_owner() == welt->get_active_player()  ) {
 		bt_no_close_factory.enable();
 		numinp_shipment_size.enable();
+		numinp_production.enable();
+		bt_set_shipment_size.enable();
+		bt_set_production.enable();
 	}
 	set_dirty();
 }

@@ -65,8 +65,14 @@ private:
 	button_t highlight_suppliers;
 	button_t highlight_consumers;
 	button_t bt_no_close_factory;
-	gui_label_t lb_shipment_size;
+	gui_label_buf_t lb_shipment_size;
 	gui_numberinput_t numinp_shipment_size;
+	gui_label_buf_t lb_production;
+	gui_numberinput_t numinp_production;
+	button_t bt_set_shipment_size;
+	button_t bt_set_production;
+	uint32 old_shipment_size;
+	sint32 old_base_production;
 
 
 	void rename_factory();
