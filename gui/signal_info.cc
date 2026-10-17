@@ -92,6 +92,14 @@ signal(s)
 	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );
 	add_component(&bt_two_ways);
 
+	bt_allow_multi_convoys.init(button_t::square_state, translator::translate("Stop more than one convoys."));
+	bt_allow_multi_convoys.set_tooltip(translator::translate("Allow more than one convoys at same spot(platform)."));
+	bt_allow_multi_convoys.add_listener(this);
+	bt_allow_multi_convoys.pressed = signal->is_allow_multi_convoys();
+	if(  signal->get_desc()->is_choose_sign()  ) {
+		add_component(&bt_allow_multi_convoys);
+	}
+	
 	bt_remove_signal.init( button_t::roundbox, translator::translate("remove signal"));
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
 	bt_remove_signal.add_listener(this);
@@ -186,6 +194,13 @@ bool signal_info_t::action_triggered( gui_action_creator_t* comp, value_t p)
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+	if(  comp==&bt_allow_multi_convoys) {
+		char param[256];
+		sprintf(param, "%s,%i,q", signal->get_pos().get_str(), (int)!signal->is_allow_multi_convoys());
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param(param);
+		welt->set_tool(tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player());
+		return true;
+	}
 	if(  comp==&bt_ignore_length  ) {
 		char param[256];
 		bool v = signal->is_ignore_length();
@@ -209,16 +224,19 @@ void signal_info_t::update_data()
 	bt_start_signal.pressed = signal->is_start_signal();
 	bt_length_based.pressed = signal->is_length_based();
 	bt_ignore_length.pressed = signal->is_ignore_length();
+	bt_allow_multi_convoys.pressed = signal->is_allow_multi_convoys();
 	if(  signal->is_choose_signal()  ) {
 		bt_advance_to_end.enable();
 		numinp_tiles_margin.enable();
 		numinp_tiles_margin.set_value(signal->get_margin_length());
 		bt_length_based.enable();
+		bt_allow_multi_convoys.enable();
 	} else {
 		bt_advance_to_end.disable();
 		numinp_tiles_margin.disable();
 		bt_stop_before_check.enable(signal->get_desc()->is_longblock_signal());
 		bt_length_based.disable();
+		bt_allow_multi_convoys.disable();
 	}
 	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->get_desc()->is_choose_sign()  ) {
 		bt_stop_before_check.enable();
