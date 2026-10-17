@@ -5803,7 +5803,10 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 
 	if(  file->is_version_atleast(102, 4)  ) {
-		if(  env_t::restore_UI  ) {
+		// standard 124.3+ dialogs save their state differently (e.g. halt_info without sort mode,
+		// new window ids), so their windows cannot be restored; skipping is safe at the end of file
+		const bool std_dialogs_unreadable = file->get_OTRP_version() == 0  &&  file->is_version_atleast(124, 3);
+		if(  env_t::restore_UI  &&  !std_dialogs_unreadable  ) {
 			file->rdwr_byte( active_player_nr );
 			active_player = players[active_player_nr];
 			/* restore all open windows
