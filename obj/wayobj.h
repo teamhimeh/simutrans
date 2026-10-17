@@ -36,11 +36,10 @@ private:
 	// close diagonals on a fourway way: 0=no, 1=northwest+southeast, 2=northeast+southwest
 	uint8 close_diagonal:2;
 
-	// image of a close diagonal (or the first diagonal, if there are no close diagonal images)
-	image_id get_close_diagonal_image(bool front) const;
-
-	// the second diagonal, if the close diagonal is drawn from two diagonal images
-	image_id get_second_diagonal_image(bool front) const;
+	// image of a close diagonal
+	image_id get_close_diagonal_image(bool front) const {
+		return front ? desc->get_front_close_diagonal_image_id(close_diagonal-1) : desc->get_back_close_diagonal_image_id(close_diagonal-1);
+	}
 
 	static const uint8 dir_unknown = 127;
 
@@ -115,14 +114,6 @@ public:
 	waytype_t get_waytype() const OVERRIDE { return desc ? desc->get_wtyp() : invalid_wt; }
 
 	void calc_image() OVERRIDE;
-
-	void display(int xpos, int ypos  CLIP_NUM_DEF) const OVERRIDE;
-
-#ifdef MULTI_THREAD
-	void display_after(int xpos, int ypos, const sint8 clip_num) const OVERRIDE;
-#else
-	void display_after(int xpos, int ypos, bool is_global) const OVERRIDE;
-#endif
 
 	void rdwr(loadsave_t *file) OVERRIDE;
 

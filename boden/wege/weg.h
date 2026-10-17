@@ -288,14 +288,9 @@ public:
 	/**
 	 * checks, if this fourway way is actually two close diagonals
 	 * and sets close_diagonal_state accordingly
+	 * (only if the way has close diagonal images; otherwise two ways on one tile are used)
 	 */
 	void check_close_diagonal();
-
-	/**
-	 * true, if the close diagonal must be drawn from two diagonal images
-	 * (the second one is drawn in display())
-	 */
-	bool needs_second_diagonal() const;
 
 	void count_sign();
 
@@ -328,8 +323,6 @@ public:
 
 	inline void set_foreground_image( image_id b ) { foreground_image = b; }
 	virtual image_id get_front_image() const OVERRIDE {return foreground_image;}
-
-	void display(int xpos, int ypos  CLIP_NUM_DEF) const OVERRIDE;
 
 	inline void set_is_ex_image( bool c ) { is_ex_image = c; }
 	bool get_is_ex_image() const  {return is_ex_image;}

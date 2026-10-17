@@ -335,8 +335,8 @@ void wayobj_t::calc_image()
 			return;
 		}
 
-		// close diagonals on fourway way tiles (OTRP extended switch images take precedence over two diagonals)
-		if(  dir == ribi_t::all  &&  w->is_close_diagonal()  &&  desc->has_diagonal_image()  &&  (desc->has_close_diagonal_image()  ||  !desc->has_switch_ex_image())  ) {
+		// close diagonals on fourway way tiles (only with close diagonal images)
+		if(  dir == ribi_t::all  &&  w->is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
 			close_diagonal = w->is_close_diagonal();
 		}
 		// find out whether using diagonals or straight lines
@@ -352,7 +352,7 @@ void wayobj_t::calc_image()
 			const ribi_t::ribi rback = ribi_t::backward(dir);
 			diagonal = (r1 == rback || r2 == rback) && r1 != ribi_t::rotate90l(dir) && r2 != ribi_t::rotate90(dir);
 			// next to fourway tiles of close diagonals (or switches) on both sides
-			if(  !diagonal  ) {
+			if(  !diagonal  &&  desc->has_close_diagonal_image()  ) {
 				diagonal = (r1 == rback || ribi_t::is_threeway(r1)) && (r2 == rback || ribi_t::is_threeway(r2));
 			}
 
@@ -386,92 +386,6 @@ void wayobj_t::calc_image()
 	}
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &wayobj_calc_image_mutex );
-#endif
-}
-
-
-
-image_id wayobj_t::get_close_diagonal_image(bool front) const
-{
-	if(  desc->has_close_diagonal_image()  ) {
-		return front ? desc->get_front_close_diagonal_image_id(close_diagonal-1) : desc->get_back_close_diagonal_image_id(close_diagonal-1);
-	}
-	// drawn from two diagonals, this is the first one
-	const ribi_t::ribi d = close_diagonal==1 ? ribi_t::southeast : ribi_t::northeast;
-	return front ? desc->get_front_diagonal_image_id(d) : desc->get_back_diagonal_image_id(d);
-}
-
-
-image_id wayobj_t::get_second_diagonal_image(bool front) const
-{
-	if(  !close_diagonal  ||  desc->has_close_diagonal_image()  ) {
-		return IMG_EMPTY;
-	}
-	const ribi_t::ribi d = close_diagonal==1 ? ribi_t::northwest : ribi_t::southwest;
-	return front ? desc->get_front_diagonal_image_id(d) : desc->get_back_diagonal_image_id(d);
-}
-
-
-void wayobj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
-{
-	const image_id image2 = get_second_diagonal_image(false);
-	if(  image2 != IMG_EMPTY  ) {
-		const int raster_width = get_current_tile_raster_width();
-		const bool is_dirty = get_flag(obj_t::dirty);
-		const int x = xpos + tile_raster_scale_x(get_xoff(), raster_width);
-		const int y = ypos + tile_raster_scale_y(get_yoff(), raster_width);
-		const sint8 owner_n = get_owner_nr();
-		if(  owner_n != PLAYER_UNOWNED  ) {
-			if(  obj_t::show_owner  ) {
-				display_blend( image2, x, y, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
-			}
-			else {
-				display_color( image2, x, y, owner_n, true, is_dirty  CLIP_NUM_PAR);
-			}
-		}
-		else {
-			display_normal( image2, x, y, 0, true, is_dirty  CLIP_NUM_PAR);
-		}
-	}
-	obj_t::display(xpos, ypos  CLIP_NUM_PAR);
-}
-
-
-#ifdef MULTI_THREAD
-void wayobj_t::display_after(int xpos, int ypos, const sint8 clip_num) const
-#else
-void wayobj_t::display_after(int xpos, int ypos, bool is_global) const
-#endif
-{
-	const image_id image2 = get_second_diagonal_image(true);
-	if(  image2 != IMG_EMPTY  ) {
-		const int raster_width = get_current_tile_raster_width();
-		const bool is_dirty = get_flag(obj_t::dirty);
-		const int x = xpos + tile_raster_scale_x(get_xoff(), raster_width);
-		const int y = ypos + tile_raster_scale_y(get_yoff(), raster_width);
-		const sint8 owner_n = get_owner_nr();
-		if(  owner_n != PLAYER_UNOWNED  ) {
-			if(  obj_t::show_owner  ) {
-				display_blend( image2, x, y, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
-			}
-			else if(  obj_t::get_flag( highlight )  ) {
-				display_blend( image2, x, y, owner_n, color_idx_to_rgb(COL_RED) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
-			}
-			else {
-				display_color( image2, x, y, owner_n, true, is_dirty  CLIP_NUM_PAR);
-			}
-		}
-		else if(  obj_t::get_flag( highlight )  ) {
-			display_blend( image2, x, y, owner_n, color_idx_to_rgb(COL_RED) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
-		}
-		else {
-			display_normal( image2, x, y, 0, true, is_dirty  CLIP_NUM_PAR);
-		}
-	}
-#ifdef MULTI_THREAD
-	obj_t::display_after(xpos, ypos, clip_num);
-#else
-	obj_t::display_after(xpos, ypos, is_global);
 #endif
 }
 
