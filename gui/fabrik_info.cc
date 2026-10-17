@@ -111,12 +111,8 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 	// top part: production number & details, boost indicators, factory view
 	add_table(6,0)->set_alignment(ALIGN_LEFT | ALIGN_TOP);
 	{
-		add_table(1,2);
+		add_table(1,1);
 		{
-			bt_no_close_factory.init(button_t::square_state, "no close this factory");
-			bt_no_close_factory.add_listener(this);
-			bt_no_close_factory.enable();
-			add_component(&bt_no_close_factory);
 			// production details per input/output
 			fab->info_prod( prod_buf );
 			prod.recalc_size();
@@ -176,9 +172,13 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 	chart.set_factory(fab);
 	switch_mode.take_tabs(chart.get_tab_panel());
 
-	// Each factory setting is staged until its own Set button is pressed.
 	switch_mode.add_tab(&container_details, translator::translate("Details"));
 	container_details.set_table_layout(1,0);
+	bt_no_close_factory.init(button_t::square_state, "no close this factory");
+	bt_no_close_factory.add_listener(this);
+	bt_no_close_factory.enable();
+	container_details.add_component(&bt_no_close_factory);
+	// Numeric settings are staged until their own Set button is pressed.
 	container_details.add_table(3,0);
 	{
 		lb_shipment_size.set_tooltip(translator::translate("Set shipment size.(default:10)"));
