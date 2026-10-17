@@ -159,6 +159,7 @@ void weg_t::init()
 	init_statistics();
 	alle_wege.insert(this);
 	flags = 0;
+	close_diagonal_state = 0;
 	image = IMG_EMPTY;
 	foreground_image = IMG_EMPTY;
 	max_wayobj_speed = 0;
@@ -456,6 +457,10 @@ void weg_t::rotate90()
 	obj_t::rotate90();
 	ribi = ribi_t::rotate90( ribi );
 	ribi_maske = ribi_t::rotate90( ribi_maske );
+	if(  close_diagonal_state  ) {
+		// horizontal <-> vertical
+		close_diagonal_state ^= 3;
+	}
 }
 
 
@@ -532,6 +537,12 @@ void weg_t::set_images(image_type typ, uint8 ribi, bool snow, bool switch_nw)
 			set_image( desc->get_diagonal_image_id(ribi, snow) );
 			set_foreground_image( desc->get_diagonal_image_id(ribi, snow, true) );
 			break;
+		case image_close_diagonal:
+			// here ribi is the close diagonal state (1 or 2)
+			set_is_ex_image(false);
+			set_image( desc->get_close_diagonal_image_id(ribi-1, snow) );
+			set_foreground_image( desc->get_close_diagonal_image_id(ribi-1, snow, true) );
+			break;
 	}
 }
 
@@ -574,7 +585,14 @@ bool weg_t::check_season(const bool calc_only_season_change)
 		return true;
 	}
 
-	if(  is_diagonal()  ) {
+	if(  is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
+		set_images( image_close_diagonal, is_close_diagonal(), snow );
+	}
+	else if(  needs_second_diagonal()  ) {
+		// the second diagonal is drawn in display()
+		set_images( image_diagonal, is_close_diagonal()==1 ? ribi_t::southeast : ribi_t::northeast, snow );
+	}
+	else if(  is_diagonal()  ) {
 		set_images( image_diagonal, ribi, snow );
 	}
 	else if(  ribi_t::is_threeway( ribi )  &&  desc->has_switch_image()  ) {
@@ -619,6 +637,8 @@ void weg_t::calc_image()
 	grund_t *from = welt->lookup(get_pos());
 	grund_t *to;
 	image_id old_image = image;
+
+	close_diagonal_state = 0;
 
 	if(  from==NULL  ||  desc==NULL  ) {
 		// no ground, in tunnel
@@ -691,10 +711,24 @@ void weg_t::calc_image()
 						set_images(image_diagonal, ribi, snow);
 					}
 				}
+
+				// fourway tiles may be two close diagonals
+				if(  ribi == ribi_t::all  ) {
+					check_close_diagonal();
+					if(  is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
+						set_images(image_close_diagonal, is_close_diagonal(), snow);
+					}
+					else if(  needs_second_diagonal()  ) {
+						// the second diagonal is drawn in display()
+						set_images(image_diagonal, is_close_diagonal()==1 ? ribi_t::southeast : ribi_t::northeast, snow);
+					}
+				}
 			}
 
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
-			if(!is_diagonal() && desc->has_switch_image()){
+			// close diagonals with own images do not need switch images
+			// (OTRP extended switch images may still be used for them)
+			if(!is_diagonal() && desc->has_switch_image()  &&  !(is_close_diagonal()  &&  (desc->has_close_diagonal_image()  ||  !desc->has_switch_ex_image()))){
 				waytype_t type_name = get_waytype();
 				if(type_name == track_wt){
 					select_switch_image(snow);
@@ -1169,11 +1203,100 @@ void weg_t::check_diagonal()
 	}
 
 	// diagonal if r1 or r2 are our reverse and neither one is 90 degree rotation of us
-	diagonal = (r1 == ribi_t::backward(ribi) || r2 == ribi_t::backward(ribi)) && r1 != ribi_t::rotate90l(ribi) && r2 != ribi_t::rotate90(ribi);
+	const ribi_t::ribi rback = ribi_t::backward(ribi);
+	diagonal = (r1 == rback || r2 == rback) && r1 != ribi_t::rotate90l(ribi) && r2 != ribi_t::rotate90(ribi);
+
+	// next to fourway tiles of close diagonals (or switches) on both sides
+	if(  !diagonal  ) {
+		diagonal = (r1 == rback || ribi_t::is_threeway(r1)) && (r2 == rback || ribi_t::is_threeway(r2));
+	}
 
 	if(  diagonal  ) {
 		flags |= IS_DIAGONAL;
 	}
+}
+
+
+// checks, if this fourway way is two close diagonals
+void weg_t::check_close_diagonal()
+{
+	close_diagonal_state = 0;
+
+	if(  get_ribi_unmasked() != ribi_t::all  ||  desc == NULL  ||  !desc->has_diagonal_image()  ) {
+		return;
+	}
+
+	grund_t *from = welt->lookup(get_pos());
+	if(  from == NULL  ) {
+		return;
+	}
+
+	grund_t *to;
+	ribi_t::ribi r[4];
+	uint8 non_bent = 0;
+	for(  uint8 i = 0;  i < 4;  i++  ) {
+		if(  !from->get_neighbour(to, get_waytype(), ribi_t::nesw[i])  ) {
+			// only happens during construction of ways
+			return;
+		}
+		r[i] = to->get_weg_ribi_unmasked(get_waytype());
+		if(  !ribi_t::is_bend(r[i])  ) {
+			// only one entry point
+			if(  non_bent++  ) {
+				return;
+			}
+		}
+	}
+	if(  r[0] == r[1]  ||  r[2] == r[3]  ) {
+		if(  r[0] + r[2] != ribi_t::all  &&  r[1] + r[3] != ribi_t::all  ) {
+			// entry and exit not parallel => crossing
+			return;
+		}
+		close_diagonal_state = 2;
+	}
+	else {
+		if(  r[0] + r[1] != ribi_t::all  &&  r[2] + r[3] != ribi_t::all  ) {
+			// entry and exit not parallel => crossing
+			return;
+		}
+		close_diagonal_state = 1;
+	}
+}
+
+
+bool weg_t::needs_second_diagonal() const
+{
+	// without own close diagonal images two diagonal images are used,
+	// unless the OTRP extended switch images take care of it
+	return close_diagonal_state  &&  !desc->has_close_diagonal_image()  &&  !desc->has_switch_ex_image();
+}
+
+
+void weg_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
+{
+	if(  close_diagonal_state  &&  desc  &&  needs_second_diagonal()  &&  image != IMG_EMPTY  ) {
+		// draw the second diagonal of a close diagonal fourway tile
+		const image_id image2 = desc->get_diagonal_image_id( close_diagonal_state==1 ? ribi_t::northwest : ribi_t::southwest, is_snow() );
+		if(  image2 != IMG_EMPTY  ) {
+			const int raster_width = get_current_tile_raster_width();
+			const bool is_dirty = get_flag(obj_t::dirty);
+			const int x = xpos + tile_raster_scale_x(get_xoff(), raster_width);
+			const int y = ypos + tile_raster_scale_y(get_yoff(), raster_width);
+			const uint8 owner_n = get_owner_nr();
+			if(  owner_n != PLAYER_UNOWNED  ) {
+				if(  obj_t::show_owner  ) {
+					display_blend( image2, x, y, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+				}
+				else {
+					display_color( image2, x, y, owner_n, true, is_dirty  CLIP_NUM_PAR);
+				}
+			}
+			else {
+				display_normal( image2, x, y, 0, true, is_dirty  CLIP_NUM_PAR);
+			}
+		}
+	}
+	obj_t::display(xpos, ypos  CLIP_NUM_PAR);
 }
 
 

@@ -110,6 +110,12 @@ private:
 
 	bool is_ex_image;
 
+	/**
+	* close diagonals (two parallel diagonals, every second tile is a fourway tile)
+	* 0=no, 1=northwest+southeast, 2=northeast+southwest
+	*/
+	uint8 close_diagonal_state;
+
 	uint16 max_wayobj_speed;
 
 
@@ -152,7 +158,8 @@ public:
 		image_slope,
 		image_diagonal,
 		image_switch,
-		image_ex
+		image_ex,
+		image_close_diagonal
 	};
 
 	/**
@@ -278,6 +285,18 @@ public:
 
 	void check_diagonal();
 
+	/**
+	 * checks, if this fourway way is actually two close diagonals
+	 * and sets close_diagonal_state accordingly
+	 */
+	void check_close_diagonal();
+
+	/**
+	 * true, if the close diagonal must be drawn from two diagonal images
+	 * (the second one is drawn in display())
+	 */
+	bool needs_second_diagonal() const;
+
 	void count_sign();
 
 	/* flag query routines */
@@ -292,6 +311,7 @@ public:
 	inline bool has_wayobj() const {return flags&HAS_WAYOBJ; }
 	inline bool is_crossing() const {return flags&HAS_CROSSING; }
 	inline bool is_diagonal() const {return flags&IS_DIAGONAL; }
+	inline uint8 is_close_diagonal() const { return close_diagonal_state; }
 	inline bool is_snow() const {return flags&IS_SNOW; }
 
 	// this is needed during a change from crossing to tram track
@@ -308,6 +328,8 @@ public:
 
 	inline void set_foreground_image( image_id b ) { foreground_image = b; }
 	virtual image_id get_front_image() const OVERRIDE {return foreground_image;}
+
+	void display(int xpos, int ypos  CLIP_NUM_DEF) const OVERRIDE;
 
 	inline void set_is_ex_image( bool c ) { is_ex_image = c; }
 	bool get_is_ex_image() const  {return is_ex_image;}
