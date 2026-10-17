@@ -3951,7 +3951,7 @@ bool road_vehicle_t::guide_route(sint32 &restart_speed, ribi_t::ribi start_direc
 	// Look for a convoy that is already waiting for us in the target halt. check_next_tile() bounds
 	// the search by the end-of-guide flag, is_coupling_target() decides what a valid partner is.
 	route_t target_rt;
-	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0 );
+	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, false, true, 0 );
 	target_halt = halthandle_t();
 	if(  !route_found  ||  target_rt.get_count()<2  ) {
 		// the convoy to couple with has not arrived yet: wait at this guide signal.
