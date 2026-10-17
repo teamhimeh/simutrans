@@ -979,3 +979,11 @@ Thumbnails
 サムネイル表示
 Large thumbnails
 大きく表示
+Base production:
+基本生産量:
+Set shipment size
+出荷単位を設定
+Set base production
+基本生産量を設定
+Monthly base production before boosts. For consumers, sets consumption capacity.
+ブースト前の月あたりの基本生産量です。消費専用産業では消費能力を設定します。

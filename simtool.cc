@@ -11556,6 +11556,9 @@ bool tool_merge_player_t::init( player_t *player )
 }
 bool tool_change_factory_t::init( player_t* player )
 {
+	if (!default_param || !player) {
+		return false;
+	}
 	char tool=0;
 	koord pos2d;
 	// skip the rest of the command
@@ -11563,7 +11566,11 @@ bool tool_change_factory_t::init( player_t* player )
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi,%hi", &tool, &pos2d.x, &pos2d.y );
+	int header_length = 0;
+	if (sscanf( p, "%c,%hi,%hi%n", &tool, &pos2d.x, &pos2d.y, &header_length ) != 3 ||
+		(tool == 'p' && p[header_length] != ',')) {
+		return false;
+	}
 
 	// skip to the commands ...
 	uint8 z = 3;
@@ -11584,6 +11591,26 @@ bool tool_change_factory_t::init( player_t* player )
 		return false;
 	}	
 	switch (tool) {
+		case 'p': // set monthly base production
+		{
+			if (z != 0 || !*p) {
+				return false;
+			}
+			// Parse bounded decimal input without overflow or accepting trailing junk.
+			const sint64 limit = welt->scale_with_month_length(65536);
+			sint64 value = 0;
+			for (const char *digit = p; *digit; ++digit) {
+				if (*digit < '0' || *digit > '9' || value > (limit - (*digit - '0')) / 10) {
+					return false;
+				}
+				value = value * 10 + (*digit - '0');
+			}
+			if (value > limit || value < factory->get_min_monthly_base_production()) {
+				return false;
+			}
+			factory->set_base_production(welt->inverse_scale_with_month_length(value));
+		}
+		break;
 		case 'd': // avoid destroy, avoid close after retire
 		{
 			factory->set_no_close_factory(!factory->is_no_close_factory());			

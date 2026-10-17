@@ -3121,7 +3121,7 @@ void fabrik_t::info_conn(cbuffer_t& buf) const
 }
 
 
-void fabrik_t::finish_rd()
+sint32 fabrik_t::get_min_base_production() const
 {
 	// adjust production base to be at least as large as fields productivity
 	uint32 prodbase_adjust = 1;
@@ -3135,8 +3135,26 @@ void fabrik_t::finish_rd()
 		}
 	}
 
+	return prodbase_adjust;
+}
+
+
+sint32 fabrik_t::get_min_monthly_base_production() const
+{
+	const sint32 minimum = get_min_base_production();
+	sint32 monthly = welt->scale_with_month_length(minimum);
+	// Round up when a short month would otherwise convert below the minimum.
+	if (welt->inverse_scale_with_month_length(monthly) < minimum) {
+		++monthly;
+	}
+	return monthly;
+}
+
+
+void fabrik_t::finish_rd()
+{
 	// set production, update all production related numbers
-	set_base_production( max(prodbase, prodbase_adjust) );
+	set_base_production( max(prodbase, get_min_base_production()) );
 
 	// now we have a valid storage limit
 	if(  welt->get_settings().is_crossconnect_factories()  ) {
