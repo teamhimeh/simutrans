@@ -3472,7 +3472,7 @@ void convoi_t::rdwr(loadsave_t *file)
 			fahr.resize(anz_vehikel, NULL);
 		}
 		owner = welt->get_player( owner_n );
-		if(  file->get_OTRP_version()<63  ) {
+		if(  file->get_OTRP_version()<63  &&  owner  ) {
 			owner->book_convoi_number(1);
 		}
 
