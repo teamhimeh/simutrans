@@ -135,6 +135,10 @@ Stop before check
 一時停止後に信号開通
 Do not use default route
 スケジュールで設定したホームを優先しない
+ignore length
+短いホームに進入可
+ignore length. Convoy can enter shorter stop
+振分を利用して編成長より短いホームに進入できます
 try coupling convoy not enter here
 連結試行時の進入禁止
 remove signal
@@ -203,6 +207,10 @@ up this entry
 この駅を上へ移動
 down this entry
 この駅を下へ移動
+Make first
+先頭へ
+Reorder the schedule so the selected entry comes first.
+選択したエントリが先頭となるようにスケジュールを並べ替えます。
 #------Schedule window related stuff------
 #------スケジュールウィンドウ関連のエントリ------
 Please click on the map to add\nwaypoints or stops to this\nschedule.
@@ -931,6 +939,46 @@ Map image exported to the screenshot folder.
 マップ画像をスクリーンショットフォルダに出力しました。
 Map image export failed.
 マップ画像の出力に失敗しました。
+You set exclusive map options:
+同時に表示できないマップ表示オプションが指定されています:
+This tile has a second, disconnected way of the same type:
+このタイルは2種類の線路等があります
+Load preset
+プリセットを読込
+Save preset
+プリセットを保存
+Preset loaded: %u / %u buildings selected
+プリセットを読み込みました: %u / %u 件を選択
+Preset name is required.
+プリセット名を入力してください。
+Please choose buildings first.
+先に建築物を選択してください。
+Could not save building presets.
+建築物プリセットを保存できませんでした。
+Building preset saved.
+建築物プリセットを保存しました。
+Overwrite preset
+プリセットの上書き
+Overwrite preset "%s"?
+プリセット「%s」を上書きしますか？
+Overwrite
+上書き
+Load a building preset file.
+ファイルから建物の選択状態を復元します。
+Save the selected buildings to a preset file.
+現在選択している建物をプリセットファイルに保存します。
+Invalid building preset filename.
+プリセットのファイル名が無効です。
+Could not load building preset.
+建築物プリセットを読み込めませんでした。
+Could not recover building presets:
+次の建築物プリセットを復旧できませんでした：
+Corrupt building preset preserved at:\n%s
+不正な建築物プリセットを次の場所に退避しました：\n%s
+Thumbnails
+サムネイル表示
+Large thumbnails
+大きく表示
 Base production:
 基本生産量:
 Set shipment size
