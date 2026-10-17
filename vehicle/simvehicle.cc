@@ -4674,7 +4674,7 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 		(to->get_weg(get_waytype())->get_ribi_maske() & ribi_type(dir))==0 
 	) {
 		// check electrification
-		schiene_t const* const sch = (const schiene_t *) gr->get_weg(get_waytype(), next_gr_ribi);
+		schiene_t const* const sch = (const schiene_t *) to->get_weg(get_waytype(), next_gr_ribi);
 		if(  sch->can_reserve(cnv->self)||!allow_multi_convoys  ) {
 			if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
 				// We can still go forward.
