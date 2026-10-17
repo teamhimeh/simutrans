@@ -11605,7 +11605,7 @@ bool tool_change_factory_t::init( player_t* player )
 				}
 				value = value * 10 + (*digit - '0');
 			}
-			if (value > limit) {
+			if (value > limit || value < factory->get_min_monthly_base_production()) {
 				return false;
 			}
 			factory->set_base_production(welt->inverse_scale_with_month_length(value));

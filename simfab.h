@@ -677,6 +677,8 @@ public:
 
 	/* does not takes month length into account */
 	sint32 get_base_production() const { return prodbase; }
+	sint32 get_min_base_production() const;
+	sint32 get_min_monthly_base_production() const;
 	void set_base_production(sint32 p);
 
 	sint32 get_current_production() const { return (sint32)welt->scale_with_month_length( ((sint64)prodbase * (sint64)get_prodfactor())>>8 ); }
