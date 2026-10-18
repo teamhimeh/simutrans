@@ -3,8 +3,16 @@
 Use an isolated portable (`-singleuser`) data directory. Open Display settings
 and select Keybindings. Never use personal pakset data for these checks.
 
-1. On first launch, verify `pak/config/menuconf.default.tab` matches the original
-   `menuconf.tab` byte for byte. Subsequent launches must not overwrite it.
+1. Use a pakset directory containing Japanese characters. Launch without a
+   backup: neither startup nor opening Display settings on a different tab may
+   create `pak/config/menuconf.default.tab`. Open Keybindings: it must create
+   a byte-identical copy of the current `menuconf.tab`. Change a binding, reopen
+   the tab, and restart: the existing backup bytes and modification time must
+   remain unchanged. Opening Keybindings must preserve them too. Repeat with
+   an ASCII directory name. A backup path that cannot be read or inspected must
+   report failure rather than overwrite it. If the backup is removed while the
+   tab is open, saving must fail without recreating it; reopening the tab is
+   required to prepare a new backup.
 2. Change Query to an unused key. Only that key field in menuconf.tab may change;
    comments, line endings, icons, sounds and toolbar parameters must remain intact.
    Restart and verify the assignment survives. menuconf.tab is the sole active

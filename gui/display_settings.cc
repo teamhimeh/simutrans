@@ -676,7 +676,7 @@ void shortcut_settings_t::reload()
  cancel_capture();
  const bool ok = tool_t::reload_shortcuts();
  refresh();
- status.set_text(ok ? "" : "Could not read menuconf.tab.", false);
+ status.set_text(ok ? "" : "Could not read keybindings or prepare their backup.", false);
 }
 
 void shortcut_settings_t::draw(scr_coord offset)

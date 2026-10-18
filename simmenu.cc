@@ -6,6 +6,7 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <cerrno>
 #include <sys/stat.h>
 #include "sys/simsys.h"
 
@@ -746,7 +747,9 @@ bool ensure_shortcut_backup()
 {
 	std::string original;
 	struct stat st;
-	if (stat(shortcut_default_path.c_str(), &st) == 0) { return read_shortcut_file(shortcut_default_path, original); }
+	if (dr_stat(shortcut_default_path.c_str(), &st) == 0) { return read_shortcut_file(shortcut_default_path, original); }
+	// Only a missing file may be created; other errors must not replace it.
+	if (errno != ENOENT) { return false; }
 	return read_shortcut_file(shortcut_menu_path, original) && write_shortcut_file(shortcut_default_path, original);
 }
 
@@ -828,7 +831,9 @@ void rebuild_shortcuts()
 
 bool save_shortcuts(tool_t *changed = NULL)
 {
-	if (!ensure_shortcut_backup()) { return false; }
+	// Creating the backup is reserved for opening the Keybindings tab.
+	std::string backup;
+	if (!read_shortcut_file(shortcut_default_path, backup)) { return false; }
 	std::string input;
 	if (!read_shortcut_file(shortcut_menu_path, input)) { return false; }
 	std::string output;
@@ -952,7 +957,7 @@ bool tool_t::reload_shortcuts()
 {
 	if (!load_shortcut_values(shortcut_menu_path, false)) { return false; }
 	rebuild_shortcuts();
-	return true;
+	return ensure_shortcut_backup();
 }
 
 bool tool_t::reset_shortcuts()
@@ -987,7 +992,6 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 		if (dr_getcwd(cwd, sizeof(cwd))) { shortcut_menu_path = std::string(cwd) + "/" + menuconf_path; }
 	}
 	shortcut_default_path = shortcut_menu_path.substr(0, shortcut_menu_path.find_last_of("/\\") + 1) + "menuconf.default.tab";
-	ensure_shortcut_backup();
 	tabfile_t menuconf;
 
 	// only use pak specific menus, since otherwise images may be missing
@@ -1353,7 +1357,6 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 		s.default_key = s.tool->command_key;
 		s.default_flags = s.tool->command_flags;
 	}
-	load_shortcut_values(shortcut_default_path, true);
 	rebuild_shortcuts();
 	return true;
 }

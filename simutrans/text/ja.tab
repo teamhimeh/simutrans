@@ -2285,5 +2285,5 @@ Conflicting key:
 競合したキー：
 The binding was not changed. Choose another key, or clear the existing binding first.
 キー設定は変更されていません。別のキーを指定するか、割り当て済みの操作のキーを解除してから設定してください。
-Could not read menuconf.tab.
-menuconf.tabを読み込めませんでした。
+Could not read keybindings or prepare their backup.
+キー設定の読み込み、またはバックアップの準備に失敗しました。
