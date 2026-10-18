@@ -163,7 +163,7 @@ factory_edit_frame_t::factory_edit_frame_t(player_t* player_) :
 
 	tbl->new_component<gui_label_t>("Produktion");
 
-	inp_production.set_limits(0,welt->scale_with_month_length(65536));
+	inp_production.set_limits(0,welt->scale_with_month_length(65536 * 2));
 	inp_production.add_listener( this );
 	tbl->add_component(&inp_production);
 	cont_options.end_table();

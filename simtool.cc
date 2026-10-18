@@ -11597,7 +11597,7 @@ bool tool_change_factory_t::init( player_t* player )
 				return false;
 			}
 			// Parse bounded decimal input without overflow or accepting trailing junk.
-			const sint64 limit = welt->scale_with_month_length(65536);
+			const sint64 limit = welt->scale_with_month_length(max(65536 * 2, factory->get_base_production()));
 			sint64 value = 0;
 			for (const char *digit = p; *digit; ++digit) {
 				if (*digit < '0' || *digit > '9' || value > (limit - (*digit - '0')) / 10) {
