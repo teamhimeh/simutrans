@@ -1075,14 +1075,14 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 				// outside the area in which our own ways will be drawn afterwards.
 				// Retaining walls above must keep their normal occlusion behaviour.
 				const bool clip_surface = get_flag(grund_t::draw_as_obj)
-					&& get_grund_hang() == slope_t::flat && (flags & has_way1)
+					&& (flags & has_way1)
 					&& !env_t::simple_drawing;
 				if (clip_surface) {
 					ribi_t::ribi way_ribi = get_weg_nr(0)->get_ribi_unmasked();
 					if (weg_t const* const way2 = get_weg_nr(1)) {
 						way_ribi |= way2->get_ribi_unmasked();
 					}
-					clip_way_background(xpos, ypos, raster_tile_width, way_ribi, slope_t::flat, 0 CLIP_NUM_PAR);
+					clip_way_background(xpos, ypos, raster_tile_width, way_ribi, get_disp_way_slope(), tile_raster_scale_y(TILE_HEIGHT_STEP, raster_tile_width) CLIP_NUM_PAR);
 				}
 				display_normal( get_image(), xpos, ypos, 0, true, dirty CLIP_NUM_PAR );
 #ifdef SHOW_FORE_GRUND
