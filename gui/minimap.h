@@ -16,6 +16,8 @@
 #include "../tpl/vector_tpl.h"
 #include "../dataobj/translator.h"
 
+#include <string>
+
 
 class karte_ptr_t;
 class fabrik_t;
@@ -176,6 +178,8 @@ private:
 
 	static bool circle_halts;
 
+	static bool show_convoi;
+
 	bool is_matching_freight_catg(const minivec_tpl<uint8> &goods_catg_index);
 
 	/// nonstatic, if we have someday many maps ...
@@ -187,6 +191,11 @@ private:
 
 	vector_tpl<koord> highlighted_depot_positions;
 
+	vector_tpl<koord3d> highlighted_route_tiles;
+
+	/// renders the whole map with @p export_mode into a new png file in the screenshot folder
+	bool render_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);
+
 public:
 	scr_coord map_to_screen_coord(const koord &k) const;
 
@@ -196,6 +205,14 @@ public:
 	static bool is_visible;
 
 	void set_circle_halts(bool val) { circle_halts = val; };
+
+	static bool get_show_convoi() { return show_convoi; }
+	void set_show_convoi(bool val) {
+		if(  show_convoi != val  ) {
+			show_convoi = val;
+			calc_map();
+		}
+	};
 	bool is_cnv_schedule_bound() { return current_cnv.is_bound() || current_schedule != nullptr; }
 
 	uint8 network_color_mode;
@@ -239,6 +256,37 @@ public:
 
 	/// calculates the current size of the map (but do not change anything else)
 	void calc_map_size();
+
+	/**
+	 * Export the complete minimap using the current zoom and display settings.
+	 * The map is rendered with @p export_mode; the current display mode (and the
+	 * visibility state of the map) is restored afterwards, so this works without
+	 * an open map window and does not disturb it.
+	 * If @p export_mode contains exclusive map options, a warning is written to
+	 * the log and shown in a message window (together with the export result).
+	 * @param filename receives the relative output path on success
+	 */
+	bool export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode);
+
+	/// same as above, with the mode stored in env_t::default_mapmode (i.e. the mode of the map window)
+	bool export_to_png(std::string &filename);
+
+	/**
+	 * Parses a display mode. Accepts a number (decimal or 0x hex bit mask) or
+	 * mode names separated by '|', '+', ',' or spaces, e.g. "MAP_TOWN|MAP_LINES"
+	 * or "town+lines" (case insensitive, the MAP_ prefix is optional).
+	 * An empty string or "default" yields env_t::default_mapmode.
+	 * @returns false if @p str could not be parsed
+	 */
+	static bool parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out);
+
+	/**
+	 * Checks for map modes that cannot be shown together (e.g. two base modes
+	 * like MAP_PASSENGER|MAP_TRAFFIC, or two halt modes).
+	 * @param conflicts receives a description of all conflicts
+	 * @returns true if there are no conflicts
+	 */
+	static bool check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &conflicts);
 
 	~minimap_t();
 
@@ -300,6 +348,12 @@ public:
 		for (koord const& k : positions) { highlighted_depot_positions.append(k); }
 	}
 	void clear_highlighted_depots() { highlighted_depot_positions.clear(); }
+
+	void set_highlighted_route(const vector_tpl<koord3d> &tiles) {
+		highlighted_route_tiles.clear();
+		for (koord3d const& k : tiles) { highlighted_route_tiles.append(k); }
+	}
+	void clear_highlighted_route() { highlighted_route_tiles.clear(); }
 	void set_from_dest_halt(halthandle_t from_halt, halthandle_t dest_halt) {
 		if (  from_halt.is_bound() && dest_halt.is_bound()  ) {
 			route_search_from_halt = from_halt;

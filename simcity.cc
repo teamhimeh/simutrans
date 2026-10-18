@@ -631,8 +631,7 @@ void stadt_t::remove_gebaeude_from_stadt(gebaeude_t* gb)
 	for (grund_t* gr : gb_tiles) {
 		gebaeude_t* remove_gb = gr->find<gebaeude_t>();
 		remove_gb->set_stadt(NULL);
-		bool ok = buildings.remove(remove_gb);
-		assert(ok);
+		buildings.remove(remove_gb);
 	}
 	recalc_city_size();
 }
@@ -1171,7 +1170,7 @@ void stadt_t::rdwr(loadsave_t* file)
 	lo.y = lob;
 	ur.x = lre;
 	ur.y = lun;
-	file->rdwr_long(owner_n);
+	file->rdwr_player_nr(owner_n);
 	file->rdwr_long(bev);
 	file->rdwr_long(arb);
 	file->rdwr_long(won);
@@ -1959,7 +1958,7 @@ void stadt_t::step_passagiere()
 			ware_t return_pax(wtyp);
 
 			// now, finally search a route; this consumes most of the time
-			int const route_result = haltestelle_t::search_route( &start_halts[0], start_halts.get_count(), welt->get_settings().is_no_routing_over_overcrowding(), pax, &return_pax);
+			int const route_result = haltestelle_t::search_route( &start_halts[0], start_halts.get_count(), welt->get_settings().is_no_routing_over_overcrowding(), pax, &return_pax, origin_pos);
 			halthandle_t start_halt = return_pax.get_ziel();
 			if(  route_result==haltestelle_t::ROUTE_OK  ) {
 				// so we have happy traveling passengers
@@ -3601,7 +3600,8 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 				if(  gebaeude_t const* const testgb = obj_cast<gebaeude_t>(gr->first_obj())  ) {
 					// We really have a building here
 					const building_desc_t* neighbor_building = testgb->get_tile()->get_desc();
-					if(  neighbor_building->is_city_building()  ) {
+					// only tiles belonging to this city can be replaced (otherwise update_gebaeude_from_stadt() fails)
+					if(  neighbor_building->is_city_building()  &&  testgb->get_stadt() == this  ) {
 
 						if(  gb->get_tile()->get_desc() == neighbor_building   &&   testgb->get_tile()->get_offset() == area3x3[area_level]  ) {
 							// part of same building
@@ -3751,6 +3751,17 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 							return;
 						}
 					}
+				}
+			}
+		}
+
+		// all tiles to be replaced must be city buildings of this city
+		for(  int x=0;  x<h->get_x(rotation);  x++  ) {
+			for(  int y=0;  y<h->get_y(rotation);  y++  ) {
+				grund_t *gr = welt->lookup_kartenboden(k+koord(x,y));
+				gebaeude_t *testgb = gr ? gr->find<gebaeude_t>() : NULL;
+				if(  testgb == NULL  ||  !testgb->is_city_building()  ||  testgb->get_stadt() != this  ) {
+					return;
 				}
 			}
 		}

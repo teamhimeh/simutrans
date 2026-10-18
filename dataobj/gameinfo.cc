@@ -107,6 +107,19 @@ gameinfo_t::gameinfo_t(karte_t *welt) :
 }
 
 
+gameinfo_t::gameinfo_t() :
+	size_x(0),
+	size_y(0),
+	map_idx(MINIMAP_SIZE,MINIMAP_SIZE),
+	map_rgb(MINIMAP_SIZE,MINIMAP_SIZE),
+	game_comment(""),
+	file_name(""),
+	pak_name(""),
+	game_engine_revision(0)
+{
+}
+
+
 gameinfo_t::gameinfo_t(loadsave_t *file) :
 	map_idx(MINIMAP_SIZE,MINIMAP_SIZE),
 	map_rgb(MINIMAP_SIZE,MINIMAP_SIZE),
@@ -194,8 +207,21 @@ void gameinfo_t::rdwr(loadsave_t *file)
 	}
 	file->rdwr_long( game_engine_revision );
 
-	for(  int i=0;  i<16;  i++  ) {
-		file->rdwr_byte( player_type[i] );
+	if(  file->get_OTRP_version()<59  ) {
+		// old savegames only stored the first 16 players
+		for(  int i=0;  i<16;  i++  ) {
+			file->rdwr_byte( player_type[i] );
+		}
+		if(  file->is_loading()  ) {
+			for(  int i=16;  i<MAX_PLAYER_COUNT;  i++  ) {
+				player_type[i] = player_t::EMPTY;
+			}
+		}
+	}
+	else {
+		for(  int i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
+			file->rdwr_byte( player_type[i] );
+		}
 	}
 	file->rdwr_byte( clients );
 

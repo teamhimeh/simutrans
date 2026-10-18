@@ -42,6 +42,14 @@ public:
 
 	bool is_overhead_line() const { return (waytype_t)own_wtyp == overheadlines_wt; }
 
+	/**
+	* Maintenance cost scaled by settings_t::maintenance_cost_multiplier_overhead [%].
+	* Hides obj_desc_transport_related_t::get_maintenance() on purpose, so that
+	* every user of a way_obj_desc_t sees the scaled value.
+	* Implemented in way_desc.cc.
+	*/
+	sint64 get_maintenance() const;
+
 	// way objects can have a front and a backimage, unlike ways ...
 	image_id get_front_image_id(ribi_t::ribi ribi) const { return get_child<image_list_t>(2)->get_image_id(ribi); }
 

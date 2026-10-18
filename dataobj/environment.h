@@ -231,6 +231,20 @@ public:
 
 	static scr_size iconsize;
 
+	/**
+	 * once tool_t::read_menu() has applied the pak-specific icon_height from
+	 * menuconf.tab to iconsize, this is set so later theme (re)loads don't
+	 * reset iconsize back to the theme's icon_width
+	 */
+	static bool iconsize_set_by_pak;
+
+	/**
+	 * thickness (in pixels) of the scrollbar strip drawn just outside the
+	 * main menu bar's icon row/column (below for MENU_TOP/BOTTOM, beside for
+	 * MENU_LEFT/RIGHT); the menu bar's on-screen footprint is iconsize plus this
+	 */
+	static const scr_coord_val menu_scrollbar_thickness = 10;
+
 	/// customize your tooltips
 	static bool show_tooltips;
 	static uint32 tooltip_color_rgb;
@@ -360,11 +374,26 @@ public:
 	static bool draw_outside_tile;
 
 	/**
+	 * Bit flags for show_names.
+	 * @see grund_t::display_overlay
+	 * @see haltestelle_t::display_status
+	 */
+	enum show_names_flags_t {
+		SHOW_NAME             = 1 << 0, ///< show city/station name label
+		SHOW_WAITING_BARS     = 1 << 1, ///< show station waiting bars
+		SHOW_NAME_TYPE2       = 1 << 2, ///< name label style 2 (outline)
+		SHOW_NAME_TYPE3       = 1 << 3, ///< name label style 3 (boxed)
+		SHOW_ALLOWED_PLAYERS  = 1 << 4  ///< show per-player stop permission bars
+	};
+
+	/**
 	 * Show labels (city and station names, ...)
-	 * and waiting indicator bar for stations
+	 * and waiting indicator bar / allowed player bars for stations
 	 * @see grund_t::display_overlay
 	 */
 	static sint32 show_names;
+
+	static sint32 const bars_settings = env_t::SHOW_WAITING_BARS|env_t::SHOW_ALLOWED_PLAYERS;
 
 	/// Show factory storage bar
 	static uint8 show_factory_storage_bar;
@@ -575,7 +604,6 @@ public:
 	static bool reversible_waytype(waytype_t w) {
 		return	w!=waytype_t::invalid_wt&&
 		w!=waytype_t::ignore_wt         &&
-		w!=waytype_t::road_wt           &&
 		w!=waytype_t::air_wt            &&
 		w!=waytype_t::powerline_wt      &&
 		w!=waytype_t::any_wt;

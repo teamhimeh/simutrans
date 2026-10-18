@@ -11,6 +11,7 @@
 #include "../simtypes.h"
 #include "../dataobj/route.h"
 #include "../linehandle_t.h"
+#include "../tpl/vector_tpl.h"
 
 /**
  * Global route cache keyed by (line, schedule_entry, start, ziel, max_speed_kmh, convoy_length, need_electric).
@@ -80,6 +81,10 @@ public:
 
 	// Erase all cache entries
 	void clear() { map.clear(); }
+
+	// Collect all currently valid (non-expired) cached route tiles for a line, across all
+	// schedule entries and cached variants. Used by the GUI to display the cached routes.
+	void get_route_tiles_for_line(linehandle_t line, vector_tpl<koord3d> &tiles) const;
 };
 
 #endif

@@ -50,6 +50,9 @@ private:
 	// used to determine min size
 	uint16 digits;
 
+	// if >0, the displayed value is zero-padded to this many digits (e.g. packed hh:mm:ss values)
+	uint8 pad_digits;
+
 	char textbuffer[20];
 
 	sint32 step_mode;
@@ -57,6 +60,7 @@ private:
 	bool wrapping : 1;
 	bool b_enabled : 1;
 	bool no_tooltip : 1;
+	bool show_arrows : 1;
 
 	// since only the last will prevail
 	static char tooltip[256];
@@ -80,6 +84,12 @@ public:
 	 * digits: length of textbuffer
 	 */
 	void set_limits(sint32 _min, sint32 _max);
+
+	// hide the increment/decrement arrow buttons; the field still reacts to mouse wheel and cursor up/down
+	void set_show_arrows(bool b);
+
+	// zero-pad the displayed value to this many digits (0 = no padding, the default)
+	void set_pad_digits(uint8 n);
 
 	enum {
 		AUTOLINEAR = 0,

@@ -11,6 +11,7 @@
 #include "map_frame.h"
 
 #include "simwin.h"
+#include "messagebox.h"
 #include "../sys/simsys.h"
 
 #include "../simworld.h"
@@ -176,7 +177,7 @@ map_frame_t::map_frame_t() :
 	set_table_layout(1,0);
 
 	// first row of controls
-	add_table(3,1);
+	add_table(4,1);
 	{
 		// first row of controls
 		// selections button
@@ -196,12 +197,18 @@ map_frame_t::map_frame_t() :
 		b_show_scale.set_tooltip("Shows the color code for several selections.");
 		b_show_scale.add_listener(this);
 		add_component(&b_show_scale);
+
+		// export the complete map with the current display settings
+		b_export_map.init(button_t::roundbox, "Export map");
+		b_export_map.set_tooltip("Export the entire map with the current display settings.");
+		b_export_map.add_listener(this);
+		add_component(&b_export_map);
 	}
 	end_table();
 
 
 	// second row of controls
-	zoom_row = add_table(7,0);
+	zoom_row = add_table(8,0);
 	{
 		// zoom levels label
 		new_component<gui_label_t>("map zoom");
@@ -229,6 +236,13 @@ map_frame_t::map_frame_t() :
 		b_rotate45.add_listener(this);
 		b_rotate45.pressed = karte->is_isometric();
 		add_component(&b_rotate45);
+
+		// show convoy positions
+		b_show_convoi.init( button_t::square_state, "Show convois");
+		b_show_convoi.set_tooltip("Show convoi positions on the map");
+		b_show_convoi.add_listener(this);
+		b_show_convoi.pressed = minimap_t::get_show_convoi();
+		add_component(&b_show_convoi);
 
 		// show contour
 		c_show_outlines.new_component<gui_scrolled_list_t::const_text_scrollitem_t>( translator::translate( "Show contour" ), SYSCOL_TEXT );
@@ -483,6 +497,15 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 	else if(  comp == &b_show_directory  ) {
 		show_hide_directory( !b_show_directory.pressed );
 	}
+	else if(  comp == &b_export_map  ) {
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename);
+		// on conflicts export_to_png() already showed the result together with the warning
+		if(  minimap_t::check_display_mode((minimap_t::MAP_DISPLAY_MODE)env_t::default_mapmode, conflicts)  ) {
+			const char *message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
+			create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
+		}
+	}
 	else if(  comp == &c_show_outlines  ) {
 		if( v.i == 2 ) {
 			env_t::default_mapmode |= minimap_t::MAP_HIDE_CONTOUR;
@@ -518,6 +541,10 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 		scrolly.set_size( scrolly.get_size() );
 		zoomed = true;
 		old_ij = koord::invalid;
+	}
+	else if(  comp == &b_show_convoi  ) {
+		b_show_convoi.pressed ^= 1;
+		minimap_t::get_instance()->set_show_convoi( b_show_convoi.pressed );
 	}
 	else if(  comp == &b_overlay_networks  ) {
 		b_overlay_networks.pressed ^= 1;

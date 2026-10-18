@@ -149,6 +149,14 @@ private:
 	bool keep_existing_faster_ways;
 	bool keep_existing_city_roads;
 
+	/**
+	 * true when the current route was computed by calc_straight_route() (ctrl-pressed,
+	 * single-segment building), false for the Dijkstra calc_route(). Only in straight-route
+	 * mode can build_track()/build_road() add a same-waytype-different-descriptor way as an
+	 * independent second diagonal leg (weg_nr(1)) instead of extending the existing way.
+	 */
+	bool straight_route_mode;
+
 	bool build_sidewalk;
 
 	uint32 maximum;    // hoechste Suchtiefe
@@ -166,6 +174,21 @@ public:
 	* B) if allowed, calculate the cost for the step from from to to
 	*/
 	bool is_allowed_step(const grund_t *from, const grund_t *to, sint32 *costs, bool is_upperlayer = false ) const;
+
+	/**
+	 * Height in tiles between a base ground and the elevated way surface built above it:
+	 * the configured way_height_clearance/height_offset plus, on a bridge ramp connection
+	 * built on sloped terrain, the extra height reported by base->get_bridge_slope_extra_height().
+	 * Common conversion used to keep route search, cost estimation and elevated-way
+	 * construction consistent with each other. 'base' may be NULL (assumes no extra height).
+	 */
+	sint8 get_way_height_offset(const grund_t *base) const;
+
+	/**
+	 * Inverse of get_way_height_offset(): given the position of an already-built elevated
+	 * way tile, finds the base ground it was built above (or NULL if none is found).
+	 */
+	grund_t *find_base_for_elevated(const koord3d &upper_pos) const;
 
 private:
 	// checks, if we can built a bridge here ...
@@ -252,7 +275,12 @@ public:
 	bool check_terraforming( const grund_t *from, const grund_t *to, uint8* new_from_slope=NULL, uint8* new_to_slope=NULL) const;
 	void do_terraforming();
 
-	void build();
+	/**
+	 * @param allow_single_tile if true, a route consisting of just the start tile
+	 * (no end tile / no connections) may be built, instead of being rejected as invalid.
+	 * Used to build an isolated one-tile way.
+	 */
+	void build(bool allow_single_tile = false);
 };
 
 ENUM_BITSET(way_builder_t::bautyp_t);

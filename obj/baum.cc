@@ -126,7 +126,7 @@ void baum_t::rdwr(loadsave_t *file)
 }
 
 
-void baum_t::finish_rd()
+void baum_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	if(get_xoff()==-128) {
 		calc_off(welt->lookup( get_pos())->get_grund_hang());

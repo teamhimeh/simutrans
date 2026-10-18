@@ -8,6 +8,7 @@
 #include "gui_frame.h"
 #include "components/gui_button.h"
 #include "components/gui_label.h"
+#include "components/gui_scrollpane.h"
 #include "components/action_listener.h"
 #include "../tpl/vector_tpl.h"
 #include "simwin.h"
@@ -19,12 +20,15 @@ class player_merge_frame_t : public gui_frame_t, private action_listener_t
 			button_t* button;
 			uint8 player_num;
 		};
-		
+
 		gui_label_t lb_description, lb_merged, lb_merge_to;
 
     vector_tpl<player_item_t> players_merged;
     vector_tpl<player_item_t> players_merge_to;
-    
+
+		gui_aligned_container_t player_table;
+		gui_scrollpane_t scrolly;
+
 		button_t bt_merge;
 		
 		sint8 selected_merged_player_num, selected_merger_player_num;

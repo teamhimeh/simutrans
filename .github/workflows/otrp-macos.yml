@@ -19,7 +19,7 @@ jobs:
     - name: install_dependencies
       run: | 
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-        brew install sdl2 sdl3 freetype libpng zstd miniupnpc pkg-config
+        brew install sdl3 freetype libpng zstd miniupnpc pkg-config
 #        brew install freetype
 # freetype library is in the system, but not the header
 #        curl -L "https://downloads.sourceforge.net/project/freetype/freetype2/2.10.1/ft2101.zip?&use_mirror=autoselect" > ft2101.zip

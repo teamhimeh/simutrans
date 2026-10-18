@@ -491,8 +491,11 @@ bool gui_theme_t::themes_init(const char *file_name, bool init_fonts, bool init_
 		gui_theme_t::gui_button_text_offset_right = scr_coord(button_text_offsets[2], 0);
 	}
 
-	// default iconsize (square for now)
-	env_t::iconsize.h = env_t::iconsize.w = contents.get_int("icon_width",env_t::iconsize.w );
+	// default iconsize (square for now); once the pak's menuconf.tab has set this
+	// (see tool_t::read_menu()), later theme (re)loads must not reset it
+	if(  !env_t::iconsize_set_by_pak  ) {
+		env_t::iconsize.h = env_t::iconsize.w = contents.get_int("icon_width",env_t::iconsize.w );
+	}
 
 	// maybe not the best place, rather use simwin for the static defines?
 	gui_theme_t::gui_color_text                         = (PIXVAL)contents.get_color("gui_color_text", SYSCOL_TEXT);

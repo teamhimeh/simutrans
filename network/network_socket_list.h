@@ -65,7 +65,7 @@ private:
 public:
 	connection_state_t state;
 	SOCKET socket;
-	uint16 player_unlocked;
+	uint64 player_unlocked;
 
 public:
 	socket_info_t() : connection_info_t(), packet(0), send_queue(), state(inactive), socket(INVALID_SOCKET), player_unlocked(0) {}
@@ -102,10 +102,10 @@ public:
 	/**
 	 * human players on this connection can play with in-game companies/players?
 	 */
-	bool is_player_unlocked(uint8 player_nr) const { return (player_nr < PLAYER_UNOWNED)  &&  ((player_unlocked & 1<<player_nr)!=0); }
+	bool is_player_unlocked(uint8 player_nr) const { return (player_nr < PLAYER_UNOWNED)  &&  ((player_unlocked & ((uint64)1<<player_nr))!=0); }
 
-	void unlock_player(uint8 player_nr) { if (player_nr < PLAYER_UNOWNED) player_unlocked |= 1<<player_nr; }
-	void lock_player(uint8 player_nr) { if (player_nr < PLAYER_UNOWNED) player_unlocked &= ~(1<<player_nr); }
+	void unlock_player(uint8 player_nr) { if (player_nr < PLAYER_UNOWNED) player_unlocked |= (uint64)1<<player_nr; }
+	void lock_player(uint8 player_nr) { if (player_nr < PLAYER_UNOWNED) player_unlocked &= ~((uint64)1<<player_nr); }
 };
 
 /**

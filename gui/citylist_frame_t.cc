@@ -212,7 +212,7 @@ citylist_frame_t::citylist_frame_t() :
 	dchart.set_background(SYSCOL_CHART_BACKGROUND);
 	dchart.set_min_size(scr_size(0, 8*LINESPACE));
 
-	container_decade.add_table(4,3);
+	container_decade.add_table(4,0);
 	for (int i = 0; i<karte_t::MAX_WORLD_COST; i++) {
 		sint16 curve = dchart.add_curve(color_idx_to_rgb(hist_type_color[i]), welt->get_finance_history_decade(), karte_t::MAX_WORLD_COST, i, MAX_WORLD_HISTORY_DECADES, hist_type_type[i], false, true, (i==1) ? 1 : 0 );
 

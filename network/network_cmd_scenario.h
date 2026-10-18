@@ -32,7 +32,7 @@ public:
 	};
 	uint16 what;
 
-	uint16 won, lost;
+	uint64 won, lost;
 
 	plainstring function;
 	plainstring result;

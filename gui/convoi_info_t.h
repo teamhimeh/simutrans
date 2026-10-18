@@ -71,6 +71,7 @@ private:
 	bool is_route_show;
 	route_t cnv_route;
 	void show_route(const bool);
+	static void hide_route_display(void *owner);
 
 	gui_tab_panel_t switch_mode;
 	gui_aligned_container_t container_freight, container_stats, container_line, *container_top, container_details, container_stops, container_line_memo;

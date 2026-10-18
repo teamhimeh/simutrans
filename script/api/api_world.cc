@@ -115,7 +115,7 @@ uint32 world_generate_goods(karte_t *welt, koord from, koord to, const goods_des
 	const bool no_route_over_overcrowded = welt->get_settings().is_no_routing_over_overcrowding();
 
 	assert(hl_count > 0);
-	const int route_result = haltestelle_t::search_route(haltlist, hl_count, no_route_over_overcrowded, good, &return_good);
+	const int route_result = haltestelle_t::search_route(haltlist, hl_count, no_route_over_overcrowded, good, &return_good, from);
 
 	switch (route_result) {
 	case haltestelle_t::ROUTE_WALK:

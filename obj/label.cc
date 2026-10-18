@@ -64,7 +64,7 @@ label_t::~label_t()
 }
 
 
-void label_t::finish_rd()
+void label_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 #ifdef MULTI_THREAD
 	pthread_mutex_lock( &add_label_mutex );

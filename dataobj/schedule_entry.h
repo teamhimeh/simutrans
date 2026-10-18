@@ -11,6 +11,7 @@
 #define NUM_STOPPING_TIME_STORED 5
 
 #include "koord3d.h"
+#include "../linehandle_t.h"
 
 /**
  * A schedule entry.
@@ -63,7 +64,16 @@ public:
 		TEMP_LOAD         = 1U << 16,// load temporary(not use for goods routing)
 		TEMP_UNLOAD       = 1U << 17,// unload temporary(not use for goods routing)
 		TEMP_UNLOAD_ALL   = 1U << 18,// unload all only for goods routing
-		BALANCE_SPEED_KMH_OF_CONVOI= 1U<<19 // Overwrite balance speed of convoy here.
+		BALANCE_SPEED_KMH_OF_CONVOI= 1U<<19,// Overwrite balance speed of convoy here.
+		WAIT_FOR_OTHER_CONVOY= 1U<<20,// The convoy waits here until another convoy (of allow_depart_line) grants departure.
+		WAIT_ALLOW_DEPARTURE = 1U<<21,// Wait until make other convoy depart. (only allow_departure_line exist)
+		WITHOUT_RESERVATION  = 1U<<22,// drive without reservation
+		// Convoy shipping needs only this one flag. Whether a convoy can carry others, which
+		// waytypes it can carry and where it will call are all already known - from its
+		// vehicles' shipping capacity and from its schedule - so a carrier needs no flag of
+		// its own. Only the carried convoy has to declare itself, because otherwise it would
+		// simply drive off. (NO_LOAD on a carrier's entry doubles as "do not pick up here".)
+		START_SHIPPED     = 1U<<23 // This convoy waits here to be taken aboard a carrier convoy.
 	};
 
 	/**
@@ -102,7 +112,13 @@ public:
 	 * Overwrite balance speed of convoy here.
 	 */
 	uint16 balance_speed_kmh_of_convoi;
-	
+
+	/**
+	 * The line whose waiting convoys are granted departure allowance when a convoy
+	 * with wait_for_other_convoy set arrives at this stop.
+	 */
+	linehandle_t allow_depart_line;
+
 	/*
 	 * store last 5 journey time of this stop.
 	 * This is the time between the arrival at the previous stop and the arrival at this stop.
@@ -195,7 +211,17 @@ public:
 	void set_temp_unload_all(bool y) {y? stop_flags|=TEMP_UNLOAD_ALL: stop_flags&= ~TEMP_UNLOAD_ALL;}
 	bool is_overwrite_balance_speed_kmh_of_convoi() const {return (stop_flags&BALANCE_SPEED_KMH_OF_CONVOI)>0;}
 	void set_overwrite_balance_speed_kmh_of_convoi(bool y) { y? stop_flags |= BALANCE_SPEED_KMH_OF_CONVOI : stop_flags &= ~BALANCE_SPEED_KMH_OF_CONVOI;}
-
+	bool is_wait_for_other_convoy() const { return (stop_flags&WAIT_FOR_OTHER_CONVOY)>0; }
+	void set_wait_for_other_convoy(bool y) { y ? stop_flags |= WAIT_FOR_OTHER_CONVOY : stop_flags &= ~WAIT_FOR_OTHER_CONVOY; }
+	linehandle_t get_allow_depart_line() const { return allow_depart_line; }
+	void set_allow_depart_line(linehandle_t l) { allow_depart_line = l; }
+	bool is_wait_allow_convoy_departure() const { return (stop_flags&WAIT_ALLOW_DEPARTURE)>0; }
+	void set_wait_allow_convoy_departure(bool y) { y ? stop_flags |= WAIT_ALLOW_DEPARTURE : stop_flags &= ~WAIT_ALLOW_DEPARTURE; }
+	bool is_drive_without_reservation() const {return (stop_flags&WITHOUT_RESERVATION)>0;}
+	void set_drive_without_reservation(bool y) { y? stop_flags |= WITHOUT_RESERVATION : stop_flags &= ~WITHOUT_RESERVATION;}
+	// convoy shipping (a convoy carried aboard another convoy)
+	bool is_start_shipped() const { return (stop_flags&START_SHIPPED)>0; }
+	void set_start_shipped(bool y) { y ? stop_flags |= START_SHIPPED : stop_flags &= ~START_SHIPPED; }
 
 	void set_spacing(uint16 a, uint16 b, uint16 c) {
 		spacing = a;
@@ -210,6 +236,22 @@ public:
 	void push_journey_time(uint32 time);
 	void push_waiting_time(uint32 time);
 	void push_convoy_stopping_time(uint32 time);
+
+	// preserve recorded times when re-applying a schedule whose stops/order did not change
+	void copy_time_records_from(const schedule_entry_t &other) {
+		jt_at_index = other.jt_at_index;
+		wt_at_index = other.wt_at_index;
+		cs_at_index = other.cs_at_index;
+		for(uint8 i = 0; i < NUM_ARRIVAL_TIME_STORED; i++) {
+			journey_time[i] = other.journey_time[i];
+		}
+		for(uint8 i = 0; i < NUM_WAITING_TIME_STORED; i++) {
+			waiting_time[i] = other.waiting_time[i];
+		}
+		for(uint8 i = 0; i < NUM_STOPPING_TIME_STORED; i++) {
+			convoy_stopping_time[i] = other.convoy_stopping_time[i];
+		}
+	}
 	
 	uint32 get_median_journey_time() const;
 	uint32 get_average_waiting_time() const;
@@ -226,7 +268,8 @@ public:
 			&&  a.max_speed_kmh_of_convoi== this->max_speed_kmh_of_convoi
 			&&  a.length_coupling_done == this->length_coupling_done
 			&&  a.maximum_loading    == this->maximum_loading
-			&&	a.balance_speed_kmh_of_convoi == this->balance_speed_kmh_of_convoi;
+			&&	a.balance_speed_kmh_of_convoi == this->balance_speed_kmh_of_convoi
+			&&	a.allow_depart_line == this->allow_depart_line;
 	}
 };
 

@@ -21,7 +21,7 @@ public:
 	label_t(koord3d pos, player_t *player, const char *text);
 	~label_t();
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	void show_info() OVERRIDE;
 

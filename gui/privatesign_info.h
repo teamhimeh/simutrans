@@ -12,6 +12,8 @@
 #include "components/action_listener.h"
 #include "components/gui_button.h"
 #include "components/gui_container.h"
+#include "components/gui_aligned_container.h"
+#include "components/gui_scrollpane.h"
 
 class roadsign_t;
 
@@ -23,6 +25,8 @@ class privatesign_info_t : public obj_infowin_t, public action_listener_t
  private:
 	roadsign_t* sign;
 	button_t players[PLAYER_UNOWNED];
+	gui_aligned_container_t player_cont;
+	gui_scrollpane_t scrolly;
 
  public:
 	privatesign_info_t(roadsign_t* s);

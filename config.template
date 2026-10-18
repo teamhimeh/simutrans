@@ -11,6 +11,7 @@
 #BACKEND := allegro
 #BACKEND := gdi
 #BACKEND := sdl2
+#BACKEND := sdl3
 #BACKEND := posix
 
 #OSTYPE := amiga
@@ -50,7 +51,7 @@
 # enable link time optimizations
 #LTO := 1
 
-# using FluidSynth for MIDI playback (SDL2 backend needed for Linux/MacOS, SDL2 or GDI for MinGW)
+# using FluidSynth for MIDI playback (SDL2/SDL3 backend needed for Linux/MacOS, SDL2/SDL3 or GDI for MinGW)
 #USE_FLUIDSYNTH_MIDI := 1
 
 # Define these as empty strings, if you don't have the respective config program
@@ -58,6 +59,7 @@
 #PNG_CONFIG     :=
 #SDL_CONFIG     :=
 #SDL2_CONFIG    :=
+#SDL3_CONFIG    :=
 #FREETYPE_CONFIG :=
 
 # Or define as the config program if you do
@@ -65,6 +67,7 @@
 #PNG_CONFIG     := pkg-config libpng
 #SDL_CONFIG     := sdl-config
 #SDL2_CONFIG    := sdl2-config
+#SDL3_CONFIG    := pkg-config sdl3
 #FREETYPE_CONFIG := freetype-config
 
 #VERBOSE := 1
