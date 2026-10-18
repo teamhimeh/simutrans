@@ -598,6 +598,39 @@ void grund_t::enlarge_map( sint16, sint16 /*new_size_y*/ )
 }
 
 
+bool grund_t::update_way_flags()
+{
+	const uint8 old_flags = flags & (has_way1|has_way2);
+
+	// ways have the highest priority, so they are always at the start of the object list
+	uint8 way_count = 0;
+	while(  way_count < objlist.get_top()  &&  objlist.bei(way_count)->get_typ() == obj_t::way  ) {
+		weg_t *weg = static_cast<weg_t *>( objlist.bei(way_count) );
+		if(  weg->get_pos() != pos  ) {
+			weg->set_pos( pos );
+		}
+		way_count++;
+	}
+	if(  way_count > 2  ) {
+		dbg->error( "grund_t::update_way_flags()", "%d ways at (%s), only two are possible", way_count, pos.get_str() );
+	}
+
+	flags &= ~(has_way1|has_way2);
+	if(  way_count >= 1  ) {
+		flags |= has_way1;
+	}
+	if(  way_count >= 2  ) {
+		flags |= has_way2;
+	}
+
+	if(  old_flags != (flags & (has_way1|has_way2))  ) {
+		set_flag( dirty );
+		return true;
+	}
+	return false;
+}
+
+
 // moves all objects from the old to the new grund_t
 void grund_t::take_obj_from(grund_t* other_gr)
 {
