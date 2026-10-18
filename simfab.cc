@@ -4,6 +4,7 @@
  */
 
 #include <math.h>
+#include <algorithm>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1123,7 +1124,7 @@ void fabrik_t::remove_field_at(koord pos)
 	const field_class_desc_t *const field_class = desc->get_field_group()->get_field_class( field.field_class_index );
 	fields.remove(field);
 	// revert the field's effect on production base and storage capacities
-	set_base_production( prodbase - field_class->get_field_production() );
+	set_base_production( max(1, prodbase - (sint32)field_class->get_field_production()) );
 }
 
 
@@ -3149,6 +3150,86 @@ sint32 fabrik_t::get_min_base_production() const
 	}
 
 	return saturate<sint32>(prodbase_adjust);
+}
+
+
+vector_tpl<fabrik_t::field_data_t> fabrik_t::get_fields_by_removal_order() const
+{
+	vector_tpl<field_data_t> ordered(fields);
+	const koord origin = get_pos().get_2d();
+	if (ordered.get_count() > 1) {
+		std::sort(ordered.begin(), ordered.end(), [origin](const field_data_t &a, const field_data_t &b) {
+			const uint32 da = koord_distance(origin, a.location);
+			const uint32 db = koord_distance(origin, b.location);
+			if (da != db) return da > db;
+			if (a.location.x != b.location.x) return a.location.x < b.location.x;
+			return a.location.y < b.location.y;
+		});
+	}
+	return ordered;
+}
+
+
+sint32 fabrik_t::get_min_editable_base_production() const
+{
+	uint64 minimum = 1;
+	if (const field_group_desc_t *fd = desc->get_field_group()) {
+		const vector_tpl<field_data_t> ordered = get_fields_by_removal_order();
+		const uint32 keep = min((uint32)fd->get_min_fields(), ordered.get_count());
+		for (uint32 i = ordered.get_count() - keep; i < ordered.get_count(); ++i) {
+			minimum += fd->get_field_class(ordered[i].field_class_index)->get_field_production();
+		}
+	}
+	return saturate<sint32>(minimum);
+}
+
+
+sint64 fabrik_t::get_min_editable_monthly_base_production() const
+{
+	const sint32 minimum = get_min_editable_base_production();
+	sint64 monthly = welt->scale_with_month_length(minimum);
+	if (welt->inverse_scale_with_month_length(monthly) < minimum) {
+		++monthly;
+	}
+	return monthly;
+}
+
+
+bool fabrik_t::set_edited_base_production(sint32 p)
+{
+	if (p < get_min_editable_base_production()) {
+		return false;
+	}
+	if (const field_group_desc_t *fd = desc->get_field_group()) {
+		const vector_tpl<field_data_t> ordered = get_fields_by_removal_order();
+		uint64 minimum = 1;
+		FOR(vector_tpl<field_data_t>, const &f, ordered) {
+			minimum += fd->get_field_class(f.field_class_index)->get_field_production();
+		}
+		uint32 remove_count = 0;
+		const uint32 keep = min((uint32)fd->get_min_fields(), ordered.get_count());
+		while (minimum > (uint64)p && remove_count < ordered.get_count() - keep) {
+			minimum -= fd->get_field_class(ordered[remove_count++].field_class_index)->get_field_production();
+		}
+		if (minimum > (uint64)p) return false;
+		// Validate every tile before changing anything.
+		for (uint32 i = 0; i < remove_count; ++i) {
+			grund_t *gr = welt->lookup_kartenboden(ordered[i].location);
+			field_t *f = gr ? gr->find<field_t>() : NULL;
+			if (!f || f->get_factory() != this) return false;
+		}
+		for (uint32 i = 0; i < remove_count; ++i) {
+			const koord k = ordered[i].location;
+			grund_t *gr = welt->lookup_kartenboden(k);
+			delete gr->find<field_t>();
+			sint8 dummy;
+			welt->access(k)->boden_ersetzen(gr, new boden_t(gr->get_pos(), welt->recalc_natural_slope(k, dummy)));
+			welt->lookup_kartenboden(k)->calc_image();
+			welt->lookup_kartenboden(k)->set_flag(grund_t::dirty);
+		}
+	}
+	set_base_production(p);
+	return true;
 }
 
 

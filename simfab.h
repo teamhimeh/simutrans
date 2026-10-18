@@ -277,6 +277,7 @@ private:
 		bool operator==(const field_data_t &other) const { return location==other.location; }
 	};
 	vector_tpl <field_data_t> fields;
+	vector_tpl<field_data_t> get_fields_by_removal_order() const;
 
 	/**
 	 * Distribute products to connected stops
@@ -681,6 +682,9 @@ public:
 	sint32 get_base_production() const { return prodbase; }
 	sint32 get_min_base_production() const;
 	sint64 get_min_monthly_base_production() const;
+	sint32 get_min_editable_base_production() const;
+	sint64 get_min_editable_monthly_base_production() const;
+	bool set_edited_base_production(sint32 p);
 	void set_base_production(sint32 p);
 
 	sint32 get_current_production() const { return saturate<sint32>(welt->scale_with_month_length( ((sint64)prodbase * (sint64)get_prodfactor())>>8 )); }
