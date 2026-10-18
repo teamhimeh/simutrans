@@ -4,6 +4,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 #include "simversion.h"
 #include <string.h>
 #include <math.h>
@@ -11593,19 +11595,14 @@ bool tool_change_factory_t::init( player_t* player )
 	switch (tool) {
 		case 'p': // set monthly base production
 		{
-			if (z != 0 || !*p) {
+			if (z != 0 || *p < '0' || *p > '9') {
 				return false;
 			}
-			// Parse bounded decimal input without overflow or accepting trailing junk.
 			const sint64 limit = welt->scale_with_month_length(65536);
-			sint64 value = 0;
-			for (const char *digit = p; *digit; ++digit) {
-				if (*digit < '0' || *digit > '9' || value > (limit - (*digit - '0')) / 10) {
-					return false;
-				}
-				value = value * 10 + (*digit - '0');
-			}
-			if (value > limit || value < factory->get_min_monthly_base_production()) {
+			char *end;
+			errno = 0;
+			const sint64 value = strtoll(p, &end, 10);
+			if (errno == ERANGE || *end != '\0' || value > limit || value < factory->get_min_monthly_base_production()) {
 				return false;
 			}
 			factory->set_base_production(welt->inverse_scale_with_month_length(value));
