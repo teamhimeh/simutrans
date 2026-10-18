@@ -209,6 +209,9 @@ private:
 
 	uint16 preservation_year_month;
 
+	/// @see get_height_clearance
+	uint8 height_clearance;
+
 	bool is_type(building_desc_t::btype u) const {
 		return type == u;
 	}
@@ -250,6 +253,13 @@ public:
 
 	// never replace this building for renovation (to create historic city centres)
 	uint16 no_renovation_month() const { return preservation_year_month; }
+
+	/**
+	 * The clearance this building needs above its ground, in height levels
+	 * (height_clearance in the dat file, pak version 12 and up).
+	 * 255 = not set in the pak.
+	 */
+	uint8 get_height_clearance() const { return height_clearance; }
 
 	building_desc_t::btype get_type() const { return type; }
 

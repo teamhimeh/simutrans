@@ -766,6 +766,13 @@ public:
 	inline bool hat_wege() const { return (flags&(has_way1|has_way2))!=0;}
 
 	/**
+	 * Recalculates the has_way1/has_way2 flags from the way objects really in the object list
+	 * (e.g. ways moved onto a foundation lose these flags). Also corrects the position of the ways.
+	 * @return true, if the flags were changed
+	 */
+	bool update_way_flags();
+
+	/**
 	* Are two ways crossing here?
 	* To not discover trams, we look for the crossing object
 	*/

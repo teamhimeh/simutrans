@@ -1342,6 +1342,13 @@ public:
 	}
 
 	/**
+	 * Like lookup(), but ignores the dummy grounds of tool previews (tunnel, elevated way).
+	 * These exist only on the client using the tool, so any check during the simulation
+	 * (e.g. where to build a building) must use this, or network games desync.
+	 */
+	grund_t *lookup_no_dummy(const koord3d &pos) const;
+
+	/**
 	 * This function takes grid coordinates as a parameter and a desired height (koord3d).
 	 * Will return the ground_t object that intersects with it in it's north corner if possible.
 	 * If that tile doesn't exist, returns the one that intersects with it in other corner.
