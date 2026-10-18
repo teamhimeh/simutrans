@@ -9548,6 +9548,40 @@ bool tool_screenshot_t::init( player_t * )
 	else {
 		create_win( new news_img("Could not\ncreate screenshot!\n"), w_time_delete, magic_none);
 	}
+	return false;
+}
+
+
+char const* tool_export_minimap_t::get_tooltip(player_t const*) const
+{
+	if(  default_param  &&  *default_param  ) {
+		snprintf(toolstr, lengthof(toolstr), "%s (%s)", translator::translate("Export map image"), default_param);
+		return toolstr;
+	}
+	return translator::translate("Export map image");
+}
+
+
+// default_param: optional map mode to export with (see minimap_t::parse_display_mode()),
+// e.g. "MAP_TOWN|MAP_LINES"; the current mode of the map window is kept
+bool tool_export_minimap_t::init( player_t * )
+{
+	minimap_t::MAP_DISPLAY_MODE export_mode;
+	const char *message;
+	if(  !minimap_t::parse_display_mode(default_param, export_mode)  ) {
+		dbg->warning("tool_export_minimap_t::init()", "invalid map mode \"%s\"", default_param);
+		message = "Map image export failed.";
+	}
+	else {
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename, export_mode);
+		if(  !minimap_t::check_display_mode(export_mode, conflicts)  ) {
+			// export_to_png() already showed the result together with the warning
+			return false;
+		}
+		message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
+	}
+	create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
 
 	return false;
 }

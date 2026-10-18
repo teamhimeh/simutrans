@@ -569,6 +569,7 @@ protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
 	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	koord3d pos_prev; //used in enter_tile()
 
@@ -818,6 +819,8 @@ protected:
 
 	bool check_next_tile(const grund_t *bd, const bool) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE {return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -882,6 +885,8 @@ protected:
 
 	bool check_next_tile(const grund_t *bd, const bool) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE {return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -909,6 +914,9 @@ public:
 
 	// return valid direction
 	ribi_t::ribi get_ribi(const grund_t* ) const OVERRIDE;
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE;
+	// valid direction on way w (may be NULL) for the current flight state
+	ribi_t::ribi get_ribi_of_way(const weg_t *w) const;
 
 	// how expensive to go here (for way search)
 	int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const OVERRIDE;

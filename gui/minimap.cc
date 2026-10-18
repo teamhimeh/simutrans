@@ -16,6 +16,7 @@
 #include "../simcity.h"
 #include "fabrik_info.h"
 #include "simwin.h"
+#include "messagebox.h"
 #include "minimap.h"
 
 #include "../display/simgraph.h"
@@ -36,11 +37,13 @@
 #include "../dataobj/powernet.h"
 #include "../dataobj/ribi.h"
 #include "../dataobj/loadsave.h"
+#include "../dataobj/environment.h"
 
 #include "../boden/wege/schiene.h"
 #include "../obj/leitung2.h"
 #include "../obj/label.h"
 #include "../utils/cbuffer_t.h"
+#include "../utils/simstring.h"
 #include "../display/scr_coord.h"
 #include "../display/simgraph.h"
 #include "../display/viewport.h"
@@ -1123,7 +1126,176 @@ void minimap_t::calc_map_size()
 }
 
 
+static const struct {
+	const char *name;
+	minimap_t::MAP_DISPLAY_MODE mode;
+} display_mode_names[] = {
+	{ "PLAIN",            minimap_t::PLAIN },
+	{ "MAP_TOWN",         minimap_t::MAP_TOWN },
+	{ "MAP_PASSENGER",    minimap_t::MAP_PASSENGER },
+	{ "MAP_MAIL",         minimap_t::MAP_MAIL },
+	{ "MAP_FREIGHT",      minimap_t::MAP_FREIGHT },
+	{ "MAP_STATUS",       minimap_t::MAP_STATUS },
+	{ "MAP_SERVICE",      minimap_t::MAP_SERVICE },
+	{ "MAP_TRAFFIC",      minimap_t::MAP_TRAFFIC },
+	{ "MAP_ORIGIN",       minimap_t::MAP_ORIGIN },
+	{ "MAP_TRANSFER",     minimap_t::MAP_TRANSFER },
+	{ "MAP_WAITING",      minimap_t::MAP_WAITING },
+	{ "MAP_TRACKS",       minimap_t::MAP_TRACKS },
+	{ "MAX_SPEEDLIMIT",   minimap_t::MAX_SPEEDLIMIT },
+	{ "MAP_SPEEDLIMIT",   minimap_t::MAX_SPEEDLIMIT },
+	{ "MAP_POWERLINES",   minimap_t::MAP_POWERLINES },
+	{ "MAP_TOURIST",      minimap_t::MAP_TOURIST },
+	{ "MAP_FACTORIES",    minimap_t::MAP_FACTORIES },
+	{ "MAP_DEPOT",        minimap_t::MAP_DEPOT },
+	{ "MAP_FOREST",       minimap_t::MAP_FOREST },
+	{ "MAP_CITYLIMIT",    minimap_t::MAP_CITYLIMIT },
+	{ "MAP_PAX_DEST",     minimap_t::MAP_PAX_DEST },
+	{ "MAP_OWNER",        minimap_t::MAP_OWNER },
+	{ "MAP_LINES",        minimap_t::MAP_LINES },
+	{ "MAP_LEVEL",        minimap_t::MAP_LEVEL },
+	{ "MAP_WAITCHANGE",   minimap_t::MAP_WAITCHANGE },
+	{ "MAP_HIDE_CONTOUR", minimap_t::MAP_HIDE_CONTOUR },
+	{ "MAP_CLIMATES",     minimap_t::MAP_CLIMATES },
+	{ "MAP_CITIZENS",     minimap_t::MAP_CITIZENS },
+	{ "MAP_CITY_GROWTH",  minimap_t::MAP_CITY_GROWTH },
+	{ "MAP_LABELS",       minimap_t::MAP_LABELS }
+};
+
+
+bool minimap_t::parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out)
+{
+	const uint32 all_modes = (MAP_LABELS << 1) - 1;
+	uint32 result = 0;
+	bool any = false;
+
+	while(  str  &&  *str  ) {
+		const size_t len = strcspn(str, "|+, \t\r\n");
+		if(  len == 0  ) {
+			str++;
+			continue;
+		}
+		std::string token(str, len);
+		str += len;
+
+		if(  token[0]>='0'  &&  token[0]<='9'  ) {
+			char *end = NULL;
+			const unsigned long val = strtoul(token.c_str(), &end, 0);
+			if(  *end != 0  ||  (val & ~(unsigned long)all_modes) != 0  ) {
+				return false;
+			}
+			result |= (uint32)val;
+		}
+		else if(  STRICMP(token.c_str(), "default") == 0  ) {
+			result |= env_t::default_mapmode;
+		}
+		else {
+			bool found = false;
+			for(  size_t i = 0;  i < lengthof(display_mode_names);  i++  ) {
+				const char *name = display_mode_names[i].name;
+				if(  STRICMP(token.c_str(), name) == 0  ||  (STRNICMP(name, "MAP_", 4) == 0  &&  STRICMP(token.c_str(), name+4) == 0)  ) {
+					result |= display_mode_names[i].mode;
+					found = true;
+					break;
+				}
+			}
+			if(  !found  ) {
+				return false;
+			}
+		}
+		any = true;
+	}
+
+	mode_out = (MAP_DISPLAY_MODE)(any ? result : env_t::default_mapmode);
+	return true;
+}
+
+
+// names of all set bits, joined by '|'
+static std::string display_mode_to_string(uint32 bits)
+{
+	std::string str;
+	for(  size_t i = 0;  i < lengthof(display_mode_names);  i++  ) {
+		if(  display_mode_names[i].mode != minimap_t::PLAIN  &&  (bits & display_mode_names[i].mode)  ) {
+			if(  !str.empty()  ) {
+				str += "|";
+			}
+			str += display_mode_names[i].name;
+			bits &= ~display_mode_names[i].mode; // skip aliases
+		}
+	}
+	return str;
+}
+
+
+bool minimap_t::check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &conflicts)
+{
+	const uint32 terrain_flags = MAP_HIDE_CONTOUR | MAP_CLIMATES;
+	const uint32 base = mode_to_check & ~(MAP_MODE_FLAGS | terrain_flags);
+	const uint32 terrain = mode_to_check & terrain_flags;
+	const uint32 halt = mode_to_check & MAP_MODE_HALT_FLAGS;
+	const uint32 city = mode_to_check & MAP_MODE_CITY_FLAGS;
+
+	conflicts.clear();
+	// calc_map_pixel() only handles a single base mode without terrain flags
+	if(  base & (base - 1)  ) {
+		conflicts += "exclusive map modes " + display_mode_to_string(base) + ": none of them is drawn";
+	}
+	else if(  base  &&  terrain  ) {
+		conflicts += "exclusive map modes " + display_mode_to_string(base) + " and " + display_mode_to_string(terrain) + ": " + display_mode_to_string(base) + " is not drawn";
+	}
+	if(  terrain == terrain_flags  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "\n";
+		}
+		conflicts += "exclusive map modes " + display_mode_to_string(terrain) + ": only MAP_HIDE_CONTOUR is used";
+	}
+	if(  halt & (halt - 1)  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "\n";
+		}
+		conflicts += "exclusive halt map modes " + display_mode_to_string(halt) + ": only one of them is drawn";
+	}
+	if(  city & (city - 1)  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "\n";
+		}
+		conflicts += "exclusive city map modes " + display_mode_to_string(city) + ": the circles overlap";
+	}
+	return conflicts.empty();
+}
+
+
 bool minimap_t::export_to_png(std::string &filename)
+{
+	return export_to_png(filename, (MAP_DISPLAY_MODE)env_t::default_mapmode);
+}
+
+
+bool minimap_t::export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
+{
+	std::string conflicts;
+	const bool has_conflicts = !check_display_mode(export_mode, conflicts);
+	if(  has_conflicts  ) {
+		dbg->warning("minimap_t::export_to_png()", "you set exclusive map options (0x%x): %s", (uint32)export_mode, conflicts.c_str());
+	}
+
+	const bool ok = render_to_png(filename, export_mode);
+
+	if(  has_conflicts  ) {
+		// also tell the user, since scripts and MCP clients have no window of their own
+		std::string text = translator::translate(ok ? "Map image exported to the screenshot folder." : "Map image export failed.");
+		text += "\n\n";
+		text += translator::translate("You set exclusive map options:");
+		text += "\n";
+		text += conflicts;
+		create_win(new news_img(text.c_str()), w_time_delete, magic_none);
+	}
+	return ok;
+}
+
+
+bool minimap_t::render_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
 {
 	filename.clear();
 	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
@@ -1156,6 +1328,14 @@ bool minimap_t::export_to_png(std::string &filename)
 	const scr_coord saved_new_off = new_off;
 	const scr_size saved_new_size = new_size;
 	const clip_dimension saved_clip = display_get_clip_wh();
+	// calc_map() marks the map as visible; without an open map window it must
+	// become invisible again, or vehicles keep updating the (hidden) map pixels
+	const bool was_visible = is_visible;
+	const MAP_DISPLAY_MODE saved_mode = mode;
+	mode = export_mode;
+	// map_data may be stale (it is not updated while the map is hidden),
+	// so force a full recalculation for the first tile
+	cur_size = scr_size(-1, -1);
 	bool ok = true;
 
 	for (scr_coord_val y = 0; ok && y < export_size.h; y += strip_height) {
@@ -1171,9 +1351,16 @@ bool minimap_t::export_to_png(std::string &filename)
 		ok = ok && writer.write_rows(strip, (uint32)tile_height);
 	}
 
+	mode = saved_mode;
 	new_off = saved_new_off;
 	new_size = saved_new_size;
 	needs_redraw = true;
+	is_visible = was_visible;
+	if(  !was_visible  ) {
+		// the map window will recalculate everything when opened
+		delete map_data;
+		map_data = NULL;
+	}
 	display_set_clip_wh(saved_clip.x, saved_clip.y, saved_clip.w, saved_clip.h);
 	mark_screen_dirty();
 
@@ -1245,6 +1432,8 @@ minimap_t::minimap_t()
 	cur_size = new_size = scr_size(0,0);
 	needs_redraw = true;
 	transport_type_showed_on_map = simline_t::line;
+	player_showed_on_map = -1;
+	freight_type_group_index_showed_on_map = NULL;
 }
 
 

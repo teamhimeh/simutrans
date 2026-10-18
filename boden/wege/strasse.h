@@ -124,6 +124,8 @@ public:
 	// used in wegbauer. param @allow is ribi in which vehicles can go. without this, ribi cannot be updated correctly at intersections.
 	void update_ribi_mask_oneway(ribi_t::ribi mask, ribi_t::ribi allow);
 	ribi_t::ribi get_ribi_mask_oneway() const { return (ribi_t::ribi)ribi_mask_oneway; }
+	// ribi_mask_oneway when it is in effect (oneway_mode or halt_mode), ribi_t::none otherwise
+	ribi_t::ribi get_active_ribi_mask_oneway() const { return overtaking_mode<=oneway_mode ? get_ribi_mask_oneway() : (ribi_t::ribi)ribi_t::none; }
 	virtual ribi_t::ribi get_ribi() const OVERRIDE;
 
 	virtual void rotate90() OVERRIDE;
