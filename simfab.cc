@@ -4,6 +4,7 @@
  */
 
 #include <math.h>
+#include <algorithm>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +68,11 @@ karte_ptr_t fabrik_t::welt;
 /**
  * Convert internal values to displayed values
  */
-sint64 convert_goods(sint64 value) { return ((value + FAB_DISPLAY_UNIT_HALF) >> (fabrik_t::precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS) ); }
+sint64 convert_goods(sint64 value)
+{
+	const int bits = fabrik_t::precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS;
+	return (value >> bits) + (((value & (((sint64)1 << bits) - 1)) + FAB_DISPLAY_UNIT_HALF) >> bits);
+}
 sint64 convert_power(sint64 value) { return ( value >> POWER_TO_MW ); }
 sint64 convert_boost(sint64 value) { return ( (value * 100 + (DEFAULT_PRODUCTION_FACTOR>>1)) >> DEFAULT_PRODUCTION_FACTOR_BITS ); }
 
@@ -98,7 +103,7 @@ public:
  */
 sint32 work_scale_production(sint64 prod, sint64 work){
 	// compute scaled production, rounding up
-	return ((prod * work) + (1 << WORK_BITS) - 1) >> WORK_BITS;
+	return (sint32)saturated_mul_div(prod, work, (uint64)1 << WORK_BITS, std::numeric_limits<sint32>::max(), true);
 }
 
 /**
@@ -106,7 +111,7 @@ sint32 work_scale_production(sint64 prod, sint64 work){
  */
 sint32 work_from_production(sint64 prod, sint64 scaled){
 	// compute work, rounding up
-	return prod ? ((scaled << WORK_BITS) + prod - 1) / prod : 0;
+	return prod ? (sint32)saturated_mul_div(scaled, (uint64)1 << WORK_BITS, prod, std::numeric_limits<sint32>::max(), true) : 0;
 }
 
 void ware_production_t::init_stats()
@@ -208,7 +213,7 @@ void ware_production_t::rdwr(loadsave_t *file)
 void ware_production_t::book_weighted_sum_storage(uint32 factor, sint64 delta_time)
 {
 	const sint64 amount = (sint64)menge * (sint64)factor;
-	weighted_sum_storage += amount * delta_time;
+	weighted_sum_storage = saturated_add(weighted_sum_storage, (sint64)saturated_mul_div(amount, delta_time, 1, std::numeric_limits<sint64>::max()));
 	set_stat( amount, FAB_GOODS_STORAGE );
 }
 
@@ -412,15 +417,12 @@ void fabrik_t::update_scaled_electric_demand()
 {
 	if(  desc->get_electric_demand()==65535  ) {
 		// demand not specified in pak, use old fixed demands
-		scaled_electric_demand = prodbase * PRODUCTION_DELTA_T;
-		if(  desc->is_electricity_producer()  ) {
-			scaled_electric_demand *= 4;
-		}
+		scaled_electric_demand = saturate<uint32>((uint64)prodbase * PRODUCTION_DELTA_T * (desc->is_electricity_producer() ? 4 : 1));
 		return;
 	}
 
 	const sint64 prod = desc->get_productivity();
-	scaled_electric_demand = (uint32)( (( (sint64)(desc->get_electric_demand()) * (sint64)prodbase + (prod >> 1) ) / prod) << POWER_TO_MW );
+	scaled_electric_demand = saturate<uint32>( (( (sint64)(desc->get_electric_demand()) * (sint64)prodbase + (prod >> 1) ) / prod) << POWER_TO_MW );
 
 	if(  scaled_electric_demand == 0  ) {
 		prodfactor_electric = 0;
@@ -434,14 +436,14 @@ void fabrik_t::update_scaled_pax_demand()
 	const sint64 prod = desc->get_productivity();
 	const sint64 desc_pax_demand = ( desc->get_pax_demand()==65535 ? desc->get_pax_level() : desc->get_pax_demand() );
 	// formula : desc_pax_demand * (current_production_base / desc_production_base); (prod >> 1) is for rounding
-	const uint32 pax_demand = (uint32)( ( desc_pax_demand * (sint64)prodbase + (prod >> 1) ) / prod );
+	const sint64 pax_demand = ( ( desc_pax_demand * (sint64)prodbase + (prod >> 1) ) / prod );
 	// then, scaling based on month length
-	scaled_pax_demand = min( (uint32)welt->scale_with_month_length(pax_demand), 932067 );
+	scaled_pax_demand = saturate<uint32>(saturated_mul_div(pax_demand, ((uint64)1 << welt->ticks_per_world_month_shift), (uint64)1 << 18, 932067));
 	if(  scaled_pax_demand == 0  &&  desc_pax_demand > 0  ) {
 		scaled_pax_demand = 1; // since desc pax demand > 0 -> ensure no less than 1
 	}
 	// pax demand for fixed period length
-	arrival_stats_pax.set_scaled_demand( pax_demand );
+	arrival_stats_pax.set_scaled_demand( saturate<uint32>(pax_demand) );
 }
 
 
@@ -451,14 +453,14 @@ void fabrik_t::update_scaled_mail_demand()
 	const sint64 prod = desc->get_productivity();
 	const sint64 desc_mail_demand = ( desc->get_mail_demand()==65535 ? (desc->get_pax_level()>>2) : desc->get_mail_demand() );
 	// formula : desc_mail_demand * (current_production_base / desc_production_base); (prod >> 1) is for rounding
-	const uint32 mail_demand = (uint32)( ( desc_mail_demand * (sint64)prodbase + (prod >> 1) ) / prod );
+	const sint64 mail_demand = ( ( desc_mail_demand * (sint64)prodbase + (prod >> 1) ) / prod );
 	// then, scaling based on month length
-	scaled_mail_demand = min( (uint32)welt->scale_with_month_length(mail_demand), 932067);
+	scaled_mail_demand = saturate<uint32>(saturated_mul_div(mail_demand, ((uint64)1 << welt->ticks_per_world_month_shift), (uint64)1 << 18, 932067));
 	if(  scaled_mail_demand == 0  &&  desc_mail_demand > 0  ) {
 		scaled_mail_demand = 1; // since desc mail demand > 0 -> ensure no less than 1
 	}
 	// mail demand for fixed period length
-	arrival_stats_mail.set_scaled_demand( mail_demand );
+	arrival_stats_mail.set_scaled_demand( saturate<uint32>(mail_demand) );
 }
 
 
@@ -467,11 +469,11 @@ void fabrik_t::update_prodfactor_pax()
 	// calculate pax boost based on arrival data and demand of the fixed-length period
 	const uint32 periods = welt->get_settings().get_factory_arrival_periods();
 	const uint32 slots = arrival_stats_pax.get_active_slots();
-	const uint32 pax_demand = ( periods==1 || slots*periods<=(uint32)SLOT_COUNT ?
+	const uint32 pax_demand = saturate<uint32>( ( periods==1 || slots*periods<=(uint32)SLOT_COUNT ?
 									arrival_stats_pax.get_scaled_demand() :
 									( slots==(uint32)SLOT_COUNT ?
-										arrival_stats_pax.get_scaled_demand() * periods :
-										(arrival_stats_pax.get_scaled_demand() * periods * slots) >> SLOT_BITS ) );
+										(uint64)arrival_stats_pax.get_scaled_demand() * periods :
+										((uint64)arrival_stats_pax.get_scaled_demand() * periods * slots) >> SLOT_BITS ) ) );
 	const uint32 pax_arrived = arrival_stats_pax.get_aggregate_arrival();
 	if(  pax_demand==0  ||  pax_arrived==0  ||  desc->get_pax_boost()==0  ) {
 		prodfactor_pax = 0;
@@ -493,11 +495,11 @@ void fabrik_t::update_prodfactor_mail()
 	// calculate mail boost based on arrival data and demand of the fixed-length period
 	const uint32 periods = welt->get_settings().get_factory_arrival_periods();
 	const uint32 slots = arrival_stats_mail.get_active_slots();
-	const uint32 mail_demand = ( periods==1 || slots*periods<=(uint32)SLOT_COUNT ?
+	const uint32 mail_demand = saturate<uint32>( ( periods==1 || slots*periods<=(uint32)SLOT_COUNT ?
 									arrival_stats_mail.get_scaled_demand() :
 									( slots==(uint32)SLOT_COUNT ?
-										arrival_stats_mail.get_scaled_demand() * periods :
-										(arrival_stats_mail.get_scaled_demand() * periods * slots) >> SLOT_BITS ) );
+										(uint64)arrival_stats_mail.get_scaled_demand() * periods :
+										((uint64)arrival_stats_mail.get_scaled_demand() * periods * slots) >> SLOT_BITS ) ) );
 	const uint32 mail_arrived = arrival_stats_mail.get_aggregate_arrival();
 	if(  mail_demand==0  ||  mail_arrived==0  ||  desc->get_mail_boost()==0  ) {
 		prodfactor_mail = 0;
@@ -562,11 +564,11 @@ void fabrik_t::recalc_storage_capacities()
 		if(  ware_types>0  ) {
 			// calculate total storage capacity contributed by fields
 			const field_group_desc_t *const field_group = desc->get_field_group();
-			sint32 field_capacities = 0;
+			uint64 field_capacities = 0;
 			FOR(vector_tpl<field_data_t>, const& f, fields) {
 				field_capacities += field_group->get_field_class(f.field_class_index)->get_storage_capacity();
 			}
-			const sint32 share = (sint32)( ( (sint64)field_capacities << precision_bits ) / (sint64)ware_types );
+			const uint64 share = (field_capacities << precision_bits) / ware_types;
 			// first, for input goods
 			FOR(array_tpl<ware_production_t>, & g, input) {
 				for(  int b=0;  b<desc->get_supplier_count();  ++b  ) {
@@ -574,7 +576,7 @@ void fabrik_t::recalc_storage_capacities()
 					if (g.get_typ() == input->get_input_type()) {
 						// Inputs are now normalized to factory production.
 						uint32 prod_factor = input->get_consumption();
-						g.max = (sint32)((((sint64)((input->get_capacity() << precision_bits) + share) << DEFAULT_PRODUCTION_FACTOR_BITS) + (sint64)(prod_factor - 1)) / (sint64)prod_factor);
+						g.max = (sint32)saturated_mul_div(((uint64)input->get_capacity() << precision_bits) + share, DEFAULT_PRODUCTION_FACTOR, prod_factor, std::numeric_limits<sint32>::max(), true);
 					}
 				}
 			}
@@ -585,7 +587,7 @@ void fabrik_t::recalc_storage_capacities()
 					if (g.get_typ() == output->get_output_type()) {
 						// Outputs are now normalized to factory production.
 						uint32 prod_factor = output->get_factor();
-						g.max = (sint32)((((sint64)((output->get_capacity() << precision_bits) + share) << DEFAULT_PRODUCTION_FACTOR_BITS) + (sint64)(prod_factor - 1)) / (sint64)prod_factor);
+						g.max = (sint32)saturated_mul_div(((uint64)output->get_capacity() << precision_bits) + share, DEFAULT_PRODUCTION_FACTOR, prod_factor, std::numeric_limits<sint32>::max(), true);
 					}
 				}
 			}
@@ -600,7 +602,7 @@ void fabrik_t::recalc_storage_capacities()
 				if (g.get_typ() == input->get_input_type()) {
 					// Inputs are now normalized to factory production.
 					uint32 prod_factor = input->get_consumption();
-					g.max = (sint32)(((((sint64)input->get_capacity() * (sint64)prodbase) << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + (sint64)(prod_factor - 1)) / ((sint64)desc->get_productivity() * (sint64)prod_factor));
+					g.max = saturate<sint32>(saturated_mul_div((uint64)input->get_capacity() * prodbase, (uint64)1 << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS), prod_factor, (uint64)std::numeric_limits<sint32>::max() * desc->get_productivity(), true) / max(1, desc->get_productivity()));
 				}
 			}
 		}
@@ -611,7 +613,7 @@ void fabrik_t::recalc_storage_capacities()
 				if (g.get_typ() == output->get_output_type()) {
 					// Outputs are now normalized to factory production.
 					uint32 prod_factor = output->get_factor();
-					g.max = (sint32)(((((sint64)output->get_capacity() * (sint64)prodbase) << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + (sint64)(prod_factor - 1)) / ((sint64)desc->get_productivity() * (sint64)prod_factor));
+					g.max = saturate<sint32>(saturated_mul_div((uint64)output->get_capacity() * prodbase, (uint64)1 << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS), prod_factor, (uint64)std::numeric_limits<sint32>::max() * desc->get_productivity(), true) / max(1, desc->get_productivity()));
 				}
 			}
 		}
@@ -680,6 +682,16 @@ void fabrik_t::clear_target_cities()
 		c->access_target_factories_for_mail().remove_factory(this);
 	}
 	target_cities.clear();
+}
+
+
+bool fabrik_t::can_auto_expand() const
+{
+	if (const field_group_desc_t *fields = desc->get_field_group()) {
+		return fields->get_probability() > 0 && fields->get_max_fields() > 0;
+	}
+	return desc->get_expand_probability() > 0 && desc->get_expand_times() > 0 &&
+		(desc->get_expand_minimum() > 0 || desc->get_expand_range() > 1);
 }
 
 
@@ -944,20 +956,22 @@ void fabrik_t::build(sint32 rotate, bool build_fields, bool force_initial_prodba
 			// we will start with a minimum number and try to get closer to start_fields
 			const uint16 spawn_fields = desc->get_field_group()->get_min_fields() + simrand( desc->get_field_group()->get_start_fields()-desc->get_field_group()->get_min_fields() );
 			while(  fields.get_count() < spawn_fields  &&  add_random_field(10000u)  ) {
-				if (fields.get_count() > desc->get_field_group()->get_min_fields()  &&  prodbase >= 2*org_prodbase) {
+				if (fields.get_count() > desc->get_field_group()->get_min_fields()  &&  (sint64)prodbase >= 2 * (sint64)org_prodbase) {
 					// too much productivity, no more fields needed
 					break;
 				}
 			}
-			sint32 field_prod = prodbase - org_prodbase;
 			// adjust prodbase
 			if (force_initial_prodbase) {
-				set_base_production( max(field_prod, org_prodbase) );
+				set_base_production(max(org_prodbase, get_min_base_production()));
 			}
 		}
 	}
 	else {
 		fields.clear();
+	}
+	if (force_initial_prodbase && prodbase < get_min_base_production()) {
+		set_base_production(get_min_base_production());
 	}
 
 	/// Determine control logic
@@ -1093,7 +1107,7 @@ bool fabrik_t::add_random_field(uint16 probability)
 		welt->access(k)->boden_ersetzen(gr, gr2);
 		gr2->obj_add( new field_t(gr2->get_pos(), owner, field_class, this ) );
 		// adjust production base and storage capacities
-		set_base_production( prodbase + field_class->get_field_production() );
+		set_base_production( saturate<sint32>((uint64)prodbase + field_class->get_field_production()) );
 		if(lt) {
 			gr2->obj_add( lt );
 		}
@@ -1112,7 +1126,7 @@ void fabrik_t::remove_field_at(koord pos)
 	const field_class_desc_t *const field_class = desc->get_field_group()->get_field_class( field.field_class_index );
 	fields.remove(field);
 	// revert the field's effect on production base and storage capacities
-	set_base_production( prodbase - field_class->get_field_production() );
+	set_base_production( max(1, prodbase - (sint32)field_class->get_field_production()) );
 }
 
 
@@ -1277,7 +1291,7 @@ DBG_DEBUG("fabrik_t::rdwr()","loading factory '%s'",s);
 				}
 
 				// repair files that have 'insane' values
-				const sint32 max = (sint32)((((sint64)FAB_MAX_INPUT << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + (sint64)(prod_factor - 1)) / (sint64)prod_factor);
+				const sint32 max = saturate<sint32>((((uint64)FAB_MAX_INPUT << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + prod_factor - 1) / prod_factor);
 				if(  ware.menge < 0  ) {
 					ware.menge = 0;
 				}
@@ -1446,7 +1460,7 @@ DBG_DEBUG("fabrik_t::rdwr()","loading factory '%s'",s);
 			koord k = desc ? desc->get_building()->get_size() : koord(1,1);
 			DBG_DEBUG("fabrik_t::rdwr()","correction of production by %i",k.x*k.y);
 			// since we step from 86.01 per factory, not per tile!
-			prodbase *= k.x*k.y*2;
+			prodbase = saturate<sint32>((uint64)prodbase * k.x * k.y * 2);
 		}
 		// restore factory owner
 		// Due to a omission in Volkers changes, there might be savegames
@@ -1594,6 +1608,12 @@ DBG_DEBUG("fabrik_t::rdwr()","loading factory '%s'",s);
 	} else {
 		shipment_size = SHIPMENT_MAX_SIZE;
 	}
+	if (file->get_OTRP_version() >= 63) {
+		file->rdwr_bool(no_expand_factory);
+	}
+	else if (file->is_loading()) {
+		no_expand_factory = false;
+	}
 
 	// save name
 	if(  file->is_version_atleast(110, 7)  ) {
@@ -1643,14 +1663,7 @@ uint32 fabrik_t::scale_output_production(const uint32 product, uint32 menge) con
 	const uint32 actu = output[product].menge;
 	if(  actu<maxi  ) {
 		if(  actu >= (uint32)(2 * output[product].min_shipment) ) {
-			if(  menge>(0x7FFFFFFFu/maxi)  ) {
-				// avoid overflow
-				menge = (((maxi-actu)>>5)*(menge>>5))/(maxi>>10);
-			}
-			else {
-				// and that is the simple formula
-				menge = (menge*(maxi-actu)) / maxi;
-			}
+			menge = (uint32)((uint64)menge * (maxi - actu) / maxi);
 		}
 	}
 	else {
@@ -1801,23 +1814,24 @@ sint32 fabrik_t::liefere_an(const goods_desc_t *typ, sint32 menge)
 
 				// Resolve how much normalized production arrived, rounding up (since we rounded up when we removed it).
 				const uint32 prod_factor = desc->get_supplier(in)->get_consumption();
-				const sint32 prod_delta = (sint32)((((sint64)menge << (DEFAULT_PRODUCTION_FACTOR_BITS + precision_bits)) + (sint64)(prod_factor - 1)) / (sint64)prod_factor);
+				const sint32 prod_delta = saturate<sint32>((((uint64)menge << (DEFAULT_PRODUCTION_FACTOR_BITS + precision_bits)) + prod_factor - 1) / prod_factor);
 
 				// Activate inactive inputs.
 				if( ware.menge <= 0 ) {
 					inactive_inputs --;
 				}
-				ware.menge+= prod_delta;
+				const sint64 received = (sint64)ware.menge + prod_delta;
+				ware.menge = saturate<sint32>(received);
 
 				if( welt->get_settings().get_just_in_time() >= 2 ){
 					// In JIT2 it is illegal to exceed input storage limit. All production that does so is discarded.
-					if( ware.menge > ware.max ){
-						const sint32 prod_comp = ware.menge - ware.max;
+					if( received > ware.max ){
+						const sint64 prod_comp = received - ware.max;
 						ware.menge = ware.max;
 
 						// Apply demand penalty. Reactivate inactive demands.
 						sint32 demand_old = ware.demand_buffer;
-						ware.demand_buffer-= prod_comp;
+						ware.demand_buffer = (sint32)clamp((sint64)ware.demand_buffer - prod_comp, (sint64)std::numeric_limits<sint32>::min(), (sint64)std::numeric_limits<sint32>::max());
 						if( demand_old >= ware.max && ware.demand_buffer < ware.max ) inactive_demands-= 1;
 
 						// Resolve how many goods we actually used (rounding to nearest)
@@ -1826,9 +1840,10 @@ sint32 fabrik_t::liefere_an(const goods_desc_t *typ, sint32 menge)
 				}
 				else{
 					// avoid overflow
-					const sint32 max = (sint32)((((sint64)FAB_MAX_INPUT << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + (sint64)(prod_factor - 1)) / (sint64)prod_factor);
-					if( ware.menge >= max ) {
-						menge -= (sint32)(((sint64)menge * (sint64)(ware.menge - max) + (sint64)(prod_delta >> 1)) / (sint64)prod_delta);
+					const sint32 max = saturate<sint32>((((uint64)FAB_MAX_INPUT << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + prod_factor - 1) / prod_factor);
+					if( received >= max && prod_delta > 0 ) {
+						const sint64 discarded = ((sint64)menge * (received - max) + (prod_delta >> 1)) / prod_delta;
+						menge -= (sint32)(discarded > menge ? menge : discarded);
 						ware.menge = max - 1;
 					}
 				}
@@ -1894,10 +1909,10 @@ void fabrik_t::step(uint32 delta_t)
 	sint32 prod;
 
 	// Actual production effort done.
-	sint32 work = 0;
+	sint64 work = 0;
 
 	// Desired production effort of factory.
-	sint32 want = 0;
+	sint64 want = 0;
 
 	/// Boost logic.
 
@@ -1948,9 +1963,12 @@ void fabrik_t::step(uint32 delta_t)
 	{
 		// Calculate actual production. A remainder is used for extra precision.
 		const uint32 remainder_bits = (PRODUCTION_DELTA_T_BITS + DEFAULT_PRODUCTION_FACTOR_BITS + DEFAULT_PRODUCTION_FACTOR_BITS - fabrik_t::precision_bits);
-		const uint64 want_prod_long = (uint64)prodbase * (uint64)boost * (uint64)delta_t + (uint64)menge_remainder;
-		prod = (uint32)(want_prod_long >> remainder_bits);
-		menge_remainder = (uint32)(want_prod_long & ((1 << remainder_bits) - 1 ));
+		const uint64 divisor = (uint64)1 << remainder_bits;
+		const uint64 mask = divisor - 1;
+		const uint64 base_boost = (uint64)prodbase * boost;
+		const uint64 remainder = ((base_boost & mask) * (delta_t & mask) & mask) + menge_remainder;
+		prod = saturate<sint32>(saturated_mul_div(base_boost, delta_t, divisor, std::numeric_limits<sint32>::max()) + (remainder >> remainder_bits));
+		menge_remainder = (uint32)(remainder & mask);
 	}
 
 	/// Perform the control logic.
@@ -1962,15 +1980,13 @@ void fabrik_t::step(uint32 delta_t)
 		// The amount of production available.
 		sint32 prod_comp;
 		// The amount of consumption available.
-		sint32 cons_comp = 0;
+		sint64 cons_comp = 0;
 
 		switch(  control_type  ) {
 			case CL_PROD_CLASSIC: {
 				// Classic producer logic.
 				currently_requiring_power = false;
 				currently_producing = false;
-				uint32 power = 0;
-
 				// produces something
 				for(  uint32 product = 0;  product < output.get_count();  product++  ) {
 					// source producer
@@ -1990,11 +2006,11 @@ void fabrik_t::step(uint32 delta_t)
 						// produce
 						if(  output[product].menge < output[product].max  ) {
 							// to find out, if storage changed
-							delta_menge += p;
-							output[product].menge += p;
+							delta_menge = saturate<uint32>((uint64)delta_menge + p);
+							output[product].menge = saturate<sint32>((uint64)output[product].menge + p);
 							output[product].book_stat((sint64)p * (sint64)desc->get_product(product)->get_factor(), FAB_GOODS_PRODUCED);
 							// if less than 3/4 filled we neary always consume power
-							currently_requiring_power |= (output[product].menge*4 < output[product].max*3);
+							currently_requiring_power |= ((sint64)output[product].menge*4 < (sint64)output[product].max*3);
 							currently_producing = true;
 						}
 						else {
@@ -2005,8 +2021,8 @@ void fabrik_t::step(uint32 delta_t)
 				}
 				if(  desc->is_electricity_producer()  ) {
 					// compute power production
-					uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
-					set_power_supply((uint32)pp);
+					uint64 pp = saturated_mul_div((uint64)scaled_electric_demand * boost, work, (uint64)1 << (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS), std::numeric_limits<uint32>::max());
+					set_power_supply(saturate<uint32>(pp));
 				}
 
 				break;
@@ -2040,7 +2056,7 @@ void fabrik_t::step(uint32 delta_t)
 
 					currently_requiring_power = (prod_delta>0);
 
-					delta_menge += prod_delta;
+					delta_menge = saturate<uint32>((uint64)delta_menge + prod_delta);
 					output[product].menge += prod_delta;
 					output[product].book_stat((sint64)prod_delta * (sint64)desc->get_product(product)->get_factor(), FAB_GOODS_PRODUCED);
 
@@ -2052,8 +2068,8 @@ void fabrik_t::step(uint32 delta_t)
 				work /= output.get_count();
 				if(  desc->is_electricity_producer()  ) {
 					// compute power production
-					uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
-					set_power_supply((uint32)pp);
+					uint64 pp = saturated_mul_div((uint64)scaled_electric_demand * boost, work, (uint64)1 << (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS), std::numeric_limits<uint32>::max());
+					set_power_supply(saturate<uint32>(pp));
 				}
 
 				break;
@@ -2094,11 +2110,11 @@ void fabrik_t::step(uint32 delta_t)
 							// produce
 							if(  output[product].menge < output[product].max  ) {
 								// to find out, if storage changed
-								delta_menge += p;
-								output[product].menge += p;
+								delta_menge = saturate<uint32>((uint64)delta_menge + p);
+								output[product].menge = saturate<sint32>((uint64)output[product].menge + p);
 								output[product].book_stat((sint64)p * (sint64)desc->get_product(product)->get_factor(), FAB_GOODS_PRODUCED);
 								// if less than 3/4 filled we neary always consume power
-								currently_requiring_power |= (output[product].menge*4 < output[product].max*3);
+								currently_requiring_power |= ((sint64)output[product].menge*4 < (sint64)output[product].max*3);
 								currently_producing = true;
 							}
 							else {
@@ -2126,8 +2142,8 @@ void fabrik_t::step(uint32 delta_t)
 					work = work_from_production(prod, consumed_menge);
 					if(  desc->is_electricity_producer()  ) {
 						// compute power production
-						uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
-						set_power_supply((uint32)pp);
+						uint64 pp = saturated_mul_div((uint64)scaled_electric_demand * boost, work, (uint64)1 << (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS), std::numeric_limits<uint32>::max());
+						set_power_supply(saturate<uint32>(pp));
 					}
 				}
 
@@ -2189,7 +2205,8 @@ void fabrik_t::step(uint32 delta_t)
 						// enforce input limits on production
 						if(  prod_delta > cons_comp  ) {
 							// not enough input
-							prod_delta = cons_comp;
+							// Here 0 <= cons_comp < prod_delta <= INT32_MAX.
+							prod_delta = (sint32)cons_comp;
 							cons_comp = 0;
 						}
 						else {
@@ -2212,7 +2229,7 @@ void fabrik_t::step(uint32 delta_t)
 						currently_producing = true;
 
 						// Produce output
-						delta_menge += prod_delta;
+						delta_menge = saturate<uint32>((uint64)delta_menge + prod_delta);
 						output[product].menge += prod_delta;
 						output[product].book_stat((sint64)prod_delta * (sint64)desc->get_product(product)->get_factor(), FAB_GOODS_PRODUCED);
 					}
@@ -2243,14 +2260,14 @@ void fabrik_t::step(uint32 delta_t)
 					}
 					if(  desc->is_electricity_producer()  ) {
 						// compute power production
-						uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
-						set_power_supply((uint32)pp);
+						uint64 pp = saturated_mul_div((uint64)scaled_electric_demand * boost, work, (uint64)1 << (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS), std::numeric_limits<uint32>::max());
+						set_power_supply(saturate<uint32>(pp));
 					}
 				}
 				break;
 			}
 			case CL_CONS_CLASSIC: {
-				uint32 power = 0;
+				uint64 power = 0;
 
 				// Classic consumer logic.
 				currently_requiring_power = false;
@@ -2275,18 +2292,18 @@ void fabrik_t::step(uint32 delta_t)
 						currently_producing = true;
 						if(  desc->is_electricity_producer()  ) {
 							// power station => produce power
-							power += (uint32)( ((sint64)scaled_electric_demand * (sint64)(DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS );
+							power += (uint64)( ((sint64)scaled_electric_demand * (sint64)(DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS );
 						}
 						work += 1 << WORK_BITS;
 						// to find out, if storage changed
-						delta_menge += v;
+						delta_menge = saturate<uint32>((uint64)delta_menge + v);
 					}
 					else {
 						if(  desc->is_electricity_producer()  ) {
 							// power station => produce power
-							power += (uint32)( (((sint64)scaled_electric_demand * (sint64)(DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS) * input[index].menge / (v + 1) );
+							power += saturated_mul_div(((uint64)scaled_electric_demand * (DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS, input[index].menge, (uint64)v + 1, std::numeric_limits<uint32>::max());
 						}
-						delta_menge += input[index].menge;
+						delta_menge = saturate<uint32>((uint64)delta_menge + input[index].menge);
 						work += work_from_production(prod, input[index].menge);
 						input[index].book_stat((sint64)input[index].menge * (sint64)desc->get_supplier(index)->get_consumption(), FAB_GOODS_CONSUMED);
 						input[index].menge = 0;
@@ -2295,7 +2312,7 @@ void fabrik_t::step(uint32 delta_t)
 
 				// normalize work with respect to input number
 				work /= input.get_count();
-				set_power_supply(power);
+				set_power_supply(saturate<uint32>(power));
 
 				break;
 			}
@@ -2330,7 +2347,7 @@ void fabrik_t::step(uint32 delta_t)
 					work += prod_delta;
 
 					// consume input
-					delta_menge += prod_delta;
+					delta_menge = saturate<uint32>((uint64)delta_menge + prod_delta);
 					input[index].menge -= prod_delta;
 					input[index].book_stat((sint64)prod_delta * (sint64)desc->get_supplier(index)->get_consumption(), FAB_GOODS_CONSUMED);
 
@@ -2348,8 +2365,8 @@ void fabrik_t::step(uint32 delta_t)
 
 				if(  desc->is_electricity_producer()  ) {
 					// compute power production
-					uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
-					set_power_supply((uint32)pp);
+					uint64 pp = saturated_mul_div((uint64)scaled_electric_demand * boost, work, (uint64)1 << (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS), std::numeric_limits<uint32>::max());
+					set_power_supply(saturate<uint32>(pp));
 				}
 
 				break;
@@ -2361,11 +2378,11 @@ void fabrik_t::step(uint32 delta_t)
 				currently_requiring_power = true;
 				currently_producing = true;
 				work = 1 << WORK_BITS;
-				delta_menge += prod;
+				delta_menge = saturate<uint32>((uint64)delta_menge + prod);
 
 				// compute power production
 				uint64 pp = ((uint64)scaled_electric_demand * (uint64)boost) >> DEFAULT_PRODUCTION_FACTOR_BITS;
-				set_power_supply((uint32)pp);
+				set_power_supply(saturate<uint32>(pp));
 
 				break;
 			}
@@ -2379,7 +2396,7 @@ void fabrik_t::step(uint32 delta_t)
 				if(  desc->is_electricity_producer()  ) {
 					// currently_requiring_power = true;
 					currently_producing = true;
-					set_power_supply((uint32)( ((sint64)scaled_electric_demand * (sint64)(DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS ));
+					set_power_supply(saturate<uint32>( ((sint64)scaled_electric_demand * (sint64)(DEFAULT_PRODUCTION_FACTOR + prodfactor_pax + prodfactor_mail)) >> DEFAULT_PRODUCTION_FACTOR_BITS ));
 				}
 				break;
 			}
@@ -2405,7 +2422,7 @@ void fabrik_t::step(uint32 delta_t)
 			}
 
 			for(  uint32 index = 0;  index < input.get_count();  index++  ) {
-				input[index].demand_buffer += want;
+				input[index].demand_buffer = (sint32)clamp((sint64)input[index].demand_buffer + want, (sint64)std::numeric_limits<sint32>::min(), (sint64)std::numeric_limits<sint32>::max());
 
 				// register inactive demand buffer
 				if(  input[index].demand_buffer >= input[index].max  ) {
@@ -2427,7 +2444,7 @@ void fabrik_t::step(uint32 delta_t)
 				if(  input[index].demand_buffer >= input[index].max  ) {
 					continue;
 				}
-				input[index].demand_buffer +=  max(work_scale_production(want, input[index].calculate_demand_production_rate()), 1);
+				input[index].demand_buffer = (sint32)clamp((sint64)input[index].demand_buffer + max(work_scale_production(want, input[index].calculate_demand_production_rate()), 1), (sint64)std::numeric_limits<sint32>::min(), (sint64)std::numeric_limits<sint32>::max());
 
 				// register inactive demand buffer
 				if(  input[index].demand_buffer >= input[index].max  ) {
@@ -2463,8 +2480,8 @@ void fabrik_t::step(uint32 delta_t)
 		}
 		case BL_POWER: {
 			// compute power demand
-			uint64 pd = ((uint64)scaled_electric_demand * (uint64)boost * (uint64)work) >> (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS);
-			set_power_demand((uint32)pd);
+			uint64 pd = saturated_mul_div((uint64)scaled_electric_demand * boost, work, (uint64)1 << (DEFAULT_PRODUCTION_FACTOR_BITS + WORK_BITS), std::numeric_limits<uint32>::max());
+			set_power_demand(saturate<uint32>(pd));
 
 			break;
 		}
@@ -2521,7 +2538,7 @@ void fabrik_t::step(uint32 delta_t)
 			smoke();
 
 			// chance to expand every 256 rounds of activities, after which activity count will return to 0 (overflow behaviour)
-			if(  (++activity_count)==0  ) {
+			if(  (++activity_count)==0 && !no_expand_factory  ) {
 				if(  desc->get_field_group()  ) {
 					if(  fields.get_count()<desc->get_field_group()->get_max_fields()  ) {
 						// spawn new field with given probability
@@ -2531,7 +2548,7 @@ void fabrik_t::step(uint32 delta_t)
 				else {
 					if(  times_expanded < desc->get_expand_times()  ) {
 						if(  simrand(10000) < desc->get_expand_probability()  ) {
-							set_base_production( prodbase + desc->get_expand_minimum() + simrand( desc->get_expand_range() ) );
+							set_base_production( saturate<sint32>((uint64)prodbase + desc->get_expand_minimum() + simrand( desc->get_expand_range() )) );
 							++times_expanded;
 						}
 					}
@@ -2759,7 +2776,7 @@ void fabrik_t::verteile_waren(const uint32 product)
 		}
 
 		// Since menge might have been mutated, it must be converted back. This might introduce some error with some prod factors which is always rounded up.
-		const sint32 prod_delta = (sint32)((((sint64)menge << (DEFAULT_PRODUCTION_FACTOR_BITS + precision_bits)) + (sint64)(prod_factor - 1)) / (sint64)prod_factor);
+		const sint32 prod_delta = saturate<sint32>((((uint64)menge << (DEFAULT_PRODUCTION_FACTOR_BITS + precision_bits)) + prod_factor - 1) / prod_factor);
 
 		// If the output is inactive, reactivate it
 		if( output[product].menge == output[product].max && prod_delta > 0 ) inactive_outputs-= 1;
@@ -2888,7 +2905,7 @@ void fabrik_t::recalc_factory_status()
 	if(  warenlager==0  ) {
 		status_ein |= FL_WARE_ALLENULL;
 	}
-	total_input = (uint32)warenlager;
+	total_input = saturate<uint32>(warenlager);
 
 	// one ware missing, but producing
 	if(  status_ein & FL_WARE_FEHLT_WAS  &&  !output.empty()  &&  haltcount > 0  ) {
@@ -2919,7 +2936,7 @@ void fabrik_t::recalc_factory_status()
 		}
 	}
 	warenlager >>= fabrik_t::precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS;
-	total_output = (uint32)warenlager;
+	total_output = saturate<uint32>(warenlager);
 
 	// now calculate status bar
 	if(  input.empty()  ) {
@@ -3124,7 +3141,7 @@ void fabrik_t::info_conn(cbuffer_t& buf) const
 sint32 fabrik_t::get_min_base_production() const
 {
 	// adjust production base to be at least as large as fields productivity
-	uint32 prodbase_adjust = 1;
+	uint64 prodbase_adjust = 1;
 	const field_group_desc_t *fd = desc->get_field_group();
 	if(fd) {
 		for(uint32 i=0; i<fields.get_count(); i++) {
@@ -3135,14 +3152,94 @@ sint32 fabrik_t::get_min_base_production() const
 		}
 	}
 
-	return prodbase_adjust;
+	return saturate<sint32>(prodbase_adjust);
 }
 
 
-sint32 fabrik_t::get_min_monthly_base_production() const
+vector_tpl<fabrik_t::field_data_t> fabrik_t::get_fields_by_removal_order() const
+{
+	vector_tpl<field_data_t> ordered(fields);
+	const koord origin = get_pos().get_2d();
+	if (ordered.get_count() > 1) {
+		std::sort(ordered.begin(), ordered.end(), [origin](const field_data_t &a, const field_data_t &b) {
+			const uint32 da = koord_distance(origin, a.location);
+			const uint32 db = koord_distance(origin, b.location);
+			if (da != db) return da > db;
+			if (a.location.x != b.location.x) return a.location.x < b.location.x;
+			return a.location.y < b.location.y;
+		});
+	}
+	return ordered;
+}
+
+
+sint32 fabrik_t::get_min_editable_base_production() const
+{
+	uint64 minimum = 1;
+	if (const field_group_desc_t *fd = desc->get_field_group()) {
+		const vector_tpl<field_data_t> ordered = get_fields_by_removal_order();
+		const uint32 keep = min((uint32)fd->get_min_fields(), ordered.get_count());
+		for (uint32 i = ordered.get_count() - keep; i < ordered.get_count(); ++i) {
+			minimum += fd->get_field_class(ordered[i].field_class_index)->get_field_production();
+		}
+	}
+	return saturate<sint32>(minimum);
+}
+
+
+sint64 fabrik_t::get_min_editable_monthly_base_production() const
+{
+	const sint32 minimum = get_min_editable_base_production();
+	sint64 monthly = welt->scale_with_month_length(minimum);
+	if (welt->inverse_scale_with_month_length(monthly) < minimum) {
+		++monthly;
+	}
+	return monthly;
+}
+
+
+bool fabrik_t::set_edited_base_production(sint32 p)
+{
+	if (p < get_min_editable_base_production()) {
+		return false;
+	}
+	if (const field_group_desc_t *fd = desc->get_field_group()) {
+		const vector_tpl<field_data_t> ordered = get_fields_by_removal_order();
+		uint64 minimum = 1;
+		FOR(vector_tpl<field_data_t>, const &f, ordered) {
+			minimum += fd->get_field_class(f.field_class_index)->get_field_production();
+		}
+		uint32 remove_count = 0;
+		const uint32 keep = min((uint32)fd->get_min_fields(), ordered.get_count());
+		while (minimum > (uint64)p && remove_count < ordered.get_count() - keep) {
+			minimum -= fd->get_field_class(ordered[remove_count++].field_class_index)->get_field_production();
+		}
+		if (minimum > (uint64)p) return false;
+		// Validate every tile before changing anything.
+		for (uint32 i = 0; i < remove_count; ++i) {
+			grund_t *gr = welt->lookup_kartenboden(ordered[i].location);
+			field_t *f = gr ? gr->find<field_t>() : NULL;
+			if (!f || f->get_factory() != this) return false;
+		}
+		for (uint32 i = 0; i < remove_count; ++i) {
+			const koord k = ordered[i].location;
+			grund_t *gr = welt->lookup_kartenboden(k);
+			delete gr->find<field_t>();
+			sint8 dummy;
+			welt->access(k)->boden_ersetzen(gr, new boden_t(gr->get_pos(), welt->recalc_natural_slope(k, dummy)));
+			welt->lookup_kartenboden(k)->calc_image();
+			welt->lookup_kartenboden(k)->set_flag(grund_t::dirty);
+		}
+	}
+	set_base_production(p);
+	return true;
+}
+
+
+sint64 fabrik_t::get_min_monthly_base_production() const
 {
 	const sint32 minimum = get_min_base_production();
-	sint32 monthly = welt->scale_with_month_length(minimum);
+	sint64 monthly = welt->scale_with_month_length(minimum);
 	// Round up when a short month would otherwise convert below the minimum.
 	if (welt->inverse_scale_with_month_length(monthly) < minimum) {
 		++monthly;

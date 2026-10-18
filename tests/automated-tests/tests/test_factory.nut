@@ -390,3 +390,57 @@ function test_factory_desc()
 		ASSERT_TRUE("Aufwindkraftwerk" in list)
 	}
 }
+
+
+// Large production must not wrap storage or the monthly production API.
+function test_factory_high_production()
+{
+	local public_pl = player_x(1)
+	local production = 2147483647
+	local bits = world.get_bits_per_month()
+	local normalized = bits >= 18 ? (production >> (bits - 18)) << (bits - 18) : production
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(0, 0, 0), 1, 1, production, "Kohlegrube"), null)
+	local mine = factory_x(0, 0)
+	local output = mine.output.Kohle
+	ASSERT_EQUAL(output.get_base_production(), normalized)
+	ASSERT_EQUAL(output.get_base_consumption(), normalized)
+	ASSERT_EQUAL(output.max_storage, 2097152) // INT32_MAX / 1024, rounded for display
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
+	// Explicit zero production is raised to a base of one, as on save loading.
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(0, 0, 0), 1, 1, 0, "Kohlegrube"), null)
+	ASSERT_EQUAL(factory_x(0, 0).output.Kohle.get_base_production(), bits >= 18 ? 1 << (bits - 18) : 1 >> (18 - bits))
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+// Verify high production does not corrupt multiple product/stock slots.
+function test_factory_high_production_multi_output()
+{
+	local public_pl = player_x(1)
+	local production = 2147483647
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(0, 0, 0), 1, 1, production, "Raffinerie"), null)
+	local refinery = factory_x(0, 0)
+	ASSERT_TRUE(refinery != null)
+	ASSERT_TRUE(refinery.input.len() > 0)
+	ASSERT_EQUAL(refinery.output.len(), 3)
+	foreach (name, product in refinery.output) {
+		ASSERT_TRUE(product.get_base_production() > 0)
+		ASSERT_TRUE(product.max_storage > 0)
+	}
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+// Basic high-production field factory invariants. See the manual checklist
+// for tests requiring the production-edit UI, save/load, or elapsed game time.
+function test_factory_high_production_fields()
+{
+	local public_pl = player_x(1)
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(3, 4, 0), 1, 1, 131072, "PVkraftwerk"), null)
+	local factory = factory_x(3, 4)
+	ASSERT_TRUE(factory != null)
+	ASSERT_TRUE(factory.get_field_count() >= factory.get_min_field_count())
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(3, 4, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}

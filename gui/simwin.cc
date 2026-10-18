@@ -3,6 +3,7 @@
  * (see LICENSE.txt)
  */
 
+#include "components/gui_numberinput64.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -524,7 +525,7 @@ gui_component_t *win_get_focus()
 bool win_is_textinput()
 {
 	if(  gui_component_t *comp = win_get_focus()  ) {
-		return dynamic_cast<gui_textinput_t *>(comp) || dynamic_cast<gui_combobox_t *>(comp)  ||  dynamic_cast<gui_numberinput_t *>(comp);
+		return dynamic_cast<gui_textinput_t *>(comp) || dynamic_cast<gui_combobox_t *>(comp)  ||  dynamic_cast<gui_numberinput_t *>(comp) || dynamic_cast<gui_numberinput64_t *>(comp);
 	}
 	return false;
 }

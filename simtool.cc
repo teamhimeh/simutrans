@@ -11570,7 +11570,7 @@ bool tool_change_factory_t::init( player_t* player )
 	}
 	int header_length = 0;
 	if (sscanf( p, "%c,%hi,%hi%n", &tool, &pos2d.x, &pos2d.y, &header_length ) != 3 ||
-		(tool == 'p' && p[header_length] != ',')) {
+		((tool == 'p' || tool == 'e') && p[header_length] != ',')) {
 		return false;
 	}
 
@@ -11593,19 +11593,32 @@ bool tool_change_factory_t::init( player_t* player )
 		return false;
 	}	
 	switch (tool) {
+		case 'e': // prohibit automatic expansion
+		{
+			if (z != 0 || (strcmp(p, "0") != 0 && strcmp(p, "1") != 0) ||
+				factory->get_owner() != player || !factory->can_auto_expand()) {
+				return false;
+			}
+			factory->set_no_expand_factory(*p == '1');
+		}
+		break;
 		case 'p': // set monthly base production
 		{
 			if (z != 0 || *p < '0' || *p > '9') {
 				return false;
 			}
-			const sint64 limit = welt->scale_with_month_length(65536);
+			const sint64 limit = welt->scale_with_month_length(max(65536 * 2, factory->get_base_production()));
 			char *end;
 			errno = 0;
 			const sint64 value = strtoll(p, &end, 10);
-			if (errno == ERANGE || *end != '\0' || value > limit || value < factory->get_min_monthly_base_production()) {
+			if (errno == ERANGE || *end != '\0' || value > limit || value < factory->get_min_editable_monthly_base_production()) {
 				return false;
 			}
-			factory->set_base_production(welt->inverse_scale_with_month_length(value));
+			const sint64 base_production = welt->inverse_scale_with_month_length(value);
+			if (base_production > std::numeric_limits<sint32>::max()) {
+				return false;
+			}
+			factory->set_edited_base_production((sint32)base_production);
 		}
 		break;
 		case 'd': // avoid destroy, avoid close after retire
