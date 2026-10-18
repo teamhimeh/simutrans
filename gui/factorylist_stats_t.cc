@@ -148,7 +148,7 @@ bool factorylist_stats_t::compare(const gui_component_t *aa, const gui_component
 		{
 			int a_in = a->get_input().empty() ? -1 : (int)a->get_total_in();
 			int b_in = b->get_input().empty() ? -1 : (int)b->get_total_in();
-			cmp = a_in - b_in;
+			cmp = sgn(a_in - b_in);
 			break;
 		}
 
@@ -162,22 +162,22 @@ bool factorylist_stats_t::compare(const gui_component_t *aa, const gui_component
 
 		case factorylist::by_available:
 		{
-			int a_in = a->get_input().empty() ? -1 : (int)(a->get_total_in()+a->get_total_transit());
-			int b_in = b->get_input().empty() ? -1 : (int)(b->get_total_in()+b->get_total_transit());
-			cmp = a_in - b_in;
+			sint64 a_in = a->get_input().empty() ? -1 : (sint64)a->get_total_in()+a->get_total_transit();
+			sint64 b_in = b->get_input().empty() ? -1 : (sint64)b->get_total_in()+b->get_total_transit();
+			cmp = sgn(a_in - b_in);
 			break;
 		}
 
 		case factorylist::by_output:
 		{
-			int a_out = a->get_output().empty() ? -1 : (int)a->get_total_out();
-			int b_out = b->get_output().empty() ? -1 : (int)b->get_total_out();
-			cmp = a_out - b_out;
+			sint64 a_out = a->get_output().empty() ? -1 : (sint64)a->get_total_out();
+			sint64 b_out = b->get_output().empty() ? -1 : (sint64)b->get_total_out();
+			cmp = sgn(a_out - b_out);
 			break;
 		}
 
 		case factorylist::by_maxprod:
-			cmp = a->get_base_production()*a->get_prodfactor() - b->get_base_production()*b->get_prodfactor();
+			cmp = sgn((sint64)a->get_base_production()*a->get_prodfactor() - (sint64)b->get_base_production()*b->get_prodfactor());
 			break;
 
 		case factorylist::by_status:

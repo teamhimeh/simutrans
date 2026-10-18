@@ -331,10 +331,10 @@ bool fabrik_info_t::action_triggered( gui_action_creator_t *comp, value_t)
 	}
 	else if (comp == &bt_set_production && fab->get_owner() == welt->get_active_player())
 	{
-		const sint32 production = numinp_production.get_value();
+		const sint64 production = numinp_production.get_value();
 		if (production != welt->scale_with_month_length(fab->get_base_production())) {
 			cbuffer_t buf;
-			buf.printf("%d", production);
+			buf.printf("%lld", production);
 			fab->call_factory_tool('p', buf);
 			old_base_production = -1; // refresh the normalized monthly value, including rounding
 			update_info();
@@ -370,7 +370,7 @@ void fabrik_info_t::update_components()
 	// Show the applied settings separately from the editable values.
 	lb_shipment_size.buf().printf("%s %u", translator::translate("shipment size:"), fab->get_shipment_size());
 	lb_shipment_size.update();
-	lb_production.buf().printf("%s %d", translator::translate("Base production:"), (sint32)welt->scale_with_month_length(fab->get_base_production()));
+	lb_production.buf().printf("%s %lld", translator::translate("Base production:"), welt->scale_with_month_length(fab->get_base_production()));
 	lb_production.update();
 
 	// update texts

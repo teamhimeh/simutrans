@@ -104,6 +104,7 @@ all_tests <- [
 	test_dir_to_slope,
 	test_dir_to_coord,
 	test_factory_build_pp,
+	test_factory_high_production,
 	test_factory_build_with_fields,
 	test_factory_build_climate,
 	test_factory_link,

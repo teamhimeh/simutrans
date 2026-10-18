@@ -390,3 +390,21 @@ function test_factory_desc()
 		ASSERT_TRUE("Aufwindkraftwerk" in list)
 	}
 }
+
+
+// Large production must not wrap storage or the monthly production API.
+function test_factory_high_production()
+{
+	local public_pl = player_x(1)
+	local production = 2147483647
+	local bits = world.get_bits_per_month()
+	local normalized = bits >= 18 ? (production >> (bits - 18)) << (bits - 18) : production
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(0, 0, 0), 1, 1, production, "Kohlegrube"), null)
+	local mine = factory_x(0, 0)
+	local output = mine.output.Kohle
+	ASSERT_EQUAL(output.get_base_production(), normalized)
+	ASSERT_EQUAL(output.get_base_consumption(), normalized)
+	ASSERT_EQUAL(output.max_storage, 2097152) // INT32_MAX / 1024, rounded for display
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}

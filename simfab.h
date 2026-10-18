@@ -17,6 +17,7 @@
 #include "halthandle_t.h"
 #include "simworld.h"
 #include "utils/plainstring.h"
+#include "utils/saturated_math.h"
 
 
 class player_t;
@@ -134,7 +135,7 @@ public:
 	void roll_stats(uint32 factor, sint64 aggregate_weight);
 	void rdwr(loadsave_t *file);
 	const sint64* get_stats() const { return *statistics; }
-	void book_stat(sint64 value, int stat_type) { assert(stat_type<MAX_FAB_GOODS_STAT); statistics[0][stat_type] += value; }
+	void book_stat(sint64 value, int stat_type) { assert(stat_type<MAX_FAB_GOODS_STAT); statistics[0][stat_type] = saturated_add(statistics[0][stat_type], value); }
 	void set_stat(sint64 value, int stat_type) { assert(stat_type<MAX_FAB_GOODS_STAT); statistics[0][stat_type] = value; }
 	sint64 get_stat(int month, int stat_type) const { assert(stat_type<MAX_FAB_GOODS_STAT); return statistics[month][stat_type]; }
 
@@ -499,7 +500,7 @@ public:
 	 */
 	const sint64* get_stats() const { return *statistics; }
 	sint64 get_stat(int month, int stat_type) const { assert(stat_type<MAX_FAB_STAT); return statistics[month][stat_type]; }
-	void book_stat(sint64 value, int stat_type) { assert(stat_type<MAX_FAB_STAT); statistics[0][stat_type] += value; }
+	void book_stat(sint64 value, int stat_type) { assert(stat_type<MAX_FAB_STAT); statistics[0][stat_type] = saturated_add(statistics[0][stat_type], value); }
 
 	// This updates maximum in-transit. Important for loading.
 	static void update_transit( const ware_t *ware, bool add );
@@ -678,10 +679,10 @@ public:
 	/* does not takes month length into account */
 	sint32 get_base_production() const { return prodbase; }
 	sint32 get_min_base_production() const;
-	sint32 get_min_monthly_base_production() const;
+	sint64 get_min_monthly_base_production() const;
 	void set_base_production(sint32 p);
 
-	sint32 get_current_production() const { return (sint32)welt->scale_with_month_length( ((sint64)prodbase * (sint64)get_prodfactor())>>8 ); }
+	sint32 get_current_production() const { return saturate<sint32>(welt->scale_with_month_length( ((sint64)prodbase * (sint64)get_prodfactor())>>8 )); }
 
 	/* returns the status of the current factory, as well as output */
 	enum {

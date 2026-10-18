@@ -11608,7 +11608,11 @@ bool tool_change_factory_t::init( player_t* player )
 			if (value > limit || value < factory->get_min_monthly_base_production()) {
 				return false;
 			}
-			factory->set_base_production(welt->inverse_scale_with_month_length(value));
+			const sint64 base_production = welt->inverse_scale_with_month_length(value);
+			if (base_production > std::numeric_limits<sint32>::max()) {
+				return false;
+			}
+			factory->set_base_production((sint32)base_production);
 		}
 		break;
 		case 'd': // avoid destroy, avoid close after retire
