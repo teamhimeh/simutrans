@@ -7316,7 +7316,7 @@ const char *tool_build_land_chain_t::work( player_t *player, koord3d pos )
 		// eventually adjust production
 		sint32 initial_prod = -1;
 		if (!strempty(default_param)) {
-			initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+			initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 		}
 
 		koord3d build_pos = gr->get_pos();
@@ -7384,7 +7384,7 @@ const char *tool_city_chain_t::work( player_t *player, koord3d pos )
 	// eventually adjust production
 	sint32 initial_prod = -1;
 	if (!strempty(default_param)) {
-		initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+		initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 	}
 
 	// process ignore climates switch
@@ -7482,7 +7482,7 @@ const char *tool_build_factory_t::work( player_t *player, koord3d pos )
 		// eventually adjust production
 		sint32 initial_prod = -1;
 		if (!strempty(default_param)) {
-			initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+			initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 		}
 
 		fabrik_t *f = factory_builder_t::build_factory(NULL, fab, initial_prod, rotation, gr->get_pos(), welt->get_public_player());
@@ -11607,7 +11607,7 @@ bool tool_change_factory_t::init( player_t* player )
 			if (z != 0 || *p < '0' || *p > '9') {
 				return false;
 			}
-			const sint64 limit = welt->scale_with_month_length(max(65536 * 2, factory->get_base_production()));
+			const sint64 limit = welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION);
 			char *end;
 			errno = 0;
 			const sint64 value = strtoll(p, &end, 10);
@@ -11615,7 +11615,7 @@ bool tool_change_factory_t::init( player_t* player )
 				return false;
 			}
 			const sint64 base_production = welt->inverse_scale_with_month_length(value);
-			if (base_production > std::numeric_limits<sint32>::max()) {
+			if (base_production > fabrik_t::MAX_BASE_PRODUCTION) {
 				return false;
 			}
 			factory->set_edited_base_production((sint32)base_production);

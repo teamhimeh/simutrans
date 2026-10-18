@@ -139,7 +139,7 @@ SQInteger ware_production_get_production(HSQUIRRELVM vm)
 		sint64 scaling = 0;
 		if (SQ_SUCCEEDED(get_slot(vm, "scaling", scaling, 1))) {
 			// see fabrik_t::step
-			prod = saturated_mul_div(scaling, welt->scale_with_month_length(fab->get_base_production()), DEFAULT_PRODUCTION_FACTOR, std::numeric_limits<sint64>::max());
+			prod = (scaling * welt->scale_with_month_length(fab->get_base_production()) * DEFAULT_PRODUCTION_FACTOR ) >> (8+8);
 		}
 	}
 	return param<sint64>::push(vm, prod);

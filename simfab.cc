@@ -63,6 +63,7 @@ static const sint64 FAB_DISPLAY_UNIT_HALF = ((sint64)1 << (fabrik_t::precision_b
 static const sint32 FAB_PRODFACT_UNIT_HALF = ((sint32)1 << (DEFAULT_PRODUCTION_FACTOR_BITS - 1));
 
 karte_ptr_t fabrik_t::welt;
+const sint32 fabrik_t::MAX_BASE_PRODUCTION;
 
 
 /**
@@ -438,7 +439,7 @@ void fabrik_t::update_scaled_pax_demand()
 	// formula : desc_pax_demand * (current_production_base / desc_production_base); (prod >> 1) is for rounding
 	const sint64 pax_demand = ( ( desc_pax_demand * (sint64)prodbase + (prod >> 1) ) / prod );
 	// then, scaling based on month length
-	scaled_pax_demand = saturate<uint32>(saturated_mul_div(pax_demand, ((uint64)1 << welt->ticks_per_world_month_shift), (uint64)1 << 18, 932067));
+	scaled_pax_demand = (uint32)min(welt->scale_with_month_length(pax_demand), (sint64)932067);
 	if(  scaled_pax_demand == 0  &&  desc_pax_demand > 0  ) {
 		scaled_pax_demand = 1; // since desc pax demand > 0 -> ensure no less than 1
 	}
@@ -455,7 +456,7 @@ void fabrik_t::update_scaled_mail_demand()
 	// formula : desc_mail_demand * (current_production_base / desc_production_base); (prod >> 1) is for rounding
 	const sint64 mail_demand = ( ( desc_mail_demand * (sint64)prodbase + (prod >> 1) ) / prod );
 	// then, scaling based on month length
-	scaled_mail_demand = saturate<uint32>(saturated_mul_div(mail_demand, ((uint64)1 << welt->ticks_per_world_month_shift), (uint64)1 << 18, 932067));
+	scaled_mail_demand = (uint32)min(welt->scale_with_month_length(mail_demand), (sint64)932067);
 	if(  scaled_mail_demand == 0  &&  desc_mail_demand > 0  ) {
 		scaled_mail_demand = 1; // since desc mail demand > 0 -> ensure no less than 1
 	}
@@ -602,7 +603,7 @@ void fabrik_t::recalc_storage_capacities()
 				if (g.get_typ() == input->get_input_type()) {
 					// Inputs are now normalized to factory production.
 					uint32 prod_factor = input->get_consumption();
-					g.max = saturate<sint32>(saturated_mul_div((uint64)input->get_capacity() * prodbase, (uint64)1 << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS), prod_factor, (uint64)std::numeric_limits<sint32>::max() * desc->get_productivity(), true) / max(1, desc->get_productivity()));
+					g.max = saturate<sint32>(((((uint64)input->get_capacity() * prodbase) << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + prod_factor - 1) / ((uint64)max(1, desc->get_productivity()) * prod_factor));
 				}
 			}
 		}
@@ -613,7 +614,7 @@ void fabrik_t::recalc_storage_capacities()
 				if (g.get_typ() == output->get_output_type()) {
 					// Outputs are now normalized to factory production.
 					uint32 prod_factor = output->get_factor();
-					g.max = saturate<sint32>(saturated_mul_div((uint64)output->get_capacity() * prodbase, (uint64)1 << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS), prod_factor, (uint64)std::numeric_limits<sint32>::max() * desc->get_productivity(), true) / max(1, desc->get_productivity()));
+					g.max = saturate<sint32>(((((uint64)output->get_capacity() * prodbase) << (precision_bits + DEFAULT_PRODUCTION_FACTOR_BITS)) + prod_factor - 1) / ((uint64)max(1, desc->get_productivity()) * prod_factor));
 				}
 			}
 		}
@@ -697,7 +698,8 @@ bool fabrik_t::can_auto_expand() const
 
 void fabrik_t::set_base_production(sint32 p)
 {
-	prodbase = p;
+	// Apply the cap before recalculating storage and related demands.
+	prodbase = min(p, MAX_BASE_PRODUCTION);
 	recalc_storage_capacities();
 	update_scaled_electric_demand();
 	update_scaled_pax_demand();
@@ -821,10 +823,10 @@ fabrik_t::fabrik_t(koord3d pos_, player_t* owner, const factory_desc_t* factory_
 	prodfactor_pax = 0;
 	prodfactor_mail = 0;
 	if (initial_prod_base < 0) {
-		prodbase = desc->get_productivity() + simrand(desc->get_range());
+		prodbase = min(MAX_BASE_PRODUCTION, desc->get_productivity() + simrand(desc->get_range()));
 	}
 	else {
-		prodbase = initial_prod_base;
+		prodbase = min(initial_prod_base, MAX_BASE_PRODUCTION);
 	}
 
 	delta_sum = 0;
@@ -956,7 +958,7 @@ void fabrik_t::build(sint32 rotate, bool build_fields, bool force_initial_prodba
 			// we will start with a minimum number and try to get closer to start_fields
 			const uint16 spawn_fields = desc->get_field_group()->get_min_fields() + simrand( desc->get_field_group()->get_start_fields()-desc->get_field_group()->get_min_fields() );
 			while(  fields.get_count() < spawn_fields  &&  add_random_field(10000u)  ) {
-				if (fields.get_count() > desc->get_field_group()->get_min_fields()  &&  (sint64)prodbase >= 2 * (sint64)org_prodbase) {
+				if (fields.get_count() > desc->get_field_group()->get_min_fields()  &&  prodbase >= 2 * org_prodbase) {
 					// too much productivity, no more fields needed
 					break;
 				}
@@ -1048,7 +1050,9 @@ bool fabrik_t::add_random_field(uint16 probability)
 {
 	// has fields, and not yet too many?
 	const field_group_desc_t *fd = desc->get_field_group();
-	if(fd==NULL  ||  fd->get_max_fields() <= fields.get_count()) {
+	// Minimum fields are retained even if their production exceeds the cap.
+	if(fd==NULL  ||  fd->get_max_fields() <= fields.get_count() ||
+		(prodbase >= MAX_BASE_PRODUCTION && fields.get_count() >= fd->get_min_fields())) {
 		return false;
 	}
 	// we are lucky and are allowed to generate a field
@@ -1107,7 +1111,7 @@ bool fabrik_t::add_random_field(uint16 probability)
 		welt->access(k)->boden_ersetzen(gr, gr2);
 		gr2->obj_add( new field_t(gr2->get_pos(), owner, field_class, this ) );
 		// adjust production base and storage capacities
-		set_base_production( saturate<sint32>((uint64)prodbase + field_class->get_field_production()) );
+		set_base_production( min(MAX_BASE_PRODUCTION, prodbase + field_class->get_field_production()) );
 		if(lt) {
 			gr2->obj_add( lt );
 		}
@@ -1460,8 +1464,9 @@ DBG_DEBUG("fabrik_t::rdwr()","loading factory '%s'",s);
 			koord k = desc ? desc->get_building()->get_size() : koord(1,1);
 			DBG_DEBUG("fabrik_t::rdwr()","correction of production by %i",k.x*k.y);
 			// since we step from 86.01 per factory, not per tile!
-			prodbase = saturate<sint32>((uint64)prodbase * k.x * k.y * 2);
+			prodbase = (sint32)min((sint64)MAX_BASE_PRODUCTION, (sint64)prodbase * k.x * k.y * 2);
 		}
+		prodbase = min(prodbase, MAX_BASE_PRODUCTION);
 		// restore factory owner
 		// Due to a omission in Volkers changes, there might be savegames
 		// in which factories were saved without an owner. In this case
@@ -2538,7 +2543,7 @@ void fabrik_t::step(uint32 delta_t)
 			smoke();
 
 			// chance to expand every 256 rounds of activities, after which activity count will return to 0 (overflow behaviour)
-			if(  (++activity_count)==0 && !no_expand_factory  ) {
+			if(  (++activity_count)==0 && !no_expand_factory && prodbase < MAX_BASE_PRODUCTION  ) {
 				if(  desc->get_field_group()  ) {
 					if(  fields.get_count()<desc->get_field_group()->get_max_fields()  ) {
 						// spawn new field with given probability
@@ -2548,7 +2553,7 @@ void fabrik_t::step(uint32 delta_t)
 				else {
 					if(  times_expanded < desc->get_expand_times()  ) {
 						if(  simrand(10000) < desc->get_expand_probability()  ) {
-							set_base_production( saturate<sint32>((uint64)prodbase + desc->get_expand_minimum() + simrand( desc->get_expand_range() )) );
+							set_base_production( min(MAX_BASE_PRODUCTION, prodbase + desc->get_expand_minimum() + simrand( desc->get_expand_range() )) );
 							++times_expanded;
 						}
 					}
@@ -3152,7 +3157,7 @@ sint32 fabrik_t::get_min_base_production() const
 		}
 	}
 
-	return saturate<sint32>(prodbase_adjust);
+	return (sint32)min((uint64)MAX_BASE_PRODUCTION, prodbase_adjust);
 }
 
 
@@ -3183,7 +3188,7 @@ sint32 fabrik_t::get_min_editable_base_production() const
 			minimum += fd->get_field_class(ordered[i].field_class_index)->get_field_production();
 		}
 	}
-	return saturate<sint32>(minimum);
+	return (sint32)min((uint64)MAX_BASE_PRODUCTION, minimum);
 }
 
 
@@ -3200,7 +3205,7 @@ sint64 fabrik_t::get_min_editable_monthly_base_production() const
 
 bool fabrik_t::set_edited_base_production(sint32 p)
 {
-	if (p < get_min_editable_base_production()) {
+	if (p < get_min_editable_base_production() || p > MAX_BASE_PRODUCTION) {
 		return false;
 	}
 	if (const field_group_desc_t *fd = desc->get_field_group()) {
@@ -3211,10 +3216,10 @@ bool fabrik_t::set_edited_base_production(sint32 p)
 		}
 		uint32 remove_count = 0;
 		const uint32 keep = min((uint32)fd->get_min_fields(), ordered.get_count());
-		while (minimum > (uint64)p && remove_count < ordered.get_count() - keep) {
+		while (min(minimum, (uint64)MAX_BASE_PRODUCTION) > (uint64)p && remove_count < ordered.get_count() - keep) {
 			minimum -= fd->get_field_class(ordered[remove_count++].field_class_index)->get_field_production();
 		}
-		if (minimum > (uint64)p) return false;
+		if (min(minimum, (uint64)MAX_BASE_PRODUCTION) > (uint64)p) return false;
 		// Validate every tile before changing anything.
 		for (uint32 i = 0; i < remove_count; ++i) {
 			grund_t *gr = welt->lookup_kartenboden(ordered[i].location);
@@ -3233,18 +3238,6 @@ bool fabrik_t::set_edited_base_production(sint32 p)
 	}
 	set_base_production(p);
 	return true;
-}
-
-
-sint64 fabrik_t::get_min_monthly_base_production() const
-{
-	const sint32 minimum = get_min_base_production();
-	sint64 monthly = welt->scale_with_month_length(minimum);
-	// Round up when a short month would otherwise convert below the minimum.
-	if (welt->inverse_scale_with_month_length(monthly) < minimum) {
-		++monthly;
-	}
-	return monthly;
 }
 
 

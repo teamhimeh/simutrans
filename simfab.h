@@ -491,6 +491,8 @@ private:
 	uint32 shipment_size = SHIPMENT_MAX_SIZE;
 
 public:
+	static const sint32 MAX_BASE_PRODUCTION = 131072;
+
 	fabrik_t(loadsave_t *file);
 	fabrik_t(koord3d pos, player_t* owner, const factory_desc_t* factory_desc, sint32 initial_prod_base);
 	~fabrik_t();
@@ -681,7 +683,6 @@ public:
 	/* does not takes month length into account */
 	sint32 get_base_production() const { return prodbase; }
 	sint32 get_min_base_production() const;
-	sint64 get_min_monthly_base_production() const;
 	sint32 get_min_editable_base_production() const;
 	sint64 get_min_editable_monthly_base_production() const;
 	bool set_edited_base_production(sint32 p);

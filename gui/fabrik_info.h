@@ -15,7 +15,6 @@
 #include "components/gui_textarea.h"
 #include "components/gui_textinput.h"
 #include "components/gui_numberinput.h"
-#include "components/gui_numberinput64.h"
 #include "components/gui_obj_view_t.h"
 #include "components/gui_container.h"
 #include "components/gui_colorbox.h"
@@ -70,7 +69,7 @@ private:
 	gui_label_buf_t lb_shipment_size;
 	gui_numberinput_t numinp_shipment_size;
 	gui_label_buf_t lb_production;
-	gui_numberinput64_t numinp_production;
+	gui_numberinput_t numinp_production;
 	button_t bt_set_shipment_size;
 	button_t bt_set_production;
 	uint32 old_shipment_size;

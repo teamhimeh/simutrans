@@ -199,10 +199,11 @@ void fabrik_info_t::init(fabrik_t* fab_, const gebaeude_t* gb)
 
 		lb_production.set_tooltip(translator::translate("Monthly base production before boosts. For consumers, sets consumption capacity."));
 		container_details.add_component(&lb_production);
-		numinp_production.set_limits(fab->get_min_editable_monthly_base_production(), welt->scale_with_month_length(max(65536 * 2, fab->get_base_production())));
+		numinp_production.set_limits((sint32)fab->get_min_editable_monthly_base_production(), (sint32)welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION));
 		old_base_production = fab->get_base_production();
 		numinp_production.set_value(welt->scale_with_month_length(old_base_production));
 		numinp_production.set_width(90);
+		numinp_production.wrap_mode(false);
 		numinp_production.set_increment_mode(max(1, (sint32)welt->scale_with_month_length(1)));
 		container_details.add_component(&numinp_production);
 		bt_set_production.init(button_t::roundbox | button_t::flexible, "Set base production");
@@ -448,7 +449,7 @@ void fabrik_info_t::update_components()
 		old_cities_count = fab->get_target_cities().get_count();
 	}
 	container_info.set_size(container_info.get_min_size());
-	numinp_production.set_limits(fab->get_min_editable_monthly_base_production(), welt->scale_with_month_length(max(65536 * 2, fab->get_base_production())));
+	numinp_production.set_limits((sint32)fab->get_min_editable_monthly_base_production(), (sint32)welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION));
 	if (old_base_production != fab->get_base_production()) {
 		old_base_production = fab->get_base_production();
 		numinp_production.set_value(welt->scale_with_month_length(old_base_production));
