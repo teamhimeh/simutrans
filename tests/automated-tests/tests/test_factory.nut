@@ -412,3 +412,35 @@ function test_factory_high_production()
 	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
+
+// Verify high production does not corrupt multiple product/stock slots.
+function test_factory_high_production_multi_output()
+{
+	local public_pl = player_x(1)
+	local production = 2147483647
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(0, 0, 0), 1, 1, production, "Raffinerie"), null)
+	local refinery = factory_x(0, 0)
+	ASSERT_TRUE(refinery != null)
+	ASSERT_TRUE(refinery.input.len() > 0)
+	ASSERT_EQUAL(refinery.output.len(), 3)
+	foreach (name, product in refinery.output) {
+		ASSERT_TRUE(product.get_base_production() > 0)
+		ASSERT_TRUE(product.max_storage > 0)
+	}
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
+// Basic high-production field factory invariants. See the manual checklist
+// for tests requiring the production-edit UI, save/load, or elapsed game time.
+function test_factory_high_production_fields()
+{
+	local public_pl = player_x(1)
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(3, 4, 0), 1, 1, 131072, "PVkraftwerk"), null)
+	local factory = factory_x(3, 4)
+	ASSERT_TRUE(factory != null)
+	ASSERT_TRUE(factory.get_field_count() >= factory.get_min_field_count())
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(3, 4, 0)), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
