@@ -4058,9 +4058,18 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 {
 	if(  h > 0  ) {
 		PIXVAL *tp = textur + yp * disp_width;
+		const bool poly_clip = CR.number_of_clips > 0;
+		if (poly_clip) {
+			init_ranges(yp CLIP_NUM_PAR);
+		}
 
 		do { // line decoder
 			int xpos = xp;
+			int xmin = CR.clip_rect.x;
+			int xmax = CR.clip_rect.xx;
+			if (poly_clip) {
+				get_xrange_and_step_y(xmin, xmax CLIP_NUM_PAR);
+			}
 
 			// display image
 			uint16 runlen = *sp++;
@@ -4075,9 +4084,9 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 				alphamap++;
 
 				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x  &&  xpos < CR.clip_rect.xx  ) {
-					const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-					const int len  = (CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos);
+				if(  xmin < xmax && xpos + runlen > xmin && xpos < xmax  ) {
+					const int left = (xpos >= xmin ? 0 : xmin - xpos);
+					const int len  = (xmax - xpos >= runlen ? runlen : xmax - xpos);
 					p( tp + xpos + left, sp + left, alphamap + left, alpha_flags, colour, len - left );
 				}
 

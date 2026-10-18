@@ -967,6 +967,22 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 }
 
 
+// Partition ground surfaces and ways along the same upper tile boundaries.
+static void clip_way_background(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const ribi_t::ribi way_ribi, const slope_t::type way_slope, const int hgt_step CLIP_NUM_DEF)
+{
+	clear_all_poly_clip(CLIP_NUM_VAR);
+	const uint8 non_convex = (way_ribi & ribi_t::northwest) == ribi_t::northwest ? 0 : 16;
+	const int dh = corner_nw(way_slope) * hgt_step;
+	if (way_ribi & ribi_t::west) {
+		add_poly_clip(xpos + raster_tile_width / 2 - 1, ypos + raster_tile_width / 2 - dh, xpos - 1, ypos + 3 * raster_tile_width / 4 - dh, ribi_t::west | non_convex CLIP_NUM_PAR);
+	}
+	if (way_ribi & ribi_t::north) {
+		add_poly_clip(xpos + raster_tile_width, ypos + 3 * raster_tile_width / 4 - dh, xpos + raster_tile_width / 2, ypos + raster_tile_width / 2 - dh, ribi_t::north | non_convex CLIP_NUM_PAR);
+	}
+	activate_ribi_clip((way_ribi & ribi_t::northwest) | non_convex CLIP_NUM_PAR);
+}
+
+
 #ifdef MULTI_THREAD
 void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const sint8 clip_num, const bool force_show_grid ) const
 #else
@@ -1054,6 +1070,20 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 		if(get_typ()!=wasser) {
 			// show image if tile is visible
 			if (visible)  {
+				// Rezooming can extend a ground image across the tile boundary. When
+				// drawing ground among objects, do not overwrite a neighbour's way
+				// outside the area in which our own ways will be drawn afterwards.
+				// Retaining walls above must keep their normal occlusion behaviour.
+				const bool clip_surface = get_flag(grund_t::draw_as_obj)
+					&& (flags & has_way1)
+					&& !env_t::simple_drawing;
+				if (clip_surface) {
+					ribi_t::ribi way_ribi = get_weg_nr(0)->get_ribi_unmasked();
+					if (weg_t const* const way2 = get_weg_nr(1)) {
+						way_ribi |= way2->get_ribi_unmasked();
+					}
+					clip_way_background(xpos, ypos, raster_tile_width, way_ribi, get_disp_way_slope(), tile_raster_scale_y(TILE_HEIGHT_STEP, raster_tile_width) CLIP_NUM_PAR);
+				}
 				display_normal( get_image(), xpos, ypos, 0, true, dirty CLIP_NUM_PAR );
 #ifdef SHOW_FORE_GRUND
 				if (get_flag(grund_t::draw_as_obj)) {
@@ -1173,6 +1203,11 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 					}
 				}
 
+				// Climate and snow overlays must obey the surface partition too.
+				if (clip_surface) {
+					clear_all_poly_clip(CLIP_NUM_VAR);
+				}
+
 				// we show additionally a grid
 				// for undergroundmode = ugm_all the grid is plotted in display_obj
 #ifdef MULTI_THREAD
@@ -1206,17 +1241,7 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 			// .. nonconvex n/w if not both n/w are active
 			if(  clip  ) {
 				const ribi_t::ribi way_ribi = (static_cast<const weg_t*>(d))->get_ribi_unmasked();
-				clear_all_poly_clip( CLIP_NUM_VAR );
-				const uint8 non_convex = (way_ribi & ribi_t::northwest) == ribi_t::northwest ? 0 : 16;
-				if(  way_ribi & ribi_t::west  ) {
-					const int dh = corner_nw(get_disp_way_slope()) * hgt_step;
-					add_poly_clip( xpos + raster_tile_width / 2 - 1, ypos + raster_tile_width / 2 - dh, xpos - 1, ypos + 3 * raster_tile_width / 4 - dh, ribi_t::west | non_convex CLIP_NUM_PAR );
-				}
-				if(  way_ribi & ribi_t::north  ) {
-					const int dh = corner_nw(get_disp_way_slope()) * hgt_step;
-					add_poly_clip( xpos + raster_tile_width, ypos + 3 * raster_tile_width / 4 - dh, xpos + raster_tile_width / 2, ypos + raster_tile_width / 2 - dh, ribi_t::north | non_convex CLIP_NUM_PAR );
-				}
-				activate_ribi_clip( (way_ribi & ribi_t::northwest) | non_convex  CLIP_NUM_PAR );
+				clip_way_background(xpos, ypos, raster_tile_width, way_ribi, get_disp_way_slope(), hgt_step CLIP_NUM_PAR);
 			}
 			d->display( xpos, ypos CLIP_NUM_PAR );
 		}
