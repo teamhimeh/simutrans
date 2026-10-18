@@ -77,6 +77,14 @@ signal(s)
 		end_table();
 	}
 
+	bt_ignore_length.init( button_t::square_state, translator::translate("ignore length"));
+	bt_ignore_length.set_tooltip(translator::translate("ignore length. Convoy can enter shorter stop"));
+	bt_ignore_length.add_listener(this);
+	bt_ignore_length.pressed = signal->is_ignore_length();
+	if(  signal->get_desc()->is_choose_sign()  ) {
+		add_component(&bt_ignore_length);
+	}
+
 	bt_two_ways.init( button_t::square_state, translator::translate("allow reverse passage") );
 	bt_two_ways.set_tooltip(translator::translate("Allow reverse passage for convoys"));
 	bt_two_ways.add_listener(this);
@@ -178,6 +186,14 @@ bool signal_info_t::action_triggered( gui_action_creator_t* comp, value_t p)
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+	if(  comp==&bt_ignore_length  ) {
+		char param[256];
+		bool v = signal->is_ignore_length();
+		sprintf( param, "%s,%i,i", signal->get_pos().get_str(), !v );
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param( param );
+		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
+		return true;
+	}
 	return false;
 }
 
@@ -192,6 +208,7 @@ void signal_info_t::update_data()
 	bt_skip_default_route.pressed = signal->is_skip_default_route();
 	bt_start_signal.pressed = signal->is_start_signal();
 	bt_length_based.pressed = signal->is_length_based();
+	bt_ignore_length.pressed = signal->is_ignore_length();
 	if(  signal->is_choose_signal()  ) {
 		bt_advance_to_end.enable();
 		numinp_tiles_margin.enable();

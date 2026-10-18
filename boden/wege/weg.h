@@ -110,6 +110,12 @@ private:
 
 	bool is_ex_image;
 
+	/**
+	* close diagonals (two parallel diagonals, every second tile is a fourway tile)
+	* 0=no, 1=northwest+southeast, 2=northeast+southwest
+	*/
+	uint8 close_diagonal_state;
+
 	uint16 max_wayobj_speed;
 
 
@@ -152,7 +158,8 @@ public:
 		image_slope,
 		image_diagonal,
 		image_switch,
-		image_ex
+		image_ex,
+		image_close_diagonal
 	};
 
 	/**
@@ -278,6 +285,13 @@ public:
 
 	void check_diagonal();
 
+	/**
+	 * checks, if this fourway way is actually two close diagonals
+	 * and sets close_diagonal_state accordingly
+	 * (only if the way has close diagonal images; otherwise two ways on one tile are used)
+	 */
+	void check_close_diagonal();
+
 	void count_sign();
 
 	/* flag query routines */
@@ -292,6 +306,7 @@ public:
 	inline bool has_wayobj() const {return flags&HAS_WAYOBJ; }
 	inline bool is_crossing() const {return flags&HAS_CROSSING; }
 	inline bool is_diagonal() const {return flags&IS_DIAGONAL; }
+	inline uint8 is_close_diagonal() const { return close_diagonal_state; }
 	inline bool is_snow() const {return flags&IS_SNOW; }
 
 	// this is needed during a change from crossing to tram track
@@ -322,7 +337,7 @@ public:
 
 
 	// correct maintenance
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	virtual bool is_clipping_below_needed() const OVERRIDE;
 } GCC_PACKED;

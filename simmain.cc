@@ -77,6 +77,9 @@
 #include "dataobj/translator.h"
 #include "dataobj/repositioning.h"
 #include "network/pakset_info.h"
+#include "network/network_cmp_pakset.h"
+#include "network/network_file_transfer.h"
+#include "dataobj/gameinfo.h"
 #include "network/otrp_log_sender.h"
 #include "network/mcp_server.h"
 
@@ -530,6 +533,32 @@ bool set_pakdir( const char *chkdir )
 			env_t::objfilename += PATH_SEPARATOR;
 			return true;
 		}
+	}
+	return false;
+}
+
+
+/**
+ * Compare the pakset checksum of the server with ours before joining.
+ * @param server address of the server (without "net:")
+ * @param msg receives a html description of the differences on mismatch
+ * @return false if the paksets differ, true otherwise (also if the server could not be queried)
+ */
+static bool check_pakset_checksum(const char *server, std::string &msg)
+{
+	gameinfo_t gi;
+	if(  const char *err = network_gameinfo( server, &gi )  ) {
+		// let the regular join report the connection problem
+		dbg->warning( "check_pakset_checksum()", "Could not get gameinfo from %s: %s", server, err );
+		return true;
+	}
+	if(  gi.get_pakset_checksum() == pakset_info_t::get_pakset_checksum()  ) {
+		return true;
+	}
+	dbg->warning( "check_pakset_checksum()", "Pakset checksum mismatch: server %s, local %s", gi.get_pakset_checksum().get_str(8), pakset_info_t::get_pakset_checksum().get_str(8) );
+	network_compare_pakset_with_server( server, msg );
+	if(  msg.empty()  ) {
+		msg = translator::translate( "Pakset differences" );
 	}
 	return false;
 }
@@ -1282,17 +1311,6 @@ int simu_main(int argc, char** argv)
 		script_tool_manager_t::load_scripts(("addons/" + env_t::objfilename + "tool/").c_str());
 	}
 
-	dbg->message("simu_main()","Reading menu configuration ...");
-	dr_chdir( env_t::data_dir );
-	if (!tool_t::read_menu(env_t::pak_dir + "config/menuconf.tab")) {
-		// Fatal error while reading menuconf.tab, we cannot continue!
-		dbg->fatal(
-			"Could not read %sconfig/menuconf.tab.\n"
-			"This file is required for a valid pak set (graphics).\n"
-			"Please install and select a valid pak set.",
-			env_t::pak_dir.c_str());
-	}
-
 #if COLOUR_DEPTH != 0
 	// reread theme
 	dr_chdir( env_t::user_dir );
@@ -1306,6 +1324,21 @@ int simu_main(int argc, char** argv)
 	}
 #endif
 	dr_chdir( env_t::data_dir );
+
+	// read_menu() must come after the theme (re)reads above: it overrides
+	// env_t::iconsize with the pak-specific icon_height from menuconf.tab
+	// (see tool_t::read_menu()), and it also builds the toolbar windows,
+	// which must use the final iconsize
+	dbg->message("simu_main()","Reading menu configuration ...");
+	dr_chdir( env_t::data_dir );
+	if (!tool_t::read_menu(env_t::pak_dir + "config/menuconf.tab")) {
+		// Fatal error while reading menuconf.tab, we cannot continue!
+		dbg->fatal(
+			"Could not read %sconfig/menuconf.tab.\n"
+			"This file is required for a valid pak set (graphics).\n"
+			"Please install and select a valid pak set.",
+			env_t::pak_dir.c_str());
+	}
 
 	if(  translator::get_language()==-1  ) {
 		// try current language
@@ -1594,6 +1627,14 @@ int simu_main(int argc, char** argv)
 		}
 	}
 
+	std::string pakset_mismatch_msg;
+	if(  scen == NULL  &&  strstart(loadgame.c_str(), "net:")  ) {
+		if(  !check_pakset_checksum( loadgame.c_str()+4, pakset_mismatch_msg )  ) {
+			dbg->error( "simu_main()", "Pakset of server %s differs from local pakset, not joining.", loadgame.c_str()+4 );
+			loadgame = "";
+		}
+	}
+
 	if(  scen == NULL && (loadgame==""  ||  !welt->load(loadgame.c_str()))  ) {
 		// create a default map
 		DBG_MESSAGE("simu_main()", "Init with default map (failing will be a pak error!)");
@@ -1706,6 +1747,11 @@ int simu_main(int argc, char** argv)
 
 	if(  !env_t::networkmode  &&  !env_t::server  &&  new_world  ) {
 		welt->get_message()->clear();
+	}
+	if(  !pakset_mismatch_msg.empty()  ) {
+		help_frame_t *win = new help_frame_t();
+		win->set_text( pakset_mismatch_msg.c_str() );
+		create_win( win, w_info, magic_pakset_info_t );
 	}
 #ifdef USE_FLUIDSYNTH_MIDI
 	if(  strcmp( env_t::soundfont_filename.c_str(), "Error" ) == 0  ) {

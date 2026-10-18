@@ -159,6 +159,7 @@ void weg_t::init()
 	init_statistics();
 	alle_wege.insert(this);
 	flags = 0;
+	close_diagonal_state = 0;
 	image = IMG_EMPTY;
 	foreground_image = IMG_EMPTY;
 	max_wayobj_speed = 0;
@@ -177,6 +178,15 @@ weg_t::~weg_t()
 
 bool weg_t::needs_crossing(const way_desc_t* other) const
 {
+	// two ways of the SAME waytype can never form a crossing: they are the disjoint diagonal
+	// legs of a closed diagonal (see grund_t::weg_erweitern()). crossing_logic_t::get_crossing()
+	// has no entry for a waytype with itself and returns NULL, which the callers turn into a
+	// dbg->fatal() -- that used to abort loading of a save containing such a tile whenever the
+	// disjoint-leg test below did not recognize it (e.g. a leg that is still a single direction).
+	if(  other->get_waytype() == desc->get_waytype()  ) {
+		return false;
+	}
+
 	// certain way always needs crossing (or never)
 	switch (desc->get_waytype()) {
 		case powerline_wt:
@@ -281,9 +291,20 @@ void append_platform_length_string_if_needed(cbuffer_t & buf, const weg_t* weg) 
 	}
 	// proceed to the edge
 	while(true) {
-		gr->get_neighbour(gr, weg->get_waytype(), dir);
-		if(  !gr  ) { break; }
-		const weg_t* w = gr->get_weg(weg->get_waytype());
+		// NOTE: get_neighbour() only ever writes its output ('gr' here) on SUCCESS -- it never
+		// nulls it out on failure. The previous version of this loop aliased the same variable
+		// as both receiver and output (`gr->get_neighbour(gr, ...)`) and then checked `!gr`,
+		// which is never true on failure, causing an infinite loop whenever get_neighbour()
+		// legitimately returns false (e.g. entering a same-waytype disjoint-diagonal-leg tile
+		// where `dir` belongs to the OTHER leg). Check the return value directly instead.
+		grund_t *next;
+		if(  !gr->get_neighbour(next, weg->get_waytype(), dir)  ) {
+			break;
+		}
+		gr = next;
+		// direction-aware: gr was reached via dir, so the leg actually being walked is the one
+		// owning the backward bit (relevant on a same-waytype disjoint-diagonal-leg tile)
+		const weg_t* w = gr->get_weg(weg->get_waytype(), ribi_t::backward(dir));
 		const halthandle_t h = gr->get_halt();
 		if(  !w  ||  !h.is_bound()  ||  h.get_id()!=halt.get_id()   ||  gr->get_pos()==start_pos ) { break; }
 		// now, the halt and the way exist on the new tile.
@@ -320,13 +341,27 @@ void weg_t::info(cbuffer_t & buf) const
 	buf.printf("%s%u",    translator::translate("\nRibi (unmasked)"), get_ribi_unmasked());
 	buf.printf("%s%u\n",  translator::translate("\nRibi (masked)"),   get_ribi());
 
+	// two ways of the SAME waytype can share this tile as disjoint diagonal legs (each is its
+	// own separate way, not connected to the other) -- make that explicit here, since
+	// otherwise this info window looks identical to an ordinary single-way tile.
+	if(  g->has_two_ways()  ) {
+		weg_t *other = g->get_weg_nr(0)==this ? g->get_weg_nr(1) : g->get_weg_nr(0);
+		if(  other  &&  other->get_waytype()==get_waytype()  ) {
+			buf.printf("%s\n", translator::translate("This tile has a second, disconnected way of the same type:"));
+			buf.printf("  %s (%s%u, %s %u%s)\n",
+				translator::translate(other->get_desc()->get_name()),
+				translator::translate("Ribi (unmasked)"), other->get_ribi_unmasked(),
+				translator::translate("Max. speed:"), other->get_max_speed(), translator::translate("km/h"));
+		}
+	}
+
 	buf.printf("%s%i (%s %s)\n",	translator::translate("\nVehicle offset: "), get_vehicle_offset(), translator::translate("Offset mode:"), get_vehicle_offset_mode()?translator::translate("Direction"):translator::translate("Absolute"));
 	
 	if(  get_waytype() == road_wt  ) {
 		const strasse_t* str = (const strasse_t*) this;
 		assert(str);
 		// Display overtaking_info
-		switch (str->get_overtaking_mode()) {
+		switch (str->get_overtaking_mode_raw()) {
 			case halt_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("halt mode"));
 				break;
@@ -345,8 +380,14 @@ void weg_t::info(cbuffer_t & buf) const
 			case inverted_mode:
 				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("inverted"));
 				break;
+			case exclusive_area_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("exclusive area"));
+				break;
+			case passing_lane_stop_only_mode:
+				buf.printf("%s %s\n", translator::translate("Overtaking:"),translator::translate("passing lane stop only"));
+				break;
 			default:
-				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode());
+				buf.printf("%s %s %d\n", translator::translate("Overtaking:"),translator::translate("ERROR"),str->get_overtaking_mode_raw());
 				break;
 		}
 
@@ -416,6 +457,10 @@ void weg_t::rotate90()
 	obj_t::rotate90();
 	ribi = ribi_t::rotate90( ribi );
 	ribi_maske = ribi_t::rotate90( ribi_maske );
+	if(  close_diagonal_state  ) {
+		// horizontal <-> vertical
+		close_diagonal_state ^= 3;
+	}
 }
 
 
@@ -492,6 +537,12 @@ void weg_t::set_images(image_type typ, uint8 ribi, bool snow, bool switch_nw)
 			set_image( desc->get_diagonal_image_id(ribi, snow) );
 			set_foreground_image( desc->get_diagonal_image_id(ribi, snow, true) );
 			break;
+		case image_close_diagonal:
+			// here ribi is the close diagonal state (1 or 2)
+			set_is_ex_image(false);
+			set_image( desc->get_close_diagonal_image_id(ribi-1, snow) );
+			set_foreground_image( desc->get_close_diagonal_image_id(ribi-1, snow, true) );
+			break;
 	}
 }
 
@@ -534,7 +585,10 @@ bool weg_t::check_season(const bool calc_only_season_change)
 		return true;
 	}
 
-	if(  is_diagonal()  ) {
+	if(  is_close_diagonal()  ) {
+		set_images( image_close_diagonal, is_close_diagonal(), snow );
+	}
+	else if(  is_diagonal()  ) {
 		set_images( image_diagonal, ribi, snow );
 	}
 	else if(  ribi_t::is_threeway( ribi )  &&  desc->has_switch_image()  ) {
@@ -579,6 +633,8 @@ void weg_t::calc_image()
 	grund_t *from = welt->lookup(get_pos());
 	grund_t *to;
 	image_id old_image = image;
+
+	close_diagonal_state = 0;
 
 	if(  from==NULL  ||  desc==NULL  ) {
 		// no ground, in tunnel
@@ -651,10 +707,19 @@ void weg_t::calc_image()
 						set_images(image_diagonal, ribi, snow);
 					}
 				}
+
+				// fourway tiles may be two close diagonals (only with close diagonal images)
+				if(  ribi == ribi_t::all  ) {
+					check_close_diagonal();
+					if(  is_close_diagonal()  ) {
+						set_images(image_close_diagonal, is_close_diagonal(), snow);
+					}
+				}
 			}
 
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
-			if(!is_diagonal() && desc->has_switch_image()){
+			// close diagonals have their own images
+			if(!is_diagonal() && !is_close_diagonal() && desc->has_switch_image()){
 				waytype_t type_name = get_waytype();
 				if(type_name == track_wt){
 					select_switch_image(snow);
@@ -1100,6 +1165,19 @@ void weg_t::check_diagonal()
 	}
 
 	grund_t *from = welt->lookup(get_pos());
+
+	// sibling way on this same tile forming a disjoint leg => always diagonal, regardless of
+	// what the neighbouring tiles look like (the two bends must always be drawn through
+	// opposite corners so they don't visually overlap). The sibling may be of the same waytype
+	// (closed diagonal) and it may still be a single direction while its second tile is missing.
+	if(  from->has_two_ways()  ) {
+		weg_t *other = from->get_weg_nr(0)==this ? from->get_weg_nr(1) : from->get_weg_nr(0);
+		if(  other  &&  ribi_t::are_disjoint_legs(ribi, other->get_ribi_unmasked())  ) {
+			flags |= IS_DIAGONAL;
+			return;
+		}
+	}
+
 	grund_t *to;
 
 	ribi_t::ribi r1 = ribi_t::none;
@@ -1116,10 +1194,64 @@ void weg_t::check_diagonal()
 	}
 
 	// diagonal if r1 or r2 are our reverse and neither one is 90 degree rotation of us
-	diagonal = (r1 == ribi_t::backward(ribi) || r2 == ribi_t::backward(ribi)) && r1 != ribi_t::rotate90l(ribi) && r2 != ribi_t::rotate90(ribi);
+	const ribi_t::ribi rback = ribi_t::backward(ribi);
+	diagonal = (r1 == rback || r2 == rback) && r1 != ribi_t::rotate90l(ribi) && r2 != ribi_t::rotate90(ribi);
+
+	// next to fourway tiles of close diagonals (or switches) on both sides
+	if(  !diagonal  &&  desc->has_close_diagonal_image()  ) {
+		diagonal = (r1 == rback || ribi_t::is_threeway(r1)) && (r2 == rback || ribi_t::is_threeway(r2));
+	}
 
 	if(  diagonal  ) {
 		flags |= IS_DIAGONAL;
+	}
+}
+
+
+// checks, if this fourway way is two close diagonals
+void weg_t::check_close_diagonal()
+{
+	close_diagonal_state = 0;
+
+	// without close diagonal images, close diagonals are built as two ways on one tile
+	if(  get_ribi_unmasked() != ribi_t::all  ||  desc == NULL  ||  !desc->has_close_diagonal_image()  ) {
+		return;
+	}
+
+	grund_t *from = welt->lookup(get_pos());
+	if(  from == NULL  ) {
+		return;
+	}
+
+	grund_t *to;
+	ribi_t::ribi r[4];
+	uint8 non_bent = 0;
+	for(  uint8 i = 0;  i < 4;  i++  ) {
+		if(  !from->get_neighbour(to, get_waytype(), ribi_t::nesw[i])  ) {
+			// only happens during construction of ways
+			return;
+		}
+		r[i] = to->get_weg_ribi_unmasked(get_waytype());
+		if(  !ribi_t::is_bend(r[i])  ) {
+			// only one entry point
+			if(  non_bent++  ) {
+				return;
+			}
+		}
+	}
+	if(  r[0] == r[1]  ||  r[2] == r[3]  ) {
+		if(  r[0] + r[2] != ribi_t::all  &&  r[1] + r[3] != ribi_t::all  ) {
+			// entry and exit not parallel => crossing
+			return;
+		}
+		close_diagonal_state = 2;
+	}
+	else {
+		if(  r[0] + r[1] != ribi_t::all  &&  r[2] + r[3] != ribi_t::all  ) {
+			// entry and exit not parallel => crossing
+			return;
+		}
+		close_diagonal_state = 1;
 	}
 }
 
@@ -1139,7 +1271,7 @@ void weg_t::new_month()
 
 
 // correct speed and maintenance
-void weg_t::finish_rd()
+void weg_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	player_t *player = get_owner();
 	if(  player  &&  desc  ) {

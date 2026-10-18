@@ -16,7 +16,19 @@
 #include "../simcity.h"
 #include "fabrik_info.h"
 #include "simwin.h"
+#include "messagebox.h"
 #include "minimap.h"
+
+#include "../display/simgraph.h"
+#include "../io/raw_image.h"
+#include "../pathes.h"
+
+#ifdef _MSC_VER
+#include <io.h>
+#define W_OK 2
+#else
+#include <unistd.h>
+#endif
 #include "schedule_gui.h"
 
 #include "../dataobj/translator.h"
@@ -25,11 +37,13 @@
 #include "../dataobj/powernet.h"
 #include "../dataobj/ribi.h"
 #include "../dataobj/loadsave.h"
+#include "../dataobj/environment.h"
 
 #include "../boden/wege/schiene.h"
 #include "../obj/leitung2.h"
 #include "../obj/label.h"
 #include "../utils/cbuffer_t.h"
+#include "../utils/simstring.h"
 #include "../display/scr_coord.h"
 #include "../display/simgraph.h"
 #include "../display/viewport.h"
@@ -1112,6 +1126,252 @@ void minimap_t::calc_map_size()
 }
 
 
+static const struct {
+	const char *name;
+	minimap_t::MAP_DISPLAY_MODE mode;
+} display_mode_names[] = {
+	{ "PLAIN",            minimap_t::PLAIN },
+	{ "MAP_TOWN",         minimap_t::MAP_TOWN },
+	{ "MAP_PASSENGER",    minimap_t::MAP_PASSENGER },
+	{ "MAP_MAIL",         minimap_t::MAP_MAIL },
+	{ "MAP_FREIGHT",      minimap_t::MAP_FREIGHT },
+	{ "MAP_STATUS",       minimap_t::MAP_STATUS },
+	{ "MAP_SERVICE",      minimap_t::MAP_SERVICE },
+	{ "MAP_TRAFFIC",      minimap_t::MAP_TRAFFIC },
+	{ "MAP_ORIGIN",       minimap_t::MAP_ORIGIN },
+	{ "MAP_TRANSFER",     minimap_t::MAP_TRANSFER },
+	{ "MAP_WAITING",      minimap_t::MAP_WAITING },
+	{ "MAP_TRACKS",       minimap_t::MAP_TRACKS },
+	{ "MAX_SPEEDLIMIT",   minimap_t::MAX_SPEEDLIMIT },
+	{ "MAP_SPEEDLIMIT",   minimap_t::MAX_SPEEDLIMIT },
+	{ "MAP_POWERLINES",   minimap_t::MAP_POWERLINES },
+	{ "MAP_TOURIST",      minimap_t::MAP_TOURIST },
+	{ "MAP_FACTORIES",    minimap_t::MAP_FACTORIES },
+	{ "MAP_DEPOT",        minimap_t::MAP_DEPOT },
+	{ "MAP_FOREST",       minimap_t::MAP_FOREST },
+	{ "MAP_CITYLIMIT",    minimap_t::MAP_CITYLIMIT },
+	{ "MAP_PAX_DEST",     minimap_t::MAP_PAX_DEST },
+	{ "MAP_OWNER",        minimap_t::MAP_OWNER },
+	{ "MAP_LINES",        minimap_t::MAP_LINES },
+	{ "MAP_LEVEL",        minimap_t::MAP_LEVEL },
+	{ "MAP_WAITCHANGE",   minimap_t::MAP_WAITCHANGE },
+	{ "MAP_HIDE_CONTOUR", minimap_t::MAP_HIDE_CONTOUR },
+	{ "MAP_CLIMATES",     minimap_t::MAP_CLIMATES },
+	{ "MAP_CITIZENS",     minimap_t::MAP_CITIZENS },
+	{ "MAP_CITY_GROWTH",  minimap_t::MAP_CITY_GROWTH },
+	{ "MAP_LABELS",       minimap_t::MAP_LABELS }
+};
+
+
+bool minimap_t::parse_display_mode(const char *str, MAP_DISPLAY_MODE &mode_out)
+{
+	const uint32 all_modes = (MAP_LABELS << 1) - 1;
+	uint32 result = 0;
+	bool any = false;
+
+	while(  str  &&  *str  ) {
+		const size_t len = strcspn(str, "|+, \t\r\n");
+		if(  len == 0  ) {
+			str++;
+			continue;
+		}
+		std::string token(str, len);
+		str += len;
+
+		if(  token[0]>='0'  &&  token[0]<='9'  ) {
+			char *end = NULL;
+			const unsigned long val = strtoul(token.c_str(), &end, 0);
+			if(  *end != 0  ||  (val & ~(unsigned long)all_modes) != 0  ) {
+				return false;
+			}
+			result |= (uint32)val;
+		}
+		else if(  STRICMP(token.c_str(), "default") == 0  ) {
+			result |= env_t::default_mapmode;
+		}
+		else {
+			bool found = false;
+			for(  size_t i = 0;  i < lengthof(display_mode_names);  i++  ) {
+				const char *name = display_mode_names[i].name;
+				if(  STRICMP(token.c_str(), name) == 0  ||  (STRNICMP(name, "MAP_", 4) == 0  &&  STRICMP(token.c_str(), name+4) == 0)  ) {
+					result |= display_mode_names[i].mode;
+					found = true;
+					break;
+				}
+			}
+			if(  !found  ) {
+				return false;
+			}
+		}
+		any = true;
+	}
+
+	mode_out = (MAP_DISPLAY_MODE)(any ? result : env_t::default_mapmode);
+	return true;
+}
+
+
+// names of all set bits, joined by '|'
+static std::string display_mode_to_string(uint32 bits)
+{
+	std::string str;
+	for(  size_t i = 0;  i < lengthof(display_mode_names);  i++  ) {
+		if(  display_mode_names[i].mode != minimap_t::PLAIN  &&  (bits & display_mode_names[i].mode)  ) {
+			if(  !str.empty()  ) {
+				str += "|";
+			}
+			str += display_mode_names[i].name;
+			bits &= ~display_mode_names[i].mode; // skip aliases
+		}
+	}
+	return str;
+}
+
+
+bool minimap_t::check_display_mode(MAP_DISPLAY_MODE mode_to_check, std::string &conflicts)
+{
+	const uint32 terrain_flags = MAP_HIDE_CONTOUR | MAP_CLIMATES;
+	const uint32 base = mode_to_check & ~(MAP_MODE_FLAGS | terrain_flags);
+	const uint32 terrain = mode_to_check & terrain_flags;
+	const uint32 halt = mode_to_check & MAP_MODE_HALT_FLAGS;
+	const uint32 city = mode_to_check & MAP_MODE_CITY_FLAGS;
+
+	conflicts.clear();
+	// calc_map_pixel() only handles a single base mode without terrain flags
+	if(  base & (base - 1)  ) {
+		conflicts += "exclusive map modes " + display_mode_to_string(base) + ": none of them is drawn";
+	}
+	else if(  base  &&  terrain  ) {
+		conflicts += "exclusive map modes " + display_mode_to_string(base) + " and " + display_mode_to_string(terrain) + ": " + display_mode_to_string(base) + " is not drawn";
+	}
+	if(  terrain == terrain_flags  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "\n";
+		}
+		conflicts += "exclusive map modes " + display_mode_to_string(terrain) + ": only MAP_HIDE_CONTOUR is used";
+	}
+	if(  halt & (halt - 1)  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "\n";
+		}
+		conflicts += "exclusive halt map modes " + display_mode_to_string(halt) + ": only one of them is drawn";
+	}
+	if(  city & (city - 1)  ) {
+		if(  !conflicts.empty()  ) {
+			conflicts += "\n";
+		}
+		conflicts += "exclusive city map modes " + display_mode_to_string(city) + ": the circles overlap";
+	}
+	return conflicts.empty();
+}
+
+
+bool minimap_t::export_to_png(std::string &filename)
+{
+	return export_to_png(filename, (MAP_DISPLAY_MODE)env_t::default_mapmode);
+}
+
+
+bool minimap_t::export_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
+{
+	std::string conflicts;
+	const bool has_conflicts = !check_display_mode(export_mode, conflicts);
+	if(  has_conflicts  ) {
+		dbg->warning("minimap_t::export_to_png()", "you set exclusive map options (0x%x): %s", (uint32)export_mode, conflicts.c_str());
+	}
+
+	const bool ok = render_to_png(filename, export_mode);
+
+	if(  has_conflicts  ) {
+		// also tell the user, since scripts and MCP clients have no window of their own
+		std::string text = translator::translate(ok ? "Map image exported to the screenshot folder." : "Map image export failed.");
+		text += "\n\n";
+		text += translator::translate("You set exclusive map options:");
+		text += "\n";
+		text += conflicts;
+		create_win(new news_img(text.c_str()), w_time_delete, magic_none);
+	}
+	return ok;
+}
+
+
+bool minimap_t::render_to_png(std::string &filename, MAP_DISPLAY_MODE export_mode)
+{
+	filename.clear();
+	if (access(SCREENSHOT_PATH_X, W_OK) == -1) {
+		return false;
+	}
+
+	const scr_size export_size = get_max_size();
+	const scr_size screen_size(display_get_width(), display_get_height());
+	if (export_size.w <= 0 || export_size.h <= 0 || screen_size.w <= 0 || screen_size.h <= 0) {
+		return false;
+	}
+
+	static int number = 0;
+	char path[80];
+	do {
+		snprintf(path, lengthof(path), SCREENSHOT_PATH_X "simmap%02d.png", number++);
+	} while (access(path, W_OK) != -1);
+
+	raw_image_png_writer_t writer(path, (uint32)export_size.w, (uint32)export_size.h, raw_image_t::FMT_RGB888);
+	if (!writer.is_valid()) {
+		return false;
+	}
+
+	// Bound temporary RGB memory independently of the total exported image size.
+	static const uint64 max_strip_bytes = 32ULL * 1024ULL * 1024ULL;
+	const uint64 row_bytes = (uint64)export_size.w * 3ULL;
+	const uint64 rows_per_strip = max_strip_bytes / row_bytes > 0 ? max_strip_bytes / row_bytes : 1;
+	const scr_coord_val strip_height = min(screen_size.h, (scr_coord_val)rows_per_strip);
+	raw_image_t strip((uint32)export_size.w, (uint32)strip_height, raw_image_t::FMT_RGB888);
+	const scr_coord saved_new_off = new_off;
+	const scr_size saved_new_size = new_size;
+	const clip_dimension saved_clip = display_get_clip_wh();
+	// calc_map() marks the map as visible; without an open map window it must
+	// become invisible again, or vehicles keep updating the (hidden) map pixels
+	const bool was_visible = is_visible;
+	const MAP_DISPLAY_MODE saved_mode = mode;
+	mode = export_mode;
+	// map_data may be stale (it is not updated while the map is hidden),
+	// so force a full recalculation for the first tile
+	cur_size = scr_size(-1, -1);
+	bool ok = true;
+
+	for (scr_coord_val y = 0; ok && y < export_size.h; y += strip_height) {
+		const scr_coord_val tile_height = min(strip_height, export_size.h - y);
+		for (scr_coord_val x = 0; ok && x < export_size.w; x += screen_size.w) {
+			const scr_coord_val tile_width = min(screen_size.w, export_size.w - x);
+			set_xy_offset_size(scr_coord(x, y), scr_size(tile_width, tile_height));
+			display_set_clip_wh(0, 0, tile_width, tile_height);
+			display_fillbox_wh_clip_rgb(0, 0, tile_width, tile_height, color_idx_to_rgb(COL_BLACK), false);
+			draw(scr_coord(-x, -y));
+			ok &= display_snapshot(scr_rect(0, 0, tile_width, tile_height), strip, scr_coord(x, 0));
+		}
+		ok = ok && writer.write_rows(strip, (uint32)tile_height);
+	}
+
+	mode = saved_mode;
+	new_off = saved_new_off;
+	new_size = saved_new_size;
+	needs_redraw = true;
+	is_visible = was_visible;
+	if(  !was_visible  ) {
+		// the map window will recalculate everything when opened
+		delete map_data;
+		map_data = NULL;
+	}
+	display_set_clip_wh(saved_clip.x, saved_clip.y, saved_clip.w, saved_clip.h);
+	mark_screen_dirty();
+
+	if (!ok || !writer.finish()) {
+		return false;
+	}
+	filename = path;
+	return true;
+}
+
+
 void minimap_t::calc_map()
 {
 	// only use bitmap size like screen size
@@ -1130,7 +1390,14 @@ void minimap_t::calc_map()
 	if(  !isometric  ) {
 		koord k;
 		koord start_off = koord( (cur_off.x*zoom_out)/zoom_in, (cur_off.y*zoom_out)/zoom_in );
-		koord end_off = start_off+koord( ( map_data->get_width()*zoom_out)/zoom_in+1, ( map_data->get_height()*zoom_out)/zoom_in+1 );
+		// cur_off need not be aligned to zoom_in (notably when exporting the map in
+		// memory-bounded strips).  Calculate the absolute far edge and round it up;
+		// deriving it only from the bitmap size can leave the final partial tile
+		// unpainted and retain pixels from the preceding strip.
+		koord end_off = koord(
+			((cur_off.x + map_data->get_width()) * zoom_out + zoom_in - 1) / zoom_in,
+			((cur_off.y + map_data->get_height()) * zoom_out + zoom_in - 1) / zoom_in
+		);
 		for(  k.y=start_off.y;  k.y<end_off.y;  k.y+=zoom_out  ) {
 			for(  k.x=start_off.x;  k.x<end_off.x;  k.x+=zoom_out  ) {
 				calc_map_pixel(k);
@@ -1165,6 +1432,8 @@ minimap_t::minimap_t()
 	cur_size = new_size = scr_size(0,0);
 	needs_redraw = true;
 	transport_type_showed_on_map = simline_t::line;
+	player_showed_on_map = -1;
+	freight_type_group_index_showed_on_map = NULL;
 }
 
 
@@ -1196,6 +1465,7 @@ void minimap_t::init()
 	last_schedule_counter = world->get_schedule_counter()-1;
 	set_selected_cnv(convoihandle_t());
 	set_selected_route(nullptr, nullptr);
+	highlighted_route_tiles.clear();
 }
 
 
@@ -2088,6 +2358,17 @@ void minimap_t::draw(scr_coord pos)
 			if(  text  ) {
 				display_proportional_clip_rgb( p.x + 6, p.y - LINESPACE / 2, text, ALIGN_LEFT, pcol, true );
 			}
+		}
+	}
+
+	// draw highlighted convoy/line route (from convoi_info_t / schedule_list_gui_t "show route" button)
+	if(  !highlighted_route_tiles.empty()  ) {
+		const PIXVAL route_col = color_idx_to_rgb(COL_SOFT_BLUE);
+		const scr_coord_val tile_size = max( 2, zoom_in );
+		FOR(  vector_tpl<koord3d>,  const &k3d,  highlighted_route_tiles  ) {
+			scr_coord p = map_to_screen_coord(k3d.get_2d());
+			p += pos;
+			display_fillbox_wh_clip_rgb( p.x, p.y, tile_size, tile_size, route_col, true );
 		}
 	}
 }

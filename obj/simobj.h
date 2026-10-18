@@ -264,7 +264,7 @@ public:
 	/**
 	 * Called after the world is completely loaded from savegame
 	 */
-	virtual void finish_rd() {}
+	virtual void finish_rd(const uint8 /*loaded_OTRP_version*/) {}
 
 	/**
 	 * @return position

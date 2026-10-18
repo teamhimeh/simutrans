@@ -58,9 +58,17 @@ private:
 	sint8 number_of_seasons;
 
 	/// if true front_images lists exists as nodes
-	bool front_images;
+	bool front_image_lists : 1;
+	/// if true front image lists exist and contain at least one image
+	bool front_images : 1;
 
-	bool clip_below; // only relevant for elevated ways
+	bool clip_below : 1; // only relevant for elevated ways
+
+	// cached to not travese the list for each of those (set in way_reader_t::register_obj)
+	bool diagonals : 1;
+	bool close_diagonals : 1;
+	bool switches : 1;
+	bool switches_ex : 1;
 
 	/**
 	 * calculates index of image list for flat ways
@@ -70,7 +78,7 @@ private:
 	uint16 image_list_base_index(bool snow, bool front) const
 	{
 		if (number_of_seasons == 0  ||  !snow) {
-			if (front  &&  front_images) {
+			if (front  &&  front_image_lists) {
 				return (number_of_seasons == 0) ? 6 : 9;
 			}
 			else {
@@ -78,7 +86,7 @@ private:
 			}
 		}
 		else { // winter images
-			if (front  &&  front_images) {
+			if (front  &&  front_image_lists) {
 				return 12;
 			}
 			else {
@@ -93,6 +101,13 @@ public:
 	* between train track and tram track
 	*/
 	waytype_t get_finance_waytype() const;
+
+	/**
+	* Maintenance cost scaled by settings_t::maintenance_cost_multiplier_way [%].
+	* Hides obj_desc_transport_related_t::get_maintenance() on purpose, so that
+	* every user of a way_desc_t sees the scaled value.
+	*/
+	sint64 get_maintenance() const;
 
 	/**
 	* returns the system type of this way (mostly used with rails)
@@ -121,7 +136,7 @@ public:
 		const uint16 n = image_list_base_index(season, front);
 		image_list_t const* const imglist = get_child<image_list_t>(n);
 		// only do this if extended switches are there
-		if(  imglist->get_count()>16  ) {
+		if(  switches  ) {
 			static uint8 ribi_to_extra[16] = {
 				255, 255, 255, 255, 255, 255, 255, 0,
 				255, 255, 255, 1, 255, 2, 3, 4
@@ -140,7 +155,7 @@ public:
 		const uint16 n = image_list_base_index(season, front);
 		image_list_t const* const imglist = get_child<image_list_t>(n);
 		// only do this if extended switches are there
-		if(  imglist->get_count()>26  ) {
+		if(  switches_ex  ) {
 			static uint8 ribi_to_extra[16] = {
 				255, 255, 255, 255, 255, 255, 255, 0,
 				255, 255, 255, 1, 255, 2, 3, 4
@@ -210,20 +225,24 @@ public:
 		return true;
 	}
 
-	bool has_diagonal_image() const {
-		return get_child<image_list_t>(4)->get_image_id(0) != IMG_EMPTY
-		||     get_child<image_list_t>(image_list_base_index(false, true)+2)->get_image_id(0) != IMG_EMPTY;
+	/**
+	 * close diagonals: two parallel diagonals one tile apart; every second tile is a four-way tile
+	 * nr=0: close1 (northwest+southeast), nr=1: close2 (northeast+southwest)
+	 */
+	image_id get_close_diagonal_image_id(uint8 nr, uint8 season, bool front = false) const
+	{
+		if (front  &&  !front_images) {
+			return IMG_EMPTY;
+		}
+		const uint16 n = image_list_base_index(season, front) + 2;
+		return get_child<image_list_t>(n)->get_image_id(4+nr);
 	}
 
-	bool has_switch_image() const {
-		return get_child<image_list_t>(2)->get_count() > 16
-		||     get_child<image_list_t>(image_list_base_index(false, true))->get_count() > 16;
-	}
-
-	bool has_switch_ex_image() const {
-		return get_child<image_list_t>(2)->get_count() > 26
-		||     get_child<image_list_t>(image_list_base_index(false, true))->get_count() > 26;
-	}
+	// quick query functions
+	bool has_diagonal_image() const { return diagonals; }
+	bool has_close_diagonal_image() const { return close_diagonals; }
+	bool has_switch_image() const { return switches; }
+	bool has_switch_ex_image() const { return switches_ex; }
 
 	/* true, if this tile is to be drawn as a normal thing */
 	bool is_draw_as_obj() const { return draw_as_obj; }

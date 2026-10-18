@@ -27,6 +27,8 @@ public:
 	uint32 get_rdwr_id() OVERRIDE { return magic_line_schedule_rdwr_dummy; }
 
 
+	convoihandle_t get_route_reference_convoi() const OVERRIDE;
+
 private:
 	linehandle_t line;
 };

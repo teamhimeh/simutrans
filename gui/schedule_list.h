@@ -45,6 +45,7 @@ private:
 	button_t bt_show_route_cache;
 	bool is_route_cache_show;
 	route_t route_cache_route;
+	static void clear_route_tile_flags(route_t &r);
 	void show_route_cache(bool yesno);
 	static void hide_route_display(void *owner);
 	gui_scrolled_list_t scl, scrolly_convois, scrolly_haltestellen;
@@ -67,6 +68,7 @@ private:
 
 	// only show schedules containing ...
 	char schedule_filter[512], old_schedule_filter[512];
+	button_t bt_memo_filter;
 
 	// so even japanese can have long enough names ...
 	char line_name[512], old_line_name[512];

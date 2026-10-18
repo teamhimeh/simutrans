@@ -226,6 +226,7 @@ private:
 
 	uint16 preservation_year_month;
 
+	/// @see get_height_clearance
 	uint8 height_clearance;
 
 	bool is_type(building_desc_t::btype u) const {

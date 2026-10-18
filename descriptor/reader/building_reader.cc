@@ -553,6 +553,10 @@ obj_desc_t * building_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->preservation_year_month = DEFAULT_RETIRE_DATE*12;
 	}
 
+	if( version < 12 ) {
+		desc->height_clearance = 255; // default for not set
+	}
+
 	DBG_DEBUG("building_reader_t::read_node()",
 		"version=%d,"
 		" btyp=%d,"

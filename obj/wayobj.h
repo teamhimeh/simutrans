@@ -33,6 +33,14 @@ private:
 	uint8 nw:1;
 	uint8 dir:7;
 
+	// close diagonals on a fourway way: 0=no, 1=northwest+southeast, 2=northeast+southwest
+	uint8 close_diagonal:2;
+
+	// image of a close diagonal
+	image_id get_close_diagonal_image(bool front) const {
+		return front ? desc->get_front_close_diagonal_image_id(close_diagonal-1) : desc->get_back_close_diagonal_image_id(close_diagonal-1);
+	}
+
 	static const uint8 dir_unknown = 127;
 
 	ribi_t::ribi find_next_ribi(const grund_t *start, const ribi_t::ribi dir, const waytype_t wt) const;
@@ -56,7 +64,7 @@ public:
 	* the back image, drawn before vehicles
 	*/
 	image_id get_image() const OVERRIDE {
-		return hang ? desc->get_back_slope_image_id(hang) :		
+		return close_diagonal ? get_close_diagonal_image(false) : hang ? desc->get_back_slope_image_id(hang) :		
 			(diagonal ? desc->get_back_diagonal_image_id(dir) : 
 				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,false) : desc->get_back_image_id(dir))
 			);
@@ -66,7 +74,7 @@ public:
 	 * the front image, drawn after everything else
 	 */
 	image_id get_front_image() const OVERRIDE {
-		return hang ? desc->get_front_slope_image_id(hang) :
+		return close_diagonal ? get_close_diagonal_image(true) : hang ? desc->get_front_slope_image_id(hang) :
 			(diagonal ? desc->get_front_diagonal_image_id(dir) : 
 				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,true) : desc->get_front_image_id(dir))
 			);
@@ -76,7 +84,7 @@ public:
 	* the back image, drawn before vehicles
 	*/
 	image_id get_image() const OVERRIDE {
-		return hang ? desc->get_back_slope_image_id(hang) :		
+		return close_diagonal ? get_close_diagonal_image(false) : hang ? desc->get_back_slope_image_id(hang) :		
 			(diagonal ? desc->get_back_diagonal_image_id(dir) : desc->get_back_image_id(dir));
 	}
 
@@ -84,7 +92,7 @@ public:
 	 * the front image, drawn after everything else
 	 */
 	image_id get_front_image() const OVERRIDE {
-		return hang ? desc->get_front_slope_image_id(hang) :
+		return close_diagonal ? get_close_diagonal_image(true) : hang ? desc->get_front_slope_image_id(hang) :
 			(diagonal ? desc->get_front_diagonal_image_id(dir) : desc->get_front_image_id(dir));
 	}
 #endif
@@ -113,7 +121,7 @@ public:
 
 	const char* is_deletable(const player_t *player) OVERRIDE;
 
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// specific for wayobj
 	void set_dir(ribi_t::ribi d) { dir = d; calc_image(); }

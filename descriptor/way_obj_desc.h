@@ -38,9 +38,21 @@ private:
 	 */
 	uint8 own_wtyp;
 
+	// cached, set in way_obj_reader_t::register_obj()
+	bool diagonals : 1;
+	bool close_diagonals : 1;
+
 public:
 
 	bool is_overhead_line() const { return (waytype_t)own_wtyp == overheadlines_wt; }
+
+	/**
+	* Maintenance cost scaled by settings_t::maintenance_cost_multiplier_overhead [%].
+	* Hides obj_desc_transport_related_t::get_maintenance() on purpose, so that
+	* every user of a way_obj_desc_t sees the scaled value.
+	* Implemented in way_desc.cc.
+	*/
+	sint64 get_maintenance() const;
 
 	// way objects can have a front and a backimage, unlike ways ...
 	image_id get_front_image_id(ribi_t::ribi ribi) const { return get_child<image_list_t>(2)->get_image_id(ribi); }
@@ -179,17 +191,22 @@ public:
 		return get_child<image_list_t>(7)->get_image_id(ribi / 3 - 1);
 	}
 
-	bool has_diagonal_image() const {
-		if (get_child<image_list_t>(4)->get_image(0)) {
-			// has diagonal fontimage
-			return true;
-		}
-		if (get_child<image_list_t>(5)->get_image(0)) {
-			// or diagonal back image
-			return true;
-		}
-		return false;
+	/**
+	 * close diagonals: two parallel diagonals one tile apart (on a fourway way tile)
+	 * nr=0: close1 (northwest+southeast), nr=1: close2 (northeast+southwest)
+	 */
+	image_id get_front_close_diagonal_image_id(uint8 nr) const
+	{
+		return nr < 2 ? get_child<image_list_t>(6)->get_image_id(4 + nr) : IMG_EMPTY;
 	}
+
+	image_id get_back_close_diagonal_image_id(uint8 nr) const
+	{
+		return nr < 2 ? get_child<image_list_t>(7)->get_image_id(4 + nr) : IMG_EMPTY;
+	}
+
+	bool has_diagonal_image() const { return diagonals; }
+	bool has_close_diagonal_image() const { return close_diagonals; }
 
 	bool has_switch_image() const {
 		return get_child<image_list_t>(2)->get_image_id(16) != IMG_EMPTY

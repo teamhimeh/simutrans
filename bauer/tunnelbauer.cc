@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include "../simversion.h"
 
 #include "../simdebug.h"
 
@@ -496,7 +497,7 @@ DBG_MESSAGE("tunnel_builder_t::build()","build from (%d,%d,%d) to (%d,%d,%d) ", 
 			lt = new leitung_t(tunnel->get_pos(), player);
 			lt->set_desc(way_desc);
 			tunnel->obj_add( lt );
-			lt->finish_rd();
+			lt->finish_rd( OTRP_VERSION_MAJOR );
 		}
 		tunnel->obj_add(new tunnel_t(pos, player, desc));
 		tunnel->calc_image();
@@ -545,7 +546,7 @@ DBG_MESSAGE("tunnel_builder_t::build()","build from (%d,%d,%d) to (%d,%d,%d) ", 
 			lt = new leitung_t(tunnel->get_pos(), player);
 			lt->set_desc(way_desc);
 			tunnel->obj_add( lt );
-			lt->finish_rd();
+			lt->finish_rd( OTRP_VERSION_MAJOR );
 		}
 		tunnel->obj_add(new tunnel_t(pos, player, desc));
 		tunnel->calc_image();
@@ -620,7 +621,7 @@ void tunnel_builder_t::build_tunnel_portal(player_t *player, koord3d end, koord 
 			// subtract maintenance once since leitung_t::finish_rd will add it again
 			player_t::add_maintenance( player, -1*lt->get_desc()->get_maintenance(), powerline_wt );
 		}
-		lt->finish_rd();
+		lt->finish_rd( OTRP_VERSION_MAJOR );
 	}
 
 	// remove sidewalk
@@ -824,7 +825,7 @@ const char *tunnel_builder_t::remove(player_t *player, koord3d start, waytype_t 
 		welt->access(pos.get_2d())->kartenboden_setzen(gr_new);
 
 		if(gr_new->get_leitung()) {
-			gr_new->get_leitung()->finish_rd();
+			gr_new->get_leitung()->finish_rd( OTRP_VERSION_MAJOR );
 		}
 
 		// recalc image of ground
