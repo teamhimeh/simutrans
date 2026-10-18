@@ -961,15 +961,17 @@ void fabrik_t::build(sint32 rotate, bool build_fields, bool force_initial_prodba
 					break;
 				}
 			}
-			sint32 field_prod = prodbase - org_prodbase;
 			// adjust prodbase
 			if (force_initial_prodbase) {
-				set_base_production( max(field_prod, org_prodbase) );
+				set_base_production(max(org_prodbase, get_min_base_production()));
 			}
 		}
 	}
 	else {
 		fields.clear();
+	}
+	if (force_initial_prodbase && prodbase < get_min_base_production()) {
+		set_base_production(get_min_base_production());
 	}
 
 	/// Determine control logic

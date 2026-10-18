@@ -406,5 +406,9 @@ function test_factory_high_production()
 	ASSERT_EQUAL(output.get_base_consumption(), normalized)
 	ASSERT_EQUAL(output.max_storage, 2097152) // INT32_MAX / 1024, rounded for display
 	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
+	// Explicit zero production is raised to a base of one, as on save loading.
+	ASSERT_EQUAL(build_factory(public_pl, coord3d(0, 0, 0), 1, 1, 0, "Kohlegrube"), null)
+	ASSERT_EQUAL(factory_x(0, 0).output.Kohle.get_base_production(), bits >= 18 ? 1 << (bits - 18) : 1 >> (18 - bits))
+	ASSERT_EQUAL(command_x(tool_remover).work(public_pl, coord3d(0, 0, 0)), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
