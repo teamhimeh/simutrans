@@ -1980,7 +1980,7 @@ void fabrik_t::step(uint32 delta_t)
 		// The amount of production available.
 		sint32 prod_comp;
 		// The amount of consumption available.
-		sint32 cons_comp = 0;
+		sint64 cons_comp = 0;
 
 		switch(  control_type  ) {
 			case CL_PROD_CLASSIC: {
@@ -2205,7 +2205,8 @@ void fabrik_t::step(uint32 delta_t)
 						// enforce input limits on production
 						if(  prod_delta > cons_comp  ) {
 							// not enough input
-							prod_delta = cons_comp;
+							// Here 0 <= cons_comp < prod_delta <= INT32_MAX.
+							prod_delta = (sint32)cons_comp;
 							cons_comp = 0;
 						}
 						else {
