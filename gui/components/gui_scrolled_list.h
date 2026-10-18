@@ -103,6 +103,8 @@ private:
 	item_compare_func compare;
 
 	bool multiple_selection; // true when multiple selection is enabled.
+	scr_coord_val grid_cell_width; // zero for the conventional single-column list
+	uint16 grid_columns;
 	void calc_selection(scrollitem_t*, scrollitem_t*, event_t);
 
 protected:
@@ -170,6 +172,19 @@ public:
 
 	bool is_marginless() const OVERRIDE { return maximize; }
 	void set_maximize(bool b) { maximize = b; }
+
+	/// Use fixed-width grid cells, or zero to restore the conventional text list.
+	void set_grid_cell_width(scr_coord_val width) {
+		grid_cell_width = width;
+		if (width == 0) {
+			container.set_table_layout(1, 0);
+			reset_container_size();
+		}
+		set_size(get_size());
+	}
+	scr_size get_max_size() const OVERRIDE {
+		return grid_cell_width > 0 ? scr_size::inf : gui_scrollpane_t::get_max_size();
+	}
 };
 
 #endif
