@@ -438,8 +438,7 @@ function test_factory_high_production_multi_output()
 }
 
 
-// Basic high-production field factory invariants. See the manual checklist
-// for tests requiring the production-edit UI, save/load, or elapsed game time.
+// Verify that a field factory built at the production cap retains its minimum field count.
 function test_factory_high_production_fields()
 {
 	local public_pl = player_x(1)
