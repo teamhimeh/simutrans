@@ -260,6 +260,12 @@ onewaysign_info_t::onewaysign_info_t(roadsign_t* s, koord3d first_intersection) 
 		bt_guide_signal.add_listener(this);
 		bt_guide_signal.pressed = sign->is_guide_signal();
 		add_component(&bt_guide_signal);
+
+		bt_allow_multi_convoys.init(button_t::square_state, translator::translate("Stop more than one convoys."));
+		bt_allow_multi_convoys.set_tooltip(translator::translate("Allow more than one convoys at same spot(platform)."));
+		bt_allow_multi_convoys.add_listener(this);
+		bt_allow_multi_convoys.pressed = sign->is_allow_multi_convoys();
+		add_component(&bt_allow_multi_convoys);
 	}
 
 	// Detailed oneway section (single_way signs only)
@@ -389,6 +395,15 @@ bool onewaysign_info_t::action_triggered(gui_action_creator_t *komp, value_t ext
 		return true;
 	}
 
+	// allow more than one convoys
+	if(  komp == &bt_allow_multi_convoys  ) {
+		char param[256];
+		sprintf(param, "%s,%i,q", sign->get_pos().get_str(), (int)!sign->is_allow_multi_convoys());
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param(param);
+		welt->set_tool(tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player());
+		return true;
+	}
+
 	// Detailed oneway toggle
 	if(  komp == &bt_detailed_oneway  ) {
 		char param[256];
@@ -478,6 +493,7 @@ void onewaysign_info_t::update_data()
 	if(  has_choose  ) {
 		bt_length_based.pressed = sign->is_length_based();
 		bt_guide_signal.pressed = sign->is_guide_signal();
+		bt_allow_multi_convoys.pressed = sign->is_allow_multi_convoys();
 	}
 	if(  sign->get_desc()->is_single_way()  ) {
 		bt_detailed_oneway.pressed = sign->is_detailed_oneway();

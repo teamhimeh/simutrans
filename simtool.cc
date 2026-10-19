@@ -10896,6 +10896,7 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
  * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
  * i:set ignore lentgh
+ * q:allow more than one convoys in same platform
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
@@ -11149,6 +11150,26 @@ bool tool_change_roadsign_t::init( player_t *player )
 					if(  signal_info_win  ) {
 						signal_info_win->update_data();
 					}
+				}
+			}
+		}
+		break;
+
+		case 'q':
+		// allow more than one convoys in same platform
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_allow_multi_convoys(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+			else if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				rs->set_allow_multi_convoys(inst);
+				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  sign_info_win  ) {
+					sign_info_win->update_data();
 				}
 			}
 		}
