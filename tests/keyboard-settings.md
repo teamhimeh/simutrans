@@ -3,6 +3,11 @@
 Use an isolated portable (`-singleuser`) data directory. Open Display settings
 and select Keybindings. Never use personal pakset data for these checks.
 
+Run `python tests/test_keybindings_unicode.py --cxx g++` with a C++17 compiler
+for focused tests of the production file and key parsing functions. These cover
+ASCII/Japanese paths, temporary-file cleanup after failed writes/replacement,
+backup preservation, direct UTF-8 keys, modifiers and numeric round trips.
+
 1. Use a pakset directory containing Japanese characters. Launch without a
    backup: neither startup nor opening Display settings on a different tab may
    create `pak/config/menuconf.default.tab`. Open Keybindings: it must create
@@ -20,6 +25,8 @@ and select Keybindings. Never use personal pakset data for these checks.
 3. Edit the key in menuconf.tab externally while the game runs. Switch away from
    Keybindings and back: the changed key must appear and work without restarting.
    Verify function keys and Ctrl/Shift, including Ctrl+Shift numeric notation.
+   Also check direct UTF-8 keys such as `あ` and `^+あ`, both at the end of an
+   entry and before a toolbar parameter. Japanese comments must be preserved.
 4. Clear a binding. Verify a zero key in menuconf.tab, Unassigned in the UI, and
    persistence after reopening the tab and restarting.
 5. Restore default keys. Verify keys from the first-run backup are applied to

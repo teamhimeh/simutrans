@@ -539,7 +539,7 @@ bool check_tool_availability(const tool_t *tool, uint16 time)
 static utf32 str_to_key( const char *str, uint8 *modifier )
 {
 	*modifier = 0;	// default no modufier check
-	if(  str[1]==','  ||  str[1]<=' ') {
+	if(  str[1]==','  ||  (uint8)str[1]<=' ') {
 		return (uint8)*str;
 	}
 	else {
@@ -551,7 +551,7 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 			else {
 				*modifier = 2;
 				// only single character following =>make is 1..26 value
-				if(  isalpha( str[1] )  ) {
+				if(  (str[1] >= 'a' && str[1] <= 'z') || (str[1] >= 'A' && str[1] <= 'Z')  ) {
 					return tolower(str[1]) - 'a' + 1;
 				}
 				str++;
@@ -573,7 +573,7 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 		if(  127<(uint8)*str  ) {
 			size_t len = 0;
 			utf32 const c = utf8_decoder_t::decode((utf8 const *)str, len);
-			if(str[len]==',') {
+			if(len > 0 && (str[len]==',' || (uint8)str[len]<=' ')) {
 				return c;
 			}
 		}
@@ -733,13 +733,13 @@ bool write_shortcut_file(const std::string &path, const std::string &data)
 	if (!file) { return false; }
 	bool ok = fwrite(data.data(), 1, data.size(), file) == data.size();
 	ok = fclose(file) == 0 && ok;
-	if (!ok) { remove(temporary.c_str()); return false; }
+	if (!ok) { dr_remove(temporary.c_str()); return false; }
 #ifdef _WIN32
 	ok = dr_rename(temporary.c_str(), path.c_str()) == 0;
 #else
 	ok = rename(temporary.c_str(), path.c_str()) == 0;
 #endif
-	if (!ok) { remove(temporary.c_str()); }
+	if (!ok) { dr_remove(temporary.c_str()); }
 	return ok;
 }
 
