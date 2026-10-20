@@ -1130,7 +1130,7 @@ void fabrik_t::remove_field_at(koord pos)
 	const field_class_desc_t *const field_class = desc->get_field_group()->get_field_class( field.field_class_index );
 	fields.remove(field);
 	// revert the field's effect on production base and storage capacities
-	set_base_production( max(1, prodbase - (sint32)field_class->get_field_production()) );
+	set_base_production( max(get_min_base_production(), prodbase - (sint32)field_class->get_field_production()) );
 }
 
 
