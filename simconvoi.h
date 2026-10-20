@@ -1383,7 +1383,7 @@ public:
 	 */
 	void book_shipping_toll();
 
-	/// pay this carrier the configured shipping revenue for putting `c` ashore at `landing`
+	/// charge `c`'s owner the configured shipping revenue as toll to this carrier, for putting it ashore at `landing`
 	void book_shipping_revenue(convoihandle_t c, koord3d landing);
 
 	/**

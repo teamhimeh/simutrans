@@ -368,7 +368,9 @@ private:
 	 * get_shipping_revenue_wt_index()). Unit: 1/100 credit per tile travelled per tile
 	 * (CARUNITS_PER_TILE) of carried convoy length. Set in simuconf.tab as
 	 * revenue_<shipped>_shipped_by_<carrier>, e.g. revenue_road_shipped_by_water.
-	 * Independent of ownership and of the toll; 0 (the default) earns nothing.
+	 * Booked as way toll: the carried convoy's owner pays it to the carrier's owner when put
+	 * ashore, on top of toll_shipping_percentage; nothing is paid between a player's own
+	 * convoys. 0 (the default) charges nothing.
 	 */
 	sint32 shipping_revenue[SHIPPING_REVENUE_SHIPPED_WT_COUNT][SHIPPING_REVENUE_CARRIER_WT_COUNT];
 
