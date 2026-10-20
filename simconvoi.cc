@@ -7917,6 +7917,10 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 		k = k->get_coupling_convoi();
 	}
 
+	// earned by the carrier for the whole crossing; needs c's last_stop_pos, which is still the
+	// port it boarded at, so it must happen before c books the revenue of this leg
+	book_shipping_revenue( c, target->get_pos() );
+
 	// detach from the carrier before starting, so nothing can observe a half-shipped convoy
 	shipped_convois.remove( c );
 	c->carrier_convoi      = convoihandle_t();
@@ -8438,6 +8442,35 @@ void convoi_t::book_shipping_toll()
 		c->book( -toll_convoy, CONVOI_WAYTOLL );
 		c->book( -toll_convoy, CONVOI_PROFIT );
 	}
+}
+
+
+void convoi_t::book_shipping_revenue(convoihandle_t c, koord3d landing)
+{
+	if(  !c.is_bound()  ||  c->get_vehicle_count() == 0  ||  anz_vehikel == 0  ||  get_schedule() == NULL  ) {
+		return;
+	}
+	// schedule waytypes, because front()->get_waytype() reports track_wt for trams
+	const waytype_t carrier_wt = get_schedule()->get_waytype();
+	const waytype_t shipped_wt = c->get_schedule() ? c->get_schedule()->get_waytype() : c->front()->get_waytype();
+	const sint64 value = welt->get_settings().get_shipping_revenue( shipped_wt, carrier_wt );
+	if(  value <= 0  ) {
+		return;
+	}
+	// paid like freight: per tile between the port of boarding and the landing, and per tile
+	// of deck the whole carried chain takes up
+	const sint64 dist = koord_distance( c->front()->last_stop_pos, landing );
+	const sint64 revenue = value * dist * (sint64)c->get_shipping_length() / CARUNITS_PER_TILE;
+	if(  revenue <= 0  ) {
+		return;
+	}
+	// booked under the carrier's waytype and the shipping good, so it shows up as the
+	// carrier's freight income in the finance and goods statistics
+	const goods_desc_t *g = goods_manager_t::get_shipping_goods( c->front()->get_waytype() );
+	get_owner()->book_revenue( revenue, front()->get_pos().get_2d(), carrier_wt, g ? g->get_index() : 2 );
+	book( revenue, CONVOI_REVENUE );
+	book( revenue, CONVOI_PROFIT );
+	jahresgewinn += revenue;
 }
 
 
