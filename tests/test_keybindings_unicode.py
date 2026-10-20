@@ -37,6 +37,8 @@ def main():
 #include <string>
 #include <filesystem>
 #include <iostream>
+#include <vector>
+#include <algorithm>
 #include <sys/stat.h>
 #include "unicode.h"
 #include "simevent.h"
@@ -62,8 +64,14 @@ size_t checked_fwrite(const void *data, size_t size, size_t count, FILE *file) {
         definition(menu, "bool ensure_shortcut_backup()"),
         definition(menu, "size_t shortcut_field("),
         definition(menu, "unsigned shortcut_key_field("),
+        definition(menu, "bool shortcut_has_key("),
         definition(menu, "std::pair<uint16, uint8> shortcut_from_value("),
         definition(menu, "std::string shortcut_to_value("),
+        "struct tool_t { uint16 command_key; uint8 command_flags; };",
+        definition(menu, "struct shortcut_t") + ";",
+        definition(menu, "struct shortcut_source_t") + ";",
+        "std::vector<shortcut_t> shortcuts; std::vector<shortcut_source_t> shortcut_sources;",
+        definition(menu, "bool save_shortcuts("),
         r'''int main() {
     for (const char *name : {"ascii", u8"日本語のフォルダ"}) {
         const auto dir = std::filesystem::u8path(name);
@@ -111,11 +119,51 @@ size_t checked_fwrite(const void *data, size_t size, size_t count, FILE *file) {
     assert(str_to_key("^A", &flags) == 1 && flags == 2);
     assert(str_to_key("F15", &flags) == SIM_KEY_F15);
     assert(str_to_key("COMMA", &flags) == ',');
+    assert(shortcut_to_value(']', 0) == "]");
+    assert(shortcut_to_value(']', 1) == "+]");
+    assert(shortcut_to_value(1, 2) == "^A");
+    assert(shortcut_to_value(1, 3) == "^+A");
+    assert(shortcut_to_value(SIM_KEY_F15, 2) == "^F15");
+    assert(shortcut_to_value(SIM_KEY_SPACE, 0) == "SPACE");
+    assert(shortcut_to_value(',', 0) == "COMMA");
+    assert(shortcut_to_value(0x3042, 0) == u8"あ");
+    assert(shortcut_to_value(0, 0).empty());
+    // Check every printable ASCII character, including prefix/field delimiters.
+    for (uint16 code = 1; code <= SIM_KEY_UPRIGHT; code++) {
+        for (uint8 modifiers = 0; modifiers < 4; modifiers++) {
+            const auto encoded = shortcut_to_value(code, modifiers);
+            const auto decoded = shortcut_from_value("general_tool[0]", "0,0,9," + encoded);
+            assert(decoded.first == code && decoded.second == modifiers);
+            const auto toolbar = shortcut_from_value("toolbar[0][0]", "tool,0," + encoded + ",parameter");
+            if (toolbar.first != code || toolbar.second != modifiers) {
+                std::cerr << "Toolbar round trip failed: key=" << code << " flags=" << int(modifiers) << " encoded=" << encoded << '\n';
+            }
+            assert(toolbar.first == code && toolbar.second == modifiers);
+        }
+    }
     for (uint8 modifiers = 0; modifiers < 4; modifiers++) {
         const auto value = "0,0,9," + shortcut_to_value(0x3042, modifiers);
         const auto key = shortcut_from_value("general_tool[0]", value);
         assert(key.first == 0x3042 && key.second == modifiers);
     }
+    // Reassigning an existing #93 must rewrite only the edited field as ].
+    std::filesystem::create_directory("save-test");
+    shortcut_menu_path = "save-test/menuconf.tab";
+    shortcut_default_path = "save-test/menuconf.default.tab";
+    const std::string original = u8"# 日本語の説明\r\ngeneral_tool[0]=0,0,9,#93\r\nother=value\r\n";
+    assert(write_shortcut_file(shortcut_menu_path, original));
+    assert(ensure_shortcut_backup());
+    tool_t tool = {']', 0};
+    shortcuts.emplace_back(&tool, "general_tool[0]");
+    assert(save_shortcuts(&tool));
+    std::string saved;
+    assert(read_shortcut_file(shortcut_menu_path, saved));
+    assert(saved == u8"# 日本語の説明\r\ngeneral_tool[0]=0,0,9,]\r\nother=value\r\n");
+    tool.command_key = 0;
+    assert(save_shortcuts(&tool));
+    assert(read_shortcut_file(shortcut_menu_path, saved));
+    assert(saved == u8"# 日本語の説明\r\ngeneral_tool[0]=0,0,9,\r\nother=value\r\n");
+    assert(read_shortcut_file(shortcut_default_path, saved) && saved == original);
     std::cout << "Unicode paths, cleanup failures, backup protection and UTF-8 keys: PASS\n";
 }
 '''])

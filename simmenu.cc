@@ -551,7 +551,8 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 			else {
 				*modifier = 2;
 				// only single character following =>make is 1..26 value
-				if(  (str[1] >= 'a' && str[1] <= 'z') || (str[1] >= 'A' && str[1] <= 'Z')  ) {
+				if(  ((str[1] >= 'a' && str[1] <= 'z') || (str[1] >= 'A' && str[1] <= 'Z'))
+					&& (str[2] == ',' || (uint8)str[2] <= ' ')  ) {
 					return tolower(str[1]) - 'a' + 1;
 				}
 				str++;
@@ -564,6 +565,13 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 			}
 			*modifier |= 1;
 			str++;
+		}
+		// A literal character can also follow Ctrl/Shift prefixes.
+		if ((uint8)*str >= ' ' && (str[1] == ',' || (uint8)str[1] <= ' ')) {
+			if ((*modifier & SIM_MOD_CTRL) && ((*str >= 'a' && *str <= 'z') || (*str >= 'A' && *str <= 'Z'))) {
+				return tolower(*str) - 'a' + 1;
+			}
+			return (uint8)*str;
 		}
 		// direct value (decimal)
 		if(str[0]=='#') {
@@ -791,11 +799,39 @@ std::pair<uint16, uint8> shortcut_from_value(const std::string &name, const std:
 
 std::string shortcut_to_value(uint16 key, uint8 flags)
 {
-	// Decimal notation avoids commas, whitespace and token ambiguity.
-	std::string text;
-	if (flags & SIM_MOD_CTRL) { text += '^'; }
-	if (flags & SIM_MOD_SHIFT) { text += '+'; }
-	return text + "#" + std::to_string(key == 0xFFFF ? 0 : key);
+	if (key == 0 || key == 0xFFFF) { return ""; }
+	std::string prefix;
+	if (flags & SIM_MOD_CTRL) { prefix += '^'; }
+	if (flags & SIM_MOD_SHIFT) { prefix += '+'; }
+	std::string value;
+	if (key >= SIM_KEY_F1 && key <= SIM_KEY_F15) { value = "F" + std::to_string(key - SIM_KEY_F1 + 1); }
+	else if (key >= SIM_KEY_NUMPAD_BASE && key <= SIM_KEY_UPRIGHT) { value = "NUM_" + std::to_string(key - SIM_KEY_NUMPAD_BASE); }
+	else if (key <= 26 && (flags & SIM_MOD_CTRL)) { value = char('A' + key - 1); }
+	else {
+		switch (key) {
+			case SIM_KEY_SPACE: value = "SPACE"; break;
+			case SIM_KEY_ESCAPE: value = "ESC"; break;
+			case SIM_KEY_DELETE: value = "DELETE"; break;
+			case SIM_KEY_HOME: value = "HOME"; break;
+			case SIM_KEY_END: value = "END"; break;
+			case SIM_KEY_SCROLLLOCK: value = "SCROLLLOCK"; break;
+			case ',': value = "COMMA"; break;
+			default:
+				if (key >= ' ' && key != SIM_KEY_PGUP && key != SIM_KEY_PGDN) {
+					char text[8];
+					text[utf16_to_utf8(key, (utf8*)text)] = '\0';
+					value = text;
+				}
+		}
+	}
+	// Use the traditional spelling only when it preserves the exact key and flags.
+	uint8 parsed_flags;
+	const std::string candidate = prefix + value;
+	if (!value.empty() && str_to_key(candidate.c_str(), &parsed_flags) == key && parsed_flags == flags) {
+		const std::string toolbar_candidate = candidate + ",";
+		if (str_to_key(toolbar_candidate.c_str(), &parsed_flags) == key && parsed_flags == flags) { return candidate; }
+	}
+	return prefix + "#" + std::to_string(key);
 }
 
 bool load_shortcut_values(const std::string &path, bool defaults)
@@ -855,7 +891,7 @@ bool save_shortcuts(tool_t *changed = NULL)
 				if (!matching) { continue; }
 				found.push_back(s.name);
 				const auto current = shortcut_from_value(name, line.substr(eq + 1));
-				if (current.first == s.tool->command_key && current.second == s.tool->command_flags) { break; }
+				if (!changed && current.first == s.tool->command_key && current.second == s.tool->command_flags) { break; }
 				const unsigned field = shortcut_key_field(name);
 				std::string value = line.substr(eq + 1);
 				size_t pos = shortcut_field(value, field);
