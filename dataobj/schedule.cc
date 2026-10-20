@@ -377,7 +377,7 @@ void schedule_t::rdwr(loadsave_t *file)
 			} else {
 				entries[i].set_stop_flags((uint32)0);
 			}
-			if(  file->is_loading()  &&  file->get_OTRP_version()<62  &&  entries[i].get_stop_flags()&schedule_entry_t::NO_GO_NO_USERS  ) {
+			if(  file->is_loading()  &&  file->get_OTRP_version()<63  &&  entries[i].get_stop_flags()&schedule_entry_t::NO_GO_NO_USERS  ) {
 				// Savegames older than OTRP v62 only had a single-stop no-go-no-users
 				// flag. Migrate it into a one-entry section (start and end on the same
 				// entry), which is what the new demand-based skip logic looks at.

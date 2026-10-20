@@ -60,7 +60,7 @@ public:
 		NO_OVERTAKE       = 1U << 12,// Do not overtake(for road)
 		UNCOUPLE_CHILD    = 1U << 13,// The convoy uncouple its child convoy (only its child: this convoy will be the most child convoy).
 		PASS_STOP		  = 1U << 14,// pass this stop even if halt is.
-		// Legacy single-stop flag, kept only to decode savegames older than OTRP v62.
+		// Legacy single-stop flag, kept only to decode savegames older than OTRP v3.
 		// On load, this bit is migrated into a one-entry section (both of the flags below
 		// set on the same entry) and is never written out again. See schedule_t::rdwr().
 		NO_GO_NO_USERS	  = 1U << 15,
