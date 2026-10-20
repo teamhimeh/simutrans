@@ -273,6 +273,18 @@ public:
 	// get current_stop excluding depot entries
 	uint8 get_current_stop_exluding_depot() const;
 
+	/**
+	 * Resolve the demand-based skip section that the entry at the given index belongs to.
+	 * A section runs from a NO_GO_NO_USERS_SECTION_START entry up to and including the next
+	 * NO_GO_NO_USERS_SECTION_END entry, or up to the entry just before the next START entry
+	 * if no END is found first. Returns false if no enclosing START entry can be found
+	 * within one full loop over the entries (the index is then not part of any section).
+	 * out_start/out_end are only valid when this returns true and are entry indices
+	 * (out_end may be numerically before out_start if the section wraps past the end
+	 * of the entries array).
+	 */
+	bool get_no_go_no_users_section(uint8 index, uint8& out_start, uint8& out_end) const;
+
 	static void get_schedule_flag_text(cbuffer_t& buf, schedule_t* schedule);
 
 	// Returns the median journey time ticks between the given index halt and the previous halt (or waypoint).
