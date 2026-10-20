@@ -2783,10 +2783,13 @@ void fabrik_t::verteile_waren(const uint32 product)
 		// Since menge might have been mutated, it must be converted back. This might introduce some error with some prod factors which is always rounded up.
 		const sint32 prod_delta = saturate<sint32>((((uint64)menge << (DEFAULT_PRODUCTION_FACTOR_BITS + precision_bits)) + prod_factor - 1) / prod_factor);
 
-		// If the output is inactive, reactivate it
-		if( output[product].menge == output[product].max && prod_delta > 0 ) inactive_outputs-= 1;
-
+		const bool was_inactive = output[product].menge >= output[product].max;
 		output[product].menge -= prod_delta;
+		// Capacity reductions can leave stock above the limit. Reactivate only
+		// when a shipment crosses below it, matching rebuild_inactive_cache().
+		if( welt->get_settings().get_just_in_time() >= 2 && was_inactive && output[product].menge < output[product].max ) {
+			inactive_outputs -= 1;
+		}
 
 		best_halt->starte_mit_route(best_ware);
 		best_halt->recalc_status();
