@@ -415,8 +415,8 @@ void grund_t::rdwr(loadsave_t *file)
 						weg->set_pos(pos);
 						// check illegal overtaking_mode
 						if(  wtyp==road_wt  ) {
-							const overtaking_mode_t ov = ((strasse_t*)weg)->get_overtaking_mode();
-							if(  ov<halt_mode  ||  ov>inverted_mode  ) {
+							const overtaking_mode_t ov = ((strasse_t*)weg)->get_overtaking_mode_raw();
+							if(  ov<halt_mode  ||  ov>passing_lane_stop_only_mode  ) {
 								dbg->error( "grund_t::rdwr()", "Road %s has illegal overtaking mode %d.", get_pos().get_str(), ov );
 							}
 						}
@@ -455,9 +455,13 @@ void grund_t::rdwr(loadsave_t *file)
 	if (file->is_loading()  &&  has_two_ways()) {
 		const weg_t* w1 = ((weg_t*)obj_bei(0));
 		const weg_t* w2 = ((weg_t*)obj_bei(1));
-		// two different waytypes on non-crossing diagonal bends never share the tile
-		// center, so no crossing_t is needed even if the waytype pair normally requires one
-		const bool disjoint_diagonal = ribi_t::are_disjoint_bends(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
+		// two waytypes on non-crossing diagonal legs never share the tile center, so no
+		// crossing_t is needed even if the waytype pair normally requires one. Use the
+		// leg (not the strict bend) test: a leg may have been saved while it was still just a
+		// single direction (second tile not built yet, or removed again), and demanding two
+		// full bends here made us try to build a crossing for a tile that never had one --
+		// for two legs of the same waytype that even aborted loading with a fatal error.
+		const bool disjoint_diagonal = ribi_t::are_disjoint_legs(w1->get_ribi_unmasked(), w2->get_ribi_unmasked());
 		if(w1->needs_crossing(w2->get_desc())  &&  !disjoint_diagonal){
 			if (crossing_t* cr = get_crossing()) {
 				cr->finish_rd( file->get_OTRP_version() );
@@ -468,12 +472,19 @@ void grund_t::rdwr(loadsave_t *file)
 					dbg->warning("crossing_t::rdwr()", "requested for waytypes %i and %i not available, try to load object without timeline", w1->get_waytype(), w2->get_waytype());
 					cr_desc = crossing_logic_t::get_crossing(w1->get_waytype(), w2->get_waytype(), 0, 0, 0);
 				}
-				if (cr_desc == 0) {
-					dbg->fatal("crossing_t::crossing_t()", "requested for waytypes %i and %i but nothing defined!", w1->get_waytype(), w2->get_waytype());
+				// the ways of the crossing must both be found again, otherwise we cannot even
+				// tell the orientation. Never abort loading here: the savegame describes a
+				// world that was running fine, so rather leave the tile without a crossing
+				// object than throw the player's game away.
+				const weg_t* cr_way1 = cr_desc ? get_weg(cr_desc->get_waytype(1)) : NULL;
+				if (cr_desc == NULL  ||  cr_way1 == NULL) {
+					dbg->error("grund_t::rdwr()", "no crossing for waytypes %i and %i at %s => tile stays without crossing", w1->get_waytype(), w2->get_waytype(), pos.get_str());
 				}
-				cr = new crossing_t(w1->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(get_weg(cr_desc->get_waytype(1))->get_ribi_unmasked()));
-				objlist.add(cr);
-				cr->finish_rd( file->get_OTRP_version() ); // or else not multithred safe!
+				else {
+					cr = new crossing_t(w1->get_owner(), pos, cr_desc, ribi_t::is_straight_ns(cr_way1->get_ribi_unmasked()));
+					objlist.add(cr);
+					cr->finish_rd( file->get_OTRP_version() ); // or else not multithred safe!
+				}
 			}
 		}
 		else {
@@ -584,6 +595,39 @@ void grund_t::enlarge_map( sint16, sint16 /*new_size_y*/ )
 		ground_texts.put(iter.key, iter.value);
 	}
 	ground_texts_enlarged.clear();
+}
+
+
+bool grund_t::update_way_flags()
+{
+	const uint8 old_flags = flags & (has_way1|has_way2);
+
+	// ways have the highest priority, so they are always at the start of the object list
+	uint8 way_count = 0;
+	while(  way_count < objlist.get_top()  &&  objlist.bei(way_count)->get_typ() == obj_t::way  ) {
+		weg_t *weg = static_cast<weg_t *>( objlist.bei(way_count) );
+		if(  weg->get_pos() != pos  ) {
+			weg->set_pos( pos );
+		}
+		way_count++;
+	}
+	if(  way_count > 2  ) {
+		dbg->error( "grund_t::update_way_flags()", "%d ways at (%s), only two are possible", way_count, pos.get_str() );
+	}
+
+	flags &= ~(has_way1|has_way2);
+	if(  way_count >= 1  ) {
+		flags |= has_way1;
+	}
+	if(  way_count >= 2  ) {
+		flags |= has_way2;
+	}
+
+	if(  old_flags != (flags & (has_way1|has_way2))  ) {
+		set_flag( dirty );
+		return true;
+	}
+	return false;
 }
 
 
@@ -956,6 +1000,22 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 }
 
 
+// Partition ground surfaces and ways along the same upper tile boundaries.
+static void clip_way_background(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const ribi_t::ribi way_ribi, const slope_t::type way_slope, const int hgt_step CLIP_NUM_DEF)
+{
+	clear_all_poly_clip(CLIP_NUM_VAR);
+	const uint8 non_convex = (way_ribi & ribi_t::northwest) == ribi_t::northwest ? 0 : 16;
+	const int dh = corner_nw(way_slope) * hgt_step;
+	if (way_ribi & ribi_t::west) {
+		add_poly_clip(xpos + raster_tile_width / 2 - 1, ypos + raster_tile_width / 2 - dh, xpos - 1, ypos + 3 * raster_tile_width / 4 - dh, ribi_t::west | non_convex CLIP_NUM_PAR);
+	}
+	if (way_ribi & ribi_t::north) {
+		add_poly_clip(xpos + raster_tile_width, ypos + 3 * raster_tile_width / 4 - dh, xpos + raster_tile_width / 2, ypos + raster_tile_width / 2 - dh, ribi_t::north | non_convex CLIP_NUM_PAR);
+	}
+	activate_ribi_clip((way_ribi & ribi_t::northwest) | non_convex CLIP_NUM_PAR);
+}
+
+
 #ifdef MULTI_THREAD
 void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 raster_tile_width, const sint8 clip_num, const bool force_show_grid ) const
 #else
@@ -1043,6 +1103,20 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 		if(get_typ()!=wasser) {
 			// show image if tile is visible
 			if (visible)  {
+				// Rezooming can extend a ground image across the tile boundary. When
+				// drawing ground among objects, do not overwrite a neighbour's way
+				// outside the area in which our own ways will be drawn afterwards.
+				// Retaining walls above must keep their normal occlusion behaviour.
+				const bool clip_surface = get_flag(grund_t::draw_as_obj)
+					&& (flags & has_way1)
+					&& !env_t::simple_drawing;
+				if (clip_surface) {
+					ribi_t::ribi way_ribi = get_weg_nr(0)->get_ribi_unmasked();
+					if (weg_t const* const way2 = get_weg_nr(1)) {
+						way_ribi |= way2->get_ribi_unmasked();
+					}
+					clip_way_background(xpos, ypos, raster_tile_width, way_ribi, get_disp_way_slope(), tile_raster_scale_y(TILE_HEIGHT_STEP, raster_tile_width) CLIP_NUM_PAR);
+				}
 				display_normal( get_image(), xpos, ypos, 0, true, dirty CLIP_NUM_PAR );
 #ifdef SHOW_FORE_GRUND
 				if (get_flag(grund_t::draw_as_obj)) {
@@ -1162,6 +1236,11 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 					}
 				}
 
+				// Climate and snow overlays must obey the surface partition too.
+				if (clip_surface) {
+					clear_all_poly_clip(CLIP_NUM_VAR);
+				}
+
 				// we show additionally a grid
 				// for undergroundmode = ugm_all the grid is plotted in display_obj
 #ifdef MULTI_THREAD
@@ -1195,17 +1274,7 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 			// .. nonconvex n/w if not both n/w are active
 			if(  clip  ) {
 				const ribi_t::ribi way_ribi = (static_cast<const weg_t*>(d))->get_ribi_unmasked();
-				clear_all_poly_clip( CLIP_NUM_VAR );
-				const uint8 non_convex = (way_ribi & ribi_t::northwest) == ribi_t::northwest ? 0 : 16;
-				if(  way_ribi & ribi_t::west  ) {
-					const int dh = corner_nw(get_disp_way_slope()) * hgt_step;
-					add_poly_clip( xpos + raster_tile_width / 2 - 1, ypos + raster_tile_width / 2 - dh, xpos - 1, ypos + 3 * raster_tile_width / 4 - dh, ribi_t::west | non_convex CLIP_NUM_PAR );
-				}
-				if(  way_ribi & ribi_t::north  ) {
-					const int dh = corner_nw(get_disp_way_slope()) * hgt_step;
-					add_poly_clip( xpos + raster_tile_width, ypos + 3 * raster_tile_width / 4 - dh, xpos + raster_tile_width / 2, ypos + raster_tile_width / 2 - dh, ribi_t::north | non_convex CLIP_NUM_PAR );
-				}
-				activate_ribi_clip( (way_ribi & ribi_t::northwest) | non_convex  CLIP_NUM_PAR );
+				clip_way_background(xpos, ypos, raster_tile_width, way_ribi, get_disp_way_slope(), hgt_step CLIP_NUM_PAR);
 			}
 			d->display( xpos, ypos CLIP_NUM_PAR );
 		}
@@ -1903,9 +1972,74 @@ bool grund_t::has_depot() const
 }
 
 
-bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi)
+bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_t* new_desc, bool allow_same_waytype_dual_leg)
 {
-	weg_t   *weg = get_weg(wegtyp);
+	// two same-waytype ways already coexist here as disjoint diagonal legs (see below) and
+	// the ribi now being built spans bits from BOTH legs (e.g. a straight N-S/E-W through
+	// connection) => the player is asserting full connectivity here. Merge the two legs back
+	// into a single way (deleting the second one) before doing the ordinary extend below.
+	if(  has_two_ways()  ) {
+		weg_t *leg0 = get_weg_nr(0);
+		weg_t *leg1 = get_weg_nr(1);
+		if(  leg0  &&  leg1  &&  leg0->get_waytype()==wegtyp  &&  leg1->get_waytype()==wegtyp
+		  &&  (ribi & leg0->get_ribi_unmasked())  &&  (ribi & leg1->get_ribi_unmasked())  ) {
+			const ribi_t::ribi leg1_ribi = leg1->get_ribi_unmasked();
+			leg1->mark_image_dirty( get_image(), 0 );
+			leg1->cleanup( NULL );
+			delete leg1;
+			flags &= ~has_way2;
+			leg0->ribi_add( leg1_ribi );
+		}
+	}
+
+	// resolve which way we're extending. When two same-waytype legs still coexist (the second
+	// leg's own tiles being built one at a time, before it's fully connected), get_weg(wegtyp)
+	// alone can't tell them apart. Since the two legs' bits always partition disjointly, adding
+	// this bit to the WRONG leg would push it past a valid bend (>2 bits); prefer whichever leg
+	// stays a valid bend/single afterward -- that works even when both legs share an identical
+	// descriptor (in which case descriptor matching alone can't disambiguate). Descriptor match,
+	// then already-overlapping ribi, are only used as tie-breakers for the rare case where
+	// both legs would stay valid.
+	weg_t *weg = NULL;
+	if(  has_two_ways()  ) {
+		weg_t *leg0 = get_weg_nr(0);
+		weg_t *leg1 = get_weg_nr(1);
+		bool m0 = leg0 && leg0->get_waytype()==wegtyp;
+		bool m1 = leg1 && leg1->get_waytype()==wegtyp;
+		if(  m0  &&  m1  ) {
+			auto stays_valid = [&](weg_t* leg) {
+				ribi_t::ribi combined = leg->get_ribi_unmasked() | ribi;
+				return ribi_t::is_bend(combined) || ribi_t::is_single(combined);
+			};
+			bool ok0 = stays_valid(leg0);
+			bool ok1 = stays_valid(leg1);
+			if(  ok0  &&  !ok1  ) weg = leg0;
+			else if(  ok1  &&  !ok0  ) weg = leg1;
+			else if(  new_desc  &&  leg0->get_desc()==new_desc  ) weg = leg0;
+			else if(  new_desc  &&  leg1->get_desc()==new_desc  ) weg = leg1;
+			else if(  leg0->get_ribi_unmasked() & ribi  ) weg = leg0;
+			else if(  leg1->get_ribi_unmasked() & ribi  ) weg = leg1;
+			else weg = leg0;
+		}
+	}
+	if(  !weg  ) {
+		weg = get_weg(wegtyp);
+	}
+
+	// only one way of this waytype exists, it's a bend, and the ribi bit(s) we're about to add
+	// are disjoint from it (a second leg being built, tile by tile - possibly with the SAME
+	// descriptor as the first, the player wants two independent, non-connected tracks here
+	// rather than a merged junction; the ribi passed in for any one tile of that leg may still
+	// be just a single bit, same as the per-edge check in check_crossing()): this is a second,
+	// independent leg sharing the tile, not an extension of the first -- decline so the caller
+	// (build_track()/build_road()) falls through to neuen_weg_bauen() and adds it as weg_nr(1).
+	if(  allow_same_waytype_dual_leg  &&  !has_two_ways()  ) {
+		if(  weg  &&  new_desc
+		  &&  ribi_t::is_bend(weg->get_ribi_unmasked())  &&  (ribi & weg->get_ribi_unmasked())==0  ) {
+			return false;
+		}
+	}
+
 	if(weg) {
 		weg->ribi_add(ribi);
 		weg->count_sign();
@@ -1959,13 +2093,20 @@ sint64 grund_t::remove_trees()
 }
 
 
-sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player)
+sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player, bool allow_same_waytype_dual_leg)
 {
 	sint64 cost=0;
 
 	// not already there?
 	const weg_t * alter_weg = get_weg(weg->get_waytype());
-	if(alter_weg==NULL) {
+	// same-waytype dual diagonal leg: weg_erweitern() already declined to extend alter_weg for
+	// exactly this case (bend, disjoint, ctrl/straight-route build - regardless of whether the
+	// descriptor matches, since the player wants two independent, non-connected tracks here
+	// rather than a merged junction), so here we add the new way as an independent second leg
+	// instead of refusing outright.
+	const bool same_waytype_dual_leg = allow_same_waytype_dual_leg && alter_weg!=NULL && !has_two_ways()
+		&& ribi_t::is_bend(alter_weg->get_ribi_unmasked()) && (ribi & alter_weg->get_ribi_unmasked())==0;
+	if(alter_weg==NULL || same_waytype_dual_leg) {
 		// ok, we are unique
 
 		if((flags&has_way1)==0) {
@@ -1997,7 +2138,7 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player)
 			// bend disjoint from our (possibly partial) ribi -- once the second leg is built
 			// this reduces to the same "both full bends, disjoint" check as elsewhere.
 			const ribi_t::ribi other_ribi = other->get_ribi_unmasked();
-			const bool disjoint_diagonal = ribi_t::is_bend(other_ribi)  &&  (ribi & other_ribi)==0;
+			const bool disjoint_diagonal = ribi_t::are_disjoint_legs(ribi, other_ribi);
 			if (weg->needs_crossing(other->get_desc()) && !disjoint_diagonal) {
 				//crossing needed!
 				waytype_t w2 =  other->get_waytype();
@@ -2038,9 +2179,33 @@ sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 
 			for(int r = 0; r < 4; r++) {
 				if((ribi & ribi_t::nesw[r]) && get_neighbour(to, wegtyp, ribi_t::nesw[r])) {
-					weg_t *weg2 = to->get_weg(wegtyp);
+					const ribi_t::ribi bit_removed = ribi_t::backward(ribi_t::nesw[r]);
+					// direction-aware: when `to` has two same-waytype disjoint diagonal legs,
+					// only one of them actually owns bit_removed -- pick that one, not just
+					// whichever of weg_nr(0)/weg_nr(1) happens to match the waytype
+					weg_t *weg2 = to->get_weg(wegtyp, bit_removed);
 					if(weg2) {
-						weg2->ribi_rem(ribi_t::backward(ribi_t::nesw[r]));
+						weg2->ribi_rem(bit_removed);
+						// if that leg just degraded from a 2-bit bend down to a single bit,
+						// the split is no longer meaningful -- merge the two legs back into
+						// one way holding the union ribi (a three-way, per spec)
+						if(  to->has_two_ways()  &&  ribi_t::is_single(weg2->get_ribi_unmasked())  ) {
+							weg_t *other_leg = to->get_weg_nr(0)==weg2 ? to->get_weg_nr(1) : to->get_weg_nr(0);
+							if(  other_leg  &&  other_leg->get_waytype()==wegtyp  ) {
+								// a halt cannot sit on a three-way tile, so if merging the two
+								// disjoint legs back into one three-way way leaves a halt here,
+								// remove it (the topology that justified it no longer exists)
+								if(  to->is_halt()  ) {
+									haltestelle_t::remove( NULL, to->get_pos() );
+								}
+								const ribi_t::ribi remaining_bit = weg2->get_ribi_unmasked();
+								weg2->mark_image_dirty( to->get_image(), 0 );
+								weg2->cleanup( NULL );
+								delete weg2;
+								to->flags &= ~has_way2;
+								other_leg->ribi_add( remaining_bit );
+							}
+						}
 						to->calc_image();
 					}
 				}
@@ -2087,8 +2252,9 @@ bool grund_t::get_neighbour(grund_t *&to, waytype_t type, ribi_t::ribi ribi) con
 	// must be a single direction
 	assert( ribi_t::is_single(ribi) );
 
-	if(  type != invalid_wt  &&   (get_weg_ribi_unmasked(type) & ribi) == 0  ) {
-		// no way on this tile in the given direction
+	if(  type != invalid_wt  &&   (get_weg_ribi_unmasked(type, ribi) & ribi) == 0  ) {
+		// no way on this tile in the given direction (direction-aware: correctly picks the
+		// owning leg when two same-waytype disjoint diagonal legs coexist on this tile)
 		return false;
 	}
 
@@ -2102,7 +2268,7 @@ bool grund_t::get_neighbour(grund_t *&to, waytype_t type, ribi_t::ribi ribi) con
 	if(  get_grund_hang() == slope_t::flat  &&  get_weg_hang() == slope_t::flat  ) {
 		if(  grund_t *gr = plan->get_boden_in_hoehe( pos.z )  ) {
 			if(  gr->get_grund_hang() == slope_t::flat  &&  gr->get_weg_hang() == slope_t::flat  ) {
-				if(  type == invalid_wt  ||  (gr->get_weg_ribi_unmasked(type) & back)  ) {
+				if(  type == invalid_wt  ||  (gr->get_weg_ribi_unmasked(type, back) & back)  ) {
 					to = gr;
 					return true;
 				}
@@ -2116,7 +2282,7 @@ bool grund_t::get_neighbour(grund_t *&to, waytype_t type, ribi_t::ribi ribi) con
 		grund_t* gr = plan->get_boden_bei(i);
 		if(gr->get_vmove(back)==this_height) {
 			// test, if connected
-			if(  type == invalid_wt  ||  (gr->get_weg_ribi_unmasked(type) & back)  ) {
+			if(  type == invalid_wt  ||  (gr->get_weg_ribi_unmasked(type, back) & back)  ) {
 				to = gr;
 				return true;
 			}

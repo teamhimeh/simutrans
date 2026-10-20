@@ -181,6 +181,7 @@ void convoi_t::init(player_t *player)
 	// convoy shipping
 	shipped_convois.clear();
 	carrier_convoi = convoihandle_t();
+	shipping_income_carrier = convoihandle_t();
 	shipping_wait_since = 0;
 
 	line_update_pending = linehandle_t();
@@ -332,11 +333,12 @@ void convoi_t::reserve_route()
 		// reservation is controlled by reserved_tiles
 		for(  uint32 idx = 0;  idx < reserved_tiles.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( reserved_tiles[idx] )  ) {
-				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					const koord3d prev = reserved_tiles[max(1u,idx)-1u];
-					const koord3d curr = reserved_tiles[idx];
-					const koord3d next = reserved_tiles[min(reserved_tiles.get_count()-1u,idx+1u)];
-					if (!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+				// direction-aware: resolve the leg this convoy runs over, relevant when two
+				// same-waytype disjoint diagonal legs coexist on the tile
+				const ribi_t::ribi corner_set = get_reserved_tiles_corner_set(idx);
+				const koord3d curr = reserved_tiles[idx];
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
+					if (!sch->reserve( self, corner_set, get_reserved_tiles_travel_dir(idx) )) {
 						// reservation invalid! do not continue reservation more!
 						dbg->error("convoi_t::reserve_route()","%s cannot reserve (%s)",get_name(),curr.get_str());
 						break;
@@ -347,8 +349,13 @@ void convoi_t::reserve_route()
 		// only front vehicle treats reserved_tiles, other convoy-on tiles release.
 		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < front()->get_route_index()-1  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
-				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					unreserve_pos(route.at(idx));
+				// direction-aware: only drop the bookkeeping entry when the leg we actually run
+				// over is a rail (on a same-waytype dual-leg tile the other leg is irrelevant)
+				// The tiles we occupy can only be at the front of reserved_tiles (leave_tile() drops
+				// them from there). Removing by position would hit a later entry instead when the
+				// reserved route passes this tile again, e.g. over its other same-waytype leg.
+				if(  obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), route.get_corner_set(idx) ))  &&  !reserved_tiles.empty()  &&  reserved_tiles[0]==route.at(idx)  ) {
+					reserved_tiles.remove_at(0);
 				}
 			}
 		}
@@ -356,11 +363,9 @@ void convoi_t::reserve_route()
 		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1; idx < (int)route.get_count(); idx++ ) {
 			if(  is_reservation_empty() || route.at(idx)==reserved_tiles[0]  ) break;// reach first reserved tiles.
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
-				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
-					const koord3d curr = route.at(idx);
-					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
+				const ribi_t::ribi corner_set = route.get_corner_set(idx);
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
+					sch->reserve( self, corner_set, route.get_travel_dir(idx) );
 				}
 			}
 		}
@@ -371,11 +376,10 @@ void convoi_t::reserve_route()
 		// the correct ribi direction (individual loading only uses ribi_t::none).
 		for(  int idx = max(1u, find_most_child_convoi()->back()->get_route_index()) - 1;  idx < (drive_without_reservation ? front()->get_route_index() : next_reservation_index)  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
-				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
-					const koord3d curr = route.at(idx);
-					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					if(!sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) )) {
+				const ribi_t::ribi corner_set = route.get_corner_set(idx);
+				const koord3d curr = route.at(idx);
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
+					if(!sch->reserve( self, corner_set, route.get_travel_dir(idx) )) {
 						next_stop_index = idx;
 						next_reservation_index = idx;
 						// reservation invalid! do not continue reservation more!
@@ -393,11 +397,9 @@ void convoi_t::reserve_route()
 		// is also reserved with the correct ribi (individual loading uses ribi_t::none).
 		for(  int idx = max(1u, back()->get_route_index()) - 1;  idx < front()->get_route_index()  &&  idx < (int)route.get_count();  idx++  ) {
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
-				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype() ))  ) {
-					const koord3d prev = route.at(max(1u,(uint32)idx)-1u);
-					const koord3d curr = route.at(idx);
-					const koord3d next = route.at(min(route.get_count()-1u,(uint32)idx+1u));
-					sch->reserve( self, ribi_t::backward(ribi_type(prev,curr)) | ribi_type(curr,next) );
+				const ribi_t::ribi corner_set = route.get_corner_set(idx);
+				if(  schiene_t *sch = obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), corner_set ))  ) {
+					sch->reserve( self, corner_set, route.get_travel_dir(idx) );
 				}
 			}
 		}
@@ -424,7 +426,7 @@ uint32 convoi_t::move_to(uint16 const start_index)
 			v.mark_image_dirty(v.get_image(), 0);
 			v.leave_tile();
 			// maybe unreserve this
-			if(  schiene_t* const rails = obj_cast<schiene_t>(gr->get_weg(v.get_waytype()))  ) {
+			if(  schiene_t* const rails = obj_cast<schiene_t>(gr->get_weg(v.get_waytype(), v.get_current_corner_set()))  ) {
 				rails->unreserve(&v);
 			}
 		}
@@ -617,8 +619,11 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 				// eventually reserve this again
 				grund_t *gr=welt->lookup(v->get_pos());
 				// airplanes may have no ground ...
-				if (schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(fahr[i]->get_waytype()))) {
-					sch0->reserve(self,ribi_t::none);
+				if (schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(fahr[i]->get_waytype(), fahr[i]->get_current_corner_set()))) {
+					// Pass the heading too: without it reserved_travel_dir stays ribi_t::none
+					// after loading and schiene_t::can_co_reserve_offset() can never allow the
+					// second convoy onto a way with a vehicle offset.
+					sch0->reserve(self,ribi_t::none,fahr[i]->get_current_travel_dir());
 				}
 			}
 			fahr[0]->set_leading(true);
@@ -835,6 +840,12 @@ uint32 convoi_t::get_length() const
 	}
 	return len;
 }
+
+sint32 convoi_t::get_running_cost_scaled() const
+{
+	return -(sint32)((base_sum_running_costs * (sint64)welt->get_settings().get_running_cost_multiplier_vehicle()) / 100l);
+}
+
 
 uint32 convoi_t::get_entire_convoy_length() const
 {
@@ -1411,7 +1422,7 @@ bool convoi_t::drive_to()
 				for(uint16 j = index1; j<index0; j++) {
 					// unreserve track on tiles between wagons
 					grund_t *gr = welt->lookup(route.at(j));
-					if (schiene_t *track = (schiene_t *)gr->get_weg( front()->get_waytype() ) ) {
+					if (schiene_t *track = (schiene_t *)gr->get_weg( front()->get_waytype(), route.get_corner_set(j) ) ) {
 						track->unreserve(self);
 					}
 				}
@@ -1444,6 +1455,7 @@ bool convoi_t::drive_to()
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
 					if (cached  &&  cached->is_passable(welt, fahr[0], true)) {
 						*r = *cached;
+						r->set_start_heading(ribi_t::none); // not used by a cached route, must not linger
 						set_use_electric(true);
 						return true;
 					}
@@ -1457,6 +1469,7 @@ bool convoi_t::drive_to()
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
 					if (cached  &&  cached->is_passable(welt, fahr[0], false)) {
 						*r = *cached;
+						r->set_start_heading(ribi_t::none); // not used by a cached route, must not linger
 						set_use_electric(false);
 						return true;
 					}
@@ -1489,6 +1502,10 @@ bool convoi_t::drive_to()
 				}
 			}
 		}
+
+		// the heading with which we entered our tile tells on which leg we stand, if it carries two
+		// same-waytype disjoint diagonal legs (taken from the old route, so before it is replaced)
+		route.set_start_heading( front()->get_current_travel_dir() );
 
 		// unreserve old route before replacing; required for cache-hit path where calc_route() (which also unreserves) is skipped
 		unreserve_route();
@@ -1557,6 +1574,10 @@ bool convoi_t::drive_to()
 					}
 
 					route_t next_segment;
+					// continue on the leg the route so far arrives on (two same-waytype disjoint diagonal legs)
+					if(  route.get_count()>=2  ) {
+						next_segment.set_start_heading( route.get_travel_dir(route.get_count()-1) );
+					}
 					if(  !cached_calc_route( start, ziel, &next_segment, schedule->get_current_entry().is_pass_stop() )  ) {
 						// do we still have a valid route to proceed => then go until there
 						if(  route.get_count()>1  ) {
@@ -1577,6 +1598,16 @@ bool convoi_t::drive_to()
 						if(  fahr[0]->get_waytype() != air_wt  ) {
 							 // check if the route circles back on itself (only check the first tile, should be enough)
 							looped = route.is_contained(next_segment.at(1));
+							const grund_t *gr_next = looped ? welt->lookup(next_segment.at(1)) : NULL;
+							if(  gr_next  &&  gr_next->has_two_same_waytype_ways()  ) {
+								// only the same leg closes a circle: two same-waytype disjoint diagonal
+								// legs are passed one after the other on a circular route over them
+								const weg_t *leg_next = gr_next->get_weg(fahr[0]->get_waytype(), next_segment.get_corner_set(1));
+								looped = false;
+								for(  uint32 i=0;  i<route.get_count()  &&  !looped;  i++  ) {
+									looped = route.at(i)==next_segment.at(1)  &&  gr_next->get_weg(fahr[0]->get_waytype(), route.get_corner_set(i))==leg_next;
+								}
+							}
 #if 0
 							// this will forbid an eight figure, which might be clever to avoid a problem of reserving one own track
 							for(  unsigned i = 1;  i<next_segment.get_count();  i++  ) {
@@ -1665,8 +1696,10 @@ void convoi_t::step()
 		case SUSPENSION_LOADING:
 			laden();
 			//When loading, vehicle should not be on passing lane.
-			str = (strasse_t*)welt->lookup(get_pos())->get_weg(road_wt);
-			if(  str  &&  str->get_overtaking_mode()!=inverted_mode  &&  str->get_overtaking_mode()!=halt_mode  ) set_tiles_overtaking(0);
+			// this runs for every waytype and the tile is not guaranteed to exist (a convoy
+			// without vehicles reports koord3d::invalid), so never dereference the ground here
+			str = strasse_at( get_pos() );
+			if(  str  &&  str->get_overtaking_mode()!=inverted_mode  &&  str->get_overtaking_mode()!=halt_mode  &&  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  ) set_tiles_overtaking(0);
 			break;
 
 		case DUMMY4:
@@ -1811,7 +1844,7 @@ void convoi_t::step()
 				else if(  steps_driven==0  ) {
 					// on rail depot tile, do not reserve this
 					if(  grund_t *gr = welt->lookup(fahr[0]->get_pos())  ) {
-						if (schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(fahr[0]->get_waytype()))) {
+						if (schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(fahr[0]->get_waytype(), fahr[0]->get_current_corner_set()))) {
 							sch0->unreserve(fahr[0]);
 						}
 					}
@@ -1820,8 +1853,13 @@ void convoi_t::step()
 					akt_speed = restart_speed;
 				}
 				if(  fahr[0]->get_waytype()==road_wt  ) {
-					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
-					if(  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
+					// a road convoy is not necessarily standing on a road: get_pos() reports the
+					// carrier's tile while the convoy is shipped, the tile may be gone after
+					// loading a savegame, and a depot convoy reports its home depot. Without a
+					// road there is no overtaking mode to react to, so just leave the lane as is.
+					const strasse_t* str0 = strasse_at( get_pos() );
+					sint8 overtaking_mode = str0 ? str0->get_overtaking_mode() : (sint8)oneway_mode;
+					if(  str0  &&  (state==CAN_START  ||  state==CAN_START_ONE_MONTH)  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  str0->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  &&  !reversing_lane_hold  ) {
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -1840,8 +1878,10 @@ void convoi_t::step()
 					akt_speed = restart_speed;
 				}
 				if(  fahr[0]->get_waytype()==road_wt  ) {
-					sint8 overtaking_mode = static_cast<strasse_t*>(welt->lookup(get_pos())->get_weg(road_wt))->get_overtaking_mode();
-					if(  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  !reversing_lane_hold  ) {
+					// see above: there is not always a road under a road convoy
+					const strasse_t* str0 = strasse_at( get_pos() );
+					sint8 overtaking_mode = str0 ? str0->get_overtaking_mode() : (sint8)oneway_mode;
+					if(  str0  &&  state!=DRIVING  &&  overtaking_mode>oneway_mode  &&  overtaking_mode!=inverted_mode  &&  str0->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  &&  !reversing_lane_hold  ) {
 						set_tiles_overtaking( 0 );
 					}
 				}
@@ -2778,7 +2818,10 @@ koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const
 	if(  !g  ) {
 		return koord3d::invalid;
 	}
-	const weg_t* w = g->get_weg(inspecting->front()->get_waytype());
+	// direction-aware: back_dir is already the local bit on g pointing toward the rest of the
+	// route/convoy, so it identifies which leg we're on when two same-waytype disjoint
+	// diagonal legs coexist on g
+	const weg_t* w = g->get_weg(inspecting->front()->get_waytype(), back_dir);
 	ribi_t::ribi weg_dir = w ? w->get_ribi_unmasked() : ribi_t::none;
 
 	for(  uint8 i = 0;  i < 4;  i++  ) {
@@ -2875,16 +2918,19 @@ bool convoi_t::insert_route_to_draw_diagonal()
 		return false;
 	}
 	const grund_t* g = welt->lookup(route.front());
-	const weg_t* w = g ? g->get_weg(front()->get_waytype()) : NULL;
+	ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());// direction which already added route
+	// direction-aware: back_dir is already the local bit on g pointing toward the rest of the
+	// route, so it identifies which leg we're on when two same-waytype disjoint diagonal legs
+	// coexist on g
+	const weg_t* w = g ? g->get_weg(front()->get_waytype(), back_dir) : NULL;
 	ribi_t::ribi weg_dir = w ? w->get_ribi_unmasked() : ribi_t::none;// way direction
-	ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());// direction which already added route 
 	if( !ribi_t::is_bend(weg_dir) || (weg_dir & back_dir)==0 ) {
-		//we do not insert because this tile is not bend tile or invalid tile 
+		//we do not insert because this tile is not bend tile or invalid tile
 		return false;
 	}
 	grund_t* gn_back;
 	g->get_neighbour(gn_back, front()->get_waytype(), weg_dir-back_dir);
-	if( gn_back && gn_back->get_weg(front()->get_waytype()) ) {
+	if( gn_back && gn_back->get_weg(front()->get_waytype(), ribi_t::backward(weg_dir-back_dir)) ) {
 		dbg->message("convoi_t::insert_route_to_draw_diagonal()","%s add (%i,%i) before (%i,%i)",get_name(),gn_back->get_pos().x,gn_back->get_pos().y,route.front().x,route.front().y);
 		route.insert(gn_back->get_pos());
 		return true;
@@ -2896,7 +2942,7 @@ bool convoi_t::insert_route_to_draw_diagonal()
 koord3d const convoi_t::find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir) {
 	grund_t* gn;
 	g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-	if(  !gn  ) {
+	if(  !gn || !gn->get_weg(front()->get_waytype())  ) {
 		return koord3d::invalid;
 	}
 	if( find_convoy_on_tile(gn, inspecting) ) {
@@ -3009,7 +3055,7 @@ void convoi_t::vorfahren()
 						cr->release_crossing(v);
 					}
 					// eventually unreserve this
-					if(  schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(c->fahr[i]->get_waytype()))  ) {
+					if(  schiene_t* const sch0 = obj_cast<schiene_t>(gr->get_weg(c->fahr[i]->get_waytype(), c->fahr[i]->get_current_corner_set()))  ) {
 						sch0->unreserve(v);
 					}
 				}
@@ -3156,8 +3202,8 @@ void convoi_t::vorfahren()
 				// the direction of travel flips. Force it AFTER can_enter_tile() has already run,
 				// so its crash-avoid re-validation (which cannot distinguish "stale artifact" from
 				// "deliberate reversal") doesn't immediately undo it.
-				strasse_t* str0 = (strasse_t*)welt->lookup(front()->get_pos())->get_weg(road_wt);
-				if(  str0->get_overtaking_mode() == prohibited_mode  ) {
+				const strasse_t* str0 = strasse_at( front()->get_pos() );
+				if(  str0==NULL  ||  str0->get_overtaking_mode() == prohibited_mode  ) {
 					set_tiles_overtaking(0);
 				}
 				else {
@@ -3204,8 +3250,9 @@ void convoi_t::vorfahren()
 		const uint16 back_index = find_most_child_convoi()->back()->get_route_index()-1;
 		for(uint16 i=back_index; i<min(get_route()->get_count(),front()->get_route_index()); i++) {
 			// eventually reserve this
-			if (schiene_t* const sch0 = obj_cast<schiene_t>(welt->lookup(get_route()->at(i))->get_weg(front()->get_waytype()))) {
-				sch0->reserve(self,ribi_t::none);
+			if (schiene_t* const sch0 = obj_cast<schiene_t>(welt->lookup(get_route()->at(i))->get_weg(front()->get_waytype(), get_route()->get_corner_set(i)))) {
+				// keep the heading, see convoi_t::finish_rd()
+				sch0->reserve(self,ribi_t::none,get_route()->get_travel_dir(i));
 			}
 			else {
 				break;
@@ -3549,7 +3596,17 @@ void convoi_t::rdwr(loadsave_t *file)
 				// set_convoi; reserving the occupied tile here would permanently lock
 				// taxiway tiles (which have no leave_tile unreservation path)
 				if(v->get_waytype() != air_wt) {
-					if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype()))) {
+					// vehicle_t::get_current_corner_set() is useless here: the vehicles are not yet
+					// attached to this convoy (set_convoi() only happens in finish_rd()), so they
+					// cannot reach the route. But our own route is already loaded above, so look the
+					// tile up in it directly: the vehicle sits at route_index-1 (route_index indexes
+					// pos_next). Verify that invariant before trusting the index.
+					ribi_t::ribi corner_set = ribi_t::none;
+					const uint16 idx = v->get_route_index();
+					if(  idx>=1u  &&  (uint32)idx-1u < route.get_count()  &&  route.at((uint16)(idx-1u))==v->get_pos()  ) {
+						corner_set = route.get_corner_set(idx-1u);
+					}
+					if(schiene_t* sch = dynamic_cast<schiene_t*>(gr->get_weg(v->get_waytype(), corner_set))) {
 						sch->reserve(self,ribi_t::none);
 					}
 				}
@@ -3998,6 +4055,15 @@ void convoi_t::rdwr(loadsave_t *file)
 		shipping_wait_since = 0;
 	}
 
+	if(  file->get_OTRP_version()>=62  ) {
+		// A convoy can be saved between disembarking and the stop that settles the revenue for
+		// the shipped leg, so the pending payee has to survive the save. Unlike carrier_convoi
+		// this is a real forward link and is stored directly.
+		rdwr_convoihandle_t( file, shipping_income_carrier );
+	} else if(  file->is_loading()  ) {
+		shipping_income_carrier = convoihandle_t();
+	}
+
 	if(  file->is_loading()  ) {
 		recalc_catg_index();
 	}
@@ -4059,7 +4125,7 @@ void convoi_t::info(cbuffer_t & buf) const
 	if (v != NULL) {
 		char tmp[128];
 
-		buf.printf("\n %d/%dkm/h (%1.2f$/km)\n", speed_to_kmh(min_top_speed), v->get_desc()->get_topspeed(), get_running_cost() / 100.0);
+		buf.printf("\n %d/%dkm/h (%1.2f$/km)\n", speed_to_kmh(min_top_speed), v->get_desc()->get_topspeed(), get_running_cost_scaled() / 100.0);
 		buf.printf(" %s: %ikW\n", translator::translate("Leistung"), sum_power);
 		buf.printf(" %s: %ld (%ld) t\n", translator::translate("Gewicht"), (long)sum_weight, (long)(sum_gesamtweight - sum_weight));
 		buf.printf(" %s: ", translator::translate("Gewinn"));
@@ -4277,11 +4343,14 @@ void convoi_t::calc_gewinn()
 	for(unsigned i=0; i<anz_vehikel; i++) {
 		vehicle_t* v = fahr[i];
 		sint64 tmp;
-		gewinn += tmp = v->calc_revenue(v->last_stop_pos, v->get_pos() );
+		// a leg ridden aboard a carrier pays the carrier its share first
+		gewinn += tmp = deduct_shipping_income_share( v->calc_revenue(v->last_stop_pos, v->get_pos() ), v );
 		// get_schedule is needed as v->get_waytype() returns track_wt for trams (instead of tram_wt
 		owner->book_revenue(tmp, fahr[0]->get_pos().get_2d(), get_schedule()->get_waytype(), v->get_cargo_type()->get_index() );
 		v->last_stop_pos = v->get_pos();
 	}
+	// the shipped leg is settled - any later leg is our own again
+	shipping_income_carrier = convoihandle_t();
 
 	// update statistics of average speed
 	if(  distance_since_last_stop  ) {
@@ -4452,7 +4521,9 @@ uint32 convoi_t::calc_available_halt_length_in_vehicle_steps(koord3d front_vehic
 		// We are not on the valid halt tiles?
 		return 0;
 	}
-	const weg_t* way_first = gr->get_weg(waytype);
+	// direction-aware: resolve to the leg the vehicle is actually facing/standing on, relevant
+	// when two same-waytype disjoint diagonal legs coexist on this tile
+	const weg_t* way_first = gr->get_weg(waytype, front_vehicle_dir);
 	const ribi_t::ribi way_dir_first = way_first->get_ribi_unmasked();
 	halt_length += ribi_t::is_bend(way_dir_first) ? half_diagonal_tile_length : straight_tile_length;
 	// find the direction which the vehicle did not come from.
@@ -4467,7 +4538,9 @@ uint32 convoi_t::calc_available_halt_length_in_vehicle_steps(koord3d front_vehic
 
 	bool is_last_diagonal = false;
 	while(  gr  &&  haltestelle_t::get_stoppable_halt(gr->get_pos(), NULL, waytype)==halt  ) {
-		const weg_t* way = gr->get_weg(waytype);
+		// direction-aware: gr was reached via open_dir, so the leg actually being walked is the
+		// one owning the backward bit (relevant on a same-waytype disjoint-diagonal-leg tile)
+		const weg_t* way = gr->get_weg(waytype, ribi_t::backward(open_dir));
 		if(  !way  ) { break; }
 		if(  use_electric && !way->is_electrified()  ) { break; }
 		const ribi_t::ribi way_dir = way->get_ribi_unmasked();
@@ -4654,18 +4727,6 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		check_and_set_coupling_done_over_length();
 	}
 
-	// Convoy shipping. Run before loading so that a convoy put ashore here is on the map for
-	// the rest of this stop, and so that a convoy taken aboard has already finished loading
-	// its own goods (it went through hat_gehalten() itself earlier in this halt's queue).
-	if(  !is_coupled()  ) {
-		if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
-			handle_shipping_at_halt( halt );
-		}
-		if(  is_waiting_for_carrier()  ) {
-			try_start_shipping( halt );
-		}
-	}
-
 	// Count how many vehicles can load and unload.
 	uint8 vehicles_loading = 0;
 	uint32 convoy_length_step = 0;
@@ -4766,8 +4827,8 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		// we need not to call this on the same position
 		if(  v->last_stop_pos != v->get_pos()  ) {
 			sint64 tmp;
-			// calc_revenue
-			gewinn += tmp = v->calc_revenue(v->last_stop_pos, v->get_pos() );
+			// calc_revenue; a leg ridden aboard a carrier pays the carrier its share first
+			gewinn += tmp = deduct_shipping_income_share( v->calc_revenue(v->last_stop_pos, v->get_pos() ), v );
 			owner->book_revenue(tmp, fahr[0]->get_pos().get_2d(), get_schedule()->get_waytype(), v->get_cargo_type()->get_index());
 			v->last_stop_pos = v->get_pos();
 		}
@@ -4815,6 +4876,9 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			time = max( time, (max(v->get_cargo_max(),v->get_total_cargo())*2*v->get_desc()->get_loading_time()) / max(v->get_cargo_max(), 1) );
 		}
 	}
+	// The shipped leg has now been settled for every vehicle - any later leg is our own again.
+	shipping_income_carrier = convoihandle_t();
+
 	// Grant departure allowance to a waiting convoy of another line, if configured.
 	// This runs after unloading (self and all coupling children) so that goods just
 	// unloaded here are already available at the halt for the released convoy to load.
@@ -4924,6 +4988,19 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		reversing_needed = true;
 		// reverse image direction after departire, in drive_to()
 	}
+
+	// Convoy shipping. Run before loading so that a convoy put ashore here is on the map for
+	// the rest of this stop, and so that a convoy taken aboard has already finished loading
+	// its own goods (it went through hat_gehalten() itself earlier in this halt's queue).
+	if(  !is_coupled()  ) {
+		if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
+			handle_shipping_at_halt( halt );
+		}
+		if(  is_waiting_for_carrier()  ) {
+			try_start_shipping( halt );
+		}
+	}
+
 	// reverse order of coupling/coupled convois
 	if (  coupling_convoi.is_bound()  &&  !is_coupled()  &&  !is_waiting_for_coupling()  &&  !reverse_coupling_done  )
 	{
@@ -5852,6 +5929,52 @@ void convoi_t::set_withdraw(bool new_withdraw)
 }
 
 
+// passing_lane_stop_only_mode allows the passing lane to be used for one purpose only: coming to a
+// stand beside a convoy that already occupies the traffic lane, so that two convoys fit into the
+// same stop. So the manoeuvre is granted exactly when the convoy to be passed stands still, every
+// tile needed for it carries that mode and has a free passing lane, and this convoy's route ends
+// within those tiles - i.e. it really does stop there instead of driving on past on the wrong lane.
+bool convoi_t::can_stop_on_passing_lane(sint32 other_speed, sint16 steps_other)
+{
+	if(  other_speed != 0  ) {
+		// only a standing convoy may be passed here
+		return false;
+	}
+	const uint32 idx = fahr[0]->get_route_index();
+	const sint32 tiles = (steps_other-1)/(CARUNITS_PER_TILE*VEHICLE_STEPS_PER_CARUNIT) + get_tile_length() + 1;
+	if(  idx + (uint32)tiles < route.get_count()  ) {
+		// the route goes on beyond the manoeuvre: we would be driving on the passing lane, not stopping on it
+		return false;
+	}
+	for(  sint32 i=0;  i<tiles  &&  idx+(uint32)i<route.get_count();  i++  ) {
+		grund_t *gr = welt->lookup( route.at( idx+i ) );
+		if(  gr==NULL  ||  gr->get_crossing()  ) {
+			return false;
+		}
+		strasse_t *str = (strasse_t*)gr->get_weg(road_wt);
+		if(  str==NULL  ||  str->get_overtaking_mode_raw()!=passing_lane_stop_only_mode  ) {
+			return false;
+		}
+		// the passing lane itself has to be free: with somebody already standing on it this convoy
+		// stays in the traffic lane, and waits behind if that one is taken as well.
+		const uint8 top = gr->get_top();
+		for(  uint8 j=1;  j<top;  j++  ) {
+			if(  vehicle_base_t* const v = obj_cast<vehicle_base_t>(gr->obj_bei(j))  ) {
+				if(  v->get_typ()==obj_t::pedestrian  ||  v->get_waytype()!=road_wt  ) {
+					continue;
+				}
+				const overtaker_t *ov = v->get_overtaker();
+				if(  ov  &&  ov!=this  &&  ov->is_overtaking()  ) {
+					return false;
+				}
+			}
+		}
+	}
+	set_tiles_overtaking( tiles );
+	return true;
+}
+
+
 /**
  * conditions for a city car to overtake another overtaker.
  * The city car is not overtaking/being overtaken.
@@ -5874,6 +5997,18 @@ bool convoi_t::can_overtake(overtaker_t *other_overtaker, sint32 other_speed, si
 	overtaking_mode_t overtaking_mode = str->get_overtaking_mode();
 	if (  !other_overtaker->can_be_overtaken()  &&  overtaking_mode > oneway_mode  ) {
 		return false;
+	}
+	// This road drives like a prohibited one, with a single exception: pulling onto the passing lane
+	// to stop beside a convoy that already occupies the traffic lane at the stop. The manoeuvre
+	// starts on the tile before the first one carrying the mode, so the tile we are about to enter
+	// decides as well as the one we are standing on.
+	{
+		const grund_t *gr_next = fahr[0]->get_route_index() < route.get_count() ? welt->lookup( route.at( fahr[0]->get_route_index() ) ) : NULL;
+		const strasse_t *str_next = gr_next ? (const strasse_t*)gr_next->get_weg(road_wt) : NULL;
+		if(  str->get_overtaking_mode_raw()==passing_lane_stop_only_mode
+		  ||  (str_next  &&  str_next->get_overtaking_mode_raw()==passing_lane_stop_only_mode)  ) {
+			return can_stop_on_passing_lane( other_speed, steps_other );
+		}
 	}
 	if(  overtaking_mode == prohibited_mode  ){
 		// This road prohibits overtaking.
@@ -5971,8 +6106,7 @@ bool convoi_t::can_overtake(overtaker_t *other_overtaker, sint32 other_speed, si
 	if(  diff_speed < kmh_to_speed(5)  ) {
 		// Overtaking in traffic jam is only accepted on one-way road.
 		if(  overtaking_mode <= oneway_mode  ) {
-			grund_t *gr = welt->lookup(get_pos());
-			strasse_t *str=(strasse_t *)gr->get_weg(road_wt);
+			strasse_t *str = strasse_at( get_pos() );
 			if(  str==NULL  ) {
 				return false;
 			}else if(  akt_speed < fmin(max_power_speed, str->get_max_speed())/2  &&  diff_speed >= kmh_to_speed(0)  ){
@@ -6762,6 +6896,51 @@ void convoi_t::set_next_cross_lane(bool n) {
 }
 
 
+// the direction from @p from to its neighbour @p to, or none when they are not neighbours
+// (reserved_tiles is only contiguous as long as nothing was removed from its middle)
+static ribi_t::ribi neighbour_ribi(const koord3d &from, const koord3d &to)
+{
+	return koord_distance(from.get_2d(), to.get_2d())==1 ? ribi_type(from, to) : (ribi_t::ribi)ribi_t::none;
+}
+
+
+ribi_t::ribi convoi_t::get_reserved_tiles_corner_set(uint32 index) const
+{
+	if(  index>=reserved_tiles.get_count()  ) {
+		return ribi_t::none;
+	}
+	const koord3d curr = reserved_tiles[index];
+	ribi_t::ribi corner_set = ribi_t::none;
+	if(  index>0  ) {
+		corner_set |= ribi_t::backward(neighbour_ribi(reserved_tiles[index-1u], curr));
+	}
+	if(  index+1u<reserved_tiles.get_count()  ) {
+		corner_set |= neighbour_ribi(curr, reserved_tiles[index+1u]);
+	}
+	if(  corner_set==ribi_t::none  ) {
+		// a single entry has no neighbour to tell the leg from (which matters on a tile with two
+		// same-waytype disjoint diagonal legs) => take it from our route, if the tile is on it
+		for(  uint32 i=0;  i<route.get_count();  i++  ) {
+			if(  route.at(i)==curr  ) {
+				return route.get_corner_set(i);
+			}
+		}
+	}
+	return corner_set;
+}
+
+
+// The heading with which this tile is entered.  Unlike the corner_set it distinguishes
+// the two opposite traversals of a tile, which schiene_t::can_co_reserve_offset() needs.
+ribi_t::ribi convoi_t::get_reserved_tiles_travel_dir(uint32 index) const
+{
+	if(  index==0  ||  index>=reserved_tiles.get_count()  ) {
+		return ribi_t::none;
+	}
+	return neighbour_ribi( reserved_tiles[index-1u], reserved_tiles[index] );
+}
+
+
 void convoi_t::clear_reserved_tiles(){
 	dbg->message("convoi_t::clear_reserved_tiles()","%s clear its reserved tiles",get_name());
 	if(  reserved_tiles.get_count()==0  ) {
@@ -6781,7 +6960,8 @@ void convoi_t::clear_reserved_tiles(){
 		if(  !route.is_contained(reserved_tiles[i])  ) {
 			// unreserve the tile
 			grund_t* gr = welt->lookup(reserved_tiles[i]);
-			schiene_t* sch = gr ? (schiene_t*)gr->get_weg(front()->get_waytype()) : NULL;
+			// direction-aware: unreserve the leg that was reserved here
+			schiene_t* sch = gr ? (schiene_t*)gr->get_weg(front()->get_waytype(), get_reserved_tiles_corner_set(i)) : NULL;
 			if(  sch  ) {
 				sch->unreserve(self);
 			}
@@ -6819,6 +6999,18 @@ void convoi_t::calc_crossing_reservation() {
 }
 
 
+void convoi_t::reanchor_chain_route_indices()
+{
+	convoihandle_t c = self;
+	while(  c.is_bound()  ) {
+		for(  uint8 i = 0;  i < c->anz_vehikel;  i++  ) {
+			c->fahr[i]->reanchor_route_index();
+		}
+		c = c->get_coupling_convoi();
+	}
+}
+
+
 bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	convoihandle_t c = coupled;
 	while( c.is_bound() ) {
@@ -6832,6 +7024,9 @@ bool convoi_t::couple_convoi(convoihandle_t coupled) {
 	coupled->parent_convoi = self;
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
+	// the chain drives as one from here on, but each convoy keeps its own copy of the
+	// route - make sure nobody enters it with an index left over from its own journey
+	get_most_parent_convoi()->reanchor_chain_route_indices();
 	must_recalc_min_top_speed();
 	must_recalc_friction_weight();
 	return true;
@@ -6857,6 +7052,10 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 		c = c->get_coupling_convoi();
 	}
 	coupling_convoi = convoihandle_t();
+	// the detached chain becomes an independent convoy: its vehicles may carry an index
+	// that ran past the end of their own route while they were being dragged along, and
+	// the reservation handover below indexes the route with exactly those values
+	ret->reanchor_chain_route_indices();
 	get_most_parent_convoi()->must_recalc_min_top_speed();
 	get_most_parent_convoi()->check_electrification();
 	get_most_parent_convoi()->must_recalc_friction_weight();
@@ -6867,14 +7066,13 @@ convoihandle_t convoi_t::uncouple_convoi(  bool need_reservation_update  ) {
 		for(  uint16 i = max(ret->find_most_child_convoi()->back()->get_route_index(),1u)-1; i < min(min(ret->front()->get_route_index(),max(back()->get_route_index(),1u)-1),r->get_count()); i++  ) {
 			koord3d const pos = r->at(i);
 			grund_t const *gr = welt->lookup(pos);
-			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype()) : NULL;
+			const ribi_t::ribi corner_set = r->get_corner_set(i);
+			// direction-aware: hand over the leg this convoy actually occupies
+			schiene_t * sch1 = gr ? (schiene_t *)gr->get_weg(front()->get_waytype(), corner_set) : NULL;
 			if(  sch1  ) {
 				sch1->unreserve(get_most_parent_convoi());
 				get_most_parent_convoi()->unreserve_pos(pos);
-				const ribi_t::ribi corner_set =
-				ribi_t::backward(ribi_type(r->at(max(1u,i)-1u), pos))
-					| ribi_type(pos, r->at(min(r->get_count()-1u,i+1u)));
-				sch1->reserve(ret,corner_set);
+				sch1->reserve(ret,corner_set,r->get_travel_dir(i));
 			}
 		}
 	}
@@ -7099,6 +7297,7 @@ void convoi_t::trade_convoi() {
 	} else {
 		unregister_stops();
 	}
+	owner->book_convoi_number(-1);
 	// because next line's owner is invalid, unset it.
 	schedule->unset_next_line();
 	player_t* const new_owner = welt->get_player(get_accept_player_nr());
@@ -7110,6 +7309,7 @@ void convoi_t::trade_convoi() {
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	set_permit_trade(false);
 	set_accept_player_nr(owner->get_player_nr());
+	owner->book_convoi_number(1);
 	if(  need_new_line  ) {
 		// reset line for new owner.
 		// search line of my schedule.
@@ -7324,6 +7524,8 @@ bool convoi_t::couple_convoi_during_running(convoihandle_t coupled) {
 	coupled->parent_convoi = self;
 	coupling_convoi->front()->set_leading(false);
 	back()->set_last(false);
+	// same as couple_convoi(): the child stops steering itself from here on
+	get_most_parent_convoi()->reanchor_chain_route_indices();
 	must_recalc_min_top_speed();
 	must_recalc_friction_weight();
 	return true;
@@ -7917,6 +8119,17 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	shipped_convois.remove( c );
 	c->carrier_convoi      = convoihandle_t();
 	c->shipping_wait_since = 0;
+	// Remember who carried us until the revenue for this leg is booked. That happens at this
+	// stop, one step later in hat_gehalten(), because calc_revenue() measures from
+	// last_stop_pos - still the port we boarded at - so the whole leg's income is the
+	// carrier's doing. Every convoy of the chain books its own revenue, so all of them need it.
+	{
+		convoihandle_t k2 = c;
+		while(  k2.is_bound()  ) {
+			k2->shipping_income_carrier = self;
+			k2 = k2->get_coupling_convoi();
+		}
+	}
 
 	// Bring the whole chain back onto the map. This does by hand what start() plus the depot
 	// branch of vorfahren() do between them; start() cannot be used directly because it would
@@ -8383,7 +8596,10 @@ void convoi_t::book_shipping_toll()
 	if(  shipped_convois.empty()  ) {
 		return;
 	}
-	const sint64 pct = (sint64)welt->get_settings().get_way_toll_runningcost_percentage();
+	// Shipping has its own percentage: a ferry crossing is priced differently from running
+	// over someone else's track. It defaults to way_toll_runningcost_percentage, so a pakset
+	// or a save that never sets it behaves exactly as before.
+	const sint64 pct = (sint64)welt->get_settings().get_toll_shipping_percentage();
 	if(  pct == 0  ) {
 		return;
 	}
@@ -8420,4 +8636,35 @@ void convoi_t::book_shipping_toll()
 		c->book( -toll_convoy, CONVOI_WAYTOLL );
 		c->book( -toll_convoy, CONVOI_PROFIT );
 	}
+}
+
+
+sint64 convoi_t::deduct_shipping_income_share(sint64 revenue, const vehicle_t *v)
+{
+	// Convoy shipping: the leg just settled was ridden aboard a carrier - calc_revenue()
+	// measures from last_stop_pos, which is still the port we boarded at, so the whole of this
+	// leg's income was earned by the carrier moving us. Hand the carrier its configured share.
+	if(  !shipping_income_carrier.is_bound()  ||  revenue == 0  ) {
+		return revenue;
+	}
+	const sint64 pct = (sint64)welt->get_settings().get_shipping_income_percentage();
+	if(  pct <= 0  ) {
+		return revenue;
+	}
+	const sint64 share = revenue * pct / 100l;
+	if(  share == 0  ) {
+		return revenue;
+	}
+	convoi_t *carrier = shipping_income_carrier.get_rep();
+	if(  carrier == NULL  ||  carrier->get_vehicle_count() == 0  ||  carrier->get_schedule() == NULL  ) {
+		return revenue;
+	}
+	// booked under the carrier's own waytype, so a ferry's earnings show up in the water
+	// column rather than in the column of whatever it happened to be carrying
+	carrier->get_owner()->book_revenue( share, carrier->front()->get_pos().get_2d(),
+		carrier->get_schedule()->get_waytype(), v->get_cargo_type()->get_index() );
+	carrier->book( share, CONVOI_REVENUE );
+	carrier->book( share, CONVOI_PROFIT );
+	carrier->jahresgewinn += share;
+	return revenue - share;
 }

@@ -340,6 +340,21 @@ private:
 	sint32 way_toll_runningcost_percentage;
 	sint32 way_toll_waycost_percentage;
 
+	/**
+	 * Convoy shipping: percentage of the running cost of the carrying vehicles charged as toll
+	 * to each convoy carried aboard. Separate from way_toll_runningcost_percentage so that a
+	 * pakset can price a ferry crossing differently from running over someone's track.
+	 * Defaults to way_toll_runningcost_percentage, including when loading a pre-v62 save.
+	 */
+	sint32 toll_shipping_percentage;
+
+	/**
+	 * Convoy shipping: percentage of the transport income earned over a shipped leg that goes
+	 * to the carrier instead of to the convoy it carried. 0 means the carried convoy keeps all
+	 * of it and the carrier earns only the toll.
+	 */
+	sint32 shipping_income_percentage;
+
 	// multipliers [%] applied on the pakset values of maintenance and running costs
 	sint32 maintenance_cost_multiplier_way;
 	sint32 maintenance_cost_multiplier_overhead;
@@ -770,6 +785,8 @@ public:
 
 	sint32 get_way_toll_runningcost_percentage() const { return way_toll_runningcost_percentage; }
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
+	sint32 get_toll_shipping_percentage() const { return toll_shipping_percentage; }
+	sint32 get_shipping_income_percentage() const { return shipping_income_percentage; }
 
 	sint32 get_maintenance_cost_multiplier_way() const { return maintenance_cost_multiplier_way; }
 	sint32 get_maintenance_cost_multiplier_overhead() const { return maintenance_cost_multiplier_overhead; }

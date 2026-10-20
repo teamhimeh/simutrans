@@ -285,6 +285,17 @@ private:
 	convoihandle_t carrier_convoi;
 
 	/**
+	* Convoy shipping: the convoy that just carried me, kept only until the revenue for that
+	* leg has been settled. Revenue is booked at the stop AFTER disembarking (calc_revenue()
+	* measures from last_stop_pos, which is still the port we boarded at), so the carrier has
+	* to stay reachable that long to be paid its share. Cleared as soon as the split is done.
+	*/
+	convoihandle_t shipping_income_carrier;
+
+	/// pay `carrier`'s share of a shipped leg's revenue and return what is left for us
+	sint64 deduct_shipping_income_share(sint64 revenue, const vehicle_t *v);
+
+	/**
 	* Convoy shipping: ticks at which this convoy began waiting for a carrier, so that a
 	* convoy nobody ever comes to fetch can eventually be reported instead of hanging forever.
 	*/
@@ -742,9 +753,11 @@ public:
 	sint64 get_fixed_cost() const { return -sum_fixed_costs; }
 
 	/**
-	 * returns the total running cost for all vehicles in convoi
+	 * returns the total running cost for all vehicles in convoi,
+	 * scaled by the running cost multiplier setting (see add_running_cost())
+	 * -- unlike vehicle_desc_t::get_running_cost(), which is the unscaled base value
 	 */
-	sint32 get_running_cost() const { return -base_sum_running_costs; }
+	sint32 get_running_cost_scaled() const;
 
 	/**
 	 * returns the total new purchase cost for all vehicles in convoy
@@ -1201,6 +1214,18 @@ public:
 	void reserve_pos(koord3d pos) {reserved_tiles.append(pos); }
 	bool is_reservation_empty() const { return reserved_tiles.empty(); }
 	vector_tpl<koord3d>& get_reserved_tiles() { return reserved_tiles; }
+
+	/**
+	 * The corner set (see route_t::get_corner_set()) of reserved_tiles[index]: reserved tiles
+	 * are held in route order, so the neighbouring entries give the bits this convoy occupies
+	 * there. Pass it to grund_t::get_weg(waytype, dir) so the reservation is looked up on the
+	 * leg actually reserved when two same-waytype disjoint diagonal legs share that tile.
+	 */
+	ribi_t::ribi get_reserved_tiles_corner_set(uint32 index) const;
+
+	/// heading with which the reserved tile at @p index is entered (see schiene_t::reserve())
+	ribi_t::ribi get_reserved_tiles_travel_dir(uint32 index) const;
+
 	void clear_reserved_tiles();
 	/**
 	 * the index and steps of the coupling point.
@@ -1266,6 +1291,10 @@ public:
 	// Overtaking for convois
 	virtual bool can_overtake(overtaker_t *other_overtaker, sint32 other_speed, sint16 steps_other) OVERRIDE;
 
+	// passing_lane_stop_only_mode: may this convoy pull onto the passing lane in order to come to a
+	// stand beside the standing convoy in front of it? Grants the lane (set_tiles_overtaking) if so.
+	bool can_stop_on_passing_lane(sint32 other_speed, sint16 steps_other);
+
 	/*
 	 * Functions related to requested_change_lane
 	 * @author teamhimeH
@@ -1300,6 +1329,16 @@ public:
 
 	// Couple with given convoy
 	bool couple_convoi(convoihandle_t coupled);
+
+	/**
+	 * Re-anchor route_index of every vehicle of this convoy and of all convoys coupled
+	 * behind it, against the route each of those convoys holds. A coupled child keeps
+	 * its own copy of the route but is driven by its parent, so its vehicles' route_index
+	 * can run arbitrarily far past its route (vehicle_t::hop() has no upper bound there).
+	 * Coupling and uncoupling hand those indices to a different convoy, so they have to
+	 * be made meaningful again at both boundaries.
+	 */
+	void reanchor_chain_route_indices();
 	convoihandle_t uncouple_convoi(  bool need_reservation_update = true  );
 
 	bool is_coupled() const { return state==COUPLED  ||  state==COUPLED_LOADING; }

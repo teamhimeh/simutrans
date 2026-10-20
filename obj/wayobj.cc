@@ -49,6 +49,7 @@ stringhashtable_tpl<const way_obj_desc_t *> wayobj_t::table;
 
 wayobj_t::wayobj_t(loadsave_t* const file) : obj_no_info_t()
 {
+	close_diagonal = 0;
 	rdwr(file);
 }
 
@@ -57,6 +58,7 @@ wayobj_t::wayobj_t(koord3d const pos, player_t* const owner, ribi_t::ribi const 
 {
 	desc = b;
 	dir = d;
+	close_diagonal = 0;
 	set_owner(owner);
 }
 
@@ -206,14 +208,30 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 	// electrify a way if we are a catenary
 	if(desc->is_overhead_line()) {
 		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
-		weg_t *weg = welt->lookup(get_pos())->get_weg(wt);
+		grund_t *gr = welt->lookup(get_pos());
+		weg_t *weg = gr->get_weg(wt, dir);
 		if (wt == any_wt) {
-			weg_t *weg2 = welt->lookup(get_pos())->get_weg_nr(1);
+			weg_t *weg2 = gr->get_weg_nr(1);
 			if (weg2) {
 				weg2->set_electrify(true);
 				if(weg2->get_max_speed()>desc->get_topspeed()) {
 					weg2->set_max_speed(desc->get_topspeed());
 				}
+			}
+		}
+		else if (gr->has_two_ways()) {
+			// two same-waytype disjoint diagonal legs: a catenary built here spans both
+			// (our own dir already covers whichever bits it was built/extended to cover),
+			// so electrify whichever leg(s) our dir actually reaches, not just one
+			weg_t *leg0 = gr->get_weg_nr(0);
+			weg_t *leg1 = gr->get_weg_nr(1);
+			if(  leg0  &&  leg0->get_waytype()==wt  &&  leg0!=weg  &&  (leg0->get_ribi_unmasked() & dir)  ) {
+				leg0->set_electrify(true);
+				leg0->set_max_wayobj_speed(desc->get_topspeed());
+			}
+			if(  leg1  &&  leg1->get_waytype()==wt  &&  leg1!=weg  &&  (leg1->get_ribi_unmasked() & dir)  ) {
+				leg1->set_electrify(true);
+				leg1->set_max_wayobj_speed(desc->get_topspeed());
 			}
 		}
 		if(weg) {
@@ -242,6 +260,10 @@ void wayobj_t::rotate90()
 	obj_t::rotate90();
 	dir = ribi_t::rotate90( dir);
 	hang = slope_t::rotate90( hang );
+	if(  close_diagonal  ) {
+		// horizontal <-> vertical
+		close_diagonal ^= 3;
+	}
 }
 
 
@@ -267,6 +289,7 @@ void wayobj_t::calc_image()
 #endif
 	grund_t *gr = welt->lookup(get_pos());
 	diagonal = false;
+	close_diagonal = 0;
 	if(gr) {
 		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
 		weg_t *w=gr->get_weg(wt);
@@ -288,6 +311,16 @@ void wayobj_t::calc_image()
 				sec_way_ribi_unmasked = sec_w->get_ribi_unmasked();
 			}
 		}
+		else if (gr->has_two_ways()) {
+			// two same-waytype disjoint diagonal legs: this one wayobj covers both (its dir
+			// mask below is unioned across them, same as the any_wt/powerline case above)
+			weg_t *leg0 = gr->get_weg_nr(0);
+			weg_t *leg1 = gr->get_weg_nr(1);
+			if (leg0 && leg1 && leg0->get_waytype()==wt && leg1->get_waytype()==wt) {
+				w = leg0;
+				sec_way_ribi_unmasked = leg1->get_ribi_unmasked();
+			}
+		}
 
 		set_yoff( -gr->get_weg_yoff() );
 		set_xoff( 0 );
@@ -302,8 +335,12 @@ void wayobj_t::calc_image()
 			return;
 		}
 
+		// close diagonals on fourway way tiles (only with close diagonal images)
+		if(  dir == ribi_t::all  &&  w->is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
+			close_diagonal = w->is_close_diagonal();
+		}
 		// find out whether using diagonals or straight lines
-		if(ribi_t::is_bend(dir)  &&  desc->has_diagonal_image()) {
+		else if(ribi_t::is_bend(dir)  &&  desc->has_diagonal_image()) {
 			ribi_t::ribi r1 = ribi_t::none, r2 = ribi_t::none;
 
 			// get the ribis of the ways that connect to us
@@ -312,7 +349,12 @@ void wayobj_t::calc_image()
 			r2 = find_next_ribi( gr, ribi_t::rotate45l(dir), wt );
 
 			// diagonal if r1 or r2 are our reverse and neither one is 90 degree rotation of us
-			diagonal = (r1 == ribi_t::backward(dir) || r2 == ribi_t::backward(dir)) && r1 != ribi_t::rotate90l(dir) && r2 != ribi_t::rotate90(dir);
+			const ribi_t::ribi rback = ribi_t::backward(dir);
+			diagonal = (r1 == rback || r2 == rback) && r1 != ribi_t::rotate90l(dir) && r2 != ribi_t::rotate90(dir);
+			// next to fourway tiles of close diagonals (or switches) on both sides
+			if(  !diagonal  &&  desc->has_close_diagonal_image()  ) {
+				diagonal = (r1 == rback || ribi_t::is_threeway(r1)) && (r2 == rback || ribi_t::is_threeway(r2));
+			}
 
 			if(diagonal) {
 				// with this, we avoid calling us endlessly

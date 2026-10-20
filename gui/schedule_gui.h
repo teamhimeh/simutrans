@@ -43,6 +43,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 		adding,
 		inserting,
 		removing,
+		making_first,
 		undefined_mode
 	};
 
@@ -59,7 +60,7 @@ class schedule_gui_t : public gui_frame_t, public action_listener_t
 
 	// always needed
 	button_t bt_add, bt_insert, bt_remove; // stop management
-	button_t bt_revert, bt_return;
+	button_t bt_revert, bt_return, bt_make_first;
 	button_t bt_wait_load;
 
 	gui_label_t lb_wait, lb_load, lb_departure_slot_group, lb_max_load;
