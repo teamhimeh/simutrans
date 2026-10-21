@@ -2807,11 +2807,20 @@ schedule_t *convoi_t::create_schedule()
 // steps one tile further in each candidate direction and recurses at depth-1.
 // Intermediate tiles are collected into buf[0..n-1] in outermost-first order
 // (buf[0] is adjacent to g, buf[n-1] is adjacent to the found vehicle tile).
-koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n)
+// Each tile is searched only once in a search, to avoid looping forever
+// (e.g. when the tracks form a loop). Tiles in `searched_tiles` are never searched;
+// the tiles searched are appended to it. If it is NULL, a local list is used.
+koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n, vector_tpl<koord3d>* searched_tiles)
 {
 	n = 0;
 	if(  !g  ) {
 		return koord3d::invalid;
+	}
+	// tiles already searched in this search, used when the caller gives no list.
+	vector_tpl<koord3d> local_searched_tiles;
+	if(  !searched_tiles  ) {
+		searched_tiles = &local_searched_tiles;
+		searched_tiles->append(g->get_pos());
 	}
 	// direction-aware: back_dir is already the local bit on g pointing toward the rest of the
 	// route/convoy, so it identifies which leg we're on when two same-waytype disjoint
@@ -2824,19 +2833,21 @@ koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const
 		if(  (next_dir & weg_dir) == 0  ||  next_dir == back_dir  ) {
 			continue;
 		}
+		grund_t* gn;
+		g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
+		if(  !gn  ||  searched_tiles->is_contained(gn->get_pos())  ) {
+			// already searched tile. do not search again.
+			continue;
+		}
+		searched_tiles->append(gn->get_pos());
 		koord3d pos = find_tiles_convoy_on(inspecting, g, next_dir);
 		if(  pos != koord3d::invalid  ) {
 			return pos;
 		}
 		if(  depth > 0  ) {
 			// try one more tile in this direction (needed for diagonals or long vehicles)
-			grund_t* gn;
-			g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-			if(  !gn  ) {
-				continue;
-			}
 			uint8 sub_n = 0;
-			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n);
+			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n, searched_tiles);
 			if(  pos2 != koord3d::invalid  ) {
 				buf[0] = gn->get_pos();  // outermost intermediate (adjacent to g)
 				n = 1 + sub_n;
