@@ -2807,7 +2807,9 @@ schedule_t *convoi_t::create_schedule()
 // steps one tile further in each candidate direction and recurses at depth-1.
 // Intermediate tiles are collected into buf[0..n-1] in outermost-first order
 // (buf[0] is adjacent to g, buf[n-1] is adjacent to the found vehicle tile).
-koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n)
+// Tiles in `searched_tiles` (the tiles already added by insert_route_convoy_on()) are never
+// searched, to avoid adding the same tile again and looping forever.
+koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n, const vector_tpl<koord3d>* searched_tiles)
 {
 	n = 0;
 	if(  !g  ) {
@@ -2824,19 +2826,20 @@ koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const
 		if(  (next_dir & weg_dir) == 0  ||  next_dir == back_dir  ) {
 			continue;
 		}
+		grund_t* gn;
+		g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
+		if(  !gn  ||  (searched_tiles  &&  searched_tiles->is_contained(gn->get_pos()))  ) {
+			// already added tile. do not search again.
+			continue;
+		}
 		koord3d pos = find_tiles_convoy_on(inspecting, g, next_dir);
 		if(  pos != koord3d::invalid  ) {
 			return pos;
 		}
 		if(  depth > 0  ) {
 			// try one more tile in this direction (needed for diagonals or long vehicles)
-			grund_t* gn;
-			g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-			if(  !gn  ) {
-				continue;
-			}
 			uint8 sub_n = 0;
-			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n);
+			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n, searched_tiles);
 			if(  pos2 != koord3d::invalid  ) {
 				buf[0] = gn->get_pos();  // outermost intermediate (adjacent to g)
 				n = 1 + sub_n;
@@ -2864,6 +2867,10 @@ bool convoi_t::insert_route_convoy_on()
 		return false;
 	}
 	else {
+		// the start tile and the tiles added to the route by this function.
+		// they are not searched again, to avoid an infinite loop.
+		vector_tpl<koord3d> searched_tiles;
+		searched_tiles.append(route.front());
 		while(  inspecting.is_bound()  ) {
 			// determine search depth from the longest vehicle across all coupled convoys
 			uint32 max_length_steps = 0;
@@ -2879,13 +2886,15 @@ bool convoi_t::insert_route_convoy_on()
 				ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());
 				koord3d intermediate_buf[256];
 				uint8 intermediate_n = 0;
-				koord3d pos_to_insert = search_next_convoy_tile(inspecting, g, back_dir, depth, intermediate_buf, intermediate_n);
+				koord3d pos_to_insert = search_next_convoy_tile(inspecting, g, back_dir, depth, intermediate_buf, intermediate_n, &searched_tiles);
 				if(  pos_to_insert != koord3d::invalid  ) {
 					// insert intermediate tiles outermost-first (adjacent to g first)
 					for(  uint8 k = 0;  k < intermediate_n;  k++  ) {
 						route.insert(intermediate_buf[k]);
+						searched_tiles.append(intermediate_buf[k]);
 					}
 					route.insert(pos_to_insert);
+					searched_tiles.append(pos_to_insert);
 				} else {
 					// there are no another position which is convoy on, searching end.
 					searching_end = true;
