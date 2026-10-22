@@ -248,7 +248,12 @@ void finance_t::rdwr(loadsave_t *file)
 	for(int year = 0;  year < max_years ; ++year ) {
 		for( int cost_type = 0; cost_type < max_atc ;  ++cost_type  ) {
 			if( ( year < MAX_PLAYER_HISTORY_YEARS ) && ( cost_type < ATC_MAX ) ) {
-				file->rdwr_longlong( com_year[year][cost_type] );
+				if(file->get_OTRP_version()<63&&year==0&&cost_type==ATC_ALL_CONVOIS) {
+					// this value can be invalid. rebuild in convoi_t::convoi_t().
+					file->rdwr_longlong( dummy );
+				} else {
+					file->rdwr_longlong( com_year[year][cost_type] );
+				}
 			} else {
 				file->rdwr_longlong( dummy );
 			}
@@ -257,7 +262,12 @@ void finance_t::rdwr(loadsave_t *file)
 	for(int month = 0; month < max_months; ++month) {
 		for( int cost_type = 0; cost_type < max_atc;  ++cost_type ) {
 			if( ( month < MAX_PLAYER_HISTORY_MONTHS ) && ( cost_type < ATC_MAX ) ) {
-				file->rdwr_longlong( com_month[month][cost_type] );
+				if(file->get_OTRP_version()<63&&month==0&&cost_type==ATC_ALL_CONVOIS) {
+					// this value can be invalid. rebuild in convoi_t::convoi_t().
+					file->rdwr_longlong( dummy );
+				} else {
+					file->rdwr_longlong( com_month[month][cost_type] );
+				}
 			} else {
 				file->rdwr_longlong( dummy );
 			}

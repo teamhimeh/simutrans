@@ -11508,8 +11508,9 @@ bool tool_merge_player_t::init( player_t *player )
 		if(  cnv->get_owner()!=merged_player  ) {
 			continue;
 		}
-		
+		merged_player->book_convoi_number(-1);
 		cnv->set_owner(merger_player);
+		merger_player->book_convoi_number(1);
 		for( uint8 h=0; h<cnv->get_vehicle_count(); h++ ) {
 			cnv->get_vehikel(h)->set_owner(merger_player);
 		}
