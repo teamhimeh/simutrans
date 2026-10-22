@@ -117,7 +117,8 @@ gebaeude_t::~gebaeude_t()
 		// avoid book-keeping
 	}
 
-	if(get_stadt()) {
+	// tile is NULL if no description is found during loading. Such a building was never added to the city.
+	if(tile  &&  get_stadt()) {
 		ptr.stadt->remove_gebaeude_from_stadt(this);
 	}
 

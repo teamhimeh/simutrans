@@ -2826,9 +2826,9 @@ koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const
 		if(  (next_dir & weg_dir) == 0  ||  next_dir == back_dir  ) {
 			continue;
 		}
-		grund_t* gn;
-		g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-		if(  !gn  ||  (searched_tiles  &&  searched_tiles->is_contained(gn->get_pos()))  ) {
+		// get_neighbour() does not set gn when it fails
+		grund_t* gn = NULL;
+		if(  !g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir)  ||  (searched_tiles  &&  searched_tiles->is_contained(gn->get_pos()))  ) {
 			// already added tile. do not search again.
 			continue;
 		}
@@ -2932,9 +2932,8 @@ bool convoi_t::insert_route_to_draw_diagonal()
 		//we do not insert because this tile is not bend tile or invalid tile
 		return false;
 	}
-	grund_t* gn_back;
-	g->get_neighbour(gn_back, front()->get_waytype(), weg_dir-back_dir);
-	if( gn_back && gn_back->get_weg(front()->get_waytype(), ribi_t::backward(weg_dir-back_dir)) ) {
+	grund_t* gn_back = NULL;
+	if( g->get_neighbour(gn_back, front()->get_waytype(), weg_dir-back_dir) && gn_back->get_weg(front()->get_waytype(), ribi_t::backward(weg_dir-back_dir)) ) {
 		dbg->message("convoi_t::insert_route_to_draw_diagonal()","%s add (%i,%i) before (%i,%i)",get_name(),gn_back->get_pos().x,gn_back->get_pos().y,route.front().x,route.front().y);
 		route.insert(gn_back->get_pos());
 		return true;
@@ -2944,9 +2943,8 @@ bool convoi_t::insert_route_to_draw_diagonal()
 
 // helper function for insert_route_convoy_on()
 koord3d const convoi_t::find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir) {
-	grund_t* gn;
-	g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-	if(  !gn || !gn->get_weg(front()->get_waytype())  ) {
+	grund_t* gn = NULL;
+	if(  !g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir) || !gn->get_weg(front()->get_waytype())  ) {
 		return koord3d::invalid;
 	}
 	if( find_convoy_on_tile(gn, inspecting) ) {
