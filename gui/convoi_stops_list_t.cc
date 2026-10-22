@@ -116,7 +116,8 @@ public:
 	void update_label()
 	{
 		stop.buf().printf("%i) ", number+1);
-		if(  waytype!=water_wt && !cnv->is_waypoint(entry) && welt->lookup(entry.pos)->get_depot()==NULL  ) {
+		const grund_t *gr = welt->lookup(entry.pos);
+		if( waytype!=water_wt && !cnv->is_waypoint(entry) && !(gr && gr->get_depot()) ) {
 			// ships do not use halt length, so we do not write
 			stop.buf().printf("[%.2f] ", (double) halt_length_in_vehicle_step()/VEHICLE_STEPS_PER_TILE);
 		}
