@@ -979,3 +979,43 @@ Thumbnails
 サムネイル表示
 Large thumbnails
 大きく表示
+Export heightmap
+高さマップをPNG出力
+Heightmap PNG
+高さPNG出力
+Save PNG
+PNGを保存
+Load mode:
+読込モード:
+Export the terrain as a PNG heightmap for a new game.
+地形を新規ゲーム用のPNG高さ画像に出力します。
+Heightmap size:
+画像サイズ:
+Height limits:
+高さの下限・上限:
+Sea level:
+海面高:
+Changed heights / max. error:
+高さの変化数 / 最大誤差:
+Changed outer vertices:
+外周の変化数:
+Right and bottom borders are duplicated on import.
+読込時に右端と下端の頂点が複製されます。
+The top-left vertex may change on import.
+読込時に左上の頂点が変わる場合があります。
+Slope correction may change the imported terrain.
+読込時の斜面補正で地形が変わる場合があります。
+Lake levels, buildings and ways are not stored.
+湖の水位・建物・道路や線路は保存されません。
+Use a new filename; existing files are kept.
+既存ファイルは上書きしません。別の名前を指定してください。
+Please enter a heightmap filename.
+高さマップのファイル名を入力してください。
+This file already exists or cannot be accessed. Choose another filename.
+ファイルが既に存在するかアクセスできません。別の名前を指定してください。
+Heightmap saved to:\n%s
+高さマップを保存しました:\n%s
+Load mode: linear
+読込モード: linear
+Heightmap export failed. Check the filename and write permissions.
+高さマップを出力できません。ファイル名と書込権限を確認してください。

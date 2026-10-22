@@ -71,6 +71,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\freelist.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\gameinfo.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\height_map_loader.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\height_map_exporter.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\koord.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\koord3d.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dataobj\loadsave.cc" />
@@ -179,6 +180,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\loadfont_frame.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\loadsave_frame.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\map_frame.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\save_heightmap_frame.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\message_frame_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\message_option_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\message_stats_t.cc" />
@@ -413,6 +415,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\freelist.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\gameinfo.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\height_map_loader.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\height_map_exporter.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\koord.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\koord3d.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)dataobj\loadsave.h" />
@@ -543,6 +546,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\loadfont_frame.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\loadsave_frame.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\map_frame.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\save_heightmap_frame.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\message_frame_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\message_option_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\message_stats_t.h" />

@@ -571,14 +571,11 @@ bool savegame_frame_t::del_action(const char *fullpath)
  */
 void savegame_frame_t::set_filename(const char *file_name)
 {
-	size_t len = strlen(file_name);
-	if(len>=4  &&  len-SAVE_PATH_X_LEN-3<128) {
-		if(strstart(file_name, SAVE_PATH_X)) {
-			tstrncpy(ibuf, file_name+SAVE_PATH_X_LEN, len-SAVE_PATH_X_LEN-3 );
-		}
-		else {
-			tstrncpy(ibuf, file_name, len-3);
-		}
+	const size_t prefix = strstart(file_name, SAVE_PATH_X) ? SAVE_PATH_X_LEN : 0;
+	const size_t len = strlen(file_name);
+	// Remove the four-character extension without unsigned underflow for a.png.
+	if(len >= prefix + 4  &&  len - prefix - 4 < 128) {
+		tstrncpy(ibuf, file_name + prefix, len - prefix - 3);
 		input.set_text(ibuf, 128);
 	}
 }
