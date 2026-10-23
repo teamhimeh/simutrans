@@ -2702,6 +2702,27 @@ void way_builder_t::build_elevated()
 
 
 
+/**
+ * true when two same-waytype disjoint diagonal legs coexist on @p gr and one of them already
+ * owns every direction in @p ribi. The tile is then already connected that way, so the caller
+ * must not hand the ribi to weg_erweitern(): its leg choice could add the same direction to
+ * the OTHER leg too (e.g. when that leg's descriptor matches the new one), leaving two ways
+ * leaving the tile in the same direction.
+ */
+static bool is_direction_already_built(const grund_t *gr, waytype_t wt, ribi_t::ribi ribi)
+{
+	if(  ribi==ribi_t::none  ||  !gr->has_two_same_waytype_ways()  ||  gr->get_weg_nr(0)->get_waytype()!=wt  ) {
+		return false;
+	}
+	for(  uint8 i=0;  i<2;  i++  ) {
+		if(  (gr->get_weg_nr(i)->get_ribi_unmasked() & ribi)==ribi  ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
 void way_builder_t::build_road()
 {
 	// only public player or cities (sp==NULL) can build cityroads with sidewalk
@@ -2726,7 +2747,9 @@ void way_builder_t::build_road()
 		grund_t* gr = welt->lookup(route[i]);
 		sint64 cost = 0;
 
-		bool extend = gr->weg_erweitern(road_wt, route.get_short_ribi(i), desc, straight_route_mode);
+		// a leg already owning this direction counts as extended; get_weg(road_wt, ribi) below picks it
+		bool extend = is_direction_already_built(gr, road_wt, route.get_short_ribi(i))
+			||  gr->weg_erweitern(road_wt, route.get_short_ribi(i), desc, straight_route_mode);
 
 		// bridges/tunnels have their own track type and must not upgrade
 		if(gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden) {
@@ -2832,7 +2855,9 @@ void way_builder_t::build_track()
 				continue;
 			}
 
-			bool const extend = gr->weg_erweitern(desc->get_wtyp(), ribi, desc, straight_route_mode);
+			// a leg already owning this direction counts as extended; get_weg(wtyp, ribi) below picks it
+			bool const extend = is_direction_already_built(gr, desc->get_wtyp(), ribi)
+				||  gr->weg_erweitern(desc->get_wtyp(), ribi, desc, straight_route_mode);
 
 			// bridges/tunnels have their own track type and must not upgrade
 			if((gr->get_typ()==grund_t::brueckenboden ||  gr->get_typ()==grund_t::tunnelboden)  &&  gr->get_weg_nr(0)->get_waytype()==desc->get_wtyp()) {
