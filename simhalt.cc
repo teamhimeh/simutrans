@@ -4443,7 +4443,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	}
 
 	// read and write fresh_cargo
-	std::function<void(loadsave_t*, sint64&)> rdwr_longlong_item = [](loadsave_t *file, sint64 &v) {
+	auto rdwr_longlong_item = [](loadsave_t *file, sint64 &v) {
 		file->rdwr_longlong(v);
 	};
 	if(  file->is_loading()  ) {

@@ -3885,7 +3885,7 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->get_OTRP_version()>=40  ) {
-		std::function<void(loadsave_t*, fetched_fresh_goods_t&)> rdwr_goods = [](loadsave_t *file, fetched_fresh_goods_t &v) {
+		auto rdwr_goods = [](loadsave_t *file, fetched_fresh_goods_t &v) {
 			file->rdwr_long(v.amount);
 			file->rdwr_long(v.arrived_time);
 		};
@@ -3982,7 +3982,7 @@ void convoi_t::rdwr(loadsave_t *file)
 		// current schedule entry, which the schedule already saves as a position. Saving a
 		// halt id instead would go stale across a halt merge or rebuild, even though the
 		// position itself is still fine. See get_shipping_dest_halt().
-		std::function<void(loadsave_t*, convoihandle_t&)> rdwr_cnv = [](loadsave_t *f, convoihandle_t &c) {
+		auto rdwr_cnv = [](loadsave_t *f, convoihandle_t &c) {
 			rdwr_convoihandle_t( f, c );
 		};
 		file->rdwr_vector( shipped_convois, rdwr_cnv );
