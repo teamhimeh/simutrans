@@ -214,6 +214,12 @@ void convoi_info_t::init(convoihandle_t cnv)
 		container_freight.add_component(&sort_button);
 	}
 	container_freight.end_table();
+	container_freight.add_component(&container_shipping);
+	container_shipping.set_table_layout(2,0);
+	container_shipping.set_visible(false);
+	shipping_cnvs.clear();
+	shipping_buttons.clear();
+	update_shipping_buttons();
 	container_freight.add_component(&text);
 
 	switch_mode.add_tab(&container_stats, translator::translate("Chart"));
@@ -352,6 +358,8 @@ void convoi_info_t::update_labels()
 	}
 	line_label.update();
 
+	update_shipping_buttons();
+
 	// buffer update now only when needed by convoi itself => dedicated buffer for this
 	const int old_len=freight_info.len();
 	cnv->get_freight_info(freight_info);
@@ -366,6 +374,64 @@ void convoi_info_t::update_labels()
 	container_top->set_size( container_top->get_size() );
 
 	memo_area->set_width(size.w-12*D_H_SPACE);
+}
+
+
+void convoi_info_t::update_shipping_buttons()
+{
+	// the carrier first, then everything aboard - the same order as shipping_cnvs
+	vector_tpl<convoihandle_t> current;
+	const convoihandle_t carrier = cnv->is_shipped() ? cnv->get_carrier_convoi() : convoihandle_t();
+	if(  carrier.is_bound()  ) {
+		current.append( carrier );
+	}
+	FOR(vector_tpl<convoihandle_t>, const c, cnv->get_shipped_convois()) {
+		if(  c.is_bound()  ) {
+			current.append( c );
+		}
+	}
+
+	// Rebuild only when the set changed. A destroyed convoy leaves an unbound handle behind,
+	// which never compares equal to the bound one recorded here, so its button (whose text
+	// points into that convoy) is gone before the next draw.
+	bool changed = current.get_count() != shipping_cnvs.get_count();
+	for(  uint32 i = 0;  !changed  &&  i < current.get_count();  i++  ) {
+		changed = !shipping_cnvs[i].is_bound()  ||  current[i] != shipping_cnvs[i];
+	}
+	if(  !changed  ) {
+		return;
+	}
+
+	container_shipping.remove_all();
+	shipping_buttons.clear();
+	shipping_cnvs.clear();
+	FOR(vector_tpl<convoihandle_t>, const c, current) {
+		shipping_cnvs.append( c );
+	}
+
+	for(  uint32 i = 0;  i < current.get_count();  i++  ) {
+		const bool is_carrier = carrier.is_bound()  &&  i == 0;
+		if(  is_carrier  ) {
+			container_shipping.new_component<gui_label_t>("Carried by:");
+		}
+		else if(  i == (carrier.is_bound() ? 1u : 0u)  ) {
+			container_shipping.new_component<gui_label_t>("Carrying:");
+		}
+		else {
+			container_shipping.new_component<gui_empty_t>();
+		}
+		button_t *b = container_shipping.new_component<button_t>();
+		b->init( button_t::roundbox | button_t::flexible, NULL );
+		b->set_no_translate( true );
+		// the convoy keeps its name in a fixed buffer, so this follows renames as well
+		b->set_text( current[i]->get_name() );
+		b->set_tooltip( "Open the information window of this convoy." );
+		b->add_listener( this );
+		shipping_buttons.append( b );
+	}
+	container_shipping.set_visible( !current.empty() );
+
+	scroll_freight.set_size( scroll_freight.get_size() );
 }
 
 
@@ -616,6 +682,16 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 	if(comp == &route_show_button) {
 		is_route_show = !is_route_show;
 		return true;
+	}
+
+	// open the carrier's or a carried convoy's window; viewing is allowed for everyone
+	for(  uint32 i = 0;  i < shipping_buttons.get_count();  i++  ) {
+		if(  comp == shipping_buttons[i]  ) {
+			if(  shipping_cnvs[i].is_bound()  ) {
+				shipping_cnvs[i]->open_info_window();
+			}
+			return true;
+		}
 	}
 
 	if(  comp == &line_button  ) {
