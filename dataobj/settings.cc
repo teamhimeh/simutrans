@@ -10,6 +10,7 @@
 #include "environment.h"
 #include "../pathes.h"
 #include "../simconst.h"
+#include "../simcolor.h"
 #include "../simtypes.h"
 #include "../simdebug.h"
 #include "../simworld.h"
@@ -261,6 +262,9 @@ settings_t::settings_t() :
 
 	maint_building = 5000; // normal buildings
 	way_toll_runningcost_percentage = 0;
+	// convoy shipping: mirrors the way toll by default, and carrying earns only the toll
+	toll_shipping_percentage = 0;
+	shipping_income_percentage = 0;
 	way_toll_waycost_percentage = 0;
 	maintenance_cost_multiplier_way = 100;
 	maintenance_cost_multiplier_overhead = 100;
@@ -1251,6 +1255,17 @@ void settings_t::rdwr(loadsave_t *file)
 			maintenance_cost_multiplier_overhead = 100;
 			running_cost_multiplier_vehicle = 100;
 		}
+		if(  file->get_OTRP_version() >= 62  ) {
+			file->rdwr_long( toll_shipping_percentage );
+			file->rdwr_long( shipping_income_percentage );
+		}
+		else if(  file->is_loading()  ) {
+			// Before v62 the shipping toll shared the way toll's percentage, so an older save
+			// keeps behaving exactly as it did. Carrying earned no share of the transport
+			// income at all, so that starts at zero.
+			toll_shipping_percentage = way_toll_runningcost_percentage;
+			shipping_income_percentage = 0;
+		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
@@ -1898,6 +1913,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	way_toll_runningcost_percentage = contents.get_int_clamped("toll_runningcost_percentage", way_toll_runningcost_percentage, 0, 100 );
 	way_toll_waycost_percentage     = contents.get_int_clamped("toll_waycost_percentage",     way_toll_waycost_percentage,     0, 100 );
+	// Convoy shipping. The shipping toll defaults to whatever the way toll is, so a pakset
+	// that only sets toll_runningcost_percentage gets the behaviour it had before this setting
+	// existed; naming toll_shipping_percentage explicitly overrides that.
+	toll_shipping_percentage   = contents.get_int_clamped("toll_shipping_percentage",   way_toll_runningcost_percentage, 0, 100 );
+	shipping_income_percentage = contents.get_int_clamped("shipping_income_percentage", shipping_income_percentage,      0, 100 );
 	maintenance_cost_multiplier_way      = contents.get_int_clamped("maintenance_cost_multiplier_way",      maintenance_cost_multiplier_way,      1, 250 );
 	maintenance_cost_multiplier_overhead = contents.get_int_clamped("maintenance_cost_multiplier_overhead", maintenance_cost_multiplier_overhead, 1, 250 );
 	running_cost_multiplier_vehicle      = contents.get_int_clamped("running_cost_multiplier_vehicle",      running_cost_multiplier_vehicle,      1, 250 );
@@ -2242,70 +2262,66 @@ void settings_t::set_default_player_color(uint8 player_nr, uint8 color1, uint8 c
 // returns default player colors for new players
 void settings_t::set_player_color_to_default(player_t* const player) const
 {
+	// number of selectable color families (each family has 8 shades)
+	const uint8 color_family_count = SPECIAL_COLOR_COUNT / 8;
 	karte_ptr_t welt;
-	uint8 color1 = default_player_color[player->get_player_nr()][0];
-	if(  color1 == 255  ) {
+	const uint8 player_nr = player->get_player_nr();
+
+	uint8 color1 = default_player_color[player_nr][0];
+	if(  color1 >= color_family_count  ) {
+		color1 = player_nr % color_family_count;
 		if(  default_player_color_random  ) {
 			// build a vector with all colors
-			minivec_tpl<uint8>all_colors1(28);
-			for(  uint8 i=0;  i<28;  i++  ) {
+			minivec_tpl<uint8>all_colors1(color_family_count);
+			for(  uint8 i=0;  i<color_family_count;  i++  ) {
 				all_colors1.append(i);
 			}
 			// remove all used colors
 			for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
 				player_t *test_sp = welt->get_player(i);
+				uint8 rem = 255;
 				if(  test_sp  &&  player!=test_sp  ) {
-					uint8 rem = 1<<(player->get_player_color1()/8);
-					if(  all_colors1.is_contained(rem)  ) {
-						all_colors1.remove( rem );
-					}
+					rem = test_sp->get_player_color1()/8;
 				}
-				else if(  default_player_color[i][0]!=255  ) {
-					uint8 rem = default_player_color[i][0];
-					if(  all_colors1.is_contained(rem)  ) {
-						all_colors1.remove( rem );
-					}
+				else if(  default_player_color[i][0]<color_family_count  ) {
+					rem = default_player_color[i][0];
 				}
+				all_colors1.remove( rem );
 			}
-			// now choose a random empty color
-			color1 = pick_any(all_colors1);
-		}
-		else {
-			color1 = player->get_player_nr();
+			// now choose a random empty color (if all are used, keep the fallback)
+			if(  !all_colors1.empty()  ) {
+				color1 = pick_any(all_colors1);
+			}
 		}
 	}
 
-	uint8 color2 = default_player_color[player->get_player_nr()][1];
-	if(  color2 == 255  ) {
+	uint8 color2 = default_player_color[player_nr][1];
+	if(  color2 >= color_family_count  ) {
+		color2 = (player_nr + 3) % color_family_count;
 		if(  default_player_color_random  ) {
 			// build a vector with all colors
-			minivec_tpl<uint8>all_colors2(28);
-			for(  uint8 i=0;  i<28;  i++  ) {
+			minivec_tpl<uint8>all_colors2(color_family_count);
+			for(  uint8 i=0;  i<color_family_count;  i++  ) {
 				all_colors2.append(i);
 			}
 			// remove color1
-			all_colors2.remove( color1/8 );
+			all_colors2.remove( color1 );
 			// remove all used colors
 			for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
 				player_t *test_sp = welt->get_player(i);
+				uint8 rem = 255;
 				if(  test_sp  &&  player!=test_sp  ) {
-					uint8 rem = 1<<(player->get_player_color2()/8);
-					if(  all_colors2.is_contained(rem)  ) {
-						all_colors2.remove( rem );
-					}
+					rem = test_sp->get_player_color2()/8;
 				}
-				else if(  default_player_color[i][1]!=255  ) {
-					uint8 rem = default_player_color[i][1];
-					if(  all_colors2.is_contained(rem)  ) {
-						all_colors2.remove( rem );
-					}
+				else if(  default_player_color[i][1]<color_family_count  ) {
+					rem = default_player_color[i][1];
 				}
+				all_colors2.remove( rem );
 			}
-			// now choose a random empty color
-			color2 = pick_any(all_colors2);
-		}
-		else {
-			color2 = player->get_player_nr() + 3;
+			// now choose a random empty color (if all are used, keep the fallback)
+			if(  !all_colors2.empty()  ) {
+				color2 = pick_any(all_colors2);
+			}
 		}
 	}
 

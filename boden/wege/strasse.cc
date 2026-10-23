@@ -21,6 +21,14 @@ const way_desc_t *strasse_t::default_strasse=NULL;
 bool strasse_t::show_masked_ribi = false;
 bool strasse_t::show_reservations = false;
 
+
+strasse_t *strasse_at(const koord3d &pos)
+{
+	const grund_t *gr = world()->lookup(pos);
+	return gr ? (strasse_t*)gr->get_weg(road_wt) : NULL;
+}
+
+
 void strasse_t::set_gehweg(bool janein)
 {
 	weg_t::set_gehweg(janein);
@@ -108,7 +116,7 @@ void strasse_t::rdwr(loadsave_t *file)
 		uint8 mask_oneway = get_ribi_mask_oneway();
 		file->rdwr_byte(mask_oneway);
 		set_ribi_mask_oneway(mask_oneway);
-		sint8 ov = get_overtaking_mode();
+		sint8 ov = get_overtaking_mode_raw();
 		file->rdwr_byte(ov);
 		overtaking_mode_t nov = (overtaking_mode_t)ov;
 		set_overtaking_mode(nov);
@@ -178,13 +186,7 @@ void strasse_t::update_ribi_mask_oneway(ribi_t::ribi mask, ribi_t::ribi allow)
 
 
 ribi_t::ribi strasse_t::get_ribi() const {
-	ribi_t::ribi ribi = get_ribi_unmasked();
-	ribi_t::ribi ribi_maske = get_ribi_maske();
-	if(  get_waytype()==road_wt  &&  overtaking_mode<=oneway_mode  ) {
-		return (ribi_t::ribi)((ribi & ~ribi_maske) & ~ribi_mask_oneway);
-	} else {
-		return (ribi_t::ribi)(ribi & ~ribi_maske);
-	}
+	return (ribi_t::ribi)(get_ribi_unmasked() & ~get_ribi_maske() & ~get_active_ribi_mask_oneway());
 }
 
 void strasse_t::rotate90() {

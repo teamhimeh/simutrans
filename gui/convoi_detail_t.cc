@@ -102,20 +102,20 @@ public:
 		if(  sint64 fix_cost = world()->scale_with_month_length((sint64)v->get_desc()->get_maintenance())  ) {
 			cbuffer_t temp_buf;
 			if(env_t::show_yen){
-				temp_buf.printf( translator::translate("(%d$/km %d$/m)"), v->get_desc()->get_running_cost(), fix_cost );
+				temp_buf.printf( translator::translate("(%d$/km %d$/m)"), v->get_operating_cost(), fix_cost );
 			}
 			else{
-				temp_buf.printf( translator::translate("(%.2f$/km %.2f$/m)"), (double)v->get_desc()->get_running_cost()/100.0, (double)fix_cost/100.0 );
+				temp_buf.printf( translator::translate("(%.2f$/km %.2f$/m)"), (double)v->get_operating_cost()/100.0, (double)fix_cost/100.0 );
 			}
 			label_resale.buf().append( temp_buf );
 		}
 		else {
 			cbuffer_t temp_buf;
 			if(env_t::show_yen){
-				temp_buf.printf( translator::translate("(%d$/km)"), v->get_desc()->get_running_cost() );
+				temp_buf.printf( translator::translate("(%d$/km)"), v->get_operating_cost() );
 			}
 			else{
-				temp_buf.printf( translator::translate("(%.2f$/km)"), (double)v->get_desc()->get_running_cost()/100.0 );
+				temp_buf.printf( translator::translate("(%.2f$/km)"), (double)v->get_operating_cost()/100.0 );
 			}
 			label_resale.buf().append( temp_buf );
 		}
@@ -418,6 +418,7 @@ void convoi_detail_t::update_labels()
 				if(  d.is_bound()  ) {
 					label_shipping_list.buf().printf( " %s %s", translator::translate("to"), d->get_name() );
 				}
+				label_shipping_list.buf().printf("\n");
 			}
 		}
 		label_shipping.update();

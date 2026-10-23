@@ -251,6 +251,22 @@ public:
 	static bool are_disjoint_bends(ribi x, ribi y) { return is_bend(x) && is_bend(y) && (x & y) == 0; }
 
 	/**
+	 * true if two ways can share a tile as disjoint legs, i.e. one of them bends around a
+	 * corner of the tile while the other has no direction in common with it and does not run
+	 * straight through the tile centre either. This is the same idea as are_disjoint_bends(),
+	 * but the second leg may still be a single direction: a leg is a single bit while its
+	 * second tile has not been built yet, or after one of its two tiles was removed again, and
+	 * a tile can be saved and reloaded in that state. Two single directions are NOT accepted -
+	 * two dead ends both stop at the tile centre, so they do meet there.
+	 * Use this (not are_disjoint_bends()) wherever the question is "do these two ways meet at
+	 * the tile centre", e.g. when deciding whether a crossing object is needed.
+	 */
+	static bool are_disjoint_legs(ribi x, ribi y) {
+		return (x & y) == 0  &&  (is_bend(x) || is_bend(y))
+		    &&  (is_bend(x) || is_single(x))  &&  (is_bend(y) || is_single(y));
+	}
+
+	/**
 	 * Same as backward, but for single directions only.
 	 * Effectively does bit rotation. Avoids lookup table backwards.
 	 * @returns backward(x) for single ribis, 0 for x==0.

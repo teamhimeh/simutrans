@@ -15,6 +15,7 @@
 #include "../tpl/stringhashtable_tpl.h"
 
 class gebaeude_t;
+class grund_t;
 class karte_ptr_t;
 class player_t;
 class tool_selector_t;
@@ -166,7 +167,40 @@ public:
 
 	/// @returns city building list of type @p typ (res/com/ind)
 	static const vector_tpl<const building_desc_t *> *get_citybuilding_list(building_desc_t::btype  typ);
-	
+
+	/**
+	 * Removes all objects from a building tile which must not share a tile with a building.
+	 * Kept are: @p keep (the building of this tile), power lines/transformers, bridge pillars,
+	 * labels, smoke and moving objects (vehicles). Trees etc. are deleted. Other buildings are removed
+	 * completely (all their tiles, using remove()), so no broken pieces of them remain.
+	 * If @p keep is NULL, the ground @p gr may be replaced (natural ground restored): look it up again.
+	 * Tiles with ways are not touched (stops have their own rules).
+	 * @param keep the building to keep on this tile, may be NULL (i.e. before a new building is placed)
+	 * @return number of removed objects
+	 */
+	static uint32 remove_invalid_objects_on_building_tile(grund_t *gr, const gebaeude_t *keep, player_t *player);
+
+	/**
+	 * Same as remove_invalid_objects_on_building_tile() for all tiles of the building @p gb
+	 * (any kind: city building, factory, townhall, headquarters, ...), if it is a multitile building.
+	 * Use after the tiles of an existing building were changed in place (upgrade, rotation, ...).
+	 * @return number of removed objects
+	 */
+	static uint32 remove_invalid_objects_on_multitile_building(const gebaeude_t *gb, player_t *player);
+
+	/**
+	 * @return true if there are ways on this ground. Also finds way objects
+	 * which were moved onto a foundation (without the has_way flags of the ground).
+	 */
+	static bool has_way_objects(const grund_t *gr);
+
+	/**
+	 * Called after loading (after all objects are finished):
+	 * checks all tiles of multitile buildings and of townhalls, factories, attractions, monuments
+	 * and headquarters (any size): corrects their way flags and removes invalid objects there.
+	 */
+	static void cleanup_multitile_buildings_finish_rd();
+
 private:
 	static gebaeude_t* build_station_extension_depot_with_complete_layout_bits(player_t* player, koord3d pos, int layout, const building_desc_t* desc, void* param);
 };

@@ -14,6 +14,7 @@
 #include "../tpl/stringhashtable_tpl.h"
 
 template<class T> class vector_tpl;
+class weg_t;
 class tool_selector_t;
 
 /**
@@ -52,7 +53,8 @@ protected:
 		skip_default_route 	= 1U<<6,// use default calc_route() before call find_route().
 		start_signal		= 1U<<7,// if the next signal is start signal and state is RED, convoy stay there (not move to the end of the steps of signal tile).
 		length_based		= 1U<<8, // in choose signal, length based find_route(do not enter the first found tile, the shortest halt which can enter the convoys).
-		detailed_oneway	= 1U<<9  // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
+		detailed_oneway	= 1U<<9, // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
+		ignore_length = 1U<<10 	 // ignore length (for track)
 	};
 
 	uint8 choose_signal_margin_length;
@@ -209,6 +211,8 @@ public:
 	void set_length_based(bool tf) { tf? choose_sign_flag|=length_based:choose_sign_flag&=~length_based; }
 	bool is_detailed_oneway() const;
 	void set_detailed_oneway(bool tf) { tf? choose_sign_flag|=detailed_oneway:choose_sign_flag&=~detailed_oneway; }
+	bool is_ignore_length() const {return (choose_sign_flag&ignore_length)>0;}
+	void set_ignore_length(bool tf) { tf? choose_sign_flag|=ignore_length: choose_sign_flag&=~ignore_length; }
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
 	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
@@ -244,6 +248,14 @@ public:
 	}
 	// Recompute ribi_maske on the underlying way to reflect detailed_oneway settings.
 	void update_ribi_maske();
+
+	/**
+	 * The way this sign belongs to. On a tile carrying two ways of the same waytype (the
+	 * disjoint legs of a closed diagonal) the sign belongs to the leg its own dir runs along:
+	 * a plain get_weg(waytype) would always answer weg_nr(0) and so count the sign on, or mask,
+	 * the wrong leg. Identical to get_weg(waytype) on every ordinary tile.
+	 */
+	weg_t *get_weg_here() const;
 
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
 	uint8 const get_margin_length() {return choose_signal_margin_length;}
