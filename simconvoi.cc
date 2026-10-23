@@ -4401,6 +4401,53 @@ sint32 subtract_ticks(uint32 v1, uint32 v2) {
 
 
 /*
+ * a helper function of can_depart() and can_start_shipping()
+ * Evaluates departure conditions 1), 2), 4) and 5) below for the whole coupled chain.
+ * The designated departure time 3) is left to the caller.
+ */
+static void check_departure_conditions(convoihandle_t cnv, uint32 arrived_time, bool &coupling_cond, bool &loading_cond, bool &allowance_cond, bool &coupling_done_cond) {
+	convoihandle_t c;
+	coupling_cond = false;
+	loading_cond = true;
+	coupling_done_cond = true;
+	allowance_cond = true;
+
+	c = cnv;
+	while(  c.is_bound()  ) {
+		const schedule_entry_t e = c->get_schedule()->get_current_entry();
+		// First, check whether we have to wait for coupling at this stop.
+		const bool coupling_waiting = (e.is_wait_for_coupling() &&  !c->is_coupling_done()  &&  !c->is_cease_coupling_due_to_length_over()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled()));
+		// And whether we have to wait for departure allowance granted by another convoy.
+		const bool allowance_waiting = (e.is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy()) || (e.allow_depart_line.is_bound()  &&  e.is_wait_allow_convoy_departure()  &&  c->is_waiting_for_departure_make_another_convoy_depart());
+		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  (world()->get_ticks() - arrived_time) > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
+		coupling_cond |= (coupling_waiting && !waiting_time_cond);
+		if (  c->is_coupling_done()  ||  !c->get_convoi_coupling_in_progress().is_bound()  ||  c->get_convoi_coupling_in_progress()->get_convoi_coupling_in_progress()!=c  ) {
+			// The convoi_coupling_in_progress flag blocks the departure.
+			// Reset the flag if it is outdated to avoid blocking the departure forever.
+			c->unset_convoi_coupling_in_progress();
+		}
+		coupling_done_cond &= (!coupling_waiting || waiting_time_cond);
+		allowance_cond &= (!allowance_waiting || waiting_time_cond);
+		c = c->get_coupling_convoi();
+	}
+	c = cnv;
+	while(  c.is_bound()  ) {
+		const schedule_entry_t e = c->get_schedule()->get_current_entry();
+		// And check the loading condition: load enough? maximum waiting time? coupling done?
+		const bool loading_level_cond = (c->get_schedule()->get_current_entry().maximum_loading<c->get_schedule()->get_current_entry().minimum_loading)?(c->get_loading_level() >= e.minimum_loading):(c->get_capacity_left()<=0); // minimum loading
+		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  world()->get_ticks() - arrived_time > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
+		bool c_cond = loading_level_cond; // condition of this convoy
+		c_cond |= c->get_no_load()||c->is_invalid_convoy(); // no load
+		c_cond |= waiting_time_cond;
+		loading_cond &= c_cond;
+
+
+		c = c->get_coupling_convoi();
+	}
+}
+
+
+/*
  * a helper function of convoi_t::hat_gehalten()
  * This judges whether the convoy satisfies all departure conditions.
  *
@@ -4439,38 +4486,7 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 		c = c->get_coupling_convoi();
 	}
 
-	c = cnv;
-	while(  c.is_bound()  ) {
-		const schedule_entry_t e = c->get_schedule()->get_current_entry();
-		// First, check whether we have to wait for coupling at this stop.
-		const bool coupling_waiting = (e.is_wait_for_coupling() &&  !c->is_coupling_done()  &&  !c->is_cease_coupling_due_to_length_over()  &&  !(c->get_coupling_convoi().is_bound()  &&  c->is_coupled()));
-		// And whether we have to wait for departure allowance granted by another convoy.
-		const bool allowance_waiting = (e.is_wait_for_other_convoy()  &&  c->is_waiting_for_departure_allowance_by_other_convoy()) || (e.allow_depart_line.is_bound()  &&  e.is_wait_allow_convoy_departure()  &&  c->is_waiting_for_departure_make_another_convoy_depart());
-		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  (world()->get_ticks() - arrived_time) > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
-		coupling_cond |= (coupling_waiting && !waiting_time_cond);
-		if (  c->is_coupling_done()  ||  !c->get_convoi_coupling_in_progress().is_bound()  ||  c->get_convoi_coupling_in_progress()->get_convoi_coupling_in_progress()!=c  ) {
-			// The convoi_coupling_in_progress flag blocks the departure.
-			// Reset the flag if it is outdated to avoid blocking the departure forever.
-			c->unset_convoi_coupling_in_progress();
-		}
-		coupling_done_cond &= (!coupling_waiting || waiting_time_cond);
-		allowance_cond &= (!allowance_waiting || waiting_time_cond);
-		c = c->get_coupling_convoi();
-	}
-	c = cnv;
-	while(  c.is_bound()  ) {
-		const schedule_entry_t e = c->get_schedule()->get_current_entry();
-		// And check the loading condition: load enough? maximum waiting time? coupling done?
-		const bool loading_level_cond = (c->get_schedule()->get_current_entry().maximum_loading<c->get_schedule()->get_current_entry().minimum_loading)?(c->get_loading_level() >= e.minimum_loading):(c->get_capacity_left()<=0); // minimum loading
-		const bool waiting_time_cond = (e.waiting_time_shift > 0  &&  world()->get_ticks() - arrived_time > (world()->ticks_per_world_month / e.waiting_time_shift) ); // waiting time
-		bool c_cond = loading_level_cond; // condition of this convoy
-		c_cond |= c->get_no_load()||c->is_invalid_convoy(); // no load
-		c_cond |= waiting_time_cond;
-		loading_cond &= c_cond;
-
-
-		c = c->get_coupling_convoi();
-	}
+	check_departure_conditions(cnv, arrived_time, coupling_cond, loading_cond, allowance_cond, coupling_done_cond);
 
 	const schedule_entry_t current_entry = cnv->get_schedule()->get_current_entry();
 
@@ -4506,6 +4522,20 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 	}
 
 	// if not calculate waiting time, return cond.
+	return loading_cond  &&  allowance_cond  &&  coupling_done_cond;
+}
+
+
+/*
+ * a helper function of convoi_t::hat_gehalten()
+ * Convoy shipping: a START_SHIPPED convoy only starts waiting for a carrier once it would
+ * otherwise be ready to leave - i.e. the same conditions as can_depart(), except that the
+ * designated departure time (wait_for_time) is ignored, since the convoy does not depart on
+ * its own clock but whenever a carrier takes it aboard.
+ */
+static bool can_start_shipping(convoihandle_t cnv, uint32 arrived_time) {
+	bool coupling_cond, loading_cond, allowance_cond, coupling_done_cond;
+	check_departure_conditions(cnv, arrived_time, coupling_cond, loading_cond, allowance_cond, coupling_done_cond);
 	return loading_cond  &&  allowance_cond  &&  coupling_done_cond;
 }
 
@@ -4955,7 +4985,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
 			handle_shipping_at_halt( halt );
 		}
-		if(  is_waiting_for_carrier()  ) {
+		// Register as waiting only once loading, coupling and departure allowance are done,
+		// as for a normal departure. Once registered, keep calling it so the "no carrier
+		// came" report still fires even if the conditions no longer hold.
+		if(  is_waiting_for_carrier()  &&  (shipping_wait_since != 0  ||  (can_start_shipping(self, arrived_time)  &&  !is_coupling_in_progress))  ) {
 			try_start_shipping( halt );
 		}
 	}
@@ -7824,7 +7857,12 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 		k->loading_waiting_time = 0;
 		k->unloading_done = false;
 		k->uncouple_done = false;
+		k->cease_coupling_due_to_length_over = false;
+		k->waiting_for_departure_allowance_by_other_convoy = false;
 		k->shipping_wait_since = 0;
+		k->next_stop_index = 65535;
+		k->next_coupling_index = route_t::INVALID_INDEX;
+		k->set_coupling_done(false);
 		k = k->get_coupling_convoi();
 	}
 	// but only the head holds the link to the carrier, exactly as only the head holds
