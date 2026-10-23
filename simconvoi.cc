@@ -1680,7 +1680,9 @@ void convoi_t::step()
 
 	// moved check to here, as this will apply the same update
 	// logic/constraints convois have for manual schedule manipulation
-	if (line_update_pending.is_bound()) {
+	// A carried convoy keeps its schedule untouched until it is put ashore: its drop-off
+	// point is its current schedule entry, so an update now would move or lose it.
+	if (line_update_pending.is_bound()  &&  state!=SHIPPED) {
 		check_pending_updates();
 	}
 
@@ -2734,6 +2736,10 @@ void convoi_t::check_freight()
 bool convoi_t::set_schedule(schedule_t * f)
 {
 	if(  state==SELF_DESTRUCT  ) {
+		return false;
+	}
+	if(  state==SHIPPED  ) {
+		// the schedule of a carried convoy is frozen: its current entry is its drop-off point
 		return false;
 	}
 
@@ -4254,6 +4260,13 @@ void convoi_t::open_schedule_window( bool show )
 	// manipulation of schedule not allowed while:
 	// - just starting
 	// - a line update is pending
+	// - aboard a carrier (regardless of owner: this must not change the state on any client)
+	if(  state==SHIPPED  ) {
+		if (show) {
+			create_win( new news_img("Not allowed!\nThe convoi's schedule can\nnot be changed currently.\nTry again later!"), w_time_delete, magic_none );
+		}
+		return;
+	}
 	if(  (state==EDIT_SCHEDULE  ||  line_update_pending.is_bound())  &&  get_owner()==welt->get_active_player()  ) {
 		if (show) {
 			create_win( new news_img("Not allowed!\nThe convoi's schedule can\nnot be changed currently.\nTry again later!"), w_time_delete, magic_none );
@@ -5201,6 +5214,10 @@ sint64 convoi_t::calc_restwert() const
 
 void convoi_t::set_suspension( bool y )
 {
+	if( is_shipped() ) {
+		// aboard a carrier: there is nothing to suspend, and leaving SHIPPED would strand it
+		return;
+	}
 	if( is_coupled() ) {
 		// nothing to do
 		return;
@@ -5733,8 +5750,9 @@ void convoi_t::check_pending_updates()
 				 * We are already there => keep current state
 				 */
 			}
-			else if(  !is_coupled()  ) {
+			else if(  !is_coupled()  &&  state!=SHIPPED  ) {
 				// need re-routing
+				// (a carried convoy stays SHIPPED; it re-routes once it is put ashore)
 				state = EDIT_SCHEDULE;
 			}
 			// make this change immediately
@@ -6312,6 +6330,9 @@ sint64 convoi_t::get_stat_converted(int month, int cost_type) const
 const char* convoi_t::send_to_depot(bool local)
 {
 	const char *txt;
+	if(  is_shipped()  ) {
+		return "Not allowed while the convoy is aboard another convoy.";
+	}
 	vehicle_t *v = front();
 	// if we are already at depot (e.g. start but wait for clearance), we go back there. 
 	if(  grund_t *gr=welt->lookup(front()->get_pos())  ) {
@@ -6394,6 +6415,9 @@ const char* convoi_t::send_to_depot(bool local)
 const char* convoi_t::send_to_depot_immediately(bool local)
 {
 	const char *txt;
+	if(  is_shipped()  ) {
+		return "Not allowed while the convoy is aboard another convoy.";
+	}
 	// First check : already in depot, do not send any more
 	if(  state==INITIAL  ) {
 		dbg->message("convoi_t::send_to_depot_immediately()","%s is already in depot.", get_name());
@@ -6508,6 +6532,9 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 
 const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, bool local)
 {
+	if(  is_shipped()  ) {
+		return "Not allowed while the convoy is aboard another convoy.";
+	}
 	// Validate the target depot
 	grund_t *gr = welt->lookup(depot_pos);
 	if (!gr) {
@@ -7138,6 +7165,10 @@ void convoi_t::trade_convoi() {
 	if (!get_permit_trade()) {
 		return;
 	}
+	if (is_shipped()) {
+		// changing hands mid-voyage would leave the carrier holding another player's convoy
+		return;
+	}
 	sint64 value = calc_restwert();
 	owner->book_new_vehicle(value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	const bool need_new_line = line.is_bound();
@@ -7238,6 +7269,10 @@ void convoi_t::change_line_to_next_if_needed()
 
 void convoi_t::reverse_vehicles_on_user_request()
 {
+	if(  is_shipped()  ) {
+		// would set EDIT_SCHEDULE below and take the convoy out of SHIPPED
+		return;
+	}
 	if(  is_loading()  ) {
 		reversing_needed = true;
 		return;
@@ -7384,7 +7419,7 @@ void convoi_t::reverse_convoy_coupling_by_user_request()
 {
 	// reverse convoy coupling by user request
 	// this must be most parent convoy!
-	if(  is_coupled()  ) {
+	if(  is_coupled()  ||  is_shipped()  ) {
 		return;
 	}
 	// firse we release the reservation

@@ -412,22 +412,21 @@ void convoi_info_t::update_shipping_buttons()
 	for(  uint32 i = 0;  i < current.get_count();  i++  ) {
 		const bool is_carrier = carrier.is_bound()  &&  i == 0;
 		if(  is_carrier  ) {
-			container_shipping.new_component<gui_label_t>("Carried by:");
+			container_shipping.new_component_span<gui_label_t>("Carried by:", 2);
 		}
 		else if(  i == (carrier.is_bound() ? 1u : 0u)  ) {
-			container_shipping.new_component<gui_label_t>("Carrying:");
+			container_shipping.new_component_span<gui_label_t>("Carrying:", 2);
 		}
-		else {
-			container_shipping.new_component<gui_empty_t>();
-		}
+		// goto button as for the line, then the convoy's name
 		button_t *b = container_shipping.new_component<button_t>();
-		b->init( button_t::roundbox | button_t::flexible, NULL );
-		b->set_no_translate( true );
-		// the convoy keeps its name in a fixed buffer, so this follows renames as well
-		b->set_text( current[i]->get_name() );
+		b->init( button_t::posbutton, NULL );
+		b->set_targetpos3d( koord3d::invalid );
 		b->set_tooltip( "Open the information window of this convoy." );
 		b->add_listener( this );
 		shipping_buttons.append( b );
+		gui_label_t *l = container_shipping.new_component<gui_label_t>();
+		// the convoy keeps its name in a fixed buffer, so this follows renames as well
+		l->set_text_pointer( current[i]->get_name() );
 	}
 	container_shipping.set_visible( !current.empty() );
 
@@ -456,14 +455,14 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			container_line.set_visible(line_bound);
 		}
 		line_button.enable();
-		bt_promote_to_line.enable();
-		
+		// aboard a carrier, schedule, line, coupling and state are frozen (see tool_change_convoi_t)
+		bt_promote_to_line.enable( !cnv->is_shipped() );
+
 		if(  cnv->is_shipped()  ) {
-			button.set_tooltip("Alters a schedule.");
+			button.set_tooltip("Not allowed while the convoy is aboard another convoy.");
 			button.set_text("Fahrplan");
 			button.disable();
-		}
-		if(  cnv->get_coupling_convoi().is_bound()  ) {
+		} else if(  cnv->get_coupling_convoi().is_bound()  ) {
 			button.set_tooltip("Uncouple the back convoy now.");
 			button.set_text("release back");
 			button.enable();
@@ -519,9 +518,10 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			next_stop_button.enable();
 		}
 		const bool reversible_waytype = env_t::reversible_waytype(cnv->front()->get_waytype());
-		if (reversible_waytype&&!cnv->is_shipped()) {
+		if (reversible_waytype) {
+			// greyed out rather than hidden while shipped, so it comes back once put ashore
 			reversed_button.pressed = cnv->is_reversed();
-			reversed_button.enable();
+			reversed_button.enable( !cnv->is_shipped() );
 		}
 		else {
 			reversed_button.set_visible(false);
@@ -714,6 +714,11 @@ bool convoi_info_t::action_triggered( gui_action_creator_t *comp,value_t /* */)
 
 	// some actions only allowed, when I am the player
 	if(cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())) {
+
+		if(  cnv->is_shipped()  &&  (comp == &button  ||  comp == &go_home_button  ||  comp == &bt_promote_to_line  ||  comp == &next_stop_button  ||  comp == &reversed_button)  ) {
+			// frozen while aboard a carrier; the tool refuses these anyway
+			return true;
+		}
 
 		if(  comp == &button  ) {
 			if(  cnv->get_coupling_convoi().is_bound()  ) {

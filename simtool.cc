@@ -9742,6 +9742,36 @@ bool tool_change_convoi_t::init( player_t *player )
 		return false;
 	}
 
+	// Convoy shipping: while aboard a carrier, a convoy's state, schedule, line, coupling and
+	// owner are frozen - its current schedule entry is where it gets put ashore, and the
+	// carrier relies on it staying SHIPPED. Flags that only take effect later stay allowed.
+	if(  cnv->is_shipped()  ) {
+		switch(  tool  ) {
+			case 'x': // sell
+			case 'f': // open schedule
+			case 'g': // change schedule
+			case 'l': // change line
+			case 'L': // create line
+			case 's': // change state
+			case 'd': // go to depot
+			case 'y': // teleport to depot
+			case 'D': // route to depot
+			case 'Y': // teleport to chosen depot
+			case 'r': // release child
+			case 't': // next stop
+			case 'v': // reverse
+			case 'c': // reverse coupling
+			case 'u': // suspension
+			case 'o': // accept trade
+				if(  is_local_execution()  ) {
+					create_win( new news_img("Not allowed while the convoy is aboard another convoy."), w_time_delete, magic_none );
+				}
+				return false;
+			default:
+				break;
+		}
+	}
+
 	// first letter is now the actual command
 	switch(  tool  ) {
 		case 'x': // self destruction ...
