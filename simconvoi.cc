@@ -4155,7 +4155,7 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 		vector_tpl<ware_t> total_fracht;
 
 		size_t const n = goods_manager_t::get_count();
-		ALLOCA(uint32, max_loaded_waren, n);
+		ALLOCA(sint32, max_loaded_waren, n);
 		MEMZERON(max_loaded_waren, n);
 
 		for(  uint32 i = 0;  i != anz_vehikel;  ++i  ) {
@@ -4179,9 +4179,11 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 					// for pax: join according next stop
 					// for all others we *must* use target coordinates
 					if( ware.same_destination(tmp) ) {
-						tmp.menge += ware.menge;
-						ware.menge = 0;
-						break;
+						// menge is limited, so what does not fit stays in ware for another entry
+						ware.menge = tmp.add_goods(ware.menge);
+						if(  ware.menge == 0  ) {
+							break;
+						}
 					}
 				}
 
@@ -4196,20 +4198,22 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 		buf.clear();
 
 		// apend info on total capacity
-		slist_tpl <ware_t>capacity;
+		// the totals are sint32: ware_t::menge is too narrow for a whole convoy
+		slist_tpl<freight_list_sorter_t::capacity_t> capacity;
 		for (uint16 i = 0; i != n; ++i) {
 			if(max_loaded_waren[i]>0  &&  i!=goods_manager_t::INDEX_NONE) {
-				ware_t ware(goods_manager_t::get_info(i));
-				ware.menge = max_loaded_waren[i];
+				freight_list_sorter_t::capacity_t cap;
+				cap.desc = goods_manager_t::get_info(i);
+				cap.amount = max_loaded_waren[i];
 				// append to category?
-				slist_tpl<ware_t>::iterator j   = capacity.begin();
-				slist_tpl<ware_t>::iterator end = capacity.end();
-				while (j != end && j->get_desc()->get_catg_index() < ware.get_desc()->get_catg_index()) ++j;
-				if (j != end && j->get_desc()->get_catg_index() == ware.get_desc()->get_catg_index()) {
-					j->menge += max_loaded_waren[i];
+				slist_tpl<freight_list_sorter_t::capacity_t>::iterator j   = capacity.begin();
+				slist_tpl<freight_list_sorter_t::capacity_t>::iterator end = capacity.end();
+				while (j != end && j->desc->get_catg_index() < cap.desc->get_catg_index()) ++j;
+				if (j != end && j->desc->get_catg_index() == cap.desc->get_catg_index()) {
+					j->amount += max_loaded_waren[i];
 				} else {
 					// not yet there
-					capacity.insert(j, ware);
+					capacity.insert(j, cap);
 				}
 			}
 		}

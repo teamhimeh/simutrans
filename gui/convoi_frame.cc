@@ -325,10 +325,10 @@ void convoi_frame_t::rdwr( loadsave_t *file )
 	file->rdwr_short( sort_mode );
 	file->rdwr_bool( sortreverse );
 	file->rdwr_long( filter_flags );
-	// The filter holds one entry per good, which no longer fits into a byte since OTRP version 62.
+	// The filter holds one entry per good, which no longer fits into a byte since OTRP version 63.
 	if( file->is_saving() ) {
 		uint32 good_nr = waren_filter ? waren_filter->get_count() : 0;
-		if(  file->get_OTRP_version() >= 62  ) {
+		if(  file->get_OTRP_version() >= 63  ) {
 			uint16 n = (uint16)good_nr;
 			file->rdwr_short( n );
 		}
@@ -351,7 +351,7 @@ void convoi_frame_t::rdwr( loadsave_t *file )
 	}
 	else {
 		uint32 good_nr;
-		if(  file->get_OTRP_version() >= 62  ) {
+		if(  file->get_OTRP_version() >= 63  ) {
 			uint16 n;
 			file->rdwr_short( n );
 			good_nr = n;

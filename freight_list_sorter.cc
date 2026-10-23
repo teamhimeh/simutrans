@@ -94,7 +94,7 @@ bool freight_list_sorter_t::compare_ware(ware_t const& w1, ware_t const& w2)
 
 
 
-void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, uint32 max, const ware_t *ware, const char *what_doing )
+void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, sint32 max, const goods_desc_t *gd, const char *what_doing )
 {
 	uint32 const max_display = ~0;
 
@@ -111,18 +111,18 @@ void freight_list_sorter_t::add_ware_heading( cbuffer_t &buf, uint64 sum, uint32
 
 	if(  max != 0  ) {
 		// convois
-		buf.printf("/%u", max);
+		buf.printf("/%d", max);
 	}
-	goods_desc_t const& desc = *ware->get_desc();
+	goods_desc_t const& desc = *gd;
 	char const*  const  unit = translator::translate(desc.get_mass());
 	// special freight (catg == 0) needs own name
-	char const*  const  name = translator::translate(ware->get_catg() != 0 ? desc.get_catg_name() : desc.get_name());
+	char const*  const  name = translator::translate(desc.get_catg() != 0 ? desc.get_catg_name() : desc.get_name());
 	char const*  const  what = translator::translate(what_doing);
 	buf.printf("%s %s %s\n", unit, name, what);
 }
 
 
-void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<ware_t>* full_list, const char* what_doing)
+void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuffer_t& buf, sort_mode_t sort_mode, const slist_tpl<capacity_t>* full_list, const char* what_doing)
 {
 	sortby = sort_mode;
 
@@ -164,10 +164,10 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 	}
 
 	// if there, give the capacity for each freight
-	slist_tpl<ware_t>                 const  dummy;
-	slist_tpl<ware_t>                 const& list     = full_list ? *full_list : dummy;
-	slist_tpl<ware_t>::const_iterator        full_i   = list.begin();
-	slist_tpl<ware_t>::const_iterator const  full_end = list.end();
+	slist_tpl<capacity_t>                 const  dummy;
+	slist_tpl<capacity_t>                 const& list     = full_list ? *full_list : dummy;
+	slist_tpl<capacity_t>::const_iterator        full_i   = list.begin();
+	slist_tpl<capacity_t>::const_iterator const  full_end = list.end();
 
 	// at least some capacity added?
 	if(  pos != 0  ) {
@@ -205,18 +205,18 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 
 				if(  full_list == NULL  ) {
 					// display all goods
-					add_ware_heading( buf, sum, 0, &ware, what_doing );
+					add_ware_heading( buf, sum, 0, ware.get_desc(), what_doing );
 				}
 				else {
 					// display goods from a list of freights
 					while(  full_i != full_end  ) {
-						ware_t const& current = *full_i++;
-						if(  last_goods_index==current.get_index()  ||  last_ware_catg==current.get_catg()  ) {
-							add_ware_heading( buf, sum, current.menge, &current, what_doing );
+						capacity_t const& current = *full_i++;
+						if(  last_goods_index==current.desc->get_index()  ||  last_ware_catg==current.desc->get_catg()  ) {
+							add_ware_heading( buf, sum, current.amount, current.desc, what_doing );
 							break;
 						}
 						else {
-							add_ware_heading( buf, 0, current.menge, &current, what_doing );
+							add_ware_heading( buf, 0, current.amount, current.desc, what_doing );
 						}
 					}
 				}
@@ -264,8 +264,8 @@ void freight_list_sorter_t::sort_freight(vector_tpl<ware_t> const& warray, cbuff
 
 	// still entire left?
 	for(  ; full_i != full_end; ++full_i  ) {
-		ware_t const& g = *full_i;
-		add_ware_heading(buf, 0, g.menge, &g, what_doing);
+		capacity_t const& g = *full_i;
+		add_ware_heading(buf, 0, g.amount, g.desc, what_doing);
 	}
 
 	delete[] wlist;

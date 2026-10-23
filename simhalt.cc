@@ -4476,10 +4476,10 @@ void haltestelle_t::rdwr(loadsave_t *file)
 		}
 	}
 	if(  file->get_OTRP_version()>=40  ) {
-		// The number of goods categories no longer fits into a byte since OTRP version 62.
+		// The number of goods categories no longer fits into a byte since OTRP version 63.
 		if(  file->is_loading()  ) {
 			uint32 list_count;
-			if(  file->get_OTRP_version()>=62  ) {
+			if(  file->get_OTRP_version()>=63  ) {
 				uint16 c;
 				file->rdwr_short(c);
 				list_count = c;
@@ -4503,7 +4503,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 			}
 		} else {
 			uint32 list_count = goods_manager_t::get_max_catg_index();
-			if(  file->get_OTRP_version()>=62  ) {
+			if(  file->get_OTRP_version()>=63  ) {
 				uint16 c = (uint16)list_count;
 				file->rdwr_short(c);
 			}
