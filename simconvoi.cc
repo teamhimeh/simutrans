@@ -1729,6 +1729,10 @@ void convoi_t::step()
 
 				set_schedule(schedule);
 				schedule_target = koord3d::invalid;
+				// the edited schedule may no longer start shipped here, or may want a different
+				// destination, so a START_SHIPPED convoy has to register again via
+				// try_start_shipping() before a carrier may take it aboard
+				shipping_wait_since = 0;
 
 				// unreserve all tiles
 				unreserve_route();
@@ -7819,6 +7823,8 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 		k->loading_limit = 0;
 		k->loading_waiting_time = 0;
 		k->unloading_done = false;
+		k->uncouple_done = false;
+		k->shipping_wait_since = 0;
 		k = k->get_coupling_convoi();
 	}
 	// but only the head holds the link to the carrier, exactly as only the head holds
