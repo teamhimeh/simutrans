@@ -7786,6 +7786,9 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 	{
 		convoihandle_t k = c;
 		while(  k.is_bound()  ) {
+			if(  !k->can_continue_coupling()||k->get_schedule()->get_current_entry().is_uncouple_child()  ) {
+				k->uncouple_convoi();
+			}
 			schedule_t *s = k->get_schedule();
 			if(  s != NULL  &&  !s->empty()  ) {
 				const waytype_t kwt = k->front()->get_waytype();
@@ -7800,9 +7803,6 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 						break;
 					}
 				}
-			}
-			if(  !k->can_continue_coupling()||k->get_schedule()->get_current_entry().is_uncouple_child()  ) {
-				k->uncouple_convoi();
 			}
 			k = k->get_coupling_convoi();
 		}
