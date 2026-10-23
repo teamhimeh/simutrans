@@ -3027,6 +3027,9 @@ void convoi_t::vorfahren()
 		c->reverse_coupling_done = false;
 		c->reversing_coupling_needed = false;
 		c->unloading_done = false;
+		// leaving this stop ends any wait for a carrier here, so a START_SHIPPED convoy has to
+		// register again via try_start_shipping() at its next stop before it can board
+		c->shipping_wait_since = 0;
 		// reset next stop index and coupling index
 		c->next_stop_index = 65535;
 		c->next_coupling_index = route_t::INVALID_INDEX;
@@ -7786,9 +7789,6 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 	{
 		convoihandle_t k = c;
 		while(  k.is_bound()  ) {
-			if(  !k->can_continue_coupling()||k->get_schedule()->get_current_entry().is_uncouple_child()  ) {
-				k->uncouple_convoi();
-			}
 			schedule_t *s = k->get_schedule();
 			if(  s != NULL  &&  !s->empty()  ) {
 				const waytype_t kwt = k->front()->get_waytype();
@@ -8176,6 +8176,21 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 				get_shipping_capacity(cwt), get_shipping_load(cwt), c->get_shipping_length());
 			continue;
 		}
+		if(  c->get_state() == EDIT_SCHEDULE  ||  c->get_state() == SUSPENSION_LOADING  ) {
+			// the player is editing its schedule, or it is suspended at this stop
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: not taking %s aboard - its schedule is being edited or it is suspended",
+				get_name(), c->get_name());
+			continue;
+		}
+		if(  c->shipping_wait_since == 0  ) {
+			// It has not run try_start_shipping() at this stop yet, i.e. it has not finished
+			// its own stop handling (unloading/loading its goods) and registered as waiting.
+			dbg->message("convoi_t::handle_shipping_at_halt()",
+				"%s: not taking %s aboard yet - it has not started waiting for a carrier",
+				get_name(), c->get_name());
+			continue;
+		}
 		const halthandle_t dest = c->get_shipping_target_halt();
 		if(  !dest.is_bound()  ) {
 			dbg->message("convoi_t::handle_shipping_at_halt()",
@@ -8230,7 +8245,9 @@ bool convoi_t::try_start_shipping(halthandle_t halt)
 	}
 
 	if(  shipping_wait_since == 0  ) {
-		shipping_wait_since = welt->get_ticks();
+		// 0 means "not waiting" (handle_shipping_at_halt() only boards convoys that got here),
+		// so never store 0 even if the world clock happens to read 0
+		shipping_wait_since = max( welt->get_ticks(), 1u );
 		// logged once per wait, so the player can confirm the flag really took effect and see
 		// which halt and which waytype a carrier has to serve to pick this convoy up
 		const halthandle_t dest = get_shipping_target_halt();
@@ -8254,7 +8271,7 @@ bool convoi_t::try_start_shipping(halthandle_t halt)
 	if(  waited > two_months  ) {
 		owner->report_vehicle_problem( self, koord3d::invalid );
 		// report once per two-month window rather than every step
-		shipping_wait_since = welt->get_ticks();
+		shipping_wait_since = max( welt->get_ticks(), 1u );
 	}
 	return true;
 }
