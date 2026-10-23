@@ -1972,6 +1972,29 @@ bool grund_t::has_depot() const
 }
 
 
+bool grund_t::would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi) const
+{
+	if(  !has_two_ways()  ) {
+		return false;
+	}
+	const weg_t *leg0 = get_weg_nr(0);
+	const weg_t *leg1 = get_weg_nr(1);
+	if(  !leg0  ||  !leg1  ||  leg0->get_waytype()!=wegtyp  ||  leg1->get_waytype()!=wegtyp  ) {
+		return false;
+	}
+	const bool on0 = (ribi & leg0->get_ribi_unmasked())!=0;
+	const bool on1 = (ribi & leg1->get_ribi_unmasked())!=0;
+	if(  on0  &&  on1  ) {
+		return true;
+	}
+	if(  on0  ||  on1  ) {
+		const ribi_t::ribi combined = (on0 ? leg0 : leg1)->get_ribi_unmasked() | ribi;
+		return !ribi_t::is_bend(combined)  &&  !ribi_t::is_single(combined);
+	}
+	return false;
+}
+
+
 bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_t* new_desc, bool allow_same_waytype_dual_leg)
 {
 	// two same-waytype ways already coexist here as disjoint diagonal legs (see below) and
@@ -1980,33 +2003,21 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 	// (e.g. a route passing through this tile, entering on one of the leg's bits and leaving
 	// on a free one) => the player is asserting full connectivity here. Merge the two legs
 	// back into a single way (deleting the second one) before doing the ordinary extend below.
-	if(  has_two_ways()  ) {
+	// The way builder refuses such routes beforehand when a leg is someone else's or a halt
+	// is here (way_builder_t::check_dual_leg_merges()); other callers may still get here.
+	if(  would_merge_same_waytype_legs( wegtyp, ribi )  ) {
 		weg_t *leg0 = get_weg_nr(0);
 		weg_t *leg1 = get_weg_nr(1);
-		bool merge = false;
-		if(  leg0  &&  leg1  &&  leg0->get_waytype()==wegtyp  &&  leg1->get_waytype()==wegtyp  ) {
-			const bool on0 = (ribi & leg0->get_ribi_unmasked())!=0;
-			const bool on1 = (ribi & leg1->get_ribi_unmasked())!=0;
-			if(  on0  &&  on1  ) {
-				merge = true;
-			}
-			else if(  on0  ||  on1  ) {
-				const ribi_t::ribi combined = (on0 ? leg0 : leg1)->get_ribi_unmasked() | ribi;
-				merge = !ribi_t::is_bend(combined)  &&  !ribi_t::is_single(combined);
-			}
+		// a halt cannot sit on a junction tile (see weg_entfernen())
+		if(  is_halt()  ) {
+			haltestelle_t::remove( NULL, get_pos() );
 		}
-		if(  merge  ) {
-			// a halt cannot sit on a junction tile (see weg_entfernen())
-			if(  is_halt()  ) {
-				haltestelle_t::remove( NULL, get_pos() );
-			}
-			const ribi_t::ribi leg1_ribi = leg1->get_ribi_unmasked();
-			leg1->mark_image_dirty( get_image(), 0 );
-			leg1->cleanup( NULL );
-			delete leg1;
-			flags &= ~has_way2;
-			leg0->ribi_add( leg1_ribi );
-		}
+		const ribi_t::ribi leg1_ribi = leg1->get_ribi_unmasked();
+		leg1->mark_image_dirty( get_image(), 0 );
+		leg1->cleanup( NULL );
+		delete leg1;
+		flags &= ~has_way2;
+		leg0->ribi_add( leg1_ribi );
 	}
 
 	// resolve which way we're extending. When two same-waytype legs still coexist (the second

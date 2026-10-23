@@ -4076,6 +4076,22 @@ bool stadt_t::build_road(const koord k, player_t* player_, bool forced)
 		}
 	}
 
+	// two road legs on disjoint diagonals here, and connecting would merge them into one city
+	// road junction (see grund_t::weg_erweitern()): this rebuilds BOTH legs, so both must be
+	// allowed to become (or branch into) a cityroad - the check above only saw weg_nr(0).
+	// A halt cannot sit on the resulting junction either.
+	if(  bd->would_merge_same_waytype_legs(road_wt, connection_roads)  ) {
+		if(  bd->is_halt()  ) {
+			return false;
+		}
+		for(  uint8 i=0;  i<2;  i++  ) {
+			const strasse_t* str = (const strasse_t*)bd->get_weg_nr(i);
+			if(  str->get_avoid_cityroad()  &&  !str->get_allow_branch_cityroad()  ) {
+				return false;
+			}
+		}
+	}
+
 	// now add the ribis to the other ways (if there)
 	for (int r = 0; r < 4; r++) {
 		if (ribi_t::nesw[r] & connection_roads) {
