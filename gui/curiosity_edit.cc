@@ -116,6 +116,8 @@ curiosity_edit_frame_t::curiosity_edit_frame_t(player_t* player_) :
 	cont_filter.add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
 
+	init_thumbnail_options();
+
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_MAIL);
@@ -202,21 +204,31 @@ void curiosity_edit_frame_t::fill_list()
 			default:                               color = SYSCOL_TEXT;                                                  break;
 		}
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
-		scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		if (bt_thumbnails.pressed) {
+			scl.new_component<building_thumbnail_t>(i, name, get_thumbnail_size());
+		}
+		else {
+			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		}
 		if (i == desc) {
 			scl.set_selection(scl.get_count()-1);
 		}
 	}
+	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
+	show_selected_building();
 }
-
 
 
 bool curiosity_edit_frame_t::action_triggered( gui_action_creator_t *comp,value_t e)
 {
 	// only one chain can be shown
-	if(  comp==&bt_city_attraction  ) {
+	if (comp == &bt_thumbnails) {
+		bt_thumbnails.pressed = !bt_thumbnails.pressed;
+		fill_list();
+	}
+	else if(  comp==&bt_city_attraction  ) {
 		bt_city_attraction.pressed ^= 1;
 		fill_list();
 	}
@@ -338,10 +350,12 @@ void curiosity_edit_frame_t::rdwr( loadsave_t *file )
 	uint8 button_pressed_flags = bt_city_attraction.pressed;
 	button_pressed_flags |= bt_land_attraction.pressed << 1;
 	button_pressed_flags |= bt_monuments.pressed << 2;
+	button_pressed_flags |= bt_thumbnails.pressed << 3;
 	file->rdwr_byte(button_pressed_flags);
 	bt_city_attraction.pressed = button_pressed_flags & 1;
 	bt_land_attraction.pressed = (button_pressed_flags >> 1) & 1;
 	bt_monuments.pressed = (button_pressed_flags >> 2) & 1;
+	bt_thumbnails.pressed = (button_pressed_flags >> 3) & 1;
 
 	extend_edit_gui_t::rdwr(file);
 }

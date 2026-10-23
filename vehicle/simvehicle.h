@@ -569,6 +569,7 @@ protected:
 	bool check_next_tile(const grund_t *bd, const bool need_electric) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
 	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE;
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	koord3d pos_prev; //used in enter_tile()
 
@@ -818,6 +819,8 @@ protected:
 
 	bool check_next_tile(const grund_t *bd, const bool) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE {return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -882,6 +885,8 @@ protected:
 
 	bool check_next_tile(const grund_t *bd, const bool) const OVERRIDE;
 	bool check_next_tile(const grund_t *bd) const OVERRIDE {return check_next_tile(bd, false);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling) const OVERRIDE {return check_next_tile(bd, need_electric, find_route, coupling, koord3d::invalid);}
+	bool check_next_tile(const grund_t *bd, const bool need_electric, bool find_route, bool coupling, const koord3d& prev) const OVERRIDE;
 
 	void enter_tile(grund_t*) OVERRIDE;
 
@@ -889,6 +894,18 @@ protected:
 
 	// find a route and reserve the stop position
 	bool find_route_to_stop_position();
+
+	// true, if gr is a runway end where a plane coming from approach can land
+	bool is_landing_runway_end(const grund_t *gr, ribi_t::ribi approach) const;
+
+	// appends the approach to the runway end end_pos (straight line, holding circle, landing roll)
+	// returns the indices of touchdown and search for stop within route
+	bool append_landing_route(route_t *route, koord3d end_pos, uint32 &touchdown_idx, uint32 &search_idx) const;
+
+	// while circling: search another free runway connected to the target halt,
+	// reroute to it from the current position and reserve it
+	// must be called in a step (uses the route finder)
+	bool find_runway();
 
 public:
 	void increment_route_index(sint16 i){route_index+=i;}
@@ -909,6 +926,9 @@ public:
 
 	// return valid direction
 	ribi_t::ribi get_ribi(const grund_t* ) const OVERRIDE;
+	ribi_t::ribi get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const OVERRIDE;
+	// valid direction on way w (may be NULL) for the current flight state
+	ribi_t::ribi get_ribi_of_way(const weg_t *w) const;
 
 	// how expensive to go here (for way search)
 	int get_cost(const grund_t *gr, const weg_t *w, const sint32 max_speed, ribi_t::ribi from) const OVERRIDE;

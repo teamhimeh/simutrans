@@ -49,6 +49,7 @@ stringhashtable_tpl<const way_obj_desc_t *> wayobj_t::table;
 
 wayobj_t::wayobj_t(loadsave_t* const file) : obj_no_info_t()
 {
+	close_diagonal = 0;
 	rdwr(file);
 }
 
@@ -57,6 +58,7 @@ wayobj_t::wayobj_t(koord3d const pos, player_t* const owner, ribi_t::ribi const 
 {
 	desc = b;
 	dir = d;
+	close_diagonal = 0;
 	set_owner(owner);
 }
 
@@ -258,6 +260,10 @@ void wayobj_t::rotate90()
 	obj_t::rotate90();
 	dir = ribi_t::rotate90( dir);
 	hang = slope_t::rotate90( hang );
+	if(  close_diagonal  ) {
+		// horizontal <-> vertical
+		close_diagonal ^= 3;
+	}
 }
 
 
@@ -283,6 +289,7 @@ void wayobj_t::calc_image()
 #endif
 	grund_t *gr = welt->lookup(get_pos());
 	diagonal = false;
+	close_diagonal = 0;
 	if(gr) {
 		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
 		weg_t *w=gr->get_weg(wt);
@@ -328,8 +335,12 @@ void wayobj_t::calc_image()
 			return;
 		}
 
+		// close diagonals on fourway way tiles (only with close diagonal images)
+		if(  dir == ribi_t::all  &&  w->is_close_diagonal()  &&  desc->has_close_diagonal_image()  ) {
+			close_diagonal = w->is_close_diagonal();
+		}
 		// find out whether using diagonals or straight lines
-		if(ribi_t::is_bend(dir)  &&  desc->has_diagonal_image()) {
+		else if(ribi_t::is_bend(dir)  &&  desc->has_diagonal_image()) {
 			ribi_t::ribi r1 = ribi_t::none, r2 = ribi_t::none;
 
 			// get the ribis of the ways that connect to us
@@ -338,7 +349,12 @@ void wayobj_t::calc_image()
 			r2 = find_next_ribi( gr, ribi_t::rotate45l(dir), wt );
 
 			// diagonal if r1 or r2 are our reverse and neither one is 90 degree rotation of us
-			diagonal = (r1 == ribi_t::backward(dir) || r2 == ribi_t::backward(dir)) && r1 != ribi_t::rotate90l(dir) && r2 != ribi_t::rotate90(dir);
+			const ribi_t::ribi rback = ribi_t::backward(dir);
+			diagonal = (r1 == rback || r2 == rback) && r1 != ribi_t::rotate90l(dir) && r2 != ribi_t::rotate90(dir);
+			// next to fourway tiles of close diagonals (or switches) on both sides
+			if(  !diagonal  &&  desc->has_close_diagonal_image()  ) {
+				diagonal = (r1 == rback || ribi_t::is_threeway(r1)) && (r2 == rback || ribi_t::is_threeway(r2));
+			}
 
 			if(diagonal) {
 				// with this, we avoid calling us endlessly

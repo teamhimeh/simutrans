@@ -346,8 +346,11 @@ void convoi_t::reserve_route()
 			if(  grund_t *gr = welt->lookup( route.at(idx) )  ) {
 				// direction-aware: only drop the bookkeeping entry when the leg we actually run
 				// over is a rail (on a same-waytype dual-leg tile the other leg is irrelevant)
-				if(  obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), route.get_corner_set(idx) ))  ) {
-					unreserve_pos(route.at(idx));
+				// The tiles we occupy can only be at the front of reserved_tiles (leave_tile() drops
+				// them from there). Removing by position would hit a later entry instead when the
+				// reserved route passes this tile again, e.g. over its other same-waytype leg.
+				if(  obj_cast<schiene_t>(gr->get_weg( front()->get_waytype(), route.get_corner_set(idx) ))  &&  !reserved_tiles.empty()  &&  reserved_tiles[0]==route.at(idx)  ) {
+					reserved_tiles.remove_at(0);
 				}
 			}
 		}
@@ -1447,6 +1450,7 @@ bool convoi_t::drive_to()
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, true);
 					if (cached  &&  cached->is_passable(welt, fahr[0], true)) {
 						*r = *cached;
+						r->set_start_heading(ribi_t::none); // not used by a cached route, must not linger
 						set_use_electric(true);
 						return true;
 					}
@@ -1460,6 +1464,7 @@ bool convoi_t::drive_to()
 							line, entry_idx, s, z, max_speed_kmh, cnv_len, false);
 					if (cached  &&  cached->is_passable(welt, fahr[0], false)) {
 						*r = *cached;
+						r->set_start_heading(ribi_t::none); // not used by a cached route, must not linger
 						set_use_electric(false);
 						return true;
 					}
@@ -1492,6 +1497,10 @@ bool convoi_t::drive_to()
 				}
 			}
 		}
+
+		// the heading with which we entered our tile tells on which leg we stand, if it carries two
+		// same-waytype disjoint diagonal legs (taken from the old route, so before it is replaced)
+		route.set_start_heading( front()->get_current_travel_dir() );
 
 		// unreserve old route before replacing; required for cache-hit path where calc_route() (which also unreserves) is skipped
 		unreserve_route();
@@ -1560,6 +1569,10 @@ bool convoi_t::drive_to()
 					}
 
 					route_t next_segment;
+					// continue on the leg the route so far arrives on (two same-waytype disjoint diagonal legs)
+					if(  route.get_count()>=2  ) {
+						next_segment.set_start_heading( route.get_travel_dir(route.get_count()-1) );
+					}
 					if(  !cached_calc_route( start, ziel, &next_segment, schedule->get_current_entry().is_pass_stop() )  ) {
 						// do we still have a valid route to proceed => then go until there
 						if(  route.get_count()>1  ) {
@@ -1580,6 +1593,16 @@ bool convoi_t::drive_to()
 						if(  fahr[0]->get_waytype() != air_wt  ) {
 							 // check if the route circles back on itself (only check the first tile, should be enough)
 							looped = route.is_contained(next_segment.at(1));
+							const grund_t *gr_next = looped ? welt->lookup(next_segment.at(1)) : NULL;
+							if(  gr_next  &&  gr_next->has_two_same_waytype_ways()  ) {
+								// only the same leg closes a circle: two same-waytype disjoint diagonal
+								// legs are passed one after the other on a circular route over them
+								const weg_t *leg_next = gr_next->get_weg(fahr[0]->get_waytype(), next_segment.get_corner_set(1));
+								looped = false;
+								for(  uint32 i=0;  i<route.get_count()  &&  !looped;  i++  ) {
+									looped = route.at(i)==next_segment.at(1)  &&  gr_next->get_weg(fahr[0]->get_waytype(), route.get_corner_set(i))==leg_next;
+								}
+							}
 #if 0
 							// this will forbid an eight figure, which might be clever to avoid a problem of reserving one own track
 							for(  unsigned i = 1;  i<next_segment.get_count();  i++  ) {
@@ -2784,7 +2807,9 @@ schedule_t *convoi_t::create_schedule()
 // steps one tile further in each candidate direction and recurses at depth-1.
 // Intermediate tiles are collected into buf[0..n-1] in outermost-first order
 // (buf[0] is adjacent to g, buf[n-1] is adjacent to the found vehicle tile).
-koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n)
+// Tiles in `searched_tiles` (the tiles already added by insert_route_convoy_on()) are never
+// searched, to avoid adding the same tile again and looping forever.
+koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n, const vector_tpl<koord3d>* searched_tiles)
 {
 	n = 0;
 	if(  !g  ) {
@@ -2801,19 +2826,20 @@ koord3d const convoi_t::search_next_convoy_tile(convoihandle_t inspecting, const
 		if(  (next_dir & weg_dir) == 0  ||  next_dir == back_dir  ) {
 			continue;
 		}
+		// get_neighbour() does not set gn when it fails
+		grund_t* gn = NULL;
+		if(  !g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir)  ||  (searched_tiles  &&  searched_tiles->is_contained(gn->get_pos()))  ) {
+			// already added tile. do not search again.
+			continue;
+		}
 		koord3d pos = find_tiles_convoy_on(inspecting, g, next_dir);
 		if(  pos != koord3d::invalid  ) {
 			return pos;
 		}
 		if(  depth > 0  ) {
 			// try one more tile in this direction (needed for diagonals or long vehicles)
-			grund_t* gn;
-			g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-			if(  !gn  ) {
-				continue;
-			}
 			uint8 sub_n = 0;
-			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n);
+			koord3d pos2 = search_next_convoy_tile(inspecting, gn, ribi_t::backward(next_dir), depth - 1, buf + 1, sub_n, searched_tiles);
 			if(  pos2 != koord3d::invalid  ) {
 				buf[0] = gn->get_pos();  // outermost intermediate (adjacent to g)
 				n = 1 + sub_n;
@@ -2841,6 +2867,10 @@ bool convoi_t::insert_route_convoy_on()
 		return false;
 	}
 	else {
+		// the start tile and the tiles added to the route by this function.
+		// they are not searched again, to avoid an infinite loop.
+		vector_tpl<koord3d> searched_tiles;
+		searched_tiles.append(route.front());
 		while(  inspecting.is_bound()  ) {
 			// determine search depth from the longest vehicle across all coupled convoys
 			uint32 max_length_steps = 0;
@@ -2856,13 +2886,15 @@ bool convoi_t::insert_route_convoy_on()
 				ribi_t::ribi back_dir = ribi_type(route.at(1) - route.front());
 				koord3d intermediate_buf[256];
 				uint8 intermediate_n = 0;
-				koord3d pos_to_insert = search_next_convoy_tile(inspecting, g, back_dir, depth, intermediate_buf, intermediate_n);
+				koord3d pos_to_insert = search_next_convoy_tile(inspecting, g, back_dir, depth, intermediate_buf, intermediate_n, &searched_tiles);
 				if(  pos_to_insert != koord3d::invalid  ) {
 					// insert intermediate tiles outermost-first (adjacent to g first)
 					for(  uint8 k = 0;  k < intermediate_n;  k++  ) {
 						route.insert(intermediate_buf[k]);
+						searched_tiles.append(intermediate_buf[k]);
 					}
 					route.insert(pos_to_insert);
+					searched_tiles.append(pos_to_insert);
 				} else {
 					// there are no another position which is convoy on, searching end.
 					searching_end = true;
@@ -2900,9 +2932,8 @@ bool convoi_t::insert_route_to_draw_diagonal()
 		//we do not insert because this tile is not bend tile or invalid tile
 		return false;
 	}
-	grund_t* gn_back;
-	g->get_neighbour(gn_back, front()->get_waytype(), weg_dir-back_dir);
-	if( gn_back && gn_back->get_weg(front()->get_waytype(), ribi_t::backward(weg_dir-back_dir)) ) {
+	grund_t* gn_back = NULL;
+	if( g->get_neighbour(gn_back, front()->get_waytype(), weg_dir-back_dir) && gn_back->get_weg(front()->get_waytype(), ribi_t::backward(weg_dir-back_dir)) ) {
 		dbg->message("convoi_t::insert_route_to_draw_diagonal()","%s add (%i,%i) before (%i,%i)",get_name(),gn_back->get_pos().x,gn_back->get_pos().y,route.front().x,route.front().y);
 		route.insert(gn_back->get_pos());
 		return true;
@@ -2912,9 +2943,8 @@ bool convoi_t::insert_route_to_draw_diagonal()
 
 // helper function for insert_route_convoy_on()
 koord3d const convoi_t::find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir) {
-	grund_t* gn;
-	g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir);
-	if(  !gn  ) {
+	grund_t* gn = NULL;
+	if(  !g->get_neighbour(gn, inspecting->front()->get_waytype(), next_dir) || !gn->get_weg(front()->get_waytype())  ) {
 		return koord3d::invalid;
 	}
 	if( find_convoy_on_tile(gn, inspecting) ) {
@@ -6679,15 +6709,37 @@ void convoi_t::set_next_cross_lane(bool n) {
 }
 
 
+// the direction from @p from to its neighbour @p to, or none when they are not neighbours
+// (reserved_tiles is only contiguous as long as nothing was removed from its middle)
+static ribi_t::ribi neighbour_ribi(const koord3d &from, const koord3d &to)
+{
+	return koord_distance(from.get_2d(), to.get_2d())==1 ? ribi_type(from, to) : (ribi_t::ribi)ribi_t::none;
+}
+
+
 ribi_t::ribi convoi_t::get_reserved_tiles_corner_set(uint32 index) const
 {
 	if(  index>=reserved_tiles.get_count()  ) {
 		return ribi_t::none;
 	}
 	const koord3d curr = reserved_tiles[index];
-	const koord3d prev = reserved_tiles[ max(1u,index)-1u ];
-	const koord3d next = reserved_tiles[ min(reserved_tiles.get_count()-1u, index+1u) ];
-	return ribi_t::backward(ribi_type(prev, curr)) | ribi_type(curr, next);
+	ribi_t::ribi corner_set = ribi_t::none;
+	if(  index>0  ) {
+		corner_set |= ribi_t::backward(neighbour_ribi(reserved_tiles[index-1u], curr));
+	}
+	if(  index+1u<reserved_tiles.get_count()  ) {
+		corner_set |= neighbour_ribi(curr, reserved_tiles[index+1u]);
+	}
+	if(  corner_set==ribi_t::none  ) {
+		// a single entry has no neighbour to tell the leg from (which matters on a tile with two
+		// same-waytype disjoint diagonal legs) => take it from our route, if the tile is on it
+		for(  uint32 i=0;  i<route.get_count();  i++  ) {
+			if(  route.at(i)==curr  ) {
+				return route.get_corner_set(i);
+			}
+		}
+	}
+	return corner_set;
 }
 
 
@@ -6695,10 +6747,10 @@ ribi_t::ribi convoi_t::get_reserved_tiles_corner_set(uint32 index) const
 // the two opposite traversals of a tile, which schiene_t::can_co_reserve_offset() needs.
 ribi_t::ribi convoi_t::get_reserved_tiles_travel_dir(uint32 index) const
 {
-	if(  index>=reserved_tiles.get_count()  ) {
+	if(  index==0  ||  index>=reserved_tiles.get_count()  ) {
 		return ribi_t::none;
 	}
-	return ribi_type( reserved_tiles[ max(1u,index)-1u ], reserved_tiles[index] );
+	return neighbour_ribi( reserved_tiles[index-1u], reserved_tiles[index] );
 }
 
 
@@ -7054,6 +7106,7 @@ void convoi_t::trade_convoi() {
 	} else {
 		unregister_stops();
 	}
+	owner->book_convoi_number(-1);
 	// because next line's owner is invalid, unset it.
 	schedule->unset_next_line();
 	player_t* const new_owner = welt->get_player(get_accept_player_nr());
@@ -7065,6 +7118,7 @@ void convoi_t::trade_convoi() {
 	owner->book_new_vehicle(-value, get_pos().get_2d(), fahr[0] ? fahr[0]->get_desc()->get_waytype() : ignore_wt);
 	set_permit_trade(false);
 	set_accept_player_nr(owner->get_player_nr());
+	owner->book_convoi_number(1);
 	if(  need_new_line  ) {
 		// reset line for new owner.
 		// search line of my schedule.

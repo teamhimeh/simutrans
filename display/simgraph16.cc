@@ -3310,9 +3310,53 @@ void display_color_img_line(const image_id n, scr_coord_val xp, scr_coord_val yp
 }
 
 
-/**
- * draw unscaled images, replaces base color
- */
+/** Draw a scaled base image, preserving transparent and semi-transparent runs. */
+void display_base_img_scaled(image_id n, scr_rect area CLIP_NUM_DEF)
+{
+	if (n >= anz_images || area.w <= 0 || area.h <= 0) {
+		return;
+	}
+	const imd &img = images[n];
+	if (img.base_w <= 0 || img.base_h <= 0 || area.x >= CR.clip_rect.xx || area.y >= CR.clip_rect.yy ||
+		area.x + area.w <= CR.clip_rect.x || area.y + area.h <= CR.clip_rect.y) {
+		return;
+	}
+	activate_player_color(0, false);
+	const PIXVAL *row = img.base_data;
+	int source_y = 0;
+	for (int dy = max(0, CR.clip_rect.y-area.y); dy < min(area.h, CR.clip_rect.yy-area.y); dy++) {
+		const int sy = (2*dy+1)*img.base_h/(2*area.h);
+		while (source_y < sy) {
+			do {
+				row++;
+				row += (*row & ~TRANSPARENT_RUN) + 1;
+			} while (*row);
+			row++;
+			source_y++;
+		}
+		const PIXVAL *run = row;
+		int sx = *run++ & ~TRANSPARENT_RUN;
+		int count = *run++ & ~TRANSPARENT_RUN;
+		for (int dx = max(0, CR.clip_rect.x-area.x); dx < min(area.w, CR.clip_rect.xx-area.x); dx++) {
+			const int sample_x = (2*dx+1)*img.base_w/(2*area.w);
+			while (sample_x >= sx+count && *(run+count)) {
+				sx += count;
+				run += count;
+				// A flagged clear run can have zero length between opaque and alpha runs.
+				sx += *run++ & ~TRANSPARENT_RUN;
+				count = *run++ & ~TRANSPARENT_RUN;
+			}
+			if (sample_x >= sx && sample_x < sx+count) {
+				const PIXVAL *pixel = run + sample_x-sx;
+				colorpixcopydaytime(textur + (area.y+dy)*disp_width + area.x+dx, pixel, pixel+1);
+			}
+		}
+	}
+	mark_rect_dirty_wc(area.x, area.y, area.x+area.w-1, area.y+area.h-1);
+}
+
+
+/** Draw unscaled images, replacing player colors. */
 void display_base_img(const image_id n, scr_coord_val xp, scr_coord_val yp, const sint8 player_nr, const bool daynight, const bool dirty  CLIP_NUM_DEF)
 {
 	if(  base_tile_raster_width==tile_raster_width  ) {
@@ -4014,9 +4058,18 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 {
 	if(  h > 0  ) {
 		PIXVAL *tp = textur + yp * disp_width;
+		const bool poly_clip = CR.number_of_clips > 0;
+		if (poly_clip) {
+			init_ranges(yp CLIP_NUM_PAR);
+		}
 
 		do { // line decoder
 			int xpos = xp;
+			int xmin = CR.clip_rect.x;
+			int xmax = CR.clip_rect.xx;
+			if (poly_clip) {
+				get_xrange_and_step_y(xmin, xmax CLIP_NUM_PAR);
+			}
 
 			// display image
 			uint16 runlen = *sp++;
@@ -4031,9 +4084,9 @@ static void display_img_alpha_wc(scr_coord_val h, const scr_coord_val xp, const 
 				alphamap++;
 
 				// something to display?
-				if(  xpos + runlen > CR.clip_rect.x  &&  xpos < CR.clip_rect.xx  ) {
-					const int left = (xpos >= CR.clip_rect.x ? 0 : CR.clip_rect.x - xpos);
-					const int len  = (CR.clip_rect.xx - xpos >= runlen ? runlen : CR.clip_rect.xx - xpos);
+				if(  xmin < xmax && xpos + runlen > xmin && xpos < xmax  ) {
+					const int left = (xpos >= xmin ? 0 : xmin - xpos);
+					const int len  = (xmax - xpos >= runlen ? runlen : xmax - xpos);
 					p( tp + xpos + left, sp + left, alphamap + left, alpha_flags, colour, len - left );
 				}
 

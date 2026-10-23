@@ -29,10 +29,68 @@
 
 #include <thread>
 #include <mutex>
+#include <cerrno>
+#include "../utils/last_server_setting.h"
 
 static char nick_buf[256];
 
-// char server_frame_t::newserver_name[2048];
+static bool read_server_settings(const std::string &path, std::string &contents)
+{
+	FILE *f = dr_fopen(path.c_str(), "rb");
+	if(  !f  ) { return errno == ENOENT; }
+	char chunk[4096];
+	size_t count;
+	while(  (count = fread(chunk, 1, sizeof(chunk), f)) != 0  ) { contents.append(chunk, count); }
+	const bool success = ferror(f) == 0;
+	fclose(f);
+	return success;
+}
+
+void server_frame_t::load_server_address()
+{
+	// Command-line -ip retains precedence; persisted text stays local to this UI.
+	tstrncpy(server_address, env_t::newserver_name, sizeof(server_address));
+	if(  server_address[0] == '\0'  ) {
+		std::string contents;
+		if(  read_server_settings(server_settings_path, contents)  ) {
+			tstrncpy(server_address, last_server_setting::read(contents).c_str(), sizeof(server_address));
+		}
+	}
+}
+
+void server_frame_t::save_server_address()
+{
+	std::string contents;
+	if(  !read_server_settings(server_settings_path, contents) || !last_server_setting::update(contents, server_address)  ) {
+		dbg->warning("server_frame_t::save_server_address", "Cannot update %s", server_settings_path.c_str());
+		return;
+	}
+	const std::string temporary = server_settings_path + ".tmp";
+	FILE *f = dr_fopen(temporary.c_str(), "wb");
+	if(  !f  ) {
+		dbg->warning("server_frame_t::save_server_address", "Cannot write %s", temporary.c_str());
+		return;
+	}
+	const bool written = fwrite(contents.data(), 1, contents.size(), f) == contents.size();
+	const bool closed = fclose(f) == 0;
+	bool replaced = false;
+	if(  written && closed  ) {
+#ifdef _WIN32
+		replaced = dr_rename(temporary.c_str(), server_settings_path.c_str()) == 0;
+#else
+		replaced = rename(temporary.c_str(), server_settings_path.c_str()) == 0;
+#endif
+	}
+	if(  !replaced  ) {
+		dr_remove(temporary.c_str());
+		dbg->warning("server_frame_t::save_server_address", "Cannot save %s", server_settings_path.c_str());
+	}
+}
+
+server_frame_t::~server_frame_t()
+{
+	if(  !server_settings_path.empty()  ) { save_server_address(); }
+}
 
 // static buffer for updating the server list asynchronously
 static std::mutex server_frame_draw_mutex;
@@ -140,6 +198,8 @@ server_frame_t::server_frame_t() :
 	// When in network mode, display only local map info (and nickname changer)
 	// When not in network mode, display server picker
 	if (  !env_t::networkmode  ) {
+		server_settings_path = env_t::pak_dir + "config/servers.tab";
+		load_server_address();
 		new_component<gui_label_t>("Select a server to join:" );
 
 		// Server listing
@@ -169,7 +229,7 @@ server_frame_t::server_frame_t() :
 		add_table(2,1);
 		{
 			// Add server input/button
-			addinput.set_text( env_t::newserver_name, sizeof( env_t::newserver_name ) );
+			addinput.set_text(server_address, sizeof(server_address));
 			addinput.add_listener( this );
 			add_component( &addinput );
 
@@ -254,7 +314,9 @@ server_frame_t::server_frame_t() :
 		end_table();
 	}
 
-	if (  env_t::newserver_name[0] != '\0'  ) {
+	// Only an explicit command-line -ip uses the upstream automatic query.
+	// Restoring the textbox never sets env_t::newserver_name or enters this block.
+	if (  !env_t::networkmode && env_t::newserver_name[0] != '\0'  ) {
 		join.disable();
 
 		dbg->warning("action_triggered()", "newserver_name: %s", env_t::newserver_name);
@@ -577,13 +639,19 @@ bool server_frame_t::action_triggered (gui_action_creator_t *comp, value_t p)
 		}
 	}
 	else if (  &add == comp  ||  &addinput ==comp  ) {
-		if (  env_t::newserver_name[0] != '\0'  ) {
+		// WIN_UNTOP sends 0 after editing: it must not start a network query.
+		if(  &addinput == comp && p.i != 1  ) {
+			custom_valid = false;
+			join.disable();
+			return true;
+		}
+		if (  server_address[0] != '\0'  ) {
 			join.disable();
 
-			dbg->warning("action_triggered()", "newserver_name: %s", env_t::newserver_name);
+			dbg->warning("action_triggered()", "server_address: %s", server_address);
 
 			display_show_load_pointer(1);
-			const char *err = network_gameinfo( env_t::newserver_name, &gi );
+			const char *err = network_gameinfo(server_address, &gi);
 			if (  err == NULL  ) {
 				custom_valid = true;
 				update_info();
@@ -640,7 +708,7 @@ bool server_frame_t::action_triggered (gui_action_creator_t *comp, value_t p)
 		// If we have a valid custom server entry, connect to that
 		else if (  custom_valid  ) {
 			display_show_load_pointer(1);
-			filename += env_t::newserver_name;
+			filename += server_address;
 			destroy_win( this );
 			welt->load( filename.c_str() );
 			display_show_load_pointer(0);
@@ -660,7 +728,7 @@ bool server_frame_t::action_triggered (gui_action_creator_t *comp, value_t p)
 				network_compare_pakset_with_server( ((server_scrollitem_t*)serverlist.get_selected_item())->get_dns(), msg );
 			}
 			else if (  custom_valid  ) {
-				network_compare_pakset_with_server( env_t::newserver_name, msg );
+				network_compare_pakset_with_server(server_address, msg);
 			}
 			else {
 				dbg->error( "server_frame_t::action_triggered()", "find_mismatch pressed without valid selection or custom server entry" );

@@ -6255,6 +6255,8 @@ const char *tool_rotate_building_t::rotate_building_at( player_t *player, koord3
 				const building_tile_desc_t* tile = desc->get_tile( newlayout, k.x, k.y );
 				gb_part->set_tile( tile, false );
 			}
+			// only this multitile building may remain on its tiles
+			hausbauer_t::remove_invalid_objects_on_multitile_building( gb, player );
 		}
 	}
 	return NULL;
@@ -7388,6 +7390,22 @@ const char *tool_city_chain_t::work( player_t *player, koord3d pos )
 	// process ignore climates switch
 	bool ignore_climates = default_param  &&  default_param[0]=='1';
 
+	if(  fab->get_placement() != factory_desc_t::City  ) {
+		// only city factories search their own place; all others are built here, so check this area (layout 0)
+		const building_desc_t *bdesc = fab->get_building();
+		bool hat_platz;
+		if(  fab->get_placement() == factory_desc_t::Water  ) {
+			hat_platz = welt->is_water( pos.get_2d(), bdesc->get_size(0) );
+		}
+		else {
+			climate_bits cl = ignore_climates ? ALL_CLIMATES : bdesc->get_allowed_climate_bits();
+			hat_platz = welt->square_is_free( pos.get_2d(), bdesc->get_x(0), bdesc->get_y(0), NULL, cl );
+		}
+		if(  !hat_platz  ) {
+			return NOTICE_UNSUITABLE_GROUND;
+		}
+	}
+
 	pos = gr->get_pos();
 	int count = factory_builder_t::build_link(NULL, fab, initial_prod, 0, &pos, welt->get_public_player(), 10000, ignore_climates);
 	if(count>0) {
@@ -7668,6 +7686,8 @@ DBG_MESSAGE("tool_headquarter()", "building headquarters at (%d,%d)", pos.x, pos
 								}
 							}
 						}
+						// only the upgraded multitile headquarters may remain on its tiles
+						hausbauer_t::remove_invalid_objects_on_multitile_building( hq, player );
 						built = true;
 					}
 				}
@@ -7697,6 +7717,9 @@ DBG_MESSAGE("tool_headquarter()", "building headquarters at (%d,%d)", pos.x, pos
 			if(ok) {
 				// then built it
 				hq = hausbauer_t::build(player, k, rotate, desc, NULL);
+				if(  hq == NULL  ) {
+					return NOTICE_UNSUITABLE_GROUND;
+				}
 				stadt_t *city = welt->find_nearest_city( k );
 				if(city) {
 					city->add_gebaeude_to_stadt( hq );
@@ -9548,6 +9571,40 @@ bool tool_screenshot_t::init( player_t * )
 	else {
 		create_win( new news_img("Could not\ncreate screenshot!\n"), w_time_delete, magic_none);
 	}
+	return false;
+}
+
+
+char const* tool_export_minimap_t::get_tooltip(player_t const*) const
+{
+	if(  default_param  &&  *default_param  ) {
+		snprintf(toolstr, lengthof(toolstr), "%s (%s)", translator::translate("Export map image"), default_param);
+		return toolstr;
+	}
+	return translator::translate("Export map image");
+}
+
+
+// default_param: optional map mode to export with (see minimap_t::parse_display_mode()),
+// e.g. "MAP_TOWN|MAP_LINES"; the current mode of the map window is kept
+bool tool_export_minimap_t::init( player_t * )
+{
+	minimap_t::MAP_DISPLAY_MODE export_mode;
+	const char *message;
+	if(  !minimap_t::parse_display_mode(default_param, export_mode)  ) {
+		dbg->warning("tool_export_minimap_t::init()", "invalid map mode \"%s\"", default_param);
+		message = "Map image export failed.";
+	}
+	else {
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename, export_mode);
+		if(  !minimap_t::check_display_mode(export_mode, conflicts)  ) {
+			// export_to_png() already showed the result together with the warning
+			return false;
+		}
+		message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
+	}
+	create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
 
 	return false;
 }

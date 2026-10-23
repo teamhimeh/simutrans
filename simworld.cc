@@ -4836,6 +4836,13 @@ bool karte_t::is_water(koord k, koord dim) const
 }
 
 
+grund_t *karte_t::lookup_no_dummy(const koord3d &pos) const
+{
+	grund_t *gr = lookup(pos);
+	return (gr  &&  !gr->is_dummy_ground()) ? gr : NULL;
+}
+
+
 bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const
 {
 	if(k.x < 0  ||  k.y < 0  ||  k.x+w > get_size().x || k.y+h > get_size().y) {
@@ -4867,8 +4874,8 @@ bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_b
 				}
 			}
 			if( (platz_max_h != max_height  &&  platz_base_h != gr->get_hoehe())  ||  !gr->ist_natur()  ||  gr->kann_alle_obj_entfernen(NULL) != NULL  ||
-			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup( gr->get_pos()+koord3d(0,0,1) ) ||
-			     (slope_t::max_diff(slope)==2 && lookup( gr->get_pos()+koord3d(0,0,2) )) ))  ) {
+			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup_no_dummy( gr->get_pos()+koord3d(0,0,1) ) ||
+			     (slope_t::max_diff(slope)==2 && lookup_no_dummy( gr->get_pos()+koord3d(0,0,2) )) ))  ) {
 				if(  last_y  ) {
 					*last_y = k_check.y;
 				}
@@ -5545,6 +5552,12 @@ DBG_MESSAGE("karte_t::load()", "%d ways loaded",weg_t::get_alle_wege().get_count
 	ls.set_progress( (get_size().y*3)/2+256 );
 
 	world_xy_loop(&karte_t::plans_finish_rd, SYNCX_FLAG);
+
+	// correct way flags and remove invalid objects on tiles of multitile and special buildings (not multithread safe, so after plans_finish_rd)
+	// only on the server (or offline): a network client must keep the server's game state
+	if(  !env_t::networkmode  ||  env_t::server  ) {
+		hausbauer_t::cleanup_multitile_buildings_finish_rd();
+	}
 
 	// update power nets with correct power
 	powernet_t::step_all(1);
