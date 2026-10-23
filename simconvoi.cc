@@ -7801,6 +7801,9 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 					}
 				}
 			}
+			if(  !k->can_continue_coupling()||k->get_schedule()->get_current_entry().is_uncouple_child()  ) {
+				k->uncouple_convoi();
+			}
 			k = k->get_coupling_convoi();
 		}
 	}
