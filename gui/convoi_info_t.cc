@@ -392,6 +392,11 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		line_button.enable();
 		bt_promote_to_line.enable();
 		
+		if(  cnv->is_shipped()  ) {
+			button.set_tooltip("Alters a schedule.");
+			button.set_text("Fahrplan");
+			button.disable();
+		}
 		if(  cnv->get_coupling_convoi().is_bound()  ) {
 			button.set_tooltip("Uncouple the back convoy now.");
 			button.set_text("release back");
@@ -406,7 +411,7 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 			button.enable();
 		}
 
-		if(  cnv->is_coupled()  ||  route_search_in_progress  ) {
+		if(  cnv->is_coupled()  ||  route_search_in_progress  ||  cnv->is_shipped()  ) {
 			go_home_button.disable();
 		}
 		else {
@@ -442,13 +447,13 @@ void convoi_info_t::draw(scr_coord pos, scr_size size)
 		}
 		set_recovery_button.pressed = cnv->is_in_delay_recovery();
 		set_recovery_button.enable();
-		if(  cnv->is_coupled() ){
+		if(  cnv->is_coupled()  ||  cnv->is_shipped() ){
 			next_stop_button.disable();
 		}else{
 			next_stop_button.enable();
 		}
 		const bool reversible_waytype = env_t::reversible_waytype(cnv->front()->get_waytype());
-		if (reversible_waytype) {
+		if (reversible_waytype&&!cnv->is_shipped()) {
 			reversed_button.pressed = cnv->is_reversed();
 			reversed_button.enable();
 		}

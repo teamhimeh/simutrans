@@ -7329,7 +7329,7 @@ convoihandle_t convoi_t::find_most_child_convoi() const
 
 
 void convoi_t::next_stop_button_pressed() {
-	if(  self->is_coupled()  ) {
+	if(  self->is_coupled() || self->is_shipped()  ) {
 		return;
 	}
 	convoihandle_t c = self;
