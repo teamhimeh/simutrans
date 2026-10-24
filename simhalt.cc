@@ -5273,6 +5273,17 @@ bool haltestelle_t::is_halt_covered(const halthandle_t &halt) const
 }
 
 
+bool haltestelle_t::is_same_departure_slot_group(convoihandle_t a, convoihandle_t b) {
+	if(  !a.is_bound()  ||  !b.is_bound()  ) {
+		return false;
+	}
+	const linehandle_t line_a = a->get_line();
+	const linehandle_t line_b = b->get_line();
+	return  line_a.is_bound()  &&  line_b.is_bound()  &&
+		line_a->get_schedule()->get_departure_slot_group_id()==line_b->get_schedule()->get_departure_slot_group_id();
+}
+
+
 bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp_tick, convoihandle_t cnv) {
 	// check if departure_slot_group_id is properly initialized.
 	if(  cnv->get_line().is_bound()  &&  !cnv->get_line()->get_schedule()->get_departure_slot_group_id().is_bound()  ) {
@@ -5293,17 +5304,16 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 			i = departure_slot_table[idx].erase(i);
 			continue;
 		}
-		if(  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  &&  (i->arr_tick==arr_tick  ||  i->dep_tick==dep_tick)  ) {
-			// The requested slot is already reserved by this convoy or by another convoy coupled with it.
-			// A coupled convoy departs as one, so it holds only one slot.
+		// The requested slot is already reserved by this convoy, or by another convoy coupled with it
+		// in the same slot group. A slot of another group does not count: the train does not hold
+		// a slot of its group then, and must book one.
+		const bool same_train_slot = i->cnv==cnv  ||  (  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  &&  is_same_departure_slot_group(i->cnv, cnv)  );
+		if(  same_train_slot  &&  (i->arr_tick==arr_tick  ||  i->dep_tick==dep_tick)  ) {
 			return true;
 		}
-		const linehandle_t line_a = i->cnv->get_line();
-		const linehandle_t line_b = cnv->get_line();
 		if(
 			i->dep_tick==dep_tick  &&
-			line_a.is_bound()  &&  line_b.is_bound()  &&
-			line_a->get_schedule()->get_departure_slot_group_id()==line_b->get_schedule()->get_departure_slot_group_id()  &&
+			is_same_departure_slot_group(i->cnv, cnv)  &&
 			i->stop_index==stop_index
 		) {
 			// The slot is already reserved by other convoy.
@@ -5323,8 +5333,11 @@ bool haltestelle_t::erase_departure(uint32 dep_tick, convoihandle_t cnv) {
 	slist_tpl<departure_t>::iterator i = departure_slot_table[idx].begin();
 	// find and remove the requested departure slot
 	while(  i!=departure_slot_table[idx].end()  ) {
-		// the slot may be booked by another convoy coupled with cnv.
-		if(  i->cnv.is_bound()  &&  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  &&  i->dep_tick==dep_tick  ) {
+		// the slot may be booked by another convoy coupled with cnv in the same slot group.
+		// A slot of another group belongs to that convoy only. (e.g. the parent booked its own slot
+		// at the same ticks, and the child gives back its slot.)
+		if(  i->dep_tick==dep_tick  &&  i->cnv.is_bound()  &&
+			(  i->cnv==cnv  ||  (  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  &&  is_same_departure_slot_group(i->cnv, cnv)  )  )  ) {
 			departure_slot_table[idx].erase(i);
 			return true;
 		}

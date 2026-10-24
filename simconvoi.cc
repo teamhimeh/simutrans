@@ -5041,18 +5041,39 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	// the conditions of all children. So only the most parent convoy judges the departure.
 	if(  !is_coupled()  &&  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
 		// The waiting convoy may have booked a slot before a try-coupling convoy coupled and became
-		// the new parent. The slot is kept for the whole convoy, so the parent takes it over.
+		// the new parent. Find the child (holder) which still holds the slot at this halt.
+		convoihandle_t holder;
 		for(  convoihandle_t cc = coupling_convoi;  cc.is_bound();  cc = cc->get_coupling_convoi()  ) {
 			if(  cc->get_departure_time()>0  &&  halt->is_departure_booked_by(cc->get_departure_time(), self)  ) {
-				scheduled_departure_time = cc->get_departure_time();
+				holder = cc;
 				break;
 			}
 		}
-		if(  scheduled_departure_time==0  ) {
+		// The parent books its own slot only when it waits for the departure time and its slot group differs.
+		// Otherwise the train rides on the holder's slot.
+		const bool own_slot = holder.is_bound()  &&  schedule->get_current_entry().get_wait_for_time()  &&  !haltestelle_t::is_same_departure_slot_group(self, holder);
+
+		if(  holder.is_bound()  &&  !own_slot  ) {
+			// ride on the holder's slot.
+			scheduled_departure_time = holder->get_departure_time();
+		}
+		else {
 			bool need_coupling_at_this_stop = false;
 			// departure judgement is done in a helper function.
 			departure_cond = can_depart(self, halt, arrived_time,
 				 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+			if(  own_slot  ) {
+				if(  scheduled_departure_time>0  ) {
+					// The parent got its own slot. Only now the holder gives its slot back,
+					// so that the train always holds one slot.
+					holder->release_departure_slot(halt);
+				}
+				else if(  !is_first_ticks_bigger(holder->get_departure_time(), welt->get_ticks())  ) {
+					// The parent could not get its own slot until the holder's departure time.
+					// The holder's slot takes priority. The parent retries every step until then.
+					scheduled_departure_time = holder->get_departure_time();
+				}
+			}
 		}
 
 		if(  scheduled_departure_time>0  ){
@@ -7928,12 +7949,9 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 		k->unset_convoi_coupling_in_progress();
 		k->loading_limit = 0;
 		k->loading_waiting_time = 0;
-		k->coupling_done = false;
 		k->state = SHIPPED;
 		k->wait_lock = 0;
 		k->scheduled_departure_time = 0;
-		k->loading_limit = 0;
-		k->loading_waiting_time = 0;
 		k->unloading_done = false;
 		k->uncouple_done = false;
 		k->cease_coupling_due_to_length_over = false;
