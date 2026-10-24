@@ -1781,9 +1781,8 @@ void convoi_t::step()
 					}
 
 					// release departure slot if needed.
-					if(  h.is_bound()  &&  scheduled_departure_time>0  ) {
-						h->erase_departure(scheduled_departure_time, self);
-						scheduled_departure_time = 0;
+					if(  h.is_bound()  ) {
+						release_departure_slot(h);
 					}
 				}
 			}
@@ -4481,6 +4480,14 @@ static void check_departure_conditions(convoihandle_t cnv, uint32 arrived_time, 
 bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint32 time_to_load, bool &coupling_cond, uint32 &go_on_ticks) {
 	convoihandle_t c = cnv;
 	coupling_cond = false;
+
+	// Only the most parent convoy judges the departure and books a departure slot.
+	// A child departs together with its parent. A slot the child booked while it was the parent
+	// is kept as the slot of the whole convoy, so go_on_ticks (the child's departure time) is not touched.
+	if(  cnv->get_most_parent_convoi()!=cnv  ) {
+		return false;
+	}
+
 	go_on_ticks = 0;
 	bool loading_cond = true;
 	bool coupling_done_cond = true;
@@ -5030,11 +5037,23 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 	}
 
-	if(  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
-		bool need_coupling_at_this_stop = false;
-		// departure judgement is done in a helper function.
-		departure_cond = can_depart(self, halt, arrived_time,
-			 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+	// A coupled child departs with its parent, and the parent's can_depart() already checks
+	// the conditions of all children. So only the most parent convoy judges the departure.
+	if(  !is_coupled()  &&  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
+		// The waiting convoy may have booked a slot before a try-coupling convoy coupled and became
+		// the new parent. The slot is kept for the whole convoy, so the parent takes it over.
+		for(  convoihandle_t cc = coupling_convoi;  cc.is_bound();  cc = cc->get_coupling_convoi()  ) {
+			if(  cc->get_departure_time()>0  &&  halt->is_departure_booked_by(cc->get_departure_time(), self)  ) {
+				scheduled_departure_time = cc->get_departure_time();
+				break;
+			}
+		}
+		if(  scheduled_departure_time==0  ) {
+			bool need_coupling_at_this_stop = false;
+			// departure judgement is done in a helper function.
+			departure_cond = can_depart(self, halt, arrived_time,
+				 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+		}
 
 		if(  scheduled_departure_time>0  ){
 			// The convoy should depart in the next or later step
@@ -7363,6 +7382,20 @@ convoihandle_t convoi_t::find_most_child_convoi() const
 }
 
 
+void convoi_t::release_departure_slot(halthandle_t halt) {
+	if(  scheduled_departure_time==0  ) {
+		return;
+	}
+	if(  !halt.is_bound()  &&  anz_vehikel>0  ) {
+		halt = haltestelle_t::get_stoppable_halt(get_pos(), get_owner(), front()->get_waytype());
+	}
+	if(  halt.is_bound()  ) {
+		halt->erase_departure(scheduled_departure_time, self);
+	}
+	scheduled_departure_time = 0;
+}
+
+
 void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled() || self->is_shipped()  ) {
 		return;
@@ -7379,7 +7412,9 @@ void convoi_t::next_stop_button_pressed() {
 			c->push_convoy_stopping_time();
 			c->set_coupling_done(false);
 			c->set_waiting_for_departure_allowance_by_other_convoy(false);
-			c->reset_departure_time();
+			c->set_waiting_for_departure_make_another_convoy_depart(false);
+			// the convoy does not depart in the booked slot. give it back to the halt.
+			c->release_departure_slot();
 		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();
@@ -7885,6 +7920,15 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 	// the whole chain rides; every convoy in it stops being driven
 	convoihandle_t k = c;
 	while(  k.is_bound()  ) {
+		// the per-stop flags and the departure slot are already cleared above
+		k->push_goods_waiting_time_if_needed();
+		k->push_convoy_stopping_time();
+		// the convoy is still on the map, so the halt is found from its position.
+		k->release_departure_slot();
+		k->unset_convoi_coupling_in_progress();
+		k->loading_limit = 0;
+		k->loading_waiting_time = 0;
+		k->coupling_done = false;
 		k->state = SHIPPED;
 		k->wait_lock = 0;
 		k->scheduled_departure_time = 0;
@@ -7894,6 +7938,7 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 		k->uncouple_done = false;
 		k->cease_coupling_due_to_length_over = false;
 		k->waiting_for_departure_allowance_by_other_convoy = false;
+		k->waiting_for_departure_make_another_convoy_depart = false;
 		k->shipping_wait_since = 0;
 		k->next_stop_index = 65535;
 		k->next_coupling_index = route_t::INVALID_INDEX;

@@ -1019,6 +1019,9 @@ public:
 	
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
 
+	// true when the slot is booked by cnv or by another convoy coupled with it (compared by the most parent convoy).
+	bool is_departure_booked_by(uint32 dep_tick, convoihandle_t cnv) const;
+
 	void extinguish_all_waiting_goods();
 
 	// allow unloading from longer convoy
