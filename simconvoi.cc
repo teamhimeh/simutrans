@@ -7897,6 +7897,7 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 		k->shipping_wait_since = 0;
 		k->next_stop_index = 65535;
 		k->next_coupling_index = route_t::INVALID_INDEX;
+		k->reverse_coupling_done = false;
 		k->set_coupling_done(false);
 		k = k->get_coupling_convoi();
 	}
