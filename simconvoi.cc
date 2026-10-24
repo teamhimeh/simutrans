@@ -4408,13 +4408,9 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 	coupling_cond = false;
 
 	// Only the most parent convoy judges the departure and books a departure slot.
-	// A child departs together with its parent, so it must not hold a slot of its own.
-	// If it still holds one (e.g. it booked as the parent before the coupling order was
-	// reversed), give it back so that only one slot is booked for the whole convoy.
-	// NOTE: go_on_ticks is the caller's scheduled_departure_time, so release before resetting it.
+	// A child departs together with its parent. A slot the child booked while it was the parent
+	// is kept as the slot of the whole convoy, so go_on_ticks (the child's departure time) is not touched.
 	if(  cnv->get_most_parent_convoi()!=cnv  ) {
-		cnv->release_departure_slot(halt);
-		go_on_ticks = 0;
 		return false;
 	}
 
@@ -4981,11 +4977,23 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 	}
 
-	if(  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
-		bool need_coupling_at_this_stop = false;
-		// departure judgement is done in a helper function.
-		departure_cond = can_depart(self, halt, arrived_time,
-			 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+	// A coupled child departs with its parent, and the parent's can_depart() already checks
+	// the conditions of all children. So only the most parent convoy judges the departure.
+	if(  !is_coupled()  &&  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
+		// The waiting convoy may have booked a slot before a try-coupling convoy coupled and became
+		// the new parent. The slot is kept for the whole convoy, so the parent takes it over.
+		for(  convoihandle_t cc = coupling_convoi;  cc.is_bound();  cc = cc->get_coupling_convoi()  ) {
+			if(  cc->get_departure_time()>0  &&  halt->is_departure_booked_by(cc->get_departure_time(), self)  ) {
+				scheduled_departure_time = cc->get_departure_time();
+				break;
+			}
+		}
+		if(  scheduled_departure_time==0  ) {
+			bool need_coupling_at_this_stop = false;
+			// departure judgement is done in a helper function.
+			departure_cond = can_depart(self, halt, arrived_time,
+				 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+		}
 
 		if(  scheduled_departure_time>0  ){
 			// The convoy should depart in the next or later step

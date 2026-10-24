@@ -5293,8 +5293,9 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 			i = departure_slot_table[idx].erase(i);
 			continue;
 		}
-		if(  i->cnv==cnv  &&  i->arr_tick==arr_tick  ) {
-			// The requested slot is already reserved by this convoy.
+		if(  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  &&  (i->arr_tick==arr_tick  ||  i->dep_tick==dep_tick)  ) {
+			// The requested slot is already reserved by this convoy or by another convoy coupled with it.
+			// A coupled convoy departs as one, so it holds only one slot.
 			return true;
 		}
 		const linehandle_t line_a = i->cnv->get_line();
@@ -5322,7 +5323,8 @@ bool haltestelle_t::erase_departure(uint32 dep_tick, convoihandle_t cnv) {
 	slist_tpl<departure_t>::iterator i = departure_slot_table[idx].begin();
 	// find and remove the requested departure slot
 	while(  i!=departure_slot_table[idx].end()  ) {
-		if(  i->cnv==cnv  &&  i->dep_tick==dep_tick  ) {
+		// the slot may be booked by another convoy coupled with cnv.
+		if(  i->cnv.is_bound()  &&  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  &&  i->dep_tick==dep_tick  ) {
 			departure_slot_table[idx].erase(i);
 			return true;
 		}
@@ -5336,7 +5338,20 @@ bool haltestelle_t::is_departure_booked(uint32 dep_tick, uint8 stop_index, lineh
 	const uint8 idx = dep_tick % DST_SIZE;
 	slist_tpl<departure_t>::const_iterator i = departure_slot_table[idx].begin();
 	while(  i!=departure_slot_table[idx].end()  ) {
-		if(  i->dep_tick==dep_tick  &&  i->stop_index==stop_index  &&  i->cnv->get_line()==line  ) {
+		if(  i->dep_tick==dep_tick  &&  i->stop_index==stop_index  &&  i->cnv.is_bound()  &&  i->cnv->get_line()==line  ) {
+			return true;
+		}
+		i++;
+	}
+	return false;
+}
+
+
+bool haltestelle_t::is_departure_booked_by(uint32 dep_tick, convoihandle_t cnv) const {
+	const uint8 idx = dep_tick % DST_SIZE;
+	slist_tpl<departure_t>::const_iterator i = departure_slot_table[idx].begin();
+	while(  i!=departure_slot_table[idx].end()  ) {
+		if(  i->dep_tick==dep_tick  &&  i->cnv.is_bound()  &&  i->cnv->get_most_parent_convoi()==cnv->get_most_parent_convoi()  ) {
 			return true;
 		}
 		i++;
