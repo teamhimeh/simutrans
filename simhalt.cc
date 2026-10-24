@@ -1024,6 +1024,15 @@ void haltestelle_t::rotate90( const sint16 y_size )
 		}
 	}
 
+	// rotate next tiles of departure slots
+	for(  uint32 i=0;  i<DST_SIZE;  i++  ) {
+		for(  departure_t &slot : departure_slot_table[i]  ) {
+			if(  slot.next_tile!=koord3d::invalid  ) {
+				slot.next_tile.rotate90( y_size );
+			}
+		}
+	}
+
 	// re-linking factories
 	reconnect_factories();
 }
@@ -4178,6 +4187,57 @@ void warenziel_rdwr(loadsave_t *file)
 }
 
 
+// Subroutines to convert departure_t::next_tile from/to the stop index used in saves before OTRP v63.
+// The stop index of the old format excludes depot entries.
+static bool is_depot_entry(const schedule_entry_t &e)
+{
+	const grund_t* gr = world()->lookup(e.pos);
+	return gr  &&  gr->get_depot();
+}
+
+// returns the position of the entry next to the one which corresponds to the legacy stop index.
+static koord3d get_next_tile_from_legacy_stop_index(convoihandle_t cnv, uint8 legacy_stop_index)
+{
+	const schedule_t* schedule = cnv->get_schedule();
+	if(  !schedule  ) {
+		return koord3d::invalid;
+	}
+	uint8 k = 0;
+	for(  uint8 i=0;  i<schedule->get_count();  i++  ) {
+		if(  is_depot_entry(schedule->get_entries()[i])  ) {
+			continue;
+		}
+		if(  k==legacy_stop_index  ) {
+			return schedule->get_next_entry(i).pos;
+		}
+		k++;
+	}
+	return koord3d::invalid;
+}
+
+// returns the legacy stop index of the entry at the halt whose next entry is at next_tile.
+static uint8 get_legacy_stop_index(convoihandle_t cnv, halthandle_t halt, koord3d next_tile)
+{
+	const schedule_t* schedule = cnv->get_schedule();
+	if(  !schedule  ||  schedule->empty()  ) {
+		return 0;
+	}
+	// check the current stop first, since the convoy usually is still at the halt.
+	const uint8 count = schedule->get_count();
+	for(  uint8 j=0;  j<count;  j++  ) {
+		const uint8 i = (schedule->get_current_stop()+j) % count;
+		if(  haltestelle_t::get_stoppable_halt(schedule->get_entries()[i].pos, cnv->get_owner(), schedule->get_waytype())==halt  &&  schedule->get_next_entry(i).pos==next_tile  ) {
+			uint8 idx = i;
+			for(  uint8 l=0;  l<i;  l++  ) {
+				idx -= is_depot_entry(schedule->get_entries()[l]);
+			}
+			return idx;
+		}
+	}
+	return schedule->get_current_stop_exluding_depot();
+}
+
+
 void haltestelle_t::rdwr(loadsave_t *file)
 {
 	xml_tag_t h( file, "haltestelle_t" );
@@ -4412,10 +4472,16 @@ void haltestelle_t::rdwr(loadsave_t *file)
 				file->rdwr_long(d.arr_tick);
 				file->rdwr_long(d.dep_tick);
 				file->rdwr_long(d.exp_tick);
-				if(  file->get_OTRP_version()>=27  ) {
-					file->rdwr_byte(d.stop_index);
+				if(  file->get_OTRP_version()>=63  ) {
+					d.next_tile.rdwr(file);
+				} else if(  file->get_OTRP_version()>=27  ) {
+					// next_tile is rebuilt from the stop index in finish_rd()
+					if(  file->is_saving()  ) {
+						d.legacy_stop_index = d.cnv.is_bound() ? get_legacy_stop_index(d.cnv, self, d.next_tile) : 0;
+					}
+					file->rdwr_byte(d.legacy_stop_index);
 				} else {
-					d.stop_index = 0;
+					d.legacy_stop_index = 0;
 				}
 				convoi_t::rdwr_convoihandle_t(file, d.cnv);
 				if(  file->is_loading()  ) {
@@ -4581,6 +4647,17 @@ void haltestelle_t::finish_rd()
 				current_name = new_name;
 			}
 			all_names.set( current_name, self );
+		}
+	}
+
+	// rebuild next_tile of departure slots from the stop index of old saves
+	if(  welt->load_otrp_version<63  ) {
+		for(  uint32 i=0;  i<DST_SIZE;  i++  ) {
+			for(  departure_t &slot : departure_slot_table[i]  ) {
+				if(  slot.cnv.is_bound()  ) {
+					slot.next_tile = get_next_tile_from_legacy_stop_index(slot.cnv, slot.legacy_stop_index);
+				}
+			}
 		}
 	}
 
@@ -5280,7 +5357,7 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 	}
 	const uint8 idx = dep_tick % DST_SIZE;
 	slist_tpl<departure_t>::iterator i = departure_slot_table[idx].begin();
-	const uint8 stop_index = cnv->get_schedule()->get_current_stop_exluding_depot();
+	const koord3d next_tile = cnv->get_schedule()->get_next_entry().pos;
 	const uint32 current_ticks = welt->get_ticks();
 	while(  i!=departure_slot_table[idx].end()  ) {
 		if(  is_first_ticks_bigger(welt->get_ticks(), i->exp_tick)  ||  !i->cnv.is_bound()  ) {
@@ -5303,7 +5380,7 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 			i->dep_tick==dep_tick  &&
 			line_a.is_bound()  &&  line_b.is_bound()  &&
 			line_a->get_schedule()->get_departure_slot_group_id()==line_b->get_schedule()->get_departure_slot_group_id()  &&
-			i->stop_index==stop_index
+			i->next_tile==next_tile
 		) {
 			// The slot is already reserved by other convoy.
 			return false;
@@ -5311,7 +5388,7 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 		i++;
 	}
 	// reserve the slot.
-	departure_t dep(arr_tick, dep_tick, exp_tick, stop_index, cnv);
+	departure_t dep(arr_tick, dep_tick, exp_tick, next_tile, cnv);
 	departure_slot_table[idx].insert(departure_slot_table[idx].begin(), dep);
 	return true;
 }
@@ -5332,11 +5409,19 @@ bool haltestelle_t::erase_departure(uint32 dep_tick, convoihandle_t cnv) {
 }
 
 
-bool haltestelle_t::is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const {
+bool haltestelle_t::is_departure_booked(uint32 dep_tick, koord3d next_tile, linehandle_t line) const {
+	if(  !line.is_bound()  ) {
+		return false;
+	}
 	const uint8 idx = dep_tick % DST_SIZE;
 	slist_tpl<departure_t>::const_iterator i = departure_slot_table[idx].begin();
 	while(  i!=departure_slot_table[idx].end()  ) {
-		if(  i->dep_tick==dep_tick  &&  i->stop_index==stop_index  &&  i->cnv->get_line()==line  ) {
+		if(
+			i->dep_tick==dep_tick  &&
+			i->next_tile==next_tile  &&
+			i->cnv.is_bound()  &&  i->cnv->get_line().is_bound()  &&
+			i->cnv->get_line()->get_schedule()->get_departure_slot_group_id()==line->get_schedule()->get_departure_slot_group_id()
+		) {
 			return true;
 		}
 		i++;

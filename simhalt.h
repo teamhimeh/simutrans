@@ -594,12 +594,13 @@ private:
 		uint32 arr_tick; // ticks of arrival
 		uint32 dep_tick; // ticks of departure
 		uint32 exp_tick; // expiration ticks of the slot. used only for table clean up.
-		uint8 stop_index; // stop index where the departure slot is requested.
+		koord3d next_tile; // position of the next schedule entry (waypoints included) when the departure slot is requested.
 		convoihandle_t cnv;
-		
-		departure_t(uint32 a, uint32 d, uint32 e, uint8 i, convoihandle_t c) : 
-		arr_tick(a), dep_tick(d), exp_tick(e), stop_index(i), cnv(c) {}
-		departure_t() {};
+		uint8 legacy_stop_index; // stop index (excluding depot) read from saves before OTRP v63. used only to rebuild next_tile in finish_rd.
+
+		departure_t(uint32 a, uint32 d, uint32 e, koord3d n, convoihandle_t c) :
+		arr_tick(a), dep_tick(d), exp_tick(e), next_tile(n), cnv(c), legacy_stop_index(0) {}
+		departure_t() : next_tile(koord3d::invalid), legacy_stop_index(0) {};
 	};
 	
 	/*
@@ -1017,7 +1018,8 @@ public:
 	
 	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
 	
-	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
+	// returns true if a convoy of the same departure slot group as line, heading to next_tile, booked the slot.
+	bool is_departure_booked(uint32 dep_tick, koord3d next_tile, linehandle_t line) const;
 
 	void extinguish_all_waiting_goods();
 
