@@ -1421,3 +1421,55 @@ function test_transport_route_cache_convoy_length()
 	settings.set_advance_to_end(true)
 	debug.set_game_speed(1)
 }
+
+
+// ware_t::menge is a 21 bit field, so a single goods packet holds at most 2097151 units.
+// Anything beyond that has to become a second packet rather than wrap around, both when
+// goods are merged into a waiting packet and when an old savegame with a wider amount
+// field is loaded (see ware_t::rdwr).
+function test_transport_pax_packet_amount_limit()
+{
+	local pl = player_x(0)
+	local goods_amount_limit = 2097151 // (1 << 21) - 1
+
+	ASSERT_EQUAL(command_x(tool_build_way).work(pl, coord3d(4, 2, 0), coord3d(4, 8, 0), "cobblestone_road"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 2, 0), "BusStop"), null)
+	ASSERT_EQUAL(command_x(tool_build_station).work(pl, coord3d(4, 7, 0), "BusStop"), null)
+	ASSERT_EQUAL(command_x.build_depot(pl, coord3d(4, 8, 0), building_desc_x("CarDepot")), null)
+
+	local depot     = depot_x(4, 8, 0)
+	local from_halt = halt_x.get_halt(coord3d(4, 7, 0), pl)
+
+	depot.append_vehicle(pl, convoy_x(0), vehicle_desc_x("Buessig"))
+	local cnv = depot.get_convoy_list()[0]
+	cnv.change_schedule(pl, create_simple_schedule(wt_road, [ coord3d(4, 7, 0), coord3d(4, 2, 0) ]))
+	depot.start_all_convoys(pl)
+
+	// make sure that the graph linking all halts is updated
+	sleep()
+	sleep()
+
+	// more than one packet can hold has to be refused outright ...
+	ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, goods_amount_limit + 1), 0)
+	ASSERT_EQUAL(from_halt.waiting[0], 0)
+
+	// ... while exactly one packet worth of it goes through
+	ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, goods_amount_limit), 1) // 1 == OK
+	ASSERT_EQUAL(from_halt.waiting[0], goods_amount_limit)
+
+	// this packet is full now, so the next lot must be split off into another one
+	// instead of overflowing the bit field
+	ASSERT_EQUAL(world.generate_goods(coord(3, 7), coord(3, 2), good_desc_x.passenger, 1000), 1)
+	ASSERT_EQUAL(from_halt.waiting[0], goods_amount_limit + 1000)
+	ASSERT_EQUAL(from_halt.get_freight_to_dest(good_desc_x.passenger, coord3d(3, 2, 0)), goods_amount_limit + 1000)
+
+	// clean up
+	cnv.destroy(pl)
+	sleep()
+	sleep() // make sure the convoy is destroyed
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(4, 2, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(4, 7, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remover).work(pl, coord3d(4, 8, 0)), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(4, 2, 0), coord3d(4, 8, 0), "" + wt_road), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
