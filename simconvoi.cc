@@ -2988,6 +2988,11 @@ void convoi_t::vorfahren()
 	// is driving direction not change?
 	ribi_t::ribi neue_richtung_rwr = ribi_t::backward(front()->calc_direction(route.front(), route.at(min(1, route.get_count() - 1))));
 	bool const go_same_direction = (neue_richtung_rwr&alte_richtung)==0;
+	if(  front()->get_waytype()==air_wt  &&  go_same_direction  ) {
+		// hat_gehalten() marks an aircraft as reversed (pushback) when it leaves a stop.
+		// On a stop longer than one tile it may leave forward or sideways: no pushback then.
+		reversed = false;
+	}
 	// Whether the lane must be held across this departure. It cannot be stored in the member yet:
 	// the vehicle repositioning below (move_to()/do_drive()) calls enter_tile(), which consumes the
 	// flag. The member is set further down, right before can_enter_tile() runs.
