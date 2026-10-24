@@ -190,6 +190,11 @@ public:
 	halthandle_t get_next_halt( player_t *player, halthandle_t halt ) const;
 
 	/**
+	 * returns a halthandle for the next halt after the entry at stop_index (or unbound)
+	 */
+	halthandle_t get_next_halt( player_t *player, halthandle_t halt, uint8 stop_index ) const;
+
+	/**
 	 * returns a halthandle for the previous halt in the schedule (or unbound)
 	 */
 	halthandle_t get_prev_halt( player_t *player ) const;

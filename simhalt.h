@@ -594,12 +594,13 @@ private:
 		uint32 arr_tick; // ticks of arrival
 		uint32 dep_tick; // ticks of departure
 		uint32 exp_tick; // expiration ticks of the slot. used only for table clean up.
-		uint8 stop_index; // stop index where the departure slot is requested.
+		halthandle_t next_halt; // next halt of the convoy when the departure slot is requested.
 		convoihandle_t cnv;
-		
-		departure_t(uint32 a, uint32 d, uint32 e, uint8 i, convoihandle_t c) : 
-		arr_tick(a), dep_tick(d), exp_tick(e), stop_index(i), cnv(c) {}
-		departure_t() {};
+		uint8 legacy_stop_index; // stop index (excluding depot) read from saves before OTRP v63. used only to rebuild next_halt in finish_rd.
+
+		departure_t(uint32 a, uint32 d, uint32 e, halthandle_t n, convoihandle_t c) :
+		arr_tick(a), dep_tick(d), exp_tick(e), next_halt(n), cnv(c), legacy_stop_index(0) {}
+		departure_t() : legacy_stop_index(0) {};
 	};
 	
 	/*
@@ -1017,7 +1018,8 @@ public:
 	
 	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
 	
-	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
+	// returns true if a convoy of the same departure slot group as line, heading to next_halt, booked the slot.
+	bool is_departure_booked(uint32 dep_tick, halthandle_t next_halt, linehandle_t line) const;
 
 	void extinguish_all_waiting_goods();
 
