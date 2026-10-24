@@ -70,7 +70,7 @@ void gui_journey_time_stat_t::update(linehandle_t line, vector_tpl<uint32*>& jou
     if(  halt.is_bound()  ) {
       // show halt name
       lb->buf().printf("%s", halt->get_name());
-      const bool last_slot_empty = e.get_wait_for_time() && !halt->is_departure_booked(get_latest_dep_slot(e, world()->get_ticks()), schedule->get_next_halt(player, halt, idx), line);
+      const bool last_slot_empty = e.get_wait_for_time() && !halt->is_departure_booked(get_latest_dep_slot(e, world()->get_ticks()), schedule->get_next_entry(idx).pos, line);
       lb->set_color(last_slot_empty ? color_idx_to_rgb(COL_ORANGE) : SYSCOL_TEXT);
       empty_slot_exists |= last_slot_empty;
     } else {

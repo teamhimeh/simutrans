@@ -92,15 +92,9 @@ bool schedule_t::is_stop_allowed(const grund_t *gr) const
  */
 halthandle_t schedule_t::get_next_halt( player_t *player, halthandle_t halt ) const
 {
-	return get_next_halt( player, halt, current_stop );
-}
-
-
-halthandle_t schedule_t::get_next_halt( player_t *player, halthandle_t halt, uint8 stop_index ) const
-{
 	if(  entries.get_count()>1  ) {
 		for(  uint i=1;  i < entries.get_count();  i++  ) {
-			halthandle_t h = haltestelle_t::get_stoppable_halt( entries[ (stop_index+i) % entries.get_count() ].pos, player, get_waytype() );
+			halthandle_t h = haltestelle_t::get_stoppable_halt( entries[ (current_stop+i) % entries.get_count() ].pos, player, get_waytype() );
 			if(  h.is_bound()  &&  h != halt  ) {
 				return h;
 			}
@@ -913,15 +907,15 @@ void schedule_t::gimme_stop_name(cbuffer_t& buf, karte_t* welt, player_t const* 
 	}
 }
 
-schedule_entry_t const& schedule_t::get_next_entry() const {
+schedule_entry_t const& schedule_t::get_next_entry(uint8 stop_index) const {
 	if(  entries.empty()  ) {
 		return dummy_entry;
 	} 
-	if(  is_next_line_valid()  &&  current_stop==entries.get_count()-1  ){
+	if(  is_next_line_valid()  &&  stop_index==entries.get_count()-1  ){
 		// Use the index 1, because the index 0 is same as the last entry of this schedule.
 		return next_line->get_schedule()->at(1);
 	}
-	return entries[(current_stop+1)%entries.get_count()];
+	return entries[(stop_index+1)%entries.get_count()];
 }
 
 void schedule_t::advance()
