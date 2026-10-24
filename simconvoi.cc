@@ -7810,7 +7810,6 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 			k->waiting_for_departure_make_another_convoy_depart = false;
 			k->uncouple_done = false;
 			k->reverse_coupling_done = false;
-			k->reversing_coupling_needed = false;
 			k->unloading_done = false;
 			k->next_stop_index = 65535;
 			k->next_coupling_index = route_t::INVALID_INDEX;
