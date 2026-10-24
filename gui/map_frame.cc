@@ -498,10 +498,13 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 		show_hide_directory( !b_show_directory.pressed );
 	}
 	else if(  comp == &b_export_map  ) {
-		std::string filename;
-		const char *message = minimap_t::get_instance()->export_to_png(filename) ?
-			"Map image exported to the screenshot folder." : "Map image export failed.";
-		create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename);
+		// on conflicts export_to_png() already showed the result together with the warning
+		if(  minimap_t::check_display_mode((minimap_t::MAP_DISPLAY_MODE)env_t::default_mapmode, conflicts)  ) {
+			const char *message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
+			create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
+		}
 	}
 	else if(  comp == &c_show_outlines  ) {
 		if( v.i == 2 ) {

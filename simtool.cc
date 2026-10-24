@@ -4797,7 +4797,7 @@ DBG_MESSAGE("tool_station_building_aux()", "building mail office/station buildin
 			for(  sint8 j=3;  j>=0;  j-- ) {
 				bool ok = true;
 				koord offset(((j&1)^1)*(testsize.x-1),((j>>1)&1)*(testsize.y-1));
-				if(welt->square_is_free(k-offset, testsize.x, testsize.y, NULL, desc->get_allowed_climate_bits())) {
+				if(welt->square_is_free(k-offset, testsize.x, testsize.y, NULL, desc->get_allowed_climate_bits(), desc)) {
 					// first we must check over/under halt
 					halthandle_t last_halt;
 					for(  sint16 x=0;  x<testsize.x;  x++  ) {
@@ -4938,7 +4938,7 @@ DBG_MESSAGE("tool_station_building_aux()", "building mail office/station buildin
 		koord testsize = desc->get_size(rotation);
 		offsets = koord(0,0);
 
-		if(  !welt->square_is_free(k, testsize.x, testsize.y, NULL, desc->get_allowed_climate_bits())  ) {
+		if(  !welt->square_is_free(k, testsize.x, testsize.y, NULL, desc->get_allowed_climate_bits(), desc)  ) {
 			return NOTICE_TILE_FULL;
 		}
 		// check over/under halt
@@ -6255,6 +6255,8 @@ const char *tool_rotate_building_t::rotate_building_at( player_t *player, koord3
 				const building_tile_desc_t* tile = desc->get_tile( newlayout, k.x, k.y );
 				gb_part->set_tile( tile, false );
 			}
+			// only this multitile building may remain on its tiles
+			hausbauer_t::remove_invalid_objects_on_multitile_building( gb, player );
 		}
 	}
 	return NULL;
@@ -7076,11 +7078,11 @@ const char *tool_build_house_t::work_on_ground( player_t *player, koord k )
 	// process ignore climates switch
 	climate_bits cl = (default_param  &&  default_param[0]=='1') ? ALL_CLIMATES : desc->get_allowed_climate_bits();
 
-	bool hat_platz = welt->square_is_free( k, desc->get_x(rotation), desc->get_y(rotation), NULL, cl );
+	bool hat_platz = welt->square_is_free( k, desc->get_x(rotation), desc->get_y(rotation), NULL, cl, desc );
 	if(!hat_platz  &&  size.y!=size.x  &&  desc->get_all_layouts()>1  &&  (default_param==NULL  ||  default_param[1]=='#'  ||  default_param[1]=='A')) {
 		// try other rotation too ...
 		rotation = (rotation+1) % desc->get_all_layouts();
-		hat_platz = welt->square_is_free( k, desc->get_x(rotation), desc->get_y(rotation), NULL, cl );
+		hat_platz = welt->square_is_free( k, desc->get_x(rotation), desc->get_y(rotation), NULL, cl, desc );
 	}
 
 	// Place found...
@@ -7301,12 +7303,12 @@ const char *tool_build_land_chain_t::work( player_t *player, koord3d pos )
 	}
 	else {
 		// and on solid ground
-		hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl );
+		hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl, fab->get_building() );
 
 		if(!hat_platz  &&  size.y!=size.x  &&  fab->get_building()->get_all_layouts()>1  &&  (default_param==NULL  ||  default_param[1]=='#')) {
 			// try other rotation too ...
 			rotation = (rotation+1) % fab->get_building()->get_all_layouts();
-			hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl );
+			hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl, fab->get_building() );
 		}
 	}
 
@@ -7388,6 +7390,22 @@ const char *tool_city_chain_t::work( player_t *player, koord3d pos )
 	// process ignore climates switch
 	bool ignore_climates = default_param  &&  default_param[0]=='1';
 
+	if(  fab->get_placement() != factory_desc_t::City  ) {
+		// only city factories search their own place; all others are built here, so check this area (layout 0)
+		const building_desc_t *bdesc = fab->get_building();
+		bool hat_platz;
+		if(  fab->get_placement() == factory_desc_t::Water  ) {
+			hat_platz = welt->is_water( pos.get_2d(), bdesc->get_size(0) );
+		}
+		else {
+			climate_bits cl = ignore_climates ? ALL_CLIMATES : bdesc->get_allowed_climate_bits();
+			hat_platz = welt->square_is_free( pos.get_2d(), bdesc->get_x(0), bdesc->get_y(0), NULL, cl );
+		}
+		if(  !hat_platz  ) {
+			return NOTICE_UNSUITABLE_GROUND;
+		}
+	}
+
 	pos = gr->get_pos();
 	int count = factory_builder_t::build_link(NULL, fab, initial_prod, 0, &pos, welt->get_public_player(), 10000, ignore_climates);
 	if(count>0) {
@@ -7467,12 +7485,12 @@ const char *tool_build_factory_t::work( player_t *player, koord3d pos )
 	}
 	else {
 		// and on solid ground
-		hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl );
+		hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl, fab->get_building() );
 
 		if(!hat_platz  &&  size.y!=size.x  &&  fab->get_building()->get_all_layouts()>1  &&  (default_param==NULL  ||  default_param[1]=='#')) {
 			// try other rotation too ...
 			rotation = (rotation+1) % fab->get_building()->get_all_layouts();
-			hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl );
+			hat_platz = welt->square_is_free( pos.get_2d(), fab->get_building()->get_x(rotation), fab->get_building()->get_y(rotation), NULL, cl, fab->get_building() );
 		}
 	}
 
@@ -7668,6 +7686,8 @@ DBG_MESSAGE("tool_headquarter()", "building headquarters at (%d,%d)", pos.x, pos
 								}
 							}
 						}
+						// only the upgraded multitile headquarters may remain on its tiles
+						hausbauer_t::remove_invalid_objects_on_multitile_building( hq, player );
 						built = true;
 					}
 				}
@@ -7686,10 +7706,10 @@ DBG_MESSAGE("tool_headquarter()", "building headquarters at (%d,%d)", pos.x, pos
 		if (!built) {
 			int rotate = 0;
 
-			if(welt->square_is_free(k, size.x, size.y, NULL, desc->get_allowed_climate_bits())) {
+			if(welt->square_is_free(k, size.x, size.y, NULL, desc->get_allowed_climate_bits(), desc)) {
 				ok = true;
 			}
-			if(!ok  &&  desc->get_all_layouts()>1  &&  size.y != size.x  &&  welt->square_is_free(k, size.y, size.x, NULL, desc->get_allowed_climate_bits())) {
+			if(!ok  &&  desc->get_all_layouts()>1  &&  size.y != size.x  &&  welt->square_is_free(k, size.y, size.x, NULL, desc->get_allowed_climate_bits(), desc)) {
 				rotate = 1;
 				ok = true;
 			}
@@ -7697,6 +7717,9 @@ DBG_MESSAGE("tool_headquarter()", "building headquarters at (%d,%d)", pos.x, pos
 			if(ok) {
 				// then built it
 				hq = hausbauer_t::build(player, k, rotate, desc, NULL);
+				if(  hq == NULL  ) {
+					return NOTICE_UNSUITABLE_GROUND;
+				}
 				stadt_t *city = welt->find_nearest_city( k );
 				if(city) {
 					city->add_gebaeude_to_stadt( hq );
@@ -9548,6 +9571,40 @@ bool tool_screenshot_t::init( player_t * )
 	else {
 		create_win( new news_img("Could not\ncreate screenshot!\n"), w_time_delete, magic_none);
 	}
+	return false;
+}
+
+
+char const* tool_export_minimap_t::get_tooltip(player_t const*) const
+{
+	if(  default_param  &&  *default_param  ) {
+		snprintf(toolstr, lengthof(toolstr), "%s (%s)", translator::translate("Export map image"), default_param);
+		return toolstr;
+	}
+	return translator::translate("Export map image");
+}
+
+
+// default_param: optional map mode to export with (see minimap_t::parse_display_mode()),
+// e.g. "MAP_TOWN|MAP_LINES"; the current mode of the map window is kept
+bool tool_export_minimap_t::init( player_t * )
+{
+	minimap_t::MAP_DISPLAY_MODE export_mode;
+	const char *message;
+	if(  !minimap_t::parse_display_mode(default_param, export_mode)  ) {
+		dbg->warning("tool_export_minimap_t::init()", "invalid map mode \"%s\"", default_param);
+		message = "Map image export failed.";
+	}
+	else {
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename, export_mode);
+		if(  !minimap_t::check_display_mode(export_mode, conflicts)  ) {
+			// export_to_png() already showed the result together with the warning
+			return false;
+		}
+		message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
+	}
+	create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
 
 	return false;
 }
@@ -9683,6 +9740,36 @@ bool tool_change_convoi_t::init( player_t *player )
 	// ownership check for network games
 	if (cnv.is_bound()  &&  env_t::networkmode  &&  !player_t::check_owner(cnv->get_owner(), player)) {
 		return false;
+	}
+
+	// Convoy shipping: while aboard a carrier, a convoy's state, schedule, line, coupling and
+	// owner are frozen - its current schedule entry is where it gets put ashore, and the
+	// carrier relies on it staying SHIPPED. Flags that only take effect later stay allowed.
+	if(  cnv->is_shipped()  ) {
+		switch(  tool  ) {
+			case 'x': // sell
+			case 'f': // open schedule
+			case 'g': // change schedule
+			case 'l': // change line
+			case 'L': // create line
+			case 's': // change state
+			case 'd': // go to depot
+			case 'y': // teleport to depot
+			case 'D': // route to depot
+			case 'Y': // teleport to chosen depot
+			case 'r': // release child
+			case 't': // next stop
+			case 'v': // reverse
+			case 'c': // reverse coupling
+			case 'u': // suspension
+			case 'o': // accept trade
+				if(  is_local_execution()  ) {
+					create_win( new news_img("Not allowed while the convoy is aboard another convoy."), w_time_delete, magic_none );
+				}
+				return false;
+			default:
+				break;
+		}
 	}
 
 	// first letter is now the actual command

@@ -575,13 +575,40 @@ class townhall_placefinder_t : public placefinder_t {
 					gr->kann_alle_obj_entfernen(NULL) == NULL;
 			} else {
 				// we want to build the townhall here: maybe replace existing buildings
-				return ((gr->get_typ()==grund_t::boden  &&  gr->ist_natur()) || gr->get_typ()==grund_t::fundament) &&
-					gr->kann_alle_obj_entfernen(NULL) == NULL;
+				return stadt_t::is_tile_ok_for_townhall(gr);
 			}
+		}
+		/// checks the area pos..pos+(w_,h_) (including the road strip) like find_place() does
+		bool is_place_ok(koord pos, sint16 w_, sint16 h_, climate_bits cl)
+		{
+			w = w_;
+			h = h_;
+			return is_area_ok(pos, w_, h_, cl);
 		}
 private:
 	uint8 dir;
 };
+
+
+bool stadt_t::is_tile_ok_for_townhall(const grund_t *gr)
+{
+	if(  gr == NULL  ||  gr->is_halt()  ||  hausbauer_t::has_way_objects(gr)  ||  gr->kann_alle_obj_entfernen(NULL) != NULL  ) {
+		return false;
+	}
+	// nothing above (bridges, elevated ways)
+	if(  welt->lookup_no_dummy( gr->get_pos() + koord3d(0, 0, 1) )  ) {
+		return false;
+	}
+	if(  gr->get_typ() == grund_t::boden  ) {
+		return gr->ist_natur();
+	}
+	if(  gr->get_typ() == grund_t::fundament  ) {
+		// only single tile city buildings are replaced; replacing a part of a larger building would break it
+		const gebaeude_t *gb = gr->find<gebaeude_t>();
+		return gb  &&  gb->is_city_building()  &&  gb->get_tile()->get_desc()->get_area() == 1;
+	}
+	return false;
+}
 
 
 static bool compare_gebaeude_pos(const gebaeude_t* a, const gebaeude_t* b)
@@ -634,6 +661,15 @@ void stadt_t::remove_gebaeude_from_stadt(gebaeude_t* gb)
 		buildings.remove(remove_gb);
 	}
 	recalc_city_size();
+}
+
+
+void stadt_t::remove_gebaeude_tile_from_stadt(gebaeude_t* gb)
+{
+	gb->set_stadt(NULL);
+	if(  buildings.remove(gb)  ) {
+		recalc_city_size();
+	}
 }
 
 
@@ -1382,7 +1418,7 @@ void stadt_t::finish_rd()
 
 	if(townhall_road==koord::invalid) {
 		// guess road tile based on current orientation
-		gebaeude_t const* const gb = obj_cast<gebaeude_t>(welt->lookup_kartenboden(pos)->first_obj());
+		gebaeude_t const* const gb = welt->lookup_kartenboden(pos)->find<gebaeude_t>();
 		if(  gb  &&  gb->is_townhall()  ) {
 			koord k(gb->get_tile()->get_desc()->get_size(gb->get_tile()->get_layout()));
 			switch (gb->get_tile()->get_layout()) {
@@ -2356,7 +2392,7 @@ class building_place_with_road_finder: public building_placefinder_t
 					}
 					if (  0 <= x  &&  x < w-1  &&  0 <= y  &&  y < h-1  ) {
 						// inside: nothing on top like elevated monorails?
-						if(  gr->get_leitung()!=NULL  ||  welt->lookup(gr->get_pos()+koord3d(0,0,1)  )!=NULL) {
+						if(  gr->get_leitung()!=NULL  ||  welt->lookup_no_dummy(gr->get_pos()+koord3d(0,0,1)  )!=NULL) {
 							// something on top (monorail or powerlines)
 							return false;
 						}
@@ -2482,6 +2518,9 @@ void stadt_t::check_bau_spezial(bool new_town)
 					}
 					// and then build it
 					const gebaeude_t* gb = hausbauer_t::build(owner, best_pos + koord(1, 1), 0, desc);
+					if (gb == NULL) {
+						return;
+					}
 					hausbauer_t::monument_erected(desc);
 					add_gebaeude_to_stadt(gb);
 					// tell the player, if not during initialization
@@ -2502,7 +2541,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 	const building_desc_t* desc = hausbauer_t::get_special( has_townhall ? bev : 0, building_desc_t::townhall, welt->get_timeline_year_month(), (bev == 0) || !has_townhall, welt->get_climate(pos) );
 	if(desc != NULL) {
 		grund_t* gr = welt->lookup_kartenboden(pos);
-		gebaeude_t* gb = obj_cast<gebaeude_t>(gr->first_obj());
+		// find<> instead of first_obj(): ground objects or ways are sorted before buildings
+		gebaeude_t* gb = gr->find<gebaeude_t>();
 		bool neugruendung = !has_townhall ||  !gb || !gb->is_townhall();
 		bool umziehen = !neugruendung;
 		koord alte_str(koord::invalid);
@@ -2539,9 +2579,12 @@ void stadt_t::check_bau_townhall(bool new_town)
 				}
 			}
 			koord groesse_alt = desc_old->get_size(old_layout);
+			// the layout the new townhall will really be built with (see below); its size must be checked,
+			// since old_layout may give a rotated (x/y swapped) size if the new townhall has fewer layouts
+			const int new_layout = old_layout % desc->get_all_layouts();
 
 			// do we need to move
-			if(  old_layout<=desc->get_all_layouts()  &&  desc->get_x(old_layout) <= groesse_alt.x  &&  desc->get_y(old_layout) <= groesse_alt.y  ) {
+			if(  old_layout<=desc->get_all_layouts()  &&  desc->get_x(new_layout) <= groesse_alt.x  &&  desc->get_y(new_layout) <= groesse_alt.y  ) {
 				// no, the size is ok
 				// still need to check whether the existing townhall is not broken in some way
 				umziehen = false;
@@ -2560,13 +2603,30 @@ void stadt_t::check_bau_townhall(bool new_town)
 						umziehen |= !ok;
 					}
 				}
+				// the new townhall will be built on these tiles without further checks (the old one is removed first)
+				// => they must not contain anything a townhall must not be built on
+				if (!umziehen) {
+					koord new_pos = best_pos;
+					if(  old_layout == 0  ) {
+						new_pos.y -= desc->get_y(new_layout) - groesse_alt.y;
+					}
+					else if (old_layout == 1) {
+						new_pos.x -= desc->get_x(new_layout) - groesse_alt.x;
+					}
+					for(k.y = 0; k.y < desc->get_y(new_layout)  &&  !umziehen; k.y ++) {
+						for(k.x = 0; k.x < desc->get_x(new_layout)  &&  !umziehen; k.x ++) {
+							grund_t *gr = welt->lookup_kartenboden(new_pos + k);
+							umziehen = gr==NULL  ||  gr->is_halt()  ||  hausbauer_t::has_way_objects(gr)  ||  welt->lookup_no_dummy( gr->get_pos() + koord3d(0,0,1) );
+						}
+					}
+				}
 				if (!umziehen) {
 					// correct position if new townhall is smaller than old
 					if(  old_layout == 0  ) {
-						best_pos.y -= desc->get_y(old_layout) - groesse_alt.y;
+						best_pos.y -= desc->get_y(new_layout) - groesse_alt.y;
 					}
 					else if (old_layout == 1) {
-						best_pos.x -= desc->get_x(old_layout) - groesse_alt.x;
+						best_pos.x -= desc->get_x(new_layout) - groesse_alt.x;
 					}
 				}
 			}
@@ -2603,7 +2663,7 @@ void stadt_t::check_bau_townhall(bool new_town)
 						const koord pos = pos_alt + k;
 						gr = welt->lookup_kartenboden(pos);
 						if (gr  &&  gr->ist_natur() &&  gr->kann_alle_obj_entfernen(NULL) == NULL  &&
-							  (  gr->get_grund_hang() == slope_t::flat  ||  welt->lookup(koord3d(k, welt->max_hgt(k))) == NULL  ) ) {
+							  (  gr->get_grund_hang() == slope_t::flat  ||  welt->lookup_no_dummy(koord3d(pos, welt->max_hgt(pos))) == NULL  ) ) {
 							DBG_MESSAGE("stadt_t::check_bau_townhall()", "fill empty spot at (%s)", pos.get_str());
 							build_city_building(pos);
 						}
@@ -2612,8 +2672,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 			}
 			else {
 				// make tiles flat, hausbauer_t::remove could have set some natural slopes
-				for(  k.x = 0;  k.x < desc->get_x(old_layout);  k.x++  ) {
-					for(  k.y = 0;  k.y < desc->get_y(old_layout);  k.y++  ) {
+				for(  k.x = 0;  k.x < desc->get_x(new_layout);  k.x++  ) {
+					for(  k.y = 0;  k.y < desc->get_y(new_layout);  k.y++  ) {
 						gr = welt->lookup_kartenboden(best_pos + k);
 						if(  gr  &&  gr->ist_natur()  ) {
 							// make flat and use right height
@@ -2641,7 +2701,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 				uint8 try_dir = ribi_t::layout_to_ribi[try_layout & 3];
 				int tw = desc->get_x(try_layout) + (try_dir & ribi_t::eastwest  ? 1 : 0);
 				int th = desc->get_y(try_layout) + (try_dir & ribi_t::northsouth ? 1 : 0);
-				koord candidate = townhall_placefinder_t(welt, try_dir).find_place(pos, tw, th, desc->get_allowed_climate_bits());
+				townhall_placefinder_t finder(welt, try_dir);
+				koord candidate = finder.find_place(pos, tw, th, desc->get_allowed_climate_bits());
 				if (candidate == koord::invalid) { continue; }
 				int w = desc->get_x(try_layout);
 				int h = desc->get_y(try_layout);
@@ -2671,7 +2732,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 										shift_ok = false;
 									}
 								}
-								if (shift_ok) { candidate.y++; found_road = true; }
+								// the shifted place (with the new road strip) must be as suitable as a found place
+								if (shift_ok  &&  finder.is_place_ok(candidate + koord(0,1), tw, th, desc->get_allowed_climate_bits())) { candidate.y++; found_road = true; }
 							}
 						}
 						break;
@@ -2696,7 +2758,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 										shift_ok = false;
 									}
 								}
-								if (shift_ok) { candidate.x++; found_road = true; }
+								// the shifted place (with the new road strip) must be as suitable as a found place
+								if (shift_ok  &&  finder.is_place_ok(candidate + koord(1,0), tw, th, desc->get_allowed_climate_bits())) { candidate.x++; found_road = true; }
 							}
 						}
 						break;
@@ -2721,7 +2784,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 										shift_ok = false;
 									}
 								}
-								if (shift_ok) { candidate.y--; found_road = true; }
+								// the shifted place (with the new road strip) must be as suitable as a found place
+								if (shift_ok  &&  finder.is_place_ok(candidate + koord(0,-1), tw, th, desc->get_allowed_climate_bits())) { candidate.y--; found_road = true; }
 							}
 						}
 						break;
@@ -2746,7 +2810,8 @@ void stadt_t::check_bau_townhall(bool new_town)
 										shift_ok = false;
 									}
 								}
-								if (shift_ok) { candidate.x--; found_road = true; }
+								// the shifted place (with the new road strip) must be as suitable as a found place
+								if (shift_ok  &&  finder.is_place_ok(candidate + koord(-1,0), tw, th, desc->get_allowed_climate_bits())) { candidate.x--; found_road = true; }
 							}
 						}
 						break;
@@ -2811,6 +2876,10 @@ void stadt_t::check_bau_townhall(bool new_town)
 			return;
 		}
 		gebaeude_t const* const new_gb = hausbauer_t::build(owner, best_pos + offset, layout, desc);
+		if (new_gb == NULL) {
+			dbg->error( "stadt_t::check_bau_townhall", "could not build townhall at (%s)", (best_pos + offset).get_str() );
+			return;
+		}
 		DBG_MESSAGE("new townhall", "use layout=%i", layout);
 		add_gebaeude_to_stadt(new_gb);
 		// sets has_townhall to true
@@ -3255,7 +3324,7 @@ bool stadt_t::check_ground_tile_for_house(grund_t *gr, sint8 zpos) const
 	if (gr) {
 		if (gr->ist_natur()  &&  gr->get_pos().z + slope_t::max_diff(gr->get_grund_hang()) == zpos) {
 			// we can build on nature if there is nothing on top
-			return gr->get_pos().z==zpos  ||  !welt->lookup(koord3d(gr->get_pos().get_2d(),zpos));
+			return gr->get_pos().z==zpos  ||  !welt->lookup_no_dummy(koord3d(gr->get_pos().get_2d(),zpos));
 		}
 		if(gr->get_hoehe() == zpos  &&  gr->get_typ() == grund_t::fundament) {
 			// a building found
@@ -3332,6 +3401,17 @@ gebaeude_t* stadt_t::build_city_house(koord3d base_pos, const building_desc_t* h
 			}
 		}
 	}
+	// only the new multitile building may remain on its tiles; other buildings are removed completely
+	// (done after all tiles are built: removing another building may restore the ground of its tiles)
+	if (h->get_area() > 1) {
+		for (int x = 0; x < h->get_x(rotation); x++) {
+			for (int y = 0; y < h->get_y(rotation); y++) {
+				grund_t* gr = welt->lookup_kartenboden(base_pos.get_2d() + koord(x, y));
+				hausbauer_t::remove_invalid_objects_on_building_tile(gr, gr->find<gebaeude_t>(), welt->get_public_player());
+			}
+		}
+	}
+
 	// we may need to recalculate vertical walls
 	if (recalc_foundations) {
 		for (int x = 0; x < h->get_x(rotation); x++) {
@@ -3414,7 +3494,7 @@ void stadt_t::build_city_building(const koord k)
 		}
 	}
 	// Refuse to build on a slope, when there is a ground right on top of it (=> the house would sit on the bridge then!)
-	if(  gr->get_grund_hang() != slope_t::flat  &&  welt->lookup(koord3d(k, welt->max_hgt(k))) != NULL  ) {
+	if(  gr->get_grund_hang() != slope_t::flat  &&  welt->lookup_no_dummy(koord3d(k, welt->max_hgt(k))) != NULL  ) {
 		return;
 	}
 
@@ -3600,7 +3680,8 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 				if(  gebaeude_t const* const testgb = obj_cast<gebaeude_t>(gr->first_obj())  ) {
 					// We really have a building here
 					const building_desc_t* neighbor_building = testgb->get_tile()->get_desc();
-					if(  neighbor_building->is_city_building()  ) {
+					// only tiles belonging to this city can be replaced (otherwise update_gebaeude_from_stadt() fails)
+					if(  neighbor_building->is_city_building()  &&  testgb->get_stadt() == this  ) {
 
 						if(  gb->get_tile()->get_desc() == neighbor_building   &&   testgb->get_tile()->get_offset() == area3x3[area_level]  ) {
 							// part of same building
@@ -3754,6 +3835,17 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 			}
 		}
 
+		// all tiles to be replaced must be city buildings of this city
+		for(  int x=0;  x<h->get_x(rotation);  x++  ) {
+			for(  int y=0;  y<h->get_y(rotation);  y++  ) {
+				grund_t *gr = welt->lookup_kartenboden(k+koord(x,y));
+				gebaeude_t *testgb = gr ? gr->find<gebaeude_t>() : NULL;
+				if(  testgb == NULL  ||  !testgb->is_city_building()  ||  testgb->get_stadt() != this  ) {
+					return;
+				}
+			}
+		}
+
 		// ok now finally replace
 		for(  int x=0;  x<h->get_x(rotation);  x++  ) {
 			for(  int y=0;  y<h->get_y(rotation);  y++  ) {
@@ -3777,6 +3869,17 @@ void stadt_t::renovate_city_building(gebaeude_t *gb)
 					case building_desc_t::city_com: arb += h->get_level() * 20; break;
 					case building_desc_t::city_ind: arb += h->get_level() * 20; break;
 					default: break;
+				}
+			}
+		}
+
+		// only the new multitile building may remain on its tiles; other buildings are removed completely
+		// (done after all tiles are replaced: removing another building may restore the ground of its tiles)
+		if(  h->get_area() > 1  ) {
+			for(  int x=0;  x<h->get_x(rotation);  x++  ) {
+				for(  int y=0;  y<h->get_y(rotation);  y++  ) {
+					grund_t *gr = welt->lookup_kartenboden(k+koord(x,y));
+					hausbauer_t::remove_invalid_objects_on_building_tile(gr, gr->find<gebaeude_t>(), welt->get_public_player());
 				}
 			}
 		}
@@ -3815,6 +3918,30 @@ void stadt_t::generate_private_cars(koord pos, koord target)
 	}
 }
 #endif
+
+
+/**
+ * false when adding @p ribi to the road on @p gr would merge two road legs on disjoint
+ * diagonals into one city road junction (see grund_t::weg_erweitern()) that the city must
+ * not build: the merge rebuilds BOTH legs, so both must be allowed to become (or branch
+ * into) a cityroad, and a halt cannot sit on the resulting junction.
+ */
+static bool can_city_merge_road_legs(const grund_t *gr, ribi_t::ribi ribi)
+{
+	if(  !gr->would_merge_same_waytype_legs(road_wt, ribi)  ) {
+		return true;
+	}
+	if(  gr->is_halt()  ) {
+		return false;
+	}
+	for(  uint8 i=0;  i<2;  i++  ) {
+		const strasse_t* str = (const strasse_t*)gr->get_weg_nr(i);
+		if(  str->get_avoid_cityroad()  &&  !str->get_allow_branch_cityroad()  ) {
+			return false;
+		}
+	}
+	return true;
+}
 
 
 /**
@@ -3935,6 +4062,9 @@ bool stadt_t::build_road(const koord k, player_t* player_, bool forced)
 					if(  str  &&  str->get_avoid_cityroad() && !str->get_allow_branch_cityroad()  ) {
 						// do not connect to road that is not alllowed to become cityroad
 					}
+					else if(  !can_city_merge_road_legs(bd2, ribi_t::backward(ribi_t::nesw[r]))  ) {
+						// connecting would merge two road legs there that must not become a cityroad
+					}
 					else if(gb) {
 						uint8 layouts = gb->get_tile()->get_desc()->get_all_layouts();
 						// nothing to connect
@@ -3973,14 +4103,17 @@ bool stadt_t::build_road(const koord k, player_t* player_, bool forced)
 		}
 	}
 
+	// the check above only saw weg_nr(0) of this tile
+	if(  !can_city_merge_road_legs(bd, connection_roads)  ) {
+		return false;
+	}
+
 	// now add the ribis to the other ways (if there)
+	// weg_erweitern() picks the right one of two road legs there (merging them if needed)
 	for (int r = 0; r < 4; r++) {
 		if (ribi_t::nesw[r] & connection_roads) {
 			grund_t* bd2 = welt->lookup_kartenboden(k + koord::nesw[r]);
-			weg_t* w2 = bd2->get_weg(road_wt);
-			w2->ribi_add(ribi_t::backward(ribi_t::nesw[r]));
-			bd2->calc_image();
-			bd2->set_flag( grund_t::dirty );
+			bd2->weg_erweitern(road_wt, ribi_t::backward(ribi_t::nesw[r]));
 		}
 	}
 

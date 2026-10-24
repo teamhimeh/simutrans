@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "../simcolor.h"
 #include "../simconvoi.h"
 #include "../simdebug.h"
 #include "../simdepot.h"
@@ -668,6 +669,16 @@ void player_t::rdwr(loadsave_t *file)
 	else {
 		file->rdwr_byte(player_color_1);
 		file->rdwr_byte(player_color_2);
+	}
+	if(  file->is_loading()  ) {
+		// repair invalid colors (e.g. from games saved with large player numbers)
+		const uint8 color_family_count = SPECIAL_COLOR_COUNT / 8;
+		if(  player_color_1 >= SPECIAL_COLOR_COUNT  ) {
+			player_color_1 = (player_nr % color_family_count) * 8;
+		}
+		if(  player_color_2 >= SPECIAL_COLOR_COUNT  ) {
+			player_color_2 = ((player_nr + 3) % color_family_count) * 8;
+		}
 	}
 
 	sint32 halt_count=0;
