@@ -3841,6 +3841,9 @@ uint8 tool_build_bridge_t::is_valid_pos(  player_t *player, const koord3d &pos, 
 const char* tool_build_tunnel_t::get_tooltip(const player_t *) const
 {
 	const tunnel_desc_t * desc = tunnel_builder_t::get_desc(default_param);
+	if (desc == NULL) {
+		return "";
+	}
 	tooltip_with_price_maintenance( welt, desc->get_name(), -desc->get_price(), desc->get_maintenance() );
 	size_t n= strlen(toolstr);
 	if(desc->get_waytype()!=powerline_wt) {
@@ -4497,7 +4500,7 @@ const char* tool_build_wayobj_t::get_tooltip(const player_t *) const
 		return NULL;
 	}
 	else {
-		waytype_t wt = (waytype_t)atoi( default_param );
+		waytype_t wt = default_param ? (waytype_t)atoi( default_param ) : invalid_wt;
 		sprintf( toolstr, translator::translate("Remove wayobj %s"), translator::translate(weg_t::waytype_to_string(wt)) );
 		return toolstr;
 	}
@@ -6926,7 +6929,8 @@ bool tool_build_depot_t::init( player_t *player )
 const char* tool_build_depot_t::get_tooltip(const player_t *) const
 {
 	settings_t   const& settings = welt->get_settings();
-	building_desc_t const* desc    = hausbauer_t::find_tile(default_param, 0)->get_desc();
+	building_tile_desc_t const* tile = hausbauer_t::find_tile(default_param, 0);
+	building_desc_t const* desc    = tile ? tile->get_desc() : NULL;
 	if (desc == NULL) {
 		return NULL;
 	}
