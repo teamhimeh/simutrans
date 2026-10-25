@@ -95,10 +95,16 @@ signal(s)
 	
 	new_component<gui_divider_t>();
 
+	add_table(2,0);
+	{
+	new_component<gui_fill_t>();
+
 	bt_remove_signal.init( button_t::roundbox, translator::translate("remove signal"));
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
 	bt_remove_signal.add_listener(this);
 	add_component(&bt_remove_signal);
+	}
+	end_table();
 	
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize() );
