@@ -4229,26 +4229,6 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 
 		// show new info
 		freight_list_sorter_t::sort_freight(total_fracht, buf, (freight_list_sorter_t::sort_mode_t)freight_info_order, &capacity, "loaded");
-
-		// Convoy shipping: the convoys we carry are not ware_t and so cannot go through the
-		// freight sorter, but this list is where a player looks to see what a convoy is
-		// carrying - so append them here, one line each, with where they get off.
-		if(  !shipped_convois.empty()  ) {
-			buf.append("\n");
-			buf.printf( "%s\n", translator::translate("Convoys aboard:") );
-			FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
-				if(  !c.is_bound()  ||  c->get_vehicle_count() == 0  ) {
-					continue;
-				}
-				const halthandle_t d = c->get_shipping_dest_halt();
-				// length is what it actually costs us, so show that rather than a vehicle count
-				buf.printf( " %s (%u) %s %s\n",
-					c->get_name(),
-					(unsigned)c->get_shipping_length(),
-					translator::translate(">"),
-					d.is_bound() ? d->get_name() : translator::translate("unknown") );
-			}
-		}
 	}
 }
 
