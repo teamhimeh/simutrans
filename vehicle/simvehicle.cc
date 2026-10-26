@@ -1434,7 +1434,10 @@ void vehicle_t::hop(grund_t* gr)
 	enter_tile(gr);
 
 	waytype_t waytype = get_waytype();
-	const weg_t *weg = gr->get_weg(waytype);
+	// direction-aware: when two same-waytype disjoint diagonal legs coexist on gr, take the
+	// speed limit of the leg entered from pos_prev - e.g. only one of them may be electrified
+	const ribi_t::ribi entry_bit = (pos_prev!=get_pos()) ? ribi_t::backward(ribi_type(pos_prev, get_pos())) : ribi_t::none;
+	const weg_t *weg = gr->get_weg(waytype, entry_bit);
 	if(  weg  ) {
 		if( (waytype != water_wt && waytype != air_wt) && cnv->get_use_electric() && weg->get_max_speed() > weg->get_max_wayobj_speed()){
 			speed_limit = kmh_to_speed( weg->get_max_wayobj_speed() );
@@ -4661,7 +4664,12 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	}
 	const koord dir=gr->get_pos().get_2d()-prev_gr->get_pos().get_2d();
 	const ribi_t::ribi ribi = ribi_type(dir);
-	const weg_t* way = gr->get_weg(get_waytype());
+	// direction-aware: on a same-waytype disjoint-diagonal-leg tile, use the leg entered from
+	// prev_gr (and on `to`, the leg entered from gr) - e.g. only one of them may be electrified
+	const weg_t* way = gr->get_weg(get_waytype(), ribi_t::backward(ribi));
+	if(  !way  ) {
+		return false;
+	}
 	if(  way->get_ribi_maske() & ribi  ) {
 		// signal/one way sign wrong direction
 		return false;
@@ -4671,10 +4679,10 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	if(  ribi_t::is_single(next_gr_ribi)  &&
 		gr->get_neighbour(to, get_waytype(), next_gr_ribi)  &&
 		(to->get_halt()==target_halt)  &&
-		(to->get_weg(get_waytype())->get_ribi_maske() & ribi_type(dir))==0 
+		(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi))->get_ribi_maske() & ribi_type(dir))==0
 	) {
 		// check electrification
-		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype()));
+		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi)));
 		if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
 			// We can still go forward.
 			return false;
