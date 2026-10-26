@@ -20,48 +20,35 @@ save_heightmap_frame_t::save_heightmap_frame_t() :
 {
 	label_enabled = false;
 	set_name(translator::translate("Export heightmap"));
-	savebutton.set_text("Save PNG");
+	savebutton.set_text("Save as PNG");
 	set_filename("heightmap.png");
 
 	// Reuse the file dialog, keeping import settings visible while naming the PNG.
-	top_frame.new_component<gui_label_t>("Load mode:");
-	top_frame.new_component<gui_label_t>("linear");
 	top_frame.new_component<gui_label_t>("Heightmap size:");
 	top_frame.add_component(&size_label);
 	top_frame.new_component<gui_label_t>("Height limits:");
 	top_frame.add_component(&limits_label);
 	top_frame.new_component<gui_label_t>("Water level");
 	top_frame.add_component(&sea_label);
-	top_frame.new_component<gui_label_t>("Changed heights / max. error:");
-	top_frame.add_component(&changes_label);
-	top_frame.new_component<gui_label_t>("Changed outer vertices:");
-	top_frame.add_component(&border_label);
-	top_frame.new_component_span<gui_label_t>("Right and bottom borders are duplicated on import.", 2);
-	top_frame.new_component_span<gui_label_t>("The top-left vertex may change on import.", 2);
+	top_frame.new_component_span<gui_label_t>("Importing the PNG may change heights at the map edges.", 2);
 	top_frame.new_component_span<gui_label_t>("Slope correction may change the imported terrain.", 2);
 	top_frame.new_component_span<gui_label_t>("Lake levels, buildings and ways are not stored.", 2);
-	top_frame.new_component_span<gui_label_t>("Use a new filename; existing files are kept.", 2);
-	update_report();
+	update_settings();
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize());
 }
 
 
 void
-save_heightmap_frame_t::update_report()
+save_heightmap_frame_t::update_settings()
 {
-	const height_map_exporter_t::report_t report = height_map_exporter_t::analyze(*welt);
 	const koord size = welt->get_size();
 	size_label.buf().printf("%i x %i", int(size.x), int(size.y));
 	size_label.update();
-	limits_label.buf().printf("%i .. %i", int(report.minimum_height), int(report.maximum_height));
+	limits_label.buf().printf("%i .. %i", int(welt->get_settings().get_minimumheight()), int(welt->get_settings().get_maximumheight()));
 	limits_label.update();
-	sea_label.buf().printf("%i", int(report.groundwater));
+	sea_label.buf().printf("%i", int(welt->get_groundwater()));
 	sea_label.update();
-	changes_label.buf().printf("%u / %i", unsigned(report.changed_heights), int(report.maximum_error));
-	changes_label.update();
-	border_label.buf().printf("%u", unsigned(report.changed_border_heights));
-	border_label.update();
 }
 
 
@@ -87,12 +74,11 @@ save_heightmap_frame_t::save(const char *filename)
 
 	height_map_exporter_t::report_t report;
 	saved = height_map_exporter_t::write_png(*welt, path.c_str(), report);
-	update_report();
+	update_settings();
 	if(saved) {
 		cbuffer_t message;
 		message.printf(translator::translate("Heightmap saved to:\n%s"), path.c_str());
 		message.printf("\n%s %i .. %i\n%s %i\n", translator::translate("Height limits:"), int(report.minimum_height), int(report.maximum_height), translator::translate("Water level"), int(report.groundwater));
-		message.printf("%s %s", translator::translate("Load mode:"), translator::translate("linear"));
 		create_win(new news_img(message.get_str()), w_info, magic_none);
 	}
 	else {

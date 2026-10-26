@@ -13,9 +13,9 @@ class save_heightmap_frame_t : public savegame_frame_t
 {
 private:
 	bool saved;
-	gui_label_buf_t size_label, limits_label, sea_label, changes_label, border_label;
+	gui_label_buf_t size_label, limits_label, sea_label;
 
-	void update_report();
+	void update_settings();
 	bool save(const char *filename);
 
 protected:
