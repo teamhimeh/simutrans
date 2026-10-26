@@ -30,7 +30,7 @@ save_heightmap_frame_t::save_heightmap_frame_t() :
 	top_frame.add_component(&size_label);
 	top_frame.new_component<gui_label_t>("Height limits:");
 	top_frame.add_component(&limits_label);
-	top_frame.new_component<gui_label_t>("Sea level:");
+	top_frame.new_component<gui_label_t>("Water level");
 	top_frame.add_component(&sea_label);
 	top_frame.new_component<gui_label_t>("Changed heights / max. error:");
 	top_frame.add_component(&changes_label);
@@ -91,8 +91,8 @@ save_heightmap_frame_t::save(const char *filename)
 	if(saved) {
 		cbuffer_t message;
 		message.printf(translator::translate("Heightmap saved to:\n%s"), path.c_str());
-		message.printf("\n%s %i .. %i\n%s %i\n", translator::translate("Height limits:"), int(report.minimum_height), int(report.maximum_height), translator::translate("Sea level:"), int(report.groundwater));
-		message.append(translator::translate("Load mode: linear"));
+		message.printf("\n%s %i .. %i\n%s %i\n", translator::translate("Height limits:"), int(report.minimum_height), int(report.maximum_height), translator::translate("Water level"), int(report.groundwater));
+		message.printf("%s %s", translator::translate("Load mode:"), translator::translate("linear"));
 		create_win(new news_img(message.get_str()), w_info, magic_none);
 	}
 	else {
