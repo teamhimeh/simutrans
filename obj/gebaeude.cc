@@ -28,6 +28,7 @@ static pthread_mutex_t add_to_city_mutex = PTHREAD_MUTEX_INITIALIZER;
 #include "../simskin.h"
 
 #include "../boden/grund.h"
+#include "../boden/wege/weg.h"
 
 
 #include "../descriptor/building_desc.h"
@@ -852,6 +853,17 @@ void gebaeude_t::info(cbuffer_t & buf) const
 		if(  !get_tile()->get_desc()->is_transport_building()  ) {
 			buf.printf("%s: %d\n", translator::translate("Passagierrate"), get_passagier_level());
 			buf.printf("%s: %d\n", translator::translate("Postrate"),      get_mail_level());
+		}
+		else {
+			// stop length of the platform on this tile (ships do not use halt length)
+			const grund_t *gr = welt->lookup(get_pos());
+			for(  uint8 i=0;  gr  &&  gr->get_halt().is_bound()  &&  i<2;  i++  ) {
+				const weg_t *weg = gr->get_weg_nr(i);
+				if(  weg  &&  weg->get_waytype()!=water_wt  ) {
+					append_platform_length_string_if_needed(buf, weg);
+					buf.append("\n");
+				}
+			}
 		}
 
 		building_desc_t const& h = *tile->get_desc();

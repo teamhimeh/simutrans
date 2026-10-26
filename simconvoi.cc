@@ -1781,10 +1781,8 @@ void convoi_t::step()
 					}
 
 					// release departure slot if needed.
-					if(  h.is_bound()  &&  scheduled_departure_time>0  ) {
-						h->erase_departure(scheduled_departure_time, self);
-						scheduled_departure_time = 0;
-					}
+					// h is found from the front vehicle. If it is not on the platform, release_departure_slot() finds the halt.
+					release_departure_slot(h);
 				}
 			}
 			break;
@@ -2129,6 +2127,10 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 	convoihandle_t child = c->get_coupling_convoi();
 	const bool coupling_arrived_depot = child.is_bound();
 	while(c.is_bound()) {
+		// a coupled child may be a carrier too; the head's cargo was handled above
+		if(  c != self  &&  c->is_carrying_convoys()  ) {
+			c->disembark_all_forced();
+		}
 		c->uncouple_convoi();
 		if( c->reversed ) {
 			// reversing in depot flag is recorded in c->reversing_needed
@@ -2988,6 +2990,11 @@ void convoi_t::vorfahren()
 	// is driving direction not change?
 	ribi_t::ribi neue_richtung_rwr = ribi_t::backward(front()->calc_direction(route.front(), route.at(min(1, route.get_count() - 1))));
 	bool const go_same_direction = (neue_richtung_rwr&alte_richtung)==0;
+	if(  front()->get_waytype()==air_wt  &&  go_same_direction  ) {
+		// hat_gehalten() marks an aircraft as reversed (pushback) when it leaves a stop.
+		// On a stop longer than one tile it may leave forward or sideways: no pushback then.
+		reversed = false;
+	}
 	// Whether the lane must be held across this departure. It cannot be stored in the member yet:
 	// the vehicle repositioning below (move_to()/do_drive()) calls enter_tile(), which consumes the
 	// flag. The member is set further down, right before can_enter_tile() runs.
@@ -4229,26 +4236,6 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 
 		// show new info
 		freight_list_sorter_t::sort_freight(total_fracht, buf, (freight_list_sorter_t::sort_mode_t)freight_info_order, &capacity, "loaded");
-
-		// Convoy shipping: the convoys we carry are not ware_t and so cannot go through the
-		// freight sorter, but this list is where a player looks to see what a convoy is
-		// carrying - so append them here, one line each, with where they get off.
-		if(  !shipped_convois.empty()  ) {
-			buf.append("\n");
-			buf.printf( "%s\n", translator::translate("Convoys aboard:") );
-			FOR(vector_tpl<convoihandle_t>, const c, shipped_convois) {
-				if(  !c.is_bound()  ||  c->get_vehicle_count() == 0  ) {
-					continue;
-				}
-				const halthandle_t d = c->get_shipping_dest_halt();
-				// length is what it actually costs us, so show that rather than a vehicle count
-				buf.printf( " %s (%u) %s %s\n",
-					c->get_name(),
-					(unsigned)c->get_shipping_length(),
-					translator::translate(">"),
-					d.is_bound() ? d->get_name() : translator::translate("unknown") );
-			}
-		}
 	}
 }
 
@@ -4481,6 +4468,14 @@ static void check_departure_conditions(convoihandle_t cnv, uint32 arrived_time, 
 bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint32 time_to_load, bool &coupling_cond, uint32 &go_on_ticks) {
 	convoihandle_t c = cnv;
 	coupling_cond = false;
+
+	// Only the most parent convoy judges the departure and books a departure slot.
+	// A child departs together with its parent. A slot the child booked while it was the parent
+	// is kept as the slot of the whole convoy, so go_on_ticks (the child's departure time) is not touched.
+	if(  cnv->get_most_parent_convoi()!=cnv  ) {
+		return false;
+	}
+
 	go_on_ticks = 0;
 	bool loading_cond = true;
 	bool coupling_done_cond = true;
@@ -4994,10 +4989,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	// Convoy shipping. Run before loading so that a convoy put ashore here is on the map for
 	// the rest of this stop, and so that a convoy taken aboard has already finished loading
 	// its own goods (it went through hat_gehalten() itself earlier in this halt's queue).
+	if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
+		handle_shipping_at_halt( halt );
+	}
 	if(  !is_coupled()  ) {
-		if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
-			handle_shipping_at_halt( halt );
-		}
 		// Register as waiting only once loading, coupling and departure allowance are done,
 		// as for a normal departure. Once registered, keep calling it so the "no carrier
 		// came" report still fires even if the conditions no longer hold.
@@ -5030,11 +5025,44 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		}
 	}
 
-	if(  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
-		bool need_coupling_at_this_stop = false;
-		// departure judgement is done in a helper function.
-		departure_cond = can_depart(self, halt, arrived_time,
-			 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+	// A coupled child departs with its parent, and the parent's can_depart() already checks
+	// the conditions of all children. So only the most parent convoy judges the departure.
+	if(  !is_coupled()  &&  scheduled_departure_time==0  &&  state!=SUSPENSION_LOADING  ) {
+		// The waiting convoy may have booked a slot before a try-coupling convoy coupled and became
+		// the new parent. Find the child (holder) which still holds the slot at this halt.
+		convoihandle_t holder;
+		for(  convoihandle_t cc = coupling_convoi;  cc.is_bound();  cc = cc->get_coupling_convoi()  ) {
+			if(  cc->get_departure_time()>0  &&  halt->is_departure_booked_by(cc->get_departure_time(), self)  ) {
+				holder = cc;
+				break;
+			}
+		}
+		// The parent books its own slot only when it waits for the departure time and its slot group differs.
+		// Otherwise the train rides on the holder's slot.
+		const bool own_slot = holder.is_bound()  &&  schedule->get_current_entry().get_wait_for_time()  &&  !haltestelle_t::is_same_departure_slot_group(self, holder);
+
+		if(  holder.is_bound()  &&  !own_slot  ) {
+			// ride on the holder's slot.
+			scheduled_departure_time = holder->get_departure_time();
+		}
+		else {
+			bool need_coupling_at_this_stop = false;
+			// departure judgement is done in a helper function.
+			departure_cond = can_depart(self, halt, arrived_time,
+				 time, need_coupling_at_this_stop, scheduled_departure_time) && !is_coupling_in_progress;
+			if(  own_slot  ) {
+				if(  scheduled_departure_time>0  ) {
+					// The parent got its own slot. Only now the holder gives its slot back,
+					// so that the train always holds one slot.
+					holder->release_departure_slot(halt);
+				}
+				else if(  !is_first_ticks_bigger(holder->get_departure_time(), welt->get_ticks())  ) {
+					// The parent could not get its own slot until the holder's departure time.
+					// The holder's slot takes priority. The parent retries every step until then.
+					scheduled_departure_time = holder->get_departure_time();
+				}
+			}
+		}
 
 		if(  scheduled_departure_time>0  ){
 			// The convoy should depart in the next or later step
@@ -5445,6 +5473,17 @@ void convoi_t::self_destruct()
 	}
 	else if(  is_coupled()  ) {
 		parent_convoi->uncouple_convoi();
+	}
+	else if(  is_shipped()  &&  parent_convoi.is_bound()  ) {
+		// Aboard a carrier a child is SHIPPED rather than COUPLED, so the branch above misses
+		// it and the parent would keep a link to a convoy that is about to vanish. Cut the link
+		// by hand: uncouple_convoi() would recalculate routes and electrification for convoys
+		// that stand on no tile, and would set us to ROUTING_1. Our own children are left
+		// SHIPPED with neither parent nor carrier once we are gone, which step() already
+		// repairs by sending them to a depot.
+		parent_convoi->coupling_convoi = convoihandle_t();
+		parent_convoi->back()->set_last( true );
+		parent_convoi = convoihandle_t();
 	}
 	state = SELF_DESTRUCT;
 	wait_lock = 0;
@@ -7363,9 +7402,63 @@ convoihandle_t convoi_t::find_most_child_convoi() const
 }
 
 
+void convoi_t::release_departure_slot(halthandle_t halt) {
+	if(  scheduled_departure_time==0  ) {
+		return;
+	}
+	if(  !halt.is_bound()  &&  anz_vehikel>0  ) {
+		// While loading, find the halt from the schedule entry, not from the front vehicle position:
+		// when the platform is shorter than the convoy, the front vehicle may stand on a non-platform tile.
+		if(  is_loading()  &&  schedule  &&  !schedule->empty()  ) {
+			halt = haltestelle_t::get_stoppable_halt(schedule->get_current_entry().pos, get_owner(), front()->get_waytype());
+		}
+		// Otherwise (e.g. the schedule was already changed), find the halt from the vehicles.
+		// Not only the front vehicle: some vehicle stands on the platform even when it is short.
+		for(  uint8 i=0;  i<anz_vehikel  &&  !halt.is_bound();  i++  ) {
+			halt = haltestelle_t::get_stoppable_halt(fahr[i]->get_pos(), get_owner(), fahr[i]->get_waytype());
+		}
+	}
+	if(  halt.is_bound()  ) {
+		halt->erase_departure(scheduled_departure_time, self);
+	}
+	scheduled_departure_time = 0;
+}
+
+
+bool convoi_t::is_staying_at(halthandle_t halt) const {
+	const convoihandle_t parent = get_most_parent_convoi();
+	if(  !halt.is_bound()  ||  !parent.is_bound()  ||  parent->get_vehicle_count()==0  ) {
+		return false;
+	}
+	if(  parent->is_loading()  ) {
+		const schedule_t *s = parent->get_schedule();
+		return  s  &&  !s->empty()  &&  haltestelle_t::get_stoppable_halt(s->get_current_entry().pos, parent->get_owner(), parent->front()->get_waytype())==halt;
+	}
+	if(  parent->get_state()==EDIT_SCHEDULE  ) {
+		// The schedule may be under edit, so its entry is not reliable. Find from the vehicles of the whole convoy.
+		// Not only the front vehicle: some vehicle stands on the platform even when it is short.
+		for(  convoihandle_t c = parent;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+			for(  uint8 i=0;  i<c->get_vehicle_count();  i++  ) {
+				const vehicle_t *v = c->get_vehikel(i);
+				if(  haltestelle_t::get_stoppable_halt(v->get_pos(), c->get_owner(), v->get_waytype())==halt  ) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+
 void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled() || self->is_shipped()  ) {
 		return;
+	}
+	// The halt where the whole convoy is loading. Find it from the parent's schedule entry, not from
+	// each convoy's front vehicle: a child, or the parent at a short platform, may stand on a non-platform tile.
+	halthandle_t loading_halt;
+	if(  is_loading()  &&  schedule  &&  !schedule->empty()  &&  anz_vehikel>0  ) {
+		loading_halt = haltestelle_t::get_stoppable_halt(schedule->get_current_entry().pos, get_owner(), front()->get_waytype());
 	}
 	convoihandle_t c = self;
 	while( c.is_bound() ) {
@@ -7379,7 +7472,9 @@ void convoi_t::next_stop_button_pressed() {
 			c->push_convoy_stopping_time();
 			c->set_coupling_done(false);
 			c->set_waiting_for_departure_allowance_by_other_convoy(false);
-			c->reset_departure_time();
+			c->set_waiting_for_departure_make_another_convoy_depart(false);
+			// the convoy does not depart in the booked slot. give it back to the halt.
+			c->release_departure_slot(loading_halt);
 		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();
@@ -7675,13 +7770,23 @@ bool convoi_t::can_ship(convoihandle_t c) const
 	if(  !c.is_bound()  ||  c == self  ||  c->get_vehicle_count() == 0  ||  anz_vehikel == 0  ) {
 		return false;
 	}
-	// only a convoy that is itself on the map and leads its own chain may carry
-	if(  is_coupled()  ||  is_shipped()  ||  in_depot()  ||  state == SELF_DESTRUCT  ) {
+	// only a convoy that is itself on the map may carry - a coupled child may, since its
+	// schedule advances with the chain and it keeps its passengers if it uncouples
+	if(  is_shipped()  ||  in_depot()  ||  state == SELF_DESTRUCT  ) {
 		return false;
 	}
 	// the candidate must lead its own chain and not already be aboard something
 	if(  c->is_coupled()  ||  c->is_shipped()  ||  c->get_carrier_convoi().is_bound()  ) {
 		return false;
+	}
+	// The whole chain of the candidate boards, so check every member of it: a coupled carrier
+	// must never take its own chain's head aboard (it would carry itself and nothing would
+	// drive it any more), and a chain that is carrying convoys itself must not be carried -
+	// nested shipping is not supported by the weight, image or rescue paths.
+	for(  convoihandle_t k = c;  k.is_bound();  k = k->get_coupling_convoi()  ) {
+		if(  k == self  ||  k->is_carrying_convoys()  ) {
+			return false;
+		}
 	}
 	if(  c->in_depot()  ||  c->get_state() == SELF_DESTRUCT  ||  shipped_convois.is_contained(c)  ) {
 		return false;
@@ -7885,15 +7990,22 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 	// the whole chain rides; every convoy in it stops being driven
 	convoihandle_t k = c;
 	while(  k.is_bound()  ) {
+		// the per-stop flags and the departure slot are already cleared above
+		k->push_goods_waiting_time_if_needed();
+		k->push_convoy_stopping_time();
+		// the convoy is still on the map, so the halt is found from its position.
+		k->release_departure_slot();
+		k->unset_convoi_coupling_in_progress();
+		k->loading_limit = 0;
+		k->loading_waiting_time = 0;
 		k->state = SHIPPED;
 		k->wait_lock = 0;
 		k->scheduled_departure_time = 0;
-		k->loading_limit = 0;
-		k->loading_waiting_time = 0;
 		k->unloading_done = false;
 		k->uncouple_done = false;
 		k->cease_coupling_due_to_length_over = false;
 		k->waiting_for_departure_allowance_by_other_convoy = false;
+		k->waiting_for_departure_make_another_convoy_depart = false;
 		k->shipping_wait_since = 0;
 		k->next_stop_index = 65535;
 		k->next_coupling_index = route_t::INVALID_INDEX;
@@ -8131,7 +8243,7 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 
 void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 {
-	if(  !halt.is_bound()  ||  is_coupled()  ||  schedule == NULL  ||  anz_vehikel == 0  ) {
+	if(  !halt.is_bound()  ||  schedule == NULL  ||  anz_vehikel == 0  ) {
 		return;
 	}
 
