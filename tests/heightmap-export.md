@@ -37,7 +37,7 @@ Before delivery, launch against a copy of current distribution data without a
 A successful launch with the legacy test base's bitmap fonts does not verify this.
 
 1. Use a disposable save. Open the map and choose **Heightmap PNG**. Confirm the
-   size, height limits, sea level and edge-height warning are readable, including in Japanese.
+   size, height limits, sea level and stored-data note are readable, including in Japanese.
 2. Save using a new name. Confirm a W by H, 8-bit grayscale PNG is created in
    `maps/`, the dialog closes and the success message includes height limits and sea level.
 3. Try the same name again. Confirm the image is unchanged and the dialog stays

@@ -995,10 +995,6 @@ Heightmap size:
 画像サイズ:
 Height limits:
 高さの下限・上限:
-Importing the PNG may change heights at the map edges.
-再読込すると、マップの端の高さが変わる場合があります。
-Slope correction may change the imported terrain.
-読込時の斜面補正で地形が変わる場合があります。
 Lake levels, buildings and ways are not stored.
 湖面水位・建物・道路や線路は保存されません。
 Please enter a heightmap filename.

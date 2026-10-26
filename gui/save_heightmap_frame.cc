@@ -30,8 +30,6 @@ save_heightmap_frame_t::save_heightmap_frame_t() :
 	top_frame.add_component(&limits_label);
 	top_frame.new_component<gui_label_t>("Water level");
 	top_frame.add_component(&sea_label);
-	top_frame.new_component_span<gui_label_t>("Importing the PNG may change heights at the map edges.", 2);
-	top_frame.new_component_span<gui_label_t>("Slope correction may change the imported terrain.", 2);
 	top_frame.new_component_span<gui_label_t>("Lake levels, buildings and ways are not stored.", 2);
 	update_settings();
 	reset_min_windowsize();
