@@ -6,6 +6,7 @@
 #include "../simmenu.h"
 #include "../simworld.h"
 #include "../dataobj/ribi.h"
+#include "components/gui_divider.h"
 
 signal_info_t::signal_info_t(signal_t* s) :
 obj_infowin_t(s),
@@ -91,11 +92,19 @@ signal(s)
 	bt_two_ways.pressed = signal->get_two_ways();
 	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );
 	add_component(&bt_two_ways);
+	
+	new_component<gui_divider_t>();
+
+	add_table(2,0);
+	{
+	new_component<gui_fill_t>();
 
 	bt_remove_signal.init( button_t::roundbox, translator::translate("remove signal"));
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
 	bt_remove_signal.add_listener(this);
 	add_component(&bt_remove_signal);
+	}
+	end_table();
 	
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize() );
