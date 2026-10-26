@@ -2129,6 +2129,10 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 	convoihandle_t child = c->get_coupling_convoi();
 	const bool coupling_arrived_depot = child.is_bound();
 	while(c.is_bound()) {
+		// a coupled child may be a carrier too; the head's cargo was handled above
+		if(  c != self  &&  c->is_carrying_convoys()  ) {
+			c->disembark_all_forced();
+		}
 		c->uncouple_convoi();
 		if( c->reversed ) {
 			// reversing in depot flag is recorded in c->reversing_needed
@@ -4994,10 +4998,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	// Convoy shipping. Run before loading so that a convoy put ashore here is on the map for
 	// the rest of this stop, and so that a convoy taken aboard has already finished loading
 	// its own goods (it went through hat_gehalten() itself earlier in this halt's queue).
+	if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
+		handle_shipping_at_halt( halt );
+	}
 	if(  !is_coupled()  ) {
-		if(  is_carrying_convoys()  ||  has_shipping_capacity()  ) {
-			handle_shipping_at_halt( halt );
-		}
 		// Register as waiting only once loading, coupling and departure allowance are done,
 		// as for a normal departure. Once registered, keep calling it so the "no carrier
 		// came" report still fires even if the conditions no longer hold.
@@ -5445,6 +5449,17 @@ void convoi_t::self_destruct()
 	}
 	else if(  is_coupled()  ) {
 		parent_convoi->uncouple_convoi();
+	}
+	else if(  is_shipped()  &&  parent_convoi.is_bound()  ) {
+		// Aboard a carrier a child is SHIPPED rather than COUPLED, so the branch above misses
+		// it and the parent would keep a link to a convoy that is about to vanish. Cut the link
+		// by hand: uncouple_convoi() would recalculate routes and electrification for convoys
+		// that stand on no tile, and would set us to ROUTING_1. Our own children are left
+		// SHIPPED with neither parent nor carrier once we are gone, which step() already
+		// repairs by sending them to a depot.
+		parent_convoi->coupling_convoi = convoihandle_t();
+		parent_convoi->back()->set_last( true );
+		parent_convoi = convoihandle_t();
 	}
 	state = SELF_DESTRUCT;
 	wait_lock = 0;
@@ -7675,13 +7690,23 @@ bool convoi_t::can_ship(convoihandle_t c) const
 	if(  !c.is_bound()  ||  c == self  ||  c->get_vehicle_count() == 0  ||  anz_vehikel == 0  ) {
 		return false;
 	}
-	// only a convoy that is itself on the map and leads its own chain may carry
-	if(  is_coupled()  ||  is_shipped()  ||  in_depot()  ||  state == SELF_DESTRUCT  ) {
+	// only a convoy that is itself on the map may carry - a coupled child may, since its
+	// schedule advances with the chain and it keeps its passengers if it uncouples
+	if(  is_shipped()  ||  in_depot()  ||  state == SELF_DESTRUCT  ) {
 		return false;
 	}
 	// the candidate must lead its own chain and not already be aboard something
 	if(  c->is_coupled()  ||  c->is_shipped()  ||  c->get_carrier_convoi().is_bound()  ) {
 		return false;
+	}
+	// The whole chain of the candidate boards, so check every member of it: a coupled carrier
+	// must never take its own chain's head aboard (it would carry itself and nothing would
+	// drive it any more), and a chain that is carrying convoys itself must not be carried -
+	// nested shipping is not supported by the weight, image or rescue paths.
+	for(  convoihandle_t k = c;  k.is_bound();  k = k->get_coupling_convoi()  ) {
+		if(  k == self  ||  k->is_carrying_convoys()  ) {
+			return false;
+		}
 	}
 	if(  c->in_depot()  ||  c->get_state() == SELF_DESTRUCT  ||  shipped_convois.is_contained(c)  ) {
 		return false;
@@ -8131,7 +8156,7 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 
 void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 {
-	if(  !halt.is_bound()  ||  is_coupled()  ||  schedule == NULL  ||  anz_vehikel == 0  ) {
+	if(  !halt.is_bound()  ||  schedule == NULL  ||  anz_vehikel == 0  ) {
 		return;
 	}
 

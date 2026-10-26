@@ -10272,6 +10272,11 @@ bool tool_change_line_t::init( player_t *player )
 							// not enough? Then remove from the end ...
 							for(  uint j=0;  j < line->get_convoys().get_count()  &&  initial-destroyed > max_left  &&  new_sum_capacity < old_sum_capacity;  j++  ) {
 								convoihandle_t cnv = line->get_convoy(j);
+								// same guard as the loop above: never destroy a convoy aboard a
+								// carrier, nor a carrier with convoys aboard
+								if(  cnv->is_shipped()  ||  cnv->is_carrying_convoys()  ) {
+									continue;
+								}
 								if(  cnv->get_state() != convoi_t::SELF_DESTRUCT  ) {
 									for(  int i=0;  i<cnv->get_vehicle_count();  i++  ) {
 										old_sum_capacity -= cnv->get_vehikel(i)->get_desc()->get_capacity();
