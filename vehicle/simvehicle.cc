@@ -6567,6 +6567,20 @@ bool air_vehicle_t::check_next_tile(const grund_t *bd, const bool, bool, bool, c
 			// direction-aware: the leg entered from `prev` (two same-waytype disjoint diagonal legs)
 			const ribi_t::ribi entry_bit = (prev!=koord3d::invalid) ? ribi_t::backward(ribi_type(prev, bd->get_pos())) : ribi_t::none;
 			const weg_t *w = bd->get_weg(air_wt, entry_bit);
+			const schiene_t *sch = obj_cast<schiene_t>(w);
+			if(sch->has_sign()) {
+				const roadsign_t* rs = bd->find<roadsign_t>();
+				if(  rs->get_desc()->get_wtyp()==get_waytype()  ) {
+					if(  cnv != NULL  &&  rs->get_desc()->get_min_speed() > 0  &&  rs->get_desc()->get_min_speed() > cnv->get_min_top_speed()  ) {
+						// below speed limit
+						return false;
+					}
+					if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
+						// private road
+						return false;
+					}
+				}
+			}
 			return (w  &&  w->get_max_speed()>0);
 		}
 
