@@ -519,7 +519,7 @@ void haltestelle_t::step_all()
 
 	// Regurally update the connection weight only when time based routing is used.
 	bool is_tbgr_used = false;
-	for(  uint8 catg_idx = 0;  catg_idx < goods_manager_t::get_max_catg_index();  catg_idx++  ) {
+	for(  uint32 catg_idx = 0;  catg_idx < goods_manager_t::get_max_catg_index();  catg_idx++  ) {
 		if(  welt->get_settings().get_time_based_routing_enabled(catg_idx)  ) {
 			is_tbgr_used = true;
 			break;
@@ -906,7 +906,7 @@ haltestelle_t::haltestelle_t(koord k, player_t* player)
 	permissions = 0;
 	// force total re-routing
 	reconnect_counter = welt->get_schedule_counter()-1;
-	last_catg_index = 255;
+	last_catg_index = goods_manager_t::INVALID_GOODS_INDEX;
 
 	cargo = new cargo_queue_t*[goods_manager_t::get_max_catg_index()];
 	for (size_t i = 0; i < goods_manager_t::get_max_catg_index(); i++) {
@@ -980,7 +980,7 @@ haltestelle_t::~haltestelle_t()
 	// before it is needed for clearing up the planqudrat and tiles
 	self.detach();
 
-	for(unsigned i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+	for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 		if(cargo[i]) {
 			if(  !welt->is_destroying()  ) {
 				for(const auto& w : *cargo[i]) {
@@ -1009,7 +1009,7 @@ void haltestelle_t::rotate90( const sint16 y_size )
 
 	// rotate cargo (good) destinations
 	// iterate over all different categories
-	for(unsigned i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+	for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 		if(cargo[i]==NULL) {
 			continue;
 		}
@@ -1427,7 +1427,7 @@ void haltestelle_t::request_loading( convoihandle_t cnv )
 
 
 
-bool haltestelle_t::has_available_network(const player_t* player, uint8 catg_index) const
+bool haltestelle_t::has_available_network(const player_t* player, uint16 catg_index) const
 {
 	if(!player_t::check_owner( player, owner )) {
 		return false;
@@ -1565,7 +1565,7 @@ void haltestelle_t::book_pax_boarding_revenue(uint16 boarded_pax)
  */
 bool haltestelle_t::reroute_goods(sint16 &units_remaining)
 {
-	if(  last_catg_index==255  ) {
+	if(  last_catg_index==goods_manager_t::INVALID_GOODS_INDEX  ) {
 		last_catg_index = 0;
 	}
 
@@ -1637,7 +1637,7 @@ bool haltestelle_t::reroute_goods(sint16 &units_remaining)
 	}
 	// likely the display must be updated after this
 	resort_freight_info = true;
-	last_catg_index = 255; // all categories are rerouted
+	last_catg_index = goods_manager_t::INVALID_GOODS_INDEX; // all categories are rerouted
 	return true; // all updated ...
 }
 
@@ -1785,16 +1785,18 @@ uint32 estimated_waiting_ticks(const schedule_t* schedule, uint8 index) {
 #define WEIGHT_MIN (WEIGHT_WAIT+WEIGHT_HALT)
 sint32 haltestelle_t::rebuild_connections()
 {
-	// These variables are for calculating is_transfer.
+	// These variables are for calculating is_transfer. They are indexed by goods category
+	// index, so they are sized at runtime: there can be as many categories as there are goods,
+	// and an array for the worst case would be far too big to build on every call.
+	const uint32 catg_count = goods_manager_t::get_max_catg_index();
 	// halts which either immediately precede or succeed self halt in serving schedules
-	vector_tpl<halthandle_t> consecutive_halts[256];
+	vector_tpl<halthandle_t> *consecutive_halts = new vector_tpl<halthandle_t>[catg_count];
 	// halts which either immediately precede or succeed self halt in currently processed schedule
-	vector_tpl<halthandle_t> consecutive_halts_schedule[256];
+	vector_tpl<halthandle_t> *consecutive_halts_schedule = new vector_tpl<halthandle_t>[catg_count];
 	// remember max number of consecutive halts for one schedule
-	uint8 max_consecutive_halts_schedule[256];
-	MEMZERON(max_consecutive_halts_schedule, goods_manager_t::get_max_catg_index());
+	uint8 *max_consecutive_halts_schedule = new uint8[catg_count]();
 	// previous halt supporting the ware categories of the serving line
-	halthandle_t previous_halt[256];
+	halthandle_t *previous_halt = new halthandle_t[catg_count];
 
 	// first, remove all old entries
 	if(  staged_all_links  ) {
@@ -1804,18 +1806,18 @@ sint32 haltestelle_t::rebuild_connections()
 	staged_all_links = new link_t[ goods_manager_t::get_max_catg_index() ];
 	resort_freight_info = true; // might result in error in routing
 
-	last_catg_index = 255; // must reroute everything
+	last_catg_index = goods_manager_t::INVALID_GOODS_INDEX; // must reroute everything
 	sint32 connections_searched = 0;
 
 // DBG_MESSAGE("haltestelle_t::rebuild_destinations()", "Adding new table entries");
 
 	const player_t *owner;
 	schedule_t *schedule;
-	const minivec_tpl<uint8> *goods_catg_index;
+	const vector_tpl<uint16> *goods_catg_index;
 	sint32 speedbonus_kmh = 0;
 	traveler_t traveler;
 
-	minivec_tpl<uint8> supported_catg_index(32);
+	vector_tpl<uint16> supported_catg_index(32);
 
 	/*
 	 * In the first loops:
@@ -1894,7 +1896,7 @@ sint32 haltestelle_t::rebuild_connections()
 
 		// determine goods category indices supported by this halt
 		supported_catg_index.clear();
-		FOR(minivec_tpl<uint8>, const catg_index, *goods_catg_index) {
+		FOR(vector_tpl<uint16>, const catg_index, *goods_catg_index) {
 			if(  is_enabled(catg_index)  ) {
 				supported_catg_index.append(catg_index);
 				previous_halt[catg_index] = self;
@@ -1943,7 +1945,7 @@ sint32 haltestelle_t::rebuild_connections()
 			}
 			if(  current_halt == self  ) {
 				// check for consecutive halts which precede self halt
-				FOR(minivec_tpl<uint8>, const catg_index, supported_catg_index) {
+				FOR(vector_tpl<uint16>, const catg_index, supported_catg_index) {
 					if(  previous_halt[catg_index]!=self  ) {
 						consecutive_halts[catg_index].append_unique(previous_halt[catg_index]);
 						consecutive_halts_schedule[catg_index].append_unique(previous_halt[catg_index]);
@@ -1979,7 +1981,7 @@ sint32 haltestelle_t::rebuild_connections()
 				++interval;
 			}
 
-			FOR(minivec_tpl<uint8>, const catg_index, supported_catg_index) {
+			FOR(vector_tpl<uint16>, const catg_index, supported_catg_index) {
 				if(  current_halt->is_enabled(catg_index)  ) {
 					// check for consecutive halts which succeed self halt
 					if(  previous_halt[catg_index] == self  ) {
@@ -1999,14 +2001,14 @@ sint32 haltestelle_t::rebuild_connections()
 			}
 		}
 
-		FOR(minivec_tpl<uint8>, const catg_index, supported_catg_index) {
+		FOR(vector_tpl<uint16>, const catg_index, supported_catg_index) {
 			if(  consecutive_halts_schedule[catg_index].get_count() > max_consecutive_halts_schedule[catg_index]  ) {
 				max_consecutive_halts_schedule[catg_index] = consecutive_halts_schedule[catg_index].get_count();
 			}
 		}
 		connections_searched += schedule->get_count();
 	}
-	for(  uint8 i=0;  i<goods_manager_t::get_max_catg_index();  i++  ){
+	for(  uint32 i=0;  i<goods_manager_t::get_max_catg_index();  i++  ){
 		// one schedule reaches all consecutive halts -> this is not transfer halt
 		staged_all_links[i].is_transfer = !consecutive_halts[i].empty()  &&
 			(consecutive_halts[i].get_count() != max_consecutive_halts_schedule[i]  ||
@@ -2123,6 +2125,11 @@ sint32 haltestelle_t::rebuild_connections()
 		}
 	}
 
+	delete [] consecutive_halts;
+	delete [] consecutive_halts_schedule;
+	delete [] max_consecutive_halts_schedule;
+	delete [] previous_halt;
+
 	return connections_searched;
 }
 
@@ -2212,7 +2219,7 @@ void haltestelle_t::rebuild_linked_connections()
 }
 
 
-void haltestelle_t::fill_connected_component(uint8 catg_idx, uint16 comp)
+void haltestelle_t::fill_connected_component(uint16 catg_idx, uint16 comp)
 {
 	if (all_links[catg_idx].catg_connected_component != UNDECIDED_CONNECTED_COMPONENT) {
 		// already connected
@@ -2243,7 +2250,7 @@ void haltestelle_t::rebuild_connected_components()
 		}
 	}
 	// calculate catg_connected_component
-	for(uint8 catg_idx = 0; catg_idx<goods_manager_t::get_max_catg_index(); catg_idx++) {
+	for(uint32 catg_idx = 0; catg_idx<goods_manager_t::get_max_catg_index(); catg_idx++) {
 		FOR(vector_tpl<halthandle_t>, halt, alle_haltestellen) {
 			if (halt->all_links[catg_idx].catg_connected_component == UNDECIDED_CONNECTED_COMPONENT) {
 				// start recursion
@@ -2255,7 +2262,7 @@ void haltestelle_t::rebuild_connected_components()
 }
 
 
-sint8 haltestelle_t::is_connected(halthandle_t halt, uint8 catg_index) const
+sint8 haltestelle_t::is_connected(halthandle_t halt, uint16 catg_index) const
 {
 	if (!halt.is_bound()) {
 		return 0; // not connected
@@ -2397,7 +2404,7 @@ void haltestelle_t::resize_halt_arrays(uint32 new_size)
  * Data for resumable route search
  */
 halthandle_t haltestelle_t::last_search_origin;
-uint8 haltestelle_t::last_search_ware_catg_idx = 255;
+uint16 haltestelle_t::last_search_ware_catg_idx = goods_manager_t::INVALID_GOODS_INDEX;
 /**
  * This routine tries to find a route for a good packet (ware)
  * it will be called for
@@ -2417,8 +2424,8 @@ uint8 haltestelle_t::last_search_ware_catg_idx = 255;
  */
 int haltestelle_t::search_route( const halthandle_t *const start_halts, const uint32 start_halt_count, const bool no_routing_over_overcrowding, ware_t &ware, ware_t *const return_ware, const koord start_pos )
 {
-	const uint8 ware_catg_idx = ware.get_desc()->get_catg_index();
-	const uint8 ware_idx = ware.get_desc()->get_index();
+	const uint16 ware_catg_idx = ware.get_desc()->get_catg_index();
+	const uint16 ware_idx = ware.get_desc()->get_index();
 
 	// Walking cost setup: only for passengers when transit_by_foot is enabled.
 	// Origin walking cost penalises start halts that are farther from the passenger's building.
@@ -2775,7 +2782,7 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 
 void haltestelle_t::search_route_resumable(  ware_t &ware   )
 {
-	const uint8 ware_catg_idx = ware.get_desc()->get_catg_index();
+	const uint16 ware_catg_idx = ware.get_desc()->get_catg_index();
 
 	// continue search if start halt and good category did not change
 	const bool resume_search = last_search_origin == self  &&  ware_catg_idx == last_search_ware_catg_idx;
@@ -3298,16 +3305,20 @@ uint32 haltestelle_t::get_ware_summe(const goods_desc_t *wtyp) const
 
 uint32 haltestelle_t::get_ware_fuer_zielpos(const goods_desc_t *wtyp, const koord zielpos) const
 {
+	// One destination can be spread over several packets - they are not always merged
+	// (first-come-first-serve keeps them apart, and a packet holds at most
+	// ware_t::GOODS_AMOUNT_LIMIT units), so all of them have to be counted.
+	uint32 sum = 0;
 	const cargo_queue_t * warray = cargo[wtyp->get_catg_index()];
 	if(warray!=NULL) {
 		for(const cargo_item_t& ware : *warray) {
 			const ware_t& goods = ware->goods;
 			if(wtyp->get_index()==goods.get_index()  &&  goods.get_zielpos()==zielpos) {
-				return goods.menge;
+				sum += goods.menge;
 			}
 		}
 	}
-	return 0;
+	return sum;
 }
 
 
@@ -3331,7 +3342,7 @@ bool haltestelle_t::vereinige_waren(const ware_t &ware)
 {
 	// merge cargos only when "load nearest first" policy is applied.
 	const settings_t &settings = world()->get_settings();
-	const uint8 goods_catg_index = ware.get_desc()->get_catg_index();
+	const uint16 goods_catg_index = ware.get_desc()->get_catg_index();
 	const bool* wefl = waiting_amount_exceeds_FIFO_limit.access(goods_catg_index);
 	if(  settings.get_first_come_first_serve(goods_catg_index)  &&  (wefl==NULL  ||  !*wefl)  ) {
 		return false;
@@ -3342,6 +3353,11 @@ bool haltestelle_t::vereinige_waren(const ware_t &ware)
 	if(  !warray  ) {
 		return false;
 	}
+	// menge is a bit field capped at GOODS_AMOUNT_LIMIT, so a merge can overflow the waiting
+	// packet. add_goods() saturates and hands back what did not fit; that surplus becomes a
+	// packet of its own rather than being silently truncated away.
+	ware_t::goods_amount_t surplus = 0;
+	bool joined = false;
 	for(auto& tmp_cargo : warray->get_ziel_iterators(ware.get_ziel())) {
 		ware_t& tmp = tmp_cargo->cargo->goods;
 		// join packets with same destination
@@ -3352,12 +3368,24 @@ bool haltestelle_t::vereinige_waren(const ware_t &ware)
 				warray->update_index(tmp_cargo);
 				warray->sort_indices();
 			}
-			tmp.menge += ware.menge;
-			resort_freight_info = true;
-			return true;
+			surplus = tmp.add_goods( ware.menge );
+			joined = true;
+			break;
 		}
 	}
-	return false;
+	if(  !joined  ) {
+		return false;
+	}
+	// Appended only after the loop: add_goods_to_halt() writes to the very queue that is
+	// being iterated above.
+	if(  surplus > 0  ) {
+		ware_t rest( ware );
+		rest.menge = 0;
+		rest.add_goods( surplus );
+		add_goods_to_halt( halt_waiting_goods_t( rest, welt->get_ticks() ) );
+	}
+	resort_freight_info = true;
+	return true;
 }
 
 
@@ -3382,7 +3410,7 @@ std::shared_ptr<halt_waiting_goods_t> haltestelle_t::add_goods_to_halt(halt_wait
 
 
 
-bool haltestelle_t::is_foot_path_connection(halthandle_t dest, uint8 catg_index) const
+bool haltestelle_t::is_foot_path_connection(halthandle_t dest, uint16 catg_index) const
 {
 	for(  auto const& conn : all_links[catg_index].connections  ) {
 		if(  conn.halt == dest  ) {
@@ -3528,7 +3556,7 @@ void haltestelle_t::get_freight_info(cbuffer_t & buf)
 		resort_freight_info = false;
 		buf.clear();
 
-		for(unsigned i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+		for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 			if(  !cargo[i]  ) {
 				continue;
 			}
@@ -3983,7 +4011,7 @@ void haltestelle_t::transfer_goods(halthandle_t halt)
 		return;
 	}
 	// transfer goods to halt
-	for(uint8 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+	for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 		const cargo_queue_t * warray = cargo[i];
 		if (warray) {
 			for(const cargo_item_t &j : *warray) {
@@ -4279,7 +4307,7 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	init_pos = tiles.empty() ? koord::invalid : tiles.front().grund->get_pos().get_2d();
 	if(file->is_saving()) {
 		const char *s;
-		for(unsigned i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+		for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 			cargo_queue_t *warray = cargo[i];
 			if(warray) {
 				s = "y"; // needs to be non-empty
@@ -4324,7 +4352,12 @@ void haltestelle_t::rdwr(loadsave_t *file)
 			if(count>0) {
 				for(  uint32 i = 0;  i < count;  i++  ) {
 					// add to internal storage (use this function, since the old categories were different)
-					ware_t ware(file);
+					// A packet saved with a wider amount field than ware_t has now is split
+					// into several; only the first of them keeps the archived address, so the
+					// extra ones simply do not take part in the fresh-cargo bookkeeping.
+					ware_t ware;
+					vector_tpl<ware_t> split_off;
+					ware.rdwr(file, &split_off);
 					uint32 arrived_time = INVALID_CARGO_ARRIVED_TIME;
 					if(  file->get_OTRP_version()>=36  ) {
 						file->rdwr_long(arrived_time);
@@ -4340,6 +4373,10 @@ void haltestelle_t::rdwr(loadsave_t *file)
 						}
 						// restore in-transit information
 						fabrik_t::update_transit( &ware, true );
+						FOR(vector_tpl<ware_t>, &extra, split_off) {
+							add_goods_to_halt(halt_waiting_goods_t(extra, arrived_time));
+							fabrik_t::update_transit( &extra, true );
+						}
 					}
 					else if(  ware.menge>0  ) {
 						if(  ware.get_desc()  ) {
@@ -4428,21 +4465,31 @@ void haltestelle_t::rdwr(loadsave_t *file)
 	}
 
 	// read and write fresh_cargo
-	std::function<void(loadsave_t*, sint64&)> rdwr_longlong_item = [](loadsave_t *file, sint64 &v) {
+	auto rdwr_longlong_item = [](loadsave_t *file, sint64 &v) {
 		file->rdwr_longlong(v);
 	};
 	if(  file->is_loading()  ) {
-		for(uint8 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+		for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 			if (cargo[i]) {
 				cargo[i]->clear_fresh();
 			}
 		}
 	}
 	if(  file->get_OTRP_version()>=40  ) {
+		// The number of goods categories no longer fits into a byte since OTRP version 63.
 		if(  file->is_loading()  ) {
-			uint8 list_count;
-			file->rdwr_byte(list_count);
-			for(uint8 i=0; i<list_count; i++) {
+			uint32 list_count;
+			if(  file->get_OTRP_version()>=63  ) {
+				uint16 c;
+				file->rdwr_short(c);
+				list_count = c;
+			}
+			else {
+				uint8 c;
+				file->rdwr_byte(c);
+				list_count = c;
+			}
+			for(uint32 i=0; i<list_count; i++) {
 				vector_tpl<sint64> ref_addresses;
 				file->rdwr_vector(ref_addresses, rdwr_longlong_item);
 				FOR(vector_tpl<sint64>, &addr, ref_addresses) {
@@ -4455,9 +4502,18 @@ void haltestelle_t::rdwr(loadsave_t *file)
 				}
 			}
 		} else {
-			uint8 list_count = goods_manager_t::get_max_catg_index();
-			file->rdwr_byte(list_count);
-			for(uint8 i=0; i<list_count; i++) {
+			uint32 list_count = goods_manager_t::get_max_catg_index();
+			if(  file->get_OTRP_version()>=63  ) {
+				uint16 c = (uint16)list_count;
+				file->rdwr_short(c);
+			}
+			else {
+				// old format: the count has to fit into a byte, so the rest cannot be stored
+				list_count = min( list_count, (uint32)255 );
+				uint8 c = (uint8)list_count;
+				file->rdwr_byte(c);
+			}
+			for(uint32 i=0; i<list_count; i++) {
 				vector_tpl<sint64> ref_addresses;
 				if (cargo[i]) {
 					cargo[i]->get_fresh_addresses(ref_addresses);
@@ -4527,7 +4583,7 @@ void haltestelle_t::finish_rd()
 	stale_convois.clear();
 	stale_lines.clear();
 	// fix good destination coordinates
-	for(unsigned i=0; i<goods_manager_t::get_max_catg_index(); i++) {
+	for(uint32 i=0; i<goods_manager_t::get_max_catg_index(); i++) {
 		if(cargo[i]) {
 			cargo_queue_t * warray = cargo[i];
 			for(cargo_item_t & j : *warray) {
@@ -4648,7 +4704,7 @@ void haltestelle_t::recalc_status()
 
 	// now for all goods
 	if(status_color!=color_idx_to_rgb(COL_RED)  &&  get_ware_enabled()) {
-		const uint8  count = goods_manager_t::get_count();
+		const uint32 count = goods_manager_t::get_count();
 		const uint32 max_ware = get_capacity(2);
 		for(  uint32 i = 3;  i < count;  i++  ) {
 			goods_desc_t const* const wtyp = goods_manager_t::get_info(i);
@@ -4770,7 +4826,7 @@ void haltestelle_t::display_status(sint16 xpos, sint16 ypos)
 
 	sint16 bar_height_index = 0;
 	uint32 max_capacity;
-	for(  uint8 i = 0;  i < goods_manager_t::get_count();  i++  ) {
+	for(  uint32 i = 0;  i < goods_manager_t::get_count();  i++  ) {
 		if(  i == 2  ) {
 			continue; // ignore freight none
 		}
@@ -5365,10 +5421,10 @@ bool unregistered_journey_time_exists(const schedule_t* schedule, player_t* play
 }
 
 
-void haltestelle_t::calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const vector_tpl<reachable_halt_t> &temp_stop_halts, const minivec_tpl<uint8> &goods_category_indexes, convoihandle_t cnv) {
+void haltestelle_t::calc_destination_halt(inthashtable_tpl<uint16, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const vector_tpl<reachable_halt_t> &temp_stop_halts, const vector_tpl<uint16> &goods_category_indexes, convoihandle_t cnv) {
 	// initialize destination_halts
 	destination_halts.clear();
-	FOR(const minivec_tpl<uint8>, const& i, goods_category_indexes) {
+	FOR(const vector_tpl<uint16>, const& i, goods_category_indexes) {
 		destination_halts.put(i);
 	}
 
@@ -5382,7 +5438,7 @@ void haltestelle_t::calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<hal
 		[&](const auto &t) { return t->get_schedule(); }, traveler
 	);
 	const bool accept_all_halts = schedule->is_temporary()  ||  unregistered_journey_time_exists(schedule, cnv->get_owner());
-	FOR(const minivec_tpl<uint8>, const& i, goods_category_indexes) {
+	FOR(const vector_tpl<uint16>, const& i, goods_category_indexes) {
 		// Temporary schedule or route cost is used -> Accept all halts.
 		if(  accept_all_halts  ||  !welt->get_settings().get_time_based_routing_enabled(i)  ) {
 			FOR(const vector_tpl<reachable_halt_t>, const& rh, reachable_halts) {
@@ -5397,7 +5453,7 @@ void haltestelle_t::calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<hal
 
 	const uint32 additional_ticks_by_schedule = (uint64)schedule->get_additional_base_waiting_time() * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 	const uint32 base_waiting_ticks = world()->get_settings().get_base_waiting_ticks(schedule->get_waytype()) + additional_ticks_by_schedule;
-	FOR(const minivec_tpl<uint8>, const& g_index, goods_category_indexes) {
+	FOR(const vector_tpl<uint16>, const& g_index, goods_category_indexes) {
 		if(  !destination_halts.access(g_index)->empty()  ) {
 			// The destination halts are already filled above.
 			continue;
@@ -5469,7 +5525,7 @@ bool haltestelle_t::is_route_search_needed(const ware_t &ware) const {
 
 
 void haltestelle_t::extinguish_all_waiting_goods() {
-	for(uint8 goods_ctg_idx=0; goods_ctg_idx<goods_manager_t::get_max_catg_index(); goods_ctg_idx++) {
+	for(uint32 goods_ctg_idx=0; goods_ctg_idx<goods_manager_t::get_max_catg_index(); goods_ctg_idx++) {
 		cargo_queue_t* goods_list = cargo[goods_ctg_idx];
 		if(  !goods_list  ) {
 			continue;
@@ -5480,7 +5536,7 @@ void haltestelle_t::extinguish_all_waiting_goods() {
 
 
 // TODO: Use (amount, arrived_time) type instead of halt_waiting_goods_t.
-void haltestelle_t::fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to_array, const uint8 goods_category_index, const vector_tpl<halthandle_t>& destination_halts) {
+void haltestelle_t::fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to_array, const uint16 goods_category_index, const vector_tpl<halthandle_t>& destination_halts) {
 	cargo_queue_t *wares = cargo[goods_category_index];
 	if(  !wares  ||  wares->empty()  ) {
 		return;

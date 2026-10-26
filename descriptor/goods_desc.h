@@ -44,13 +44,13 @@ class goods_desc_t : public obj_named_desc_t {
 	* including special freight
 	* assigned during registration
 	*/
-	uint8 catg_index;
+	uint16 catg_index;
 
 	/**
 	 * index of the type,
 	 * assigned during registration
 	 */
-	uint8 goods_index;
+	uint16 goods_index;
 
 	uint8 color;
 
@@ -86,12 +86,12 @@ public:
 	/**
 	* @return Category of the good
 	*/
-	uint8 get_catg_index() const { return catg_index; }
+	uint16 get_catg_index() const { return catg_index; }
 
 	/**
 	* @return internal index (just a number, passenger, then mail, then something ... )
 	*/
-	uint8 get_index() const { return goods_index; }
+	uint16 get_index() const { return goods_index; }
 
 	/**
 	* @return weight in KG per unit of the good

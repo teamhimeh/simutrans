@@ -22,7 +22,7 @@
 
 
 
-const goods_desc_t *ware_t::index_to_desc[256];
+const goods_desc_t *ware_t::index_to_desc[ware_t::GOODS_INDEX_LIMIT+1];
 
 ware_t::ware_t() : ziel(), zielpos(-1, -1)
 {
@@ -39,12 +39,6 @@ ware_t::ware_t(const goods_desc_t *wtyp) : ziel(), zielpos(-1, -1)
 	index = wtyp->get_index();
 	to_factory = 0;
 	clear_transit_halts();
-}
-
-
-ware_t::ware_t(loadsave_t *file)
-{
-	rdwr(file);
 }
 
 
@@ -68,11 +62,28 @@ ware_t& ware_t::operator=(const ware_t &w) {
 }
 
 
-void ware_t::rdwr(loadsave_t *file)
+void ware_t::rdwr(loadsave_t *file, vector_tpl<ware_t> *split_off)
 {
+	// This runs once per goods packet, of which a large game holds a great many, so the
+	// stream direction is read once here: the rdwr_* calls in between are opaque to the
+	// compiler, which would otherwise have to reload it at every test below.
+	const bool loading = file->is_loading();
+	const bool saving  = file->is_saving();
+
 	sint32 amount = menge;
 	file->rdwr_long(amount);
-	menge = amount;
+	// menge holds only GOODS_AMOUNT_LIMIT units. Savegames written while the field was wider
+	// can carry more than that in a single packet, so keep what does not fit and split it
+	// off into extra packets once the rest of this one (goods type, destination) is read.
+	goods_amount_t surplus = 0;
+	if(  loading  ) {
+		const goods_amount_t loaded = amount > 0 ? (goods_amount_t)amount : 0;
+		menge = min( loaded, GOODS_AMOUNT_LIMIT );
+		surplus = loaded - menge;
+		if(  surplus>0  ) {
+			dbg->warning("ware_t::rdwr()","amount too large! %u", loaded);
+		}
+	}
 	if(file->is_version_less(99, 8)) {
 		sint32 max;
 		file->rdwr_long(max);
@@ -83,7 +94,7 @@ void ware_t::rdwr(loadsave_t *file)
 		file->rdwr_byte(factory_going);
 		to_factory = factory_going;
 	}
-	else if(  file->is_loading()  ) {
+	else if(  loading  ) {
 		to_factory = 0;
 	}
 
@@ -92,7 +103,7 @@ void ware_t::rdwr(loadsave_t *file)
 		file->rdwr_byte(catg);
 	}
 
-	if(file->is_saving()) {
+	if(saving) {
 		const char *typ = NULL;
 		typ = get_desc()->get_name();
 		file->rdwr_str(typ);
@@ -105,6 +116,7 @@ void ware_t::rdwr(loadsave_t *file)
 			dbg->warning("ware_t::rdwr()","unknown ware of catg %d!",catg);
 			index = goods_manager_t::get_info_catg(catg)->get_index();
 			menge = 0;
+			surplus = 0;
 		}
 		else {
 			index = type->get_index();
@@ -115,39 +127,37 @@ void ware_t::rdwr(loadsave_t *file)
 		// rdwr ziel
 		uint32 ziel_halt_id = ziel.is_bound() ? ziel.get_id() : 0;
 		file->rdwr_long(ziel_halt_id);
-		if(  file->is_loading()  ) {
+		if(  loading  ) {
 			ziel.set_id(ziel_halt_id);
 		}
-		// rwdr transit_halts
-		std::function<void(loadsave_t*, halthandle_t&)> rdwr_halt = [](loadsave_t *file, halthandle_t &h) {
+		// rwdr transit_halts - passed as a plain lambda so that it inlines
+		file->rdwr_vector(transit_halts, [loading](loadsave_t *file, halthandle_t &h) {
 			uint32 halt_id = h.is_bound() ? h.get_id() : 0;
 			file->rdwr_long(halt_id);
-			if(  file->is_loading()  ) {
+			if(  loading  ) {
 				h.set_id(halt_id);
 			}
-		};
-		file->rdwr_vector(transit_halts, rdwr_halt);
+		});
 	}
 	else if(  file->get_OTRP_version() >= 39  ) {
 		// rdwr ziel (loading old saves only; saving always takes the >= 55 path)
 		uint16 ziel_halt_id = ziel.is_bound() ? (uint16)ziel.get_id() : 0;
 		file->rdwr_short(ziel_halt_id);
-		if(  file->is_loading()  ) {
+		if(  loading  ) {
 			ziel.set_id(ziel_halt_id);
 		}
-		// rwdr transit_halts
-		std::function<void(loadsave_t*, halthandle_t&)> rdwr_halt = [](loadsave_t *file, halthandle_t &h) {
+		// rwdr transit_halts - passed as a plain lambda so that it inlines
+		file->rdwr_vector(transit_halts, [loading](loadsave_t *file, halthandle_t &h) {
 			uint16 halt_id = h.is_bound() ? (uint16)h.get_id() : 0;
 			file->rdwr_short(halt_id);
-			if(  file->is_loading()  ) {
+			if(  loading  ) {
 				h.set_id(halt_id);
 			}
-		};
-		file->rdwr_vector(transit_halts, rdwr_halt);
+		});
 	}
 	else if(file->is_version_atleast(110, 6)) {
 		// save halt id directly
-		if(file->is_saving()) {
+		if(saving) {
 			uint16 halt_id = ziel.is_bound() ? (uint16)ziel.get_id() : 0;
 			file->rdwr_short(halt_id);
 			halt_id = !transit_halts.empty() ? (uint16)transit_halts[0].get_id() : 0;
@@ -170,7 +180,7 @@ void ware_t::rdwr(loadsave_t *file)
 		koord zwischen_ziel_koord = (!transit_halts.empty()  &&  transit_halts.front().is_bound()) ? transit_halts.front()->get_basis_pos() : koord::invalid;
 		ziel_koord.rdwr(file);
 		zwischen_ziel_koord.rdwr(file);
-		if(  file->is_loading()  ) {
+		if(  loading  ) {
 			ziel = haltestelle_t::get_halt_koord_index(ziel_koord);
 			transit_halts.clear();
 			transit_halts.append(haltestelle_t::get_halt_koord_index(zwischen_ziel_koord));
@@ -178,9 +188,25 @@ void ware_t::rdwr(loadsave_t *file)
 	}
 	zielpos.rdwr(file);
 	// restore factory-flag
-	if(  file->is_version_less(110, 5)  &&  file->is_loading()  ) {
+	if(  loading  &&  file->is_version_less(110, 5)  ) {
 		if (fabrik_t::get_fab(zielpos)) {
 			to_factory = 1;
+		}
+	}
+
+	// This packet is complete now, so the surplus can be split off into copies of it.
+	if(  surplus > 0  ) {
+		if(  split_off == NULL  ) {
+			// deliberately not get_name(): the descriptor can be NULL here
+			dbg->error( "ware_t::rdwr()", "%u units of goods %u to %s do not fit into one packet and are lost", surplus, (uint32)index, zielpos.get_str() );
+		}
+		else {
+			while(  surplus > 0  ) {
+				ware_t extra( *this );
+				extra.menge = 0;
+				surplus = extra.add_goods( surplus );
+				split_off->append( extra );
+			}
 		}
 	}
 }
