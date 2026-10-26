@@ -127,7 +127,10 @@ public:
 	/// returns the current stop, always a valid entry
 	schedule_entry_t const& get_current_entry() const { return current_stop >= entries.get_count() ? dummy_entry : entries[current_stop]; }
 	
-	schedule_entry_t const& get_next_entry() const;
+	schedule_entry_t const& get_next_entry() const { return get_next_entry(current_stop); }
+
+	/// returns the entry next to the entry at stop_index (waypoints and depots included)
+	schedule_entry_t const& get_next_entry(uint8 stop_index) const;
 
 	/**
 	 * Set the current stop of the schedule .
