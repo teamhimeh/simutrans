@@ -1383,6 +1383,9 @@ public:
 	 */
 	void book_shipping_toll();
 
+	/// charge `c`'s owner the configured shipping revenue as toll to this carrier, for putting it ashore at `landing`
+	void book_shipping_revenue(convoihandle_t c, koord3d landing);
+
 	/**
 	 * Take `c` (a most-parent convoy, together with its coupled children) aboard this
 	 * carrier, to be put ashore at `dest`. Removes `c` from the map and releases every

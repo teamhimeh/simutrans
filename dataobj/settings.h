@@ -54,6 +54,13 @@ public:
 		MAP_BASED
 	} climate_generate_t;
 
+	// convoy shipping revenue table: every waytype that can be carried, and additionally air
+	// (last), which can only carry
+	enum {
+		SHIPPING_REVENUE_SHIPPED_WT_COUNT = 7,
+		SHIPPING_REVENUE_CARRIER_WT_COUNT = 8
+	};
+
 private:
 	sint32 size_x, size_y;
 	sint32 map_number;
@@ -354,6 +361,18 @@ private:
 	 * of it and the carrier earns only the toll.
 	 */
 	sint32 shipping_income_percentage;
+
+	/**
+	 * Convoy shipping: revenue the carrier earns for carrying a convoy, as
+	 * shipping_revenue[shipped waytype][carrier waytype] (indices from
+	 * get_shipping_revenue_wt_index()). Unit: 1/100 credit per tile travelled per tile
+	 * (CARUNITS_PER_TILE) of carried convoy length. Set in simuconf.tab as
+	 * revenue_<shipped>_shipped_by_<carrier>, e.g. revenue_road_shipped_by_water.
+	 * Booked as way toll: the carried convoy's owner pays it to the carrier's owner when put
+	 * ashore, on top of toll_shipping_percentage; nothing is paid between a player's own
+	 * convoys. 0 (the default) charges nothing.
+	 */
+	sint32 shipping_revenue[SHIPPING_REVENUE_SHIPPED_WT_COUNT][SHIPPING_REVENUE_CARRIER_WT_COUNT];
 
 	// multipliers [%] applied on the pakset values of maintenance and running costs
 	sint32 maintenance_cost_multiplier_way;
@@ -787,6 +806,12 @@ public:
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
 	sint32 get_toll_shipping_percentage() const { return toll_shipping_percentage; }
 	sint32 get_shipping_income_percentage() const { return shipping_income_percentage; }
+	/// revenue [1/100 credit per tile per tile of convoy length] for a `shipped` convoy aboard a `carrier`
+	sint32 get_shipping_revenue(waytype_t shipped, waytype_t carrier) const;
+	/// index into shipping_revenue for a waytype, or -1 if it has none (air can only be a carrier)
+	static sint8 get_shipping_revenue_wt_index(waytype_t wt);
+	/// simuconf.tab key (and settings dialog label) for a shipping_revenue entry
+	static const char *get_shipping_revenue_name(uint8 shipped_idx, uint8 carrier_idx);
 
 	sint32 get_maintenance_cost_multiplier_way() const { return maintenance_cost_multiplier_way; }
 	sint32 get_maintenance_cost_multiplier_overhead() const { return maintenance_cost_multiplier_overhead; }
