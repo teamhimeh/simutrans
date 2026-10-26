@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <png.h>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
@@ -59,6 +60,22 @@ log_t *dbg = new log_t(NULL, false, false, false, NULL);
 sint8 env_t::pak_height_conversion_factor = 1;
 
 static bool fail_next_png_close = false;
+static int fail_after_png_rows = -1;
+static unsigned successful_png_rows = 0;
+static bool png_row_failure_injected = false;
+
+void heightmap_test_png_write_row(png_structp png, png_const_bytep row)
+{
+	if(fail_after_png_rows >= 0 && successful_png_rows == unsigned(fail_after_png_rows)) {
+		png_row_failure_injected = true;
+		png_error(png, "Injected mid-write heightmap failure");
+	}
+	png_write_row(png, row);
+	if(fail_after_png_rows >= 0) {
+		++successful_png_rows;
+	}
+}
+
 int heightmap_test_fclose(FILE *file)
 {
 	const int result = std::fclose(file);
@@ -252,10 +269,36 @@ static void test_failure_cleanup()
 	std::cout << "Existing destination preserved, invalid input, failed publication/final-close cleanup: PASS\n";
 }
 
+static void test_mid_write_failure()
+{
+	karte_t world(4, 5);
+	for(int y = 0; y <= world.size.y; ++y) {
+		for(int x = 0; x <= world.size.x; ++x) {
+			world.set(x, y, sint8(x + y - 5));
+		}
+	}
+	const auto before = world.heights;
+	for(const char *path : {"mid-write-failure.png", u8"日本語-途中失敗.png"}) {
+		height_map_exporter_t::report_t report;
+		successful_png_rows = 0;
+		png_row_failure_injected = false;
+		fail_after_png_rows = 2;
+		// Two real row writes succeed; the third calls libpng's actual longjmp.
+		assert(!height_map_exporter_t::write_png(world, path, report));
+		fail_after_png_rows = -1;
+		assert(png_row_failure_injected && successful_png_rows == 2);
+		assert(world.heights == before);
+		assert(!exists(path));
+		assert(!exists((std::string(path) + ".heightmap-0.tmp").c_str()));
+	}
+	std::cout << "Real libpng row-error recovery after two rows, ASCII/Unicode cleanup and terrain preserved: PASS\n";
+}
+
 int main()
 {
 	test_encoding();
 	test_png_and_report();
 	test_failure_cleanup();
+	test_mid_write_failure();
 	test_filename_setter();
 }

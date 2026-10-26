@@ -1,0 +1,51 @@
+name: PNG heightmap export checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  heightmap-export:
+    name: PNG export regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ python3 libpng-dev pkg-config
+
+      - name: Set up MinGW test dependencies
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-pkgconf
+
+      - name: Run PNG export regression tests on Linux
+        if: runner.os == 'Linux'
+        run: |
+          python3 tests/test_heightmap_export.py --cxx g++
+          python3 tests/test_keybindings_unicode.py --cxx g++
+
+      - name: Run PNG export regression tests on Windows
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          python tests/test_heightmap_export.py --cxx g++
+          python tests/test_keybindings_unicode.py --cxx g++

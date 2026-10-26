@@ -13,8 +13,13 @@ The heightmap check requires Python 3, a C++11 compiler and libpng development
 files. It compiles the production exporter, image codecs and loader with an
 in-memory world adapter. It verifies linear encoding including the world loader's
 height offset, PNG dimensions/orientation, border-loss counts, Unicode paths,
-existing-file preservation, rename and final-close failures, and filename length
-boundaries. It does not exercise world generation or slope correction.
+existing-file preservation, mid-write, rename and final-close failures, and filename length
+boundaries. Mid-write failures occur after two real PNG rows have been written;
+both ASCII and Japanese paths must leave no output or temporary file, and terrain
+must be unchanged. It does not exercise world generation or slope correction.
+
+The `PNG heightmap export checks` workflow runs these focused checks on Linux and
+Windows for pull requests, independently of the full game build and scenario suite.
 
 Run relevant existing scenarios following `tests/README.txt`:
 

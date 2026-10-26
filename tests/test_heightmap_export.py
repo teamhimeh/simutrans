@@ -5,8 +5,8 @@ Requires a C++11 compiler and libpng development files. Run, for example:
     python tests/test_heightmap_export.py --cxx g++
 Compiler/library discovery uses pkg-config, with -lpng -lz as a fallback.
 The exporter body, PNG codecs and height loader are production code. World data,
-logging and the GUI text sink are adapters; injected close/rename failures act at
-the I/O boundary. Filesystem wrappers, image classification and the filename
+logging and the GUI text sink are adapters; injected row/close/rename failures act
+at the I/O boundary. Filesystem wrappers, image classification and the filename
 setter are extracted verbatim, like test_keybindings_unicode.py, to avoid linking
 the game. This does not test world initialization, slope correction or GUI events.
 """
@@ -78,11 +78,15 @@ def main():
         (directory / "exporter.inc").write_text(exporter, encoding="utf-8")
         (directory / "filename_setter.inc").write_text(filename_setter, encoding="utf-8")
         # Fault injection changes only the I/O boundary, retaining the real codec.
-        png_source = directory / "png_with_close_failure.cc"
+        png_source = directory / "png_with_io_failures.cc"
         png_source.write_text('#include <cstdio>\n'
+                              '#include <png.h>\n'
                               'extern int heightmap_test_fclose(FILE *);\n'
+                              'extern void heightmap_test_png_write_row(png_structp, png_const_bytep);\n'
                               '#define fclose heightmap_test_fclose\n'
+                              '#define png_write_row heightmap_test_png_write_row\n'
                               '#include "' + (root / "io/raw_image_png.cc").as_posix() + '"\n'
+                              '#undef png_write_row\n'
                               '#undef fclose\n', encoding="utf-8")
         binary = directory / ("test.exe" if os.name == "nt" else "test")
         sources = ["tests/heightmap_export_test.cc", "dataobj/height_map_loader.cc",
@@ -99,6 +103,8 @@ def main():
         assert not (directory / "日本語-失敗.png").exists()
         assert not (directory / "close-failure.png").exists()
         assert not (directory / "日本語-終了失敗.png").exists()
+        assert not (directory / "mid-write-failure.png").exists()
+        assert not (directory / "日本語-途中失敗.png").exists()
 
 
 if __name__ == "__main__":
