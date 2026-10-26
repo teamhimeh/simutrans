@@ -1781,9 +1781,8 @@ void convoi_t::step()
 					}
 
 					// release departure slot if needed.
-					if(  h.is_bound()  ) {
-						release_departure_slot(h);
-					}
+					// h is found from the front vehicle. If it is not on the platform, release_departure_slot() finds the halt.
+					release_departure_slot(h);
 				}
 			}
 			break;
@@ -7408,7 +7407,16 @@ void convoi_t::release_departure_slot(halthandle_t halt) {
 		return;
 	}
 	if(  !halt.is_bound()  &&  anz_vehikel>0  ) {
-		halt = haltestelle_t::get_stoppable_halt(get_pos(), get_owner(), front()->get_waytype());
+		// While loading, find the halt from the schedule entry, not from the front vehicle position:
+		// when the platform is shorter than the convoy, the front vehicle may stand on a non-platform tile.
+		if(  is_loading()  &&  schedule  &&  !schedule->empty()  ) {
+			halt = haltestelle_t::get_stoppable_halt(schedule->get_current_entry().pos, get_owner(), front()->get_waytype());
+		}
+		// Otherwise (e.g. the schedule was already changed), find the halt from the vehicles.
+		// Not only the front vehicle: some vehicle stands on the platform even when it is short.
+		for(  uint8 i=0;  i<anz_vehikel  &&  !halt.is_bound();  i++  ) {
+			halt = haltestelle_t::get_stoppable_halt(fahr[i]->get_pos(), get_owner(), fahr[i]->get_waytype());
+		}
 	}
 	if(  halt.is_bound()  ) {
 		halt->erase_departure(scheduled_departure_time, self);
@@ -7420,6 +7428,12 @@ void convoi_t::release_departure_slot(halthandle_t halt) {
 void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled() || self->is_shipped()  ) {
 		return;
+	}
+	// The halt where the whole convoy is loading. Find it from the parent's schedule entry, not from
+	// each convoy's front vehicle: a child, or the parent at a short platform, may stand on a non-platform tile.
+	halthandle_t loading_halt;
+	if(  is_loading()  &&  schedule  &&  !schedule->empty()  &&  anz_vehikel>0  ) {
+		loading_halt = haltestelle_t::get_stoppable_halt(schedule->get_current_entry().pos, get_owner(), front()->get_waytype());
 	}
 	convoihandle_t c = self;
 	while( c.is_bound() ) {
@@ -7435,7 +7449,7 @@ void convoi_t::next_stop_button_pressed() {
 			c->set_waiting_for_departure_allowance_by_other_convoy(false);
 			c->set_waiting_for_departure_make_another_convoy_depart(false);
 			// the convoy does not depart in the booked slot. give it back to the halt.
-			c->release_departure_slot();
+			c->release_departure_slot(loading_halt);
 		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();
