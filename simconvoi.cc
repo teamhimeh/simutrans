@@ -7425,6 +7425,31 @@ void convoi_t::release_departure_slot(halthandle_t halt) {
 }
 
 
+bool convoi_t::is_staying_at(halthandle_t halt) const {
+	const convoihandle_t parent = get_most_parent_convoi();
+	if(  !halt.is_bound()  ||  !parent.is_bound()  ||  parent->get_vehicle_count()==0  ) {
+		return false;
+	}
+	if(  parent->is_loading()  ) {
+		const schedule_t *s = parent->get_schedule();
+		return  s  &&  !s->empty()  &&  haltestelle_t::get_stoppable_halt(s->get_current_entry().pos, parent->get_owner(), parent->front()->get_waytype())==halt;
+	}
+	if(  parent->get_state()==EDIT_SCHEDULE  ) {
+		// The schedule may be under edit, so its entry is not reliable. Find from the vehicles of the whole convoy.
+		// Not only the front vehicle: some vehicle stands on the platform even when it is short.
+		for(  convoihandle_t c = parent;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+			for(  uint8 i=0;  i<c->get_vehicle_count();  i++  ) {
+				const vehicle_t *v = c->get_vehikel(i);
+				if(  haltestelle_t::get_stoppable_halt(v->get_pos(), c->get_owner(), v->get_waytype())==halt  ) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+
 void convoi_t::next_stop_button_pressed() {
 	if(  self->is_coupled() || self->is_shipped()  ) {
 		return;

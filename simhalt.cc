@@ -5299,7 +5299,7 @@ bool haltestelle_t::book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp
 			i = departure_slot_table[idx].erase(i);
 			continue;
 		}
-		if(  is_first_ticks_bigger(i->dep_tick, current_ticks) && (get_stoppable_halt(i->cnv->get_pos(), i->cnv->get_owner(), i->cnv->front()->get_waytype()) != self)  ) {
+		if(  is_first_ticks_bigger(i->dep_tick, current_ticks)  &&  !i->cnv->is_staying_at(self)  ) {
 			// The convoy is not on this halt while the convoy is yet to depart. Handle it as an invalid.
 			i = departure_slot_table[idx].erase(i);
 			continue;

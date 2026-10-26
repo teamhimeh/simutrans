@@ -1453,6 +1453,12 @@ public:
 	 * If halt is unbound, the halt at the current position is used.
 	 */
 	void release_departure_slot(halthandle_t halt = halthandle_t());
+	/**
+	 * true while the whole convoy (judged by the most parent convoy) stays at halt for loading.
+	 * Judged by the state and the schedule entry, not by the tile of the front vehicle:
+	 * when the platform is shorter than the convoy, the front vehicle may stand on a non-platform tile.
+	 */
+	bool is_staying_at(halthandle_t halt) const;
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
 
 	// register journey time to the current schedule entry
