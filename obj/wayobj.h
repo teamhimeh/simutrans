@@ -124,8 +124,16 @@ public:
 	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// specific for wayobj
-	void set_dir(ribi_t::ribi d) { dir = d; calc_image(); }
+	// also updates which of two same-waytype diagonal legs an overhead line electrifies
+	void set_dir(ribi_t::ribi d);
 	ribi_t::ribi get_dir() const { return dir; }
+
+	/**
+	 * (Re)electrifies the way(s) below an overhead line. A single way is electrified as long
+	 * as the line exists. When two same-waytype disjoint diagonal legs share the tile, this one
+	 * wayobj spans both, so each leg is electrified exactly when our dir reaches it.
+	 */
+	void update_electrification();
 
 	/* the static routines */
 private:

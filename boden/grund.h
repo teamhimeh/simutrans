@@ -850,6 +850,12 @@ public:
 	sint64 weg_entfernen(waytype_t wegtyp, bool ribi_rem);
 
 	/**
+	 * Merges two same-waytype disjoint diagonal legs into one way: @p removed_leg is deleted
+	 * and its ribi added to the other leg, which also takes over its electrification.
+	 */
+	void merge_same_waytype_legs(weg_t *removed_leg);
+
+	/**
 	 * Description;
 	 *      Look for an adjacent way in the given direction. Think of an object
 	 *      that needs the given waytyp for movement. The object is current at

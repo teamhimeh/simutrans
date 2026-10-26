@@ -1995,6 +1995,23 @@ bool grund_t::would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi)
 }
 
 
+void grund_t::merge_same_waytype_legs(weg_t *removed_leg)
+{
+	weg_t *kept_leg = get_weg_nr(0)==removed_leg ? get_weg_nr(1) : get_weg_nr(0);
+	const ribi_t::ribi removed_ribi = removed_leg->get_ribi_unmasked();
+	removed_leg->mark_image_dirty( get_image(), 0 );
+	removed_leg->cleanup( NULL );
+	delete removed_leg;
+	flags &= ~has_way2;
+	kept_leg->ribi_add( removed_ribi );
+	// the tile's one wayobj spanned both legs and now lies on a single way, which (as any
+	// single way) is electrified wherever the catenary is - even if only the removed leg was
+	if(  wayobj_t *wo = get_wayobj( kept_leg->get_waytype() )  ) {
+		wo->update_electrification();
+	}
+}
+
+
 bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_t* new_desc, bool allow_same_waytype_dual_leg)
 {
 	// two same-waytype ways already coexist here as disjoint diagonal legs (see below) and
@@ -2006,18 +2023,11 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 	// The way builder refuses such routes beforehand when a leg is someone else's or a halt
 	// is here (way_builder_t::check_dual_leg_merges()); other callers may still get here.
 	if(  would_merge_same_waytype_legs( wegtyp, ribi )  ) {
-		weg_t *leg0 = get_weg_nr(0);
-		weg_t *leg1 = get_weg_nr(1);
 		// a halt cannot sit on a junction tile (see weg_entfernen())
 		if(  is_halt()  ) {
 			haltestelle_t::remove( NULL, get_pos() );
 		}
-		const ribi_t::ribi leg1_ribi = leg1->get_ribi_unmasked();
-		leg1->mark_image_dirty( get_image(), 0 );
-		leg1->cleanup( NULL );
-		delete leg1;
-		flags &= ~has_way2;
-		leg0->ribi_add( leg1_ribi );
+		merge_same_waytype_legs( get_weg_nr(1) );
 	}
 
 	// resolve which way we're extending. When two same-waytype legs still coexist (the second
@@ -2074,12 +2084,11 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 		weg->ribi_add(ribi);
 		weg->count_sign();
 		if(weg->is_electrified()) {
-			wayobj_t *wo = get_wayobj( wegtyp );
-			if( (ribi & wo->get_dir()) == 0 ) {
-				// ribi isn't set at wayobj;
+			if(  wayobj_t *wo = get_wayobj( wegtyp )  ) {
 				for( uint8 i = 0; i < 4; i++ ) {
-					// Add ribis to adjacent wayobj.
-					if( ribi_t::nesw[i] & ribi ) {
+					// Add ribis, which aren't set at wayobj yet, to it and to adjacent wayobj.
+					// (set_dir() also electrifies the leg reached on a two-leg tile)
+					if( ribi_t::nesw[i] & ribi & ~wo->get_dir() ) {
 						grund_t *next_gr;
 						if( get_neighbour( next_gr, wegtyp, ribi_t::nesw[i] ) ) {
 							wayobj_t *wo2 = next_gr->get_wayobj( wegtyp );
@@ -2228,12 +2237,7 @@ sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 								if(  to->is_halt()  ) {
 									haltestelle_t::remove( NULL, to->get_pos() );
 								}
-								const ribi_t::ribi remaining_bit = weg2->get_ribi_unmasked();
-								weg2->mark_image_dirty( to->get_image(), 0 );
-								weg2->cleanup( NULL );
-								delete weg2;
-								to->flags &= ~has_way2;
-								other_leg->ribi_add( remaining_bit );
+								to->merge_same_waytype_legs( weg2 );
 							}
 						}
 						to->calc_image();

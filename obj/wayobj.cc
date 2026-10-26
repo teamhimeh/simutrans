@@ -47,6 +47,58 @@ const way_obj_desc_t *wayobj_t::default_oberleitung=NULL;
 stringhashtable_tpl<const way_obj_desc_t *> wayobj_t::table;
 
 
+// waytype of the way(s) an overhead line desc electrifies
+static waytype_t overhead_way_waytype(const way_obj_desc_t *desc)
+{
+	return (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
+}
+
+
+// true when both way slots of gr hold ways of waytype wt (two disjoint diagonal legs)
+static bool has_two_legs(const grund_t *gr, waytype_t wt)
+{
+	return gr->has_two_same_waytype_ways()  &&  gr->get_weg_nr(0)->get_waytype()==wt;
+}
+
+
+static void electrify_way(weg_t *weg, const way_obj_desc_t *desc, waytype_t wt)
+{
+	weg->set_electrify(true);
+	if((wt != water_wt && wt != air_wt)){
+		weg->set_max_wayobj_speed(desc->get_topspeed());
+	}
+	else if(weg->get_max_speed()>desc->get_topspeed()) {
+		weg->set_max_speed(desc->get_topspeed());
+	}
+}
+
+
+static void unelectrify_way(const grund_t *gr, weg_t *weg, waytype_t wt)
+{
+	// Weg wieder freigeben, wenn das Signal nicht mehr da ist.
+	weg->set_electrify(false);
+	// restore old speed limit
+	sint32 max_speed = weg->hat_gehweg() ? 50 : weg->get_desc()->get_topspeed();
+	if(gr->get_typ()==grund_t::tunnelboden) {
+		tunnel_t *t = gr->find<tunnel_t>(1);
+		if(t) {
+			max_speed = t->get_desc()->get_topspeed();
+		}
+	}
+	if(gr->get_typ()==grund_t::brueckenboden) {
+		bruecke_t *b = gr->find<bruecke_t>(1);
+		if(b) {
+			max_speed = b->get_desc()->get_topspeed();
+		}
+	}
+	// Updating way's max speed is needed unless the way is a railway track.
+	if(  wt == water_wt || wt == air_wt  ) {
+		weg->set_max_speed(max_speed);
+	}
+	weg->set_max_wayobj_speed(0);
+}
+
+
 wayobj_t::wayobj_t(loadsave_t* const file) : obj_no_info_t()
 {
 	close_diagonal = 0;
@@ -75,30 +127,15 @@ wayobj_t::~wayobj_t()
 		grund_t *gr=welt->lookup(get_pos());
 		weg_t *weg=NULL;
 		if(gr) {
-			const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
+			const waytype_t wt = overhead_way_waytype(desc);
 			weg = gr->get_weg(wt);
-			if(weg) {
-				// Weg wieder freigeben, wenn das Signal nicht mehr da ist.
-				weg->set_electrify(false);
-				// restore old speed limit
-				sint32 max_speed = weg->hat_gehweg() ? 50 : weg->get_desc()->get_topspeed();
-				if(gr->get_typ()==grund_t::tunnelboden) {
-					tunnel_t *t = gr->find<tunnel_t>(1);
-					if(t) {
-						max_speed = t->get_desc()->get_topspeed();
-					}
-				}
-				if(gr->get_typ()==grund_t::brueckenboden) {
-					bruecke_t *b = gr->find<bruecke_t>(1);
-					if(b) {
-						max_speed = b->get_desc()->get_topspeed();
-					}
-				}
-				// Updating way's max speed is needed unless the way is a railway track.
-				if(  wt == water_wt || wt == air_wt  ) {
-					weg->set_max_speed(max_speed);
-				}
-				weg->set_max_wayobj_speed(0);
+			if(  weg  &&  has_two_legs(gr, wt)  ) {
+				// we spanned both legs, so neither is electrified any more
+				unelectrify_way(gr, gr->get_weg_nr(0), wt);
+				unelectrify_way(gr, gr->get_weg_nr(1), wt);
+			}
+			else if(weg) {
+				unelectrify_way(gr, weg, wt);
 			}
 			else {
 				dbg->warning("wayobj_t::~wayobj_t()","ground was not a way!");
@@ -195,9 +232,14 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 	// (re)set dir
 	if(dir==dir_unknown) {
-		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
-		weg_t *w=welt->lookup(get_pos())->get_weg(wt);
-		if(w) {
+		const waytype_t wt = overhead_way_waytype(desc);
+		const grund_t *gr = welt->lookup(get_pos());
+		weg_t *w=gr->get_weg(wt);
+		if(  w  &&  has_two_legs(gr, wt)  ) {
+			// we span both legs
+			dir = gr->get_weg_nr(0)->get_ribi_unmasked() | gr->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		else if(w) {
 			dir = w->get_ribi_unmasked();
 		}
 		else {
@@ -207,9 +249,8 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 
 	// electrify a way if we are a catenary
 	if(desc->is_overhead_line()) {
-		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
+		const waytype_t wt = overhead_way_waytype(desc);
 		grund_t *gr = welt->lookup(get_pos());
-		weg_t *weg = gr->get_weg(wt, dir);
 		if (wt == any_wt) {
 			weg_t *weg2 = gr->get_weg_nr(1);
 			if (weg2) {
@@ -219,30 +260,8 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 				}
 			}
 		}
-		else if (gr->has_two_ways()) {
-			// two same-waytype disjoint diagonal legs: a catenary built here spans both
-			// (our own dir already covers whichever bits it was built/extended to cover),
-			// so electrify whichever leg(s) our dir actually reaches, not just one
-			weg_t *leg0 = gr->get_weg_nr(0);
-			weg_t *leg1 = gr->get_weg_nr(1);
-			if(  leg0  &&  leg0->get_waytype()==wt  &&  leg0!=weg  &&  (leg0->get_ribi_unmasked() & dir)  ) {
-				leg0->set_electrify(true);
-				leg0->set_max_wayobj_speed(desc->get_topspeed());
-			}
-			if(  leg1  &&  leg1->get_waytype()==wt  &&  leg1!=weg  &&  (leg1->get_ribi_unmasked() & dir)  ) {
-				leg1->set_electrify(true);
-				leg1->set_max_wayobj_speed(desc->get_topspeed());
-			}
-		}
-		if(weg) {
-			// Weg wieder freigeben, wenn das Signal nicht mehr da ist.
-			weg->set_electrify(true);
-			if((wt != water_wt && wt != air_wt)){
-				weg->set_max_wayobj_speed(desc->get_topspeed());
-			}
-			else if(weg->get_max_speed()>desc->get_topspeed()) {
-				weg->set_max_speed(desc->get_topspeed());
-			}
+		if(gr->get_weg(wt)) {
+			update_electrification();
 		}
 		else {
 			dbg->warning("wayobj_t::finish_rd()","ground was not a way!");
@@ -251,6 +270,42 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 
 	if(get_owner()) {
 		player_t::add_maintenance(get_owner(), desc->get_maintenance(), desc->get_wtyp());
+	}
+}
+
+
+void wayobj_t::set_dir(ribi_t::ribi d)
+{
+	dir = d;
+	// before calc_image(), which deletes us when there is no way here anymore
+	update_electrification();
+	calc_image();
+}
+
+
+void wayobj_t::update_electrification()
+{
+	if(  !desc->is_overhead_line()  ) {
+		return;
+	}
+	grund_t *gr = welt->lookup(get_pos());
+	if(  !gr  ) {
+		return;
+	}
+	const waytype_t wt = overhead_way_waytype(desc);
+	if(  has_two_legs(gr, wt)  ) {
+		for(  uint8 i=0;  i<2;  i++  ) {
+			weg_t *leg = gr->get_weg_nr(i);
+			if(  leg->get_ribi_unmasked() & dir  ) {
+				electrify_way(leg, desc, wt);
+			}
+			else if(  leg->is_electrified()  ) {
+				unelectrify_way(gr, leg, wt);
+			}
+		}
+	}
+	else if(  weg_t *weg = gr->get_weg(wt)  ) {
+		electrify_way(weg, desc, wt);
 	}
 }
 
