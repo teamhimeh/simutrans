@@ -708,6 +708,13 @@ public:
 		return m0 ? w0 : (m1 ? w1 : NULL);
 	}
 
+	/**
+	* true when two ways of waytype @p wegtyp coexist here as disjoint diagonal legs and
+	* weg_erweitern(wegtyp, ribi) would merge them back into a single way: @p ribi either
+	* touches both legs, or touches one leg only and would turn it into a junction.
+	*/
+	bool would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi) const;
+
 	bool hat_weg(waytype_t typ) const { return get_weg(typ)!=NULL; }
 
 	/**

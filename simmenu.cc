@@ -719,6 +719,10 @@ bool shortcut_requires_parameter(const shortcut_t &s)
 		case GENERAL_TOOL | TOOL_CHANGE_CITY_SIZE:
 		case GENERAL_TOOL | TOOL_CHANGE_WATER_HEIGHT:
 		case GENERAL_TOOL | TOOL_SET_CLIMATE:
+		case GENERAL_TOOL | TOOL_REMOVE_WAYOBJ:
+		case SIMPLE_TOOL | TOOL_CHANGE_GAME_SPEED:
+		case SIMPLE_TOOL | TOOL_TRAFFIC_LEVEL:
+		case SIMPLE_TOOL | TOOL_MOVE_MAP:
 			return true;
 	}
 	return false;
