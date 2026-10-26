@@ -107,6 +107,15 @@ private:
 
 	void show_hide_statistics( bool show );
 
+	/**
+	 * Convoy shipping: buttons opening the info window of the carrier this convoy is aboard,
+	 * or of the convoys this convoy is carrying. Rebuilt whenever that set changes.
+	 */
+	gui_aligned_container_t container_shipping;
+	vector_tpl<convoihandle_t> shipping_cnvs; ///< convoys the buttons below stand for; the carrier first, if any
+	vector_tpl<button_t*> shipping_buttons;  ///< owned by container_shipping
+	void update_shipping_buttons();
+
 	gui_button_to_chart_array_t button_to_chart;
 	cbuffer_t buf_line_memo;
 	gui_fixedwidth_textarea_t* memo_area;

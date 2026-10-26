@@ -444,7 +444,9 @@ void convoi_detail_t::update_labels()
 
 void convoi_detail_t::draw(scr_coord offset)
 {
-	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())  ;
+	// aboard a carrier, the convoy can be neither sold, moved, suspended nor traded
+	const bool shipped = cnv->is_shipped();
+	const bool selling_allowed = cnv->get_owner()==welt->get_active_player()  &&  welt->player_can_act_unrestricted(welt->get_active_player())  &&  !shipped;
 	sale_button.enable(selling_allowed && !cnv->get_coupling_convoi().is_bound());
 	withdraw_button.enable(selling_allowed  &&  !cnv->get_coupling_convoi().is_bound()  &&  !cnv->is_coupled());
 	bool show_move_to_depot_button = selling_allowed;
@@ -462,7 +464,7 @@ void convoi_detail_t::draw(scr_coord offset)
 	withdraw_button.pressed = cnv->get_withdraw();
 
 	bool is_owner = cnv->get_owner()==welt->get_active_player();
-	trade_convoi_button.enable(is_owner || (cnv->get_permit_trade() && welt->get_active_player_nr() == cnv->get_accept_player_nr()));
+	trade_convoi_button.enable(!shipped  &&  (is_owner || (cnv->get_permit_trade() && welt->get_active_player_nr() == cnv->get_accept_player_nr())));
 	trade_convoi_button.set_text(is_owner ? cnv->get_permit_trade() ? "Permitted" : "Permit Trade" : "Accept Trade");
 	trade_convoi_button.set_tooltip(is_owner ? "Permit trade this convoi" : "Accept trade this convoi");
 
@@ -478,7 +480,7 @@ void convoi_detail_t::draw(scr_coord offset)
 		max_balance_speed_kmh_of_convoi_numberinput.disable();
 	}
 	max_balance_speed_kmh_of_convoi_button.enable(is_owner);
-	if (is_owner&&!cnv->is_coupled()) {
+	if (is_owner&&!cnv->is_coupled()&&!shipped) {
 		suspension_button.enable(cnv->get_state()!=convoi_t::EDIT_SCHEDULE);
 	} else {
 		suspension_button.disable();
@@ -507,6 +509,10 @@ bool convoi_detail_t::action_triggered(gui_action_creator_t *comp,value_t /* */)
 {
 	if(cnv.is_bound()) {
 		bool is_owner = cnv->get_owner()==welt->get_active_player();
+		if(  cnv->is_shipped()  &&  (comp==&sale_button  ||  comp==&move_to_depot_button  ||  comp==&trade_convoi_button  ||  comp==&suspension_button)  ) {
+			// frozen while aboard a carrier; the tool refuses these anyway
+			return true;
+		}
 		if(comp==&sale_button) {
 			cnv->call_convoi_tool( 'x', NULL );
 			return true;
