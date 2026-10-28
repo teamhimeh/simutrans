@@ -2,7 +2,8 @@
 
 ## Automated checks
 
-Build using the existing platform configuration, then run:
+Build with `make` using the existing platform configuration (`config.default`),
+then run:
 
 ```sh
 python tests/test_heightmap_export.py --cxx g++

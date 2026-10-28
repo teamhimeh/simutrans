@@ -28,7 +28,6 @@ target_sources(simutrans PRIVATE
 		dataobj/freelist.cc
 		dataobj/gameinfo.cc
 		dataobj/height_map_loader.cc
-		dataobj/height_map_exporter.cc
 		dataobj/koord.cc
 		dataobj/koord3d.cc
 		dataobj/loadsave.cc
@@ -167,7 +166,6 @@ target_sources(simutrans PRIVATE
 		gui/loadfont_frame.cc
 		gui/loadsave_frame.cc
 		gui/map_frame.cc
-		gui/save_heightmap_frame.cc
 		gui/message_frame_t.cc
 		gui/message_option_t.cc
 		gui/message_stats_t.cc
