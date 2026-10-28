@@ -2287,29 +2287,3 @@ The binding was not changed. Choose another key, or clear the existing binding f
 キー設定は変更されていません。別のキーを指定するか、割り当て済みの操作のキーを解除してから設定してください。
 Could not read keybindings or prepare their backup.
 キー設定の読み込み、またはバックアップの準備に失敗しました。
-Export heightmap
-地形データ出力
-Heightmap PNG
-地形データ出力
-Save as PNG
-PNG形式で保存
-Load mode:
-ロードモード:
-linear
-線形
-Export the terrain as a PNG heightmap for a new game.
-地形データを新規ゲーム用のPNG画像として出力します。
-Heightmap size:
-画像サイズ:
-Height limits:
-高さの下限・上限:
-Lake levels, buildings and ways are not stored.
-湖面水位・建物・道路や線路は保存されません。
-Please enter a heightmap filename.
-地形データのファイル名を入力してください。
-This file already exists or cannot be accessed. Choose another filename.
-ファイルが既に存在するかアクセスできません。別の名前を指定してください。
-Heightmap saved to:\n%s
-地形データを保存しました:\n%s
-Heightmap export failed. Check the filename and write permissions.
-地形データを出力できません。ファイル名と書込権限を確認してください。
