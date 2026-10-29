@@ -5788,7 +5788,8 @@ bool tool_build_station_t::init( player_t * player )
 	}
 	else {
 set_area_cov:
-		uint16 const cov = welt->get_settings().get_station_coverage() * 2 + 1;
+		waytype_t wt = bdsc->get_finance_waytype();
+		uint16 const cov = welt->get_settings().get_station_coverage( wt==ignore_wt ? invalid_wt : wt ) * 2 + 1;
 		cursor_area = koord(cov, cov);
 		cursor_centered = true;
 		cursor_offset = koord(0,0);

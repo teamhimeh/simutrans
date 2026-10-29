@@ -217,6 +217,8 @@ void planquadrat_t::boden_ersetzen(grund_t *alt, grund_t *neu)
 			}
 		}
 	}
+	// sea tiles may have their own station coverage
+	const bool water_changed = neu->ist_karten_boden()  &&  alt->is_water() != neu->is_water();
 	// transfer text and delete
 	if(alt) {
 		if(alt->get_flag(grund_t::has_text)) {
@@ -228,6 +230,9 @@ void planquadrat_t::boden_ersetzen(grund_t *alt, grund_t *neu)
 			neu->obj_add( alt->obj_remove_top() );
 		}
 		delete alt;
+	}
+	if(  water_changed  &&  welt->get_settings().get_station_coverage_water() >= 0  ) {
+		update_haltlist();
 	}
 }
 
@@ -785,22 +790,41 @@ void planquadrat_t::remove_from_haltlist(halthandle_t halt)
 
 	// quick and dirty way to our 2d koodinates ...
 	const koord pos = get_kartenboden()->get_pos().get_2d();
-	int const cov = welt->get_settings().get_station_coverage();
+	if(  halt->is_covering(pos)  ) {
+		// still connected
+		// Reset distance computation
+		add_to_haltlist(halt);
+	}
+}
+
+
+void planquadrat_t::update_haltlist()
+{
+	const koord pos = get_kartenboden()->get_pos().get_2d();
+
+	// remove halts which do not cover this tile any more
+	for(  uint8 i = halt_list_count;  i-- > 0;  ) {
+		if(  !halt_list[i]->is_covering(pos)  ) {
+			halt_list_remove( halt_list[i] );
+		}
+	}
+
+	// add halts which cover this tile now
+	int const cov = welt->get_settings().get_max_station_coverage();
 	for (int y = -cov; y <= cov; y++) {
 		for (int x = -cov; x <= cov; x++) {
-			koord test_pos = pos+koord(x,y);
-			const planquadrat_t *pl = welt->access(test_pos);
+			const planquadrat_t *pl = welt->access(pos+koord(x,y));
 			if (pl) {
 				for(  uint i = 0;  i < pl->get_boden_count();  i++  ) {
-					if (  pl->get_boden_bei(i)->get_halt() == halt  ) {
-						// still connected
-						// Reset distance computation
+					halthandle_t const halt = pl->get_boden_bei(i)->get_halt();
+					if(  halt.is_bound()  &&  !is_connected(halt)  &&  halt->is_covering(pos)  ) {
 						add_to_haltlist(halt);
 					}
 				}
 			}
 		}
 	}
+	get_kartenboden()->set_flag(grund_t::dirty);
 }
 
 

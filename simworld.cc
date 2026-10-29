@@ -2076,21 +2076,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	set_schedule_counter();
 
 	// Refresh the haltlist for the affected tiles / stations.
-	// It is enough to check the tile just at the border ...
-	uint16 const cov = settings.get_station_coverage();
+	// It is enough to check the stations with tiles just at the border ...
+	uint16 const cov = settings.get_max_station_coverage();
+	vector_tpl<halthandle_t> border_halts;
 	if(  old_y < new_size_y  ) {
 		for(  sint16 y=0;  y<old_y;  y++  ) {
 			for(  sint16 x=max(0,old_x-cov);  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=max(0,x-cov);  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=y;  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
@@ -2101,18 +2097,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 			for(  sint16 x=0;  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=x;  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=max(0,y-cov);  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
 		}
+	}
+	// re-adding the whole coverage also covers the new tiles
+	FOR(vector_tpl<halthandle_t>, const h, border_halts) {
+		h->refresh_coverage();
 	}
 	clear_random_mode( MAP_CREATE_RANDOM );
 

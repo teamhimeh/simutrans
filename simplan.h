@@ -192,6 +192,12 @@ public:
 	void remove_from_haltlist(halthandle_t halt);
 
 	/**
+	 * rebuilds the halt list from the halts covering this tile
+	 * (needed when the coverage changes, e.g. when land becomes sea or vice versa)
+	 */
+	void update_haltlist();
+
+	/**
 	 * sort list of connected halts, ascending wrt distance to this tile
 	 */
 	void sort_haltlist();

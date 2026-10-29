@@ -376,7 +376,8 @@ bool ai_passenger_t::create_water_transport_vehikel(const stadt_t* start_stadt, 
 		}
 	}
 
-	uint16 const cov = welt->get_settings().get_station_coverage();
+	// sea tiles covered by the harbour (dock and the joined bus stop)
+	sint16 const cov = max( (sint16)max( welt->get_settings().get_station_coverage(water_wt), welt->get_settings().get_station_coverage(road_wt) ), welt->get_settings().get_station_coverage_water() );
 	// now we have harbour => find start position for ships
 	koord pos1 = start_harbour-start_dx;
 	koord start_pos = pos1;
@@ -832,7 +833,7 @@ void ai_passenger_t::walk_city(linehandle_t const line, grund_t* const start, in
 				// find out how many tiles we have covered already
 				int covered_tiles=0;
 				int house_tiles=0;
-				uint16 const cov = welt->get_settings().get_station_coverage();
+				uint16 const cov = welt->get_settings().get_station_coverage(road_wt);
 				for (sint16 y = to->get_pos().y - cov; y <= to->get_pos().y + cov + 1; ++y) {
 					for (sint16 x = to->get_pos().x - cov; x <= to->get_pos().x + cov + 1; ++x) {
 						const planquadrat_t *pl = welt->access(koord(x,y));
@@ -1029,7 +1030,7 @@ DBG_MESSAGE("ai_passenger_t::do_passenger_ki()","searching attraction");
 						// this is either a town already served (so we do not create a new hub)
 						// or a lonely point somewhere
 						// in any case we do not want to serve this location already
-						uint16 const c   = welt->get_settings().get_station_coverage();
+						uint16 const c   = welt->get_settings().get_station_coverage(road_wt);
 						koord  const cov = koord(c, c);
 						koord test_platz=find_area_for_hub(pos-cov,pos+size+cov,pos);
 						if(  !get_halt(test_platz).is_bound()  ) {
