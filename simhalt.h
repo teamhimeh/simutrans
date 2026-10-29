@@ -235,13 +235,14 @@ public:
 	 */
 	struct tile_t
 	{
-		tile_t(grund_t* grund_) : grund(grund_) {}
+		tile_t(grund_t* grund_) : grund(grund_), coverage(0) {}
 
 		bool operator ==(const tile_t& o) { return grund == o.grund; }
 		bool operator !=(const tile_t& o) { return grund != o.grund; }
 
 		grund_t*       grund;
 		convoihandle_t reservation[2];
+		uint16         coverage; ///< station coverage of this tile, set by add_grund()
 	};
 
 	const slist_tpl<tile_t> &get_tiles() const { return tiles; }
@@ -363,6 +364,12 @@ private:
 
 	// private helper function for recalc_station_type()
 	void add_to_station_type( grund_t *gr );
+
+	/// largest distance this station tile can cover (its own coverage or station_coverage_water)
+	static uint16 get_tile_reach(const tile_t &tile);
+
+	/// adds this halt to the haltlists of all tiles covered by this station tile
+	void add_tile_coverage(const tile_t &tile, bool insert_unsorted);
 
 	/**
 	 * Reconnect and reroute if counter different from welt->get_schedule_counter()
@@ -755,6 +762,25 @@ public:
 	 */
 	bool add_grund(grund_t *gb, bool relink_factories = true);
 	bool rem_grund(grund_t *gb);
+
+	/**
+	 * Station coverage of a station tile. It depends on the waytype of the building on it.
+	 * Buildings without waytype (e.g. extensions) use invalid_wt, i.e. settings_t::get_station_coverage().
+	 */
+	static uint16 get_tile_coverage(const grund_t *gr);
+
+	/// true, if pos is covered by this station tile (sea tiles may use station_coverage_water)
+	static bool is_tile_covering(const tile_t &tile, koord pos);
+
+	/// true, if pos is covered by any tile of this station
+	bool is_covering(koord pos) const;
+
+	/// true, if any tile of other is covered by this station
+	/// (walking transfer needs this in both directions)
+	bool covers_any_tile_of(halthandle_t other) const;
+
+	/// re-adds this halt to the haltlists of all covered tiles
+	void refresh_coverage();
 
 	uint32 get_capacity(uint8 typ) const { return capacity[typ]; }
 

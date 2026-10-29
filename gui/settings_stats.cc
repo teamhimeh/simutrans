@@ -236,6 +236,15 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "overloading runningcost increase", sets->is_overloading_runningcost_increase() );
 	INIT_BOOL( "overloaded acceleration", sets->is_overloaded_acceleration() );
 	INIT_NUM( "station_coverage", sets->get_station_coverage(), 1, 127, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[road]", sets->station_coverage_size_wt[road_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[track]", sets->station_coverage_size_wt[track_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[water]", sets->station_coverage_size_wt[water_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[monorail_track]", sets->station_coverage_size_wt[monorail_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[maglev_track]", sets->station_coverage_size_wt[maglev_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[tram_track]", sets->station_coverage_size_wt[tram_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[narrowgauge_track]", sets->station_coverage_size_wt[narrowgauge_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage[air]", sets->station_coverage_size_wt[air_wt], -1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage_water", sets->get_station_coverage_water(), -1, 64, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "allow_merge_distant_halt", sets->get_allow_merge_distant_halt(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	SEPERATOR
 	INIT_NUM( "max_route_steps", sets->get_max_route_steps(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
@@ -297,6 +306,15 @@ void settings_routing_stats_t::read(settings_t* const sets)
 	READ_BOOL_VALUE( sets->overloading_runningcost_increase );
 	READ_BOOL_VALUE( sets->overloaded_acceleration );
 	READ_NUM_VALUE( sets->station_coverage_size );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[road_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[track_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[water_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[monorail_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[maglev_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[tram_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[narrowgauge_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_wt[air_wt] );
+	READ_NUM_VALUE( sets->station_coverage_size_water );
 	READ_NUM_VALUE( sets->allow_merge_distant_halt );
 	READ_NUM_VALUE( sets->max_route_steps );
 	READ_NUM_VALUE( sets->max_choose_route_steps );

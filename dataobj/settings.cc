@@ -58,6 +58,10 @@ settings_t::settings_t() :
 	mean_citizen_count = 1600;
 
 	station_coverage_size = 2;
+	for(  uint8 i=0;  i<=air_wt;  i++  ) {
+		station_coverage_size_wt[i] = -1;
+	}
+	station_coverage_size_water = -1;
 
 	traffic_level = 5;
 
@@ -1255,6 +1259,18 @@ void settings_t::rdwr(loadsave_t *file)
 			maintenance_cost_multiplier_overhead = 100;
 			running_cost_multiplier_vehicle = 100;
 		}
+		if(  file->get_OTRP_version() >= 63  ) {
+			for(  uint8 i=0;  i<=air_wt;  i++  ) {
+				file->rdwr_short( station_coverage_size_wt[i] );
+			}
+			file->rdwr_short( station_coverage_size_water );
+		}
+		else if(  file->is_loading()  ) {
+			for(  uint8 i=0;  i<=air_wt;  i++  ) {
+				station_coverage_size_wt[i] = -1;
+			}
+			station_coverage_size_water = -1;
+		}
 		if(  file->get_OTRP_version() >= 62  ) {
 			file->rdwr_long( toll_shipping_percentage );
 			file->rdwr_long( shipping_income_percentage );
@@ -1846,6 +1862,18 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 
 	numbered_stations     = contents.get_int( "numbered_stations", numbered_stations ) != 0;
 	station_coverage_size = contents.get_int_clamped( "station_coverage", station_coverage_size, 0, 64);
+	// station_coverage[road] etc.: coverage of stations of this waytype, -1 = use station_coverage
+	{
+		static const waytype_t coverage_wts[] = { road_wt, track_wt, water_wt, monorail_wt, maglev_wt, tram_wt, narrowgauge_wt, air_wt };
+		static const char *const coverage_wt_names[] = { "road", "track", "water", "monorail_track", "maglev_track", "tram_track", "narrowgauge_track", "air" };
+		for(  uint8 i=0;  i<lengthof(coverage_wts);  i++  ) {
+			char buf[64];
+			sprintf( buf, "station_coverage[%s]", coverage_wt_names[i] );
+			station_coverage_size_wt[coverage_wts[i]] = contents.get_int_clamped( buf, station_coverage_size_wt[coverage_wts[i]], -1, 64 );
+		}
+	}
+	// coverage for sea tiles (not rivers), -1 = use the coverage of the station tile
+	station_coverage_size_water = contents.get_int_clamped( "station_coverage_water", station_coverage_size_water, -1, 64 );
 
 	// time stuff
 	bits_per_month = contents.get_int_clamped( "bits_per_month", bits_per_month, 1, 31 );
@@ -2347,4 +2375,14 @@ uint32 settings_t::get_base_waiting_ticks(waytype_t waytype) const {
 	else {
 		return base_waiting_ticks_for_rail_convoi;
 	}
+}
+
+
+uint16 settings_t::get_max_station_coverage() const
+{
+	sint16 cov = station_coverage_size;
+	for(  uint8 i=0;  i<=air_wt;  i++  ) {
+		cov = max( cov, station_coverage_size_wt[i] );
+	}
+	return (uint16)max( cov, station_coverage_size_water );
 }
