@@ -82,6 +82,13 @@ private:
 	/// true if tile2 matches the two disjoint diagonal legs on @p gr
 	bool is_valid_platform_pair(const grund_t *gr) const;
 
+	/**
+	 * With two platforms (tile and tile2), a platform which is a single stop tile on its leg
+	 * is not shown next to a connected one. Two single platforms are both shown.
+	 * @param t tile or tile2
+	 */
+	bool is_platform_shown(const building_tile_desc_t *t) const;
+
 	/// draws the background images of the second platform tile2
 	void display_tile2(int xpos, int ypos  CLIP_NUM_DEF) const;
 

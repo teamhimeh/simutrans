@@ -401,6 +401,24 @@ bool gebaeude_t::is_valid_platform_pair(const grund_t *gr) const
 }
 
 
+// a diagonal platform not connected to any other stop tile along its leg (both end bits set)
+static bool is_single_platform(const building_tile_desc_t *t)
+{
+	return (t->get_layout() & 6) == 6;
+}
+
+
+bool gebaeude_t::is_platform_shown(const building_tile_desc_t *t) const
+{
+	if(  !tile2  ) {
+		return true;
+	}
+	// a single platform is hidden next to a connected one; two single platforms are both shown
+	const building_tile_desc_t *other = (t==tile) ? tile2 : tile;
+	return !is_single_platform(t)  ||  is_single_platform(other);
+}
+
+
 sync_result gebaeude_t::sync_step(uint32 delta_t)
 {
 	if(  zeige_baugrube  ) {
@@ -524,6 +542,9 @@ image_id gebaeude_t::get_image() const
 	if(  zeige_baugrube  )  {
 		return skinverwaltung_t::construction_site->get_image_id(0);
 	}
+	else if(  !is_platform_shown(tile)  ) {
+		return IMG_EMPTY;
+	}
 	else {
 		return tile->get_background( anim_frame, 0, season );
 	}
@@ -538,7 +559,7 @@ image_id gebaeude_t::get_outline_image() const
 	if (((env_t::hide_buildings != 0 && env_t::hide_with_transparency) || (is_in_highlighted_city && is_city_info_opened)) && !zeige_baugrube)
 	{
 		// opaque houses
-		return tile->get_background( anim_frame, 0, season );
+		return is_platform_shown(tile) ? tile->get_background( anim_frame, 0, season ) : IMG_EMPTY;
 	}
 	return IMG_EMPTY;
 }
@@ -579,7 +600,7 @@ image_id gebaeude_t::get_image(int nr) const
 		return IMG_EMPTY;
 	}
 	else {
-		return tile->get_background( anim_frame, nr, season );
+		return is_platform_shown(tile) ? tile->get_background( anim_frame, nr, season ) : IMG_EMPTY;
 	}
 }
 
@@ -600,7 +621,7 @@ image_id gebaeude_t::get_front_image() const
 	}
 	else {
 		// Show depots, station buildings etc.
-		return tile->get_foreground( anim_frame, season );
+		return is_platform_shown(tile) ? tile->get_foreground( anim_frame, season ) : IMG_EMPTY;
 	}
 }
 
@@ -637,7 +658,7 @@ static void display_tile2_image(image_id image, int xpos, int ypos, sint8 owner_
 
 void gebaeude_t::display_tile2(int xpos, int ypos  CLIP_NUM_DEF) const
 {
-	if(  zeige_baugrube  ) {
+	if(  zeige_baugrube  ||  !is_platform_shown(tile2)  ) {
 		// the construction site is drawn once (by tile)
 		return;
 	}
@@ -658,7 +679,7 @@ void gebaeude_t::display_tile2(int xpos, int ypos  CLIP_NUM_DEF) const
 
 void gebaeude_t::display_tile2_after(int xpos, int ypos  CLIP_NUM_DEF) const
 {
-	if(  zeige_baugrube  ) {
+	if(  zeige_baugrube  ||  !is_platform_shown(tile2)  ) {
 		return;
 	}
 	const image_id image = tile2->get_foreground( anim_frame, season );
@@ -1423,6 +1444,13 @@ void gebaeude_t::mark_images_dirty() const
 	}
 	for(  int i=0;  img!=IMG_EMPTY;  img=get_image(++i)  ) {
 		mark_image_dirty( img, -(i*get_tile_raster_width()) );
+	}
+	if(  tile2  ) {
+		// a hidden platform (see is_platform_shown()) may just have been shown
+		for(  int i=1;  (img=tile->get_background( anim_frame, i, season ))!=IMG_EMPTY;  i++  ) {
+			mark_image_dirty( img, -(i*get_tile_raster_width()) );
+		}
+		mark_image_dirty( tile->get_foreground( anim_frame, season ), 0 );
 	}
 	if(  tile2  ) {
 		for(  int i=0;  (img=tile2->get_background( anim_frame, i, season ))!=IMG_EMPTY;  i++  ) {
