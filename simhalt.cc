@@ -3739,7 +3739,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only, bool no_cost
 			player_t *gbplayer =gb->get_owner();
 			gb->set_owner(player);
 			gb->set_flag(obj_t::dirty);
-			sint64 const monthly_costs = welt->get_settings().maint_building * gb->get_tile()->get_desc()->get_level();
+			sint64 const monthly_costs = welt->get_settings().maint_building * gb->get_tile()->get_desc()->get_level() * gb->get_platform_count();
 			waytype_t const costs_type = gb->get_waytype();
 			player_t::add_maintenance(gbplayer, -monthly_costs, costs_type);
 			player_t::add_maintenance(player, monthly_costs, costs_type);
@@ -4054,7 +4054,7 @@ void haltestelle_t::add_to_station_type( grund_t *gr )
 			switch (desc->get_extra()) {
 				case road_wt:
 					station_type |= (desc->get_enabled()&3)!=0 ? busstop : loadingbay;
-					if (gr->has_two_ways()) { // tram track on street
+					if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) { // tram track on street (not a closed diagonal)
 						station_type |= tramstop;
 					}
 					break;
@@ -4064,7 +4064,7 @@ void haltestelle_t::add_to_station_type( grund_t *gr )
 				case track_wt:       station_type |= railstation;     break;
 				case tram_wt:
 					station_type |= tramstop;
-					if (gr->has_two_ways()) { // tram track on street
+					if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) { // tram track on street (not a closed diagonal)
 						station_type |= (desc->get_enabled()&3)!=0 ? busstop : loadingbay;
 					}
 					break;
@@ -4078,20 +4078,22 @@ void haltestelle_t::add_to_station_type( grund_t *gr )
 
 	// enabled the matching types
 	enables |= desc->get_enabled();
+	// a closed diagonal stop has a platform on each leg
+	const uint32 platform_capacity = desc->get_capacity() * gb->get_platform_count();
 	if (welt->get_settings().is_separate_halt_capacities()) {
 		if(desc->get_enabled()&1) {
-			capacity[0] += desc->get_capacity();
+			capacity[0] += platform_capacity;
 		}
 		if(desc->get_enabled()&2) {
-			capacity[1] += desc->get_capacity();
+			capacity[1] += platform_capacity;
 		}
 		if(desc->get_enabled()&4) {
-			capacity[2] += desc->get_capacity();
+			capacity[2] += platform_capacity;
 		}
 	}
 	else {
 		// no separate capacities: sum up all
-		capacity[0] += desc->get_capacity();
+		capacity[0] += platform_capacity;
 		capacity[2] = capacity[1] = capacity[0];
 	}
 }

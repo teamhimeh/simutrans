@@ -157,6 +157,11 @@ public:
 	// desc has to have 48 layouts.
 	static gebaeude_t* build_station_on_diagonal_way(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi way_connection, halthandle_t halt);
 
+	// Build a stop on a closed diagonal tile (two disjoint diagonal legs @p leg1 and @p leg2 of
+	// the stop's waytype): one building with a platform image for each leg (see gebaeude_t::get_tile2()).
+	// desc has to have 48 layouts.
+	static gebaeude_t* build_station_on_closed_diagonal(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi leg1, const ribi_t::ribi leg2, halthandle_t halt);
+
 	// Build a stop on a sloped way tile.
 	// Slope image offsets per flat pattern: N/W single=+48, S/E single=+64, N/W double=+80, S/E double=+96.
 	// If the descriptor does not have slope images the flat layout is used unchanged.
@@ -202,6 +207,10 @@ public:
 	static void cleanup_multitile_buildings_finish_rd();
 
 private:
+	// Layout of a stop on the diagonal leg @p way_connection at @p pos. Also clears the
+	// end bits of the neighbouring stops along this leg.
+	static uint8 calc_diagonal_station_layout(koord3d pos, const ribi_t::ribi way_connection);
+
 	static gebaeude_t* build_station_extension_depot_with_complete_layout_bits(player_t* player, koord3d pos, int layout, const building_desc_t* desc, void* param);
 };
 

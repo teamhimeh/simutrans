@@ -517,6 +517,10 @@ bool way_builder_t::check_building( const grund_t *to, const koord dir ) const
 			// horizontal
 			gb_connected_direction = (layout&1) ? ribi_t::northwest : ribi_t::southeast;
 		}
+		if(  gb->get_tile2()  ) {
+			// closed diagonal stop: the second platform is on the other leg
+			gb_connected_direction |= gebaeude_t::get_diagonal_layout_ribi( gb->get_tile2()->get_layout() );
+		}
 		return r & gb_connected_direction;
 	}
 	return true;

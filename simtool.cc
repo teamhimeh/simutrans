@@ -5451,10 +5451,35 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	const bool disjoint_diagonal_halt = bd->has_two_ways()
 		&&  ribi_t::are_disjoint_legs( bd->get_weg_nr(0)->get_ribi_unmasked(), bd->get_weg_nr(1)->get_ribi_unmasked() );
 
+	// On such a tile the stop goes on a bend of its own waytype. When both legs are such bends
+	// (a closed diagonal), each leg gets its own platform image (see gebaeude_t::get_tile2()).
+	ribi_t::ribi disjoint_leg_ribi = ribi_t::none;
+	ribi_t::ribi second_leg_ribi = ribi_t::none;
+	if(  disjoint_diagonal_halt  ) {
+		const waytype_t leg_wt = (wegtype==tram_wt) ? track_wt : wegtype;
+		const weg_t *w0 = bd->get_weg_nr(0);
+		const weg_t *w1 = bd->get_weg_nr(1);
+		const bool leg0_ok = w0->get_waytype()==leg_wt  &&  ribi_t::is_bend( w0->get_ribi_unmasked() );
+		const bool leg1_ok = w1->get_waytype()==leg_wt  &&  ribi_t::is_bend( w1->get_ribi_unmasked() );
+		// unless only the second leg is suitable, keep using the first one (refused below if unsuitable)
+		const weg_t *first = (!leg0_ok  &&  leg1_ok) ? w1 : w0;
+		disjoint_leg_ribi = first->get_ribi_unmasked();
+		if(  leg0_ok  &&  leg1_ok  &&  desc->get_all_layouts()>=48  ) {
+			second_leg_ribi = w1->get_ribi_unmasked();
+		}
+		// both platforms belong to the halt owner: the builder must be allowed to use both legs
+		for(  uint8 i=0;  i<2;  i++  ) {
+			weg_t *w = bd->get_weg_nr(i);
+			if(  (w==first  ||  second_leg_ribi!=ribi_t::none)  &&  w->is_deletable(player)!=NULL  ) {
+				return "Das Feld gehoert\neinem anderen Spieler\n";
+			}
+		}
+	}
+
 	if(  desc->get_all_layouts()==112  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			ribi = disjoint_leg_ribi;
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5476,7 +5501,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	else if(  desc->get_all_layouts()==80  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			ribi = disjoint_leg_ribi;
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5498,7 +5523,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	else if(  desc->get_all_layouts()==48  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			ribi = disjoint_leg_ribi;
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5591,7 +5616,8 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 				const gebaeude_t* gb = gr->find<gebaeude_t>();
 				if(gb  &&  gb->get_tile()->get_desc()->get_all_layouts()>4  &&  (gb->get_tile()->get_desc()->get_type()>building_desc_t::dock  ||  gb->get_tile()->get_desc()->get_type()>building_desc_t::flat_dock)  ) {
 					next_own |= ribi_t::nesw[i];
-					neighbour_layout[ribi_t::nesw[i]] = gb->get_tile()->get_layout();
+					// on a closed diagonal neighbour: the platform on the leg facing us
+					neighbour_layout[ribi_t::nesw[i]] = gb->get_tile_toward( ribi_t::backward(ribi_t::nesw[i]) )->get_layout();
 				}
 			}
 		}
@@ -5640,6 +5666,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	halthandle_t old_halt = bd->get_halt();
 	sint64 old_cost = 0;
 	bool recalc_schedule = false;
+	// the same stop is already here, only the platform on the second leg is added
+	bool add_second_platform = false;
+	const uint8 platforms = (second_leg_ribi!=ribi_t::none) ? 2 : 1;
 
 	halthandle_t halt;
 
@@ -5650,13 +5679,17 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		halt_player = gb->get_owner();
 		const building_desc_t *old_desc = gb->get_tile()->get_desc();
 		if(  old_desc == desc  ) {
-			// already has the same station
-			return NULL;
+			if(  platforms <= gb->get_platform_count()  ) {
+				// already has the same station
+				return NULL;
+			}
+			// closed diagonal, which got its second leg after the stop was built
+			add_second_platform = true;
 		}
-		if(  old_desc->get_capacity() >= desc->get_capacity()  &&  !is_ctrl_pressed()  ) {
+		else if(  old_desc->get_capacity() >= desc->get_capacity()  &&  !is_ctrl_pressed()  ) {
 			return "Upgrade must have\na higher level";
 		}
-		old_cost = old_desc->get_price(welt)*old_desc->get_x()*old_desc->get_y();
+		old_cost = old_desc->get_price(welt)*old_desc->get_x()*old_desc->get_y()*gb->get_platform_count();
 		gb->cleanup( NULL );
 		delete gb;
 		halt = old_halt;
@@ -5686,6 +5719,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	if(  bd->get_weg_hang() != slope_t::flat  ) {
 		hausbauer_t::build_station_on_slope_way(halt_player, bd->get_pos(), layout, desc, halt);
 	}
+	else if(  second_leg_ribi!=ribi_t::none  ) {
+		hausbauer_t::build_station_on_closed_diagonal(halt_player, bd->get_pos(), desc, ribi, second_leg_ribi, halt);
+	}
 	else if(  desc->get_all_layouts()>=48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
@@ -5704,13 +5740,17 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	}
 
 	// cost to build new station
-	sint64 cost = -desc->get_price(welt)*desc->get_x()*desc->get_y();
+	sint64 cost = -desc->get_price(welt)*desc->get_x()*desc->get_y()*platforms;
 	// discount for existing station
 	cost += old_cost/2;
+	if(  add_second_platform  ) {
+		// only the new platform is paid
+		cost = -desc->get_price(welt);
+	}
 	if(  player!=halt->get_owner() && player != welt->get_public_player()  ) {
 		// public stops are expensive!
 		// (Except for the public player itself)
-		cost -= (desc->get_maintenance(welt) * desc->get_x() * desc->get_y() * 60);
+		cost -= (desc->get_maintenance(welt) * desc->get_x() * desc->get_y() * (add_second_platform ? 1 : platforms) * 60);
 	}
 	player_t::book_construction_costs(player,  cost, k, wegtype);
 
@@ -6225,6 +6265,11 @@ const char *tool_rotate_building_t::rotate_building_at( player_t *player, koord3
 			}
 			int layout = gb->get_tile()->get_layout();
 			gb->set_tile( gb->get_tile()->get_desc()->get_tile( layout^8, 0, 0 ), false );
+			if(  gb->get_tile2()  &&  (layout & 8)  ) {
+				// closed diagonal stop: count through all four front/back combinations of the
+				// two platforms, flipping the second one whenever the first one returns to front
+				gb->set_tile2( desc->get_tile( gb->get_tile2()->get_layout()^8, 0, 0 ) );
+			}
 		}
 		else {
 			// single and multitile buildings from here, include factories with holes etc.
