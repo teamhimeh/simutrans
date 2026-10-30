@@ -303,7 +303,7 @@ public:
 	 * Draw background image of object
 	 * (everything that could be potentially behind vehicles)
 	 */
-	void display(int xpos, int ypos  CLIP_NUM_DEF) const;
+	virtual void display(int xpos, int ypos  CLIP_NUM_DEF) const;
 
 	/**
 	 * Draw foreground image

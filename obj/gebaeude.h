@@ -10,6 +10,7 @@
 #include "../ifc/sync_steppable.h"
 #include "simobj.h"
 #include "../simcolor.h"
+#include "../dataobj/ribi.h"
 
 class building_tile_desc_t;
 class fabrik_t;
@@ -23,6 +24,14 @@ class gebaeude_t : public obj_t, sync_steppable
 {
 private:
 	const building_tile_desc_t *tile;
+
+	/**
+	 * Second platform of a stop on a closed diagonal tile (two disjoint diagonal legs of the
+	 * stop's waytype): tile covers one leg, tile2 the other one. Both are diagonal layouts
+	 * (16..47) of the same building_desc_t, which leg is in which slot has no meaning.
+	 * NULL for all other buildings.
+	 */
+	const building_tile_desc_t *tile2;
 
 	/**
 	 * Time control for animation progress.
@@ -70,6 +79,15 @@ private:
 	 */
 	void init();
 
+	/// true if tile2 matches the two disjoint diagonal legs on @p gr
+	bool is_valid_platform_pair(const grund_t *gr) const;
+
+	/// draws the background images of the second platform tile2
+	void display_tile2(int xpos, int ypos  CLIP_NUM_DEF) const;
+
+	/// draws the foreground image of the second platform tile2
+	void display_tile2_after(int xpos, int ypos  CLIP_NUM_DEF) const;
+
 protected:
 	gebaeude_t();
 
@@ -102,6 +120,14 @@ public:
 
 	image_id get_outline_image() const OVERRIDE;
 	FLAGGED_PIXVAL get_outline_colour() const OVERRIDE;
+
+	/// draws tile2 too: the platform on the back leg first
+	void display(int xpos, int ypos  CLIP_NUM_DEF) const OVERRIDE;
+#ifdef MULTI_THREAD
+	void display_after(int xpos, int ypos, const sint8 clip_num) const OVERRIDE;
+#else
+	void display_after(int xpos, int ypos, bool is_global) const OVERRIDE;
+#endif
 
 	// caches image at height 0
 	void calc_image() OVERRIDE;
@@ -155,6 +181,27 @@ public:
 	void set_tile( const building_tile_desc_t *t, bool start_with_construction );
 
 	const building_tile_desc_t *get_tile() const { return tile; }
+
+	/// second platform of a stop on a closed diagonal tile, NULL otherwise
+	const building_tile_desc_t *get_tile2() const { return tile2; }
+
+	/// sets or removes (@p t==NULL) the second platform, books its maintenance
+	void set_tile2( const building_tile_desc_t *t );
+
+	/// @return the tile whose diagonal leg contains @p dir (tile, if there is no such tile2)
+	const building_tile_desc_t *get_tile_toward( ribi_t::ribi dir ) const;
+
+	/// replaces the tile whose diagonal leg contains @p dir (tile, if there is no such tile2)
+	void set_tile_toward( ribi_t::ribi dir, const building_tile_desc_t *t );
+
+	/// number of platforms (two with tile2), each one counts for maintenance and capacity
+	uint8 get_platform_count() const { return tile2 ? 2 : 1; }
+
+	/**
+	 * @return the leg (a bend) covered by the diagonal stop layout @p layout (16..47),
+	 * ribi_t::none for all other layouts
+	 */
+	static ribi_t::ribi get_diagonal_layout_ribi( uint8 layout );
 
 	bool is_within_players_network(const player_t* player) const;
 
