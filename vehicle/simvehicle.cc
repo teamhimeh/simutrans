@@ -186,6 +186,7 @@ void vehicle_base_t::rotate90()
 void vehicle_base_t::leave_tile()
 {
 	// first: release crossing
+	dbg->message("vehicle_base_t::leave_tile()","leave from %s",get_pos().get_str());
 	grund_t *gr = welt->lookup(get_pos());
 	if (gr) {
 		if (crossing_t* cr = gr->get_crossing()) {
@@ -6119,6 +6120,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 /* beware: we must un-reserve rail blocks... */
 void rail_vehicle_t::leave_tile()
 {
+	dbg->message("rail_vehicle_t::leave_tile()","leave tile");
 	vehicle_t::leave_tile();
 	// fix counters
 	// direction-aware: resolve the leg this vehicle actually occupies, relevant when two
@@ -6147,8 +6149,9 @@ void rail_vehicle_t::leave_tile()
 				ribi_t::ribi other_convoy_travel_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
-					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
-						// no vehicle or same convoy, ok
+					convoi_t* const vc = v ? v->get_convoi() : NULL;
+					if(  !v  ||  !vc  ||  vc==(convoi_t*)1  ||  vc==get_convoi()  ) {
+						// no vehicle, same convoy, or not yet finished loading (cnv placeholder)
 						continue;
 					}
 					if(  gr->has_two_same_waytype_ways()  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
