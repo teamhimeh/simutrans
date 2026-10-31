@@ -36,15 +36,42 @@ private:
 	// close diagonals on a fourway way: 0=no, 1=northwest+southeast, 2=northeast+southwest
 	uint8 close_diagonal:2;
 
+	// two same-waytype disjoint diagonal legs below, both reached by our dir, and no close
+	// diagonal image for them: each leg gets its own image (leg_dir_a is drawn as our normal
+	// image, leg_dir_b additionally by display()/display_after())
+	uint8 two_legs:1;
+	// bit 0: leg a drawn diagonal, bit 1: leg b drawn diagonal
+	uint8 leg_diagonal:2;
+	uint8 leg_dir_a:4;
+	uint8 leg_dir_b:4;
+
 	// image of a close diagonal
 	image_id get_close_diagonal_image(bool front) const {
 		return front ? desc->get_front_close_diagonal_image_id(close_diagonal-1) : desc->get_back_close_diagonal_image_id(close_diagonal-1);
 	}
 
+	// image of one of two legs
+	image_id get_leg_image(ribi_t::ribi leg_dir, bool leg_diag, bool front) const {
+		if(  leg_diag  ) {
+			return front ? desc->get_front_diagonal_image_id(leg_dir) : desc->get_back_diagonal_image_id(leg_dir);
+		}
+		return front ? desc->get_front_image_id(leg_dir) : desc->get_back_image_id(leg_dir);
+	}
+
+	// draws an additional image like display_after() does
+	void display_extra_image(image_id image, int xpos, int ypos  CLIP_NUM_DEF) const;
+
 	static const uint8 dir_unknown = 127;
 
 	ribi_t::ribi find_next_ribi(const grund_t *start, const ribi_t::ribi dir, const waytype_t wt) const;
 
+	// true when leg_dir is a bend we have a diagonal image for
+	bool is_diagonal_leg(ribi_t::ribi leg_dir) const;
+
+	// recalculates the images of the wayobjs on the neighbouring tiles (not recursively)
+	void calc_neighbour_images(const grund_t *gr, waytype_t wt) const;
+
+	void mark_leg_b_dirty() const;
 
 public:
 	wayobj_t(koord3d pos, player_t *owner, ribi_t::ribi dir, const way_obj_desc_t *desc);
@@ -64,8 +91,8 @@ public:
 	* the back image, drawn before vehicles
 	*/
 	image_id get_image() const OVERRIDE {
-		return close_diagonal ? get_close_diagonal_image(false) : hang ? desc->get_back_slope_image_id(hang) :		
-			(diagonal ? desc->get_back_diagonal_image_id(dir) : 
+		return close_diagonal ? get_close_diagonal_image(false) : two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, false) : hang ? desc->get_back_slope_image_id(hang) :
+			(diagonal ? desc->get_back_diagonal_image_id(dir) :
 				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,false) : desc->get_back_image_id(dir))
 			);
 	}
@@ -74,8 +101,8 @@ public:
 	 * the front image, drawn after everything else
 	 */
 	image_id get_front_image() const OVERRIDE {
-		return close_diagonal ? get_close_diagonal_image(true) : hang ? desc->get_front_slope_image_id(hang) :
-			(diagonal ? desc->get_front_diagonal_image_id(dir) : 
+		return close_diagonal ? get_close_diagonal_image(true) : two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, true) : hang ? desc->get_front_slope_image_id(hang) :
+			(diagonal ? desc->get_front_diagonal_image_id(dir) :
 				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,true) : desc->get_front_image_id(dir))
 			);
 	}
@@ -84,7 +111,7 @@ public:
 	* the back image, drawn before vehicles
 	*/
 	image_id get_image() const OVERRIDE {
-		return close_diagonal ? get_close_diagonal_image(false) : hang ? desc->get_back_slope_image_id(hang) :		
+		return close_diagonal ? get_close_diagonal_image(false) : two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, false) : hang ? desc->get_back_slope_image_id(hang) :
 			(diagonal ? desc->get_back_diagonal_image_id(dir) : desc->get_back_image_id(dir));
 	}
 
@@ -92,19 +119,29 @@ public:
 	 * the front image, drawn after everything else
 	 */
 	image_id get_front_image() const OVERRIDE {
-		return close_diagonal ? get_close_diagonal_image(true) : hang ? desc->get_front_slope_image_id(hang) :
+		return close_diagonal ? get_close_diagonal_image(true) : two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, true) : hang ? desc->get_front_slope_image_id(hang) :
 			(diagonal ? desc->get_front_diagonal_image_id(dir) : desc->get_front_image_id(dir));
 	}
 #endif
 	image_id get_image_test() const {
-		return hang ? desc->get_back_slope_image_id(hang) :
+		return two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, false) : hang ? desc->get_back_slope_image_id(hang) :
 			(diagonal ? desc->get_back_diagonal_image_id(dir) : desc->get_back_image_id(dir));
 	}
 
 	image_id get_front_image_test() const {
-		return hang ? desc->get_front_slope_image_id(hang) :
+		return two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, true) : hang ? desc->get_front_slope_image_id(hang) :
 			(diagonal ? desc->get_front_diagonal_image_id(dir) : desc->get_front_image_id(dir));
 	}
+
+	/**
+	 * also draws the image of the second leg (see two_legs)
+	 */
+	void display(int xpos, int ypos  CLIP_NUM_DEF) const OVERRIDE;
+#ifdef MULTI_THREAD
+	void display_after(int xpos, int ypos, const sint8 clip_num) const OVERRIDE;
+#else
+	void display_after(int xpos, int ypos, bool is_global) const OVERRIDE;
+#endif
 
 	typ get_typ() const OVERRIDE { return wayobj; }
 
