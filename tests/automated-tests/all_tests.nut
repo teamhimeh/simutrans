@@ -44,6 +44,7 @@ include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_wayobj")
 include("tests/test_schedule")
+include("tests/test_loading_departure_slot")
 include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
@@ -302,6 +303,11 @@ all_tests <- [
 	test_schedule_next_line_non_null,
 	test_schedule_current,
 	test_schedule_entry_time_statistics,
+	test_loading_departure_slot_after_long_wait,
+	test_loading_departure_slot_delay_tolerance,
+	test_loading_departure_slot_wait_timeout,
+	test_loading_departure_slot_without_loading_limit,
+	test_loading_departure_slot_without_time_wait,
 	test_road_api,
 	test_road_choose_stop_behind_halt_mode,
 	test_road_choose_stop_behind_oneway_mode,

@@ -4508,15 +4508,25 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 			cnv->set_arrived_time(arrived_time);
 			dbg->warning("can_depart", "%s: arrived time is not registered. replaced to %u", cnv->get_name(), arrived_time);
 		}
+		// With a loading limit, start looking for a slot only once the train is ready
+		// to book it. Arrival-based slots may already be long past after loading.
+		// Keep arrived_time itself for waiting limits, statistics and the booking identity.
+		uint32 slot_search_time = arrived_time;
+		for(  c = cnv;  c.is_bound();  c = c->get_coupling_convoi()  ) {
+			if(  c->get_schedule()->get_current_entry().minimum_loading>0  ) {
+				slot_search_time = world()->get_ticks();
+				break;
+			}
+		}
 		// consider spacing
 		// subtract wait_lock (time_to_load) from spacing_shift
 		const sint64 spacing_shift = (sint64)current_entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 		// NOTE: Treating spacing as int causes numerical error due to decimal amount.
 		// const sint32 spacing = world()->ticks_per_world_month / current_entry.spacing;
 		const uint64 delay_tolerance = (uint64)current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
-		// slot = (arrived_time - delay_tolerance - spacing_shift) / spacing + 1
-		const sint64 calibrated_arrived_time = (sint64)arrived_time - (sint64)delay_tolerance - (sint64)spacing_shift + (sint64)time_to_load;
-		sint64 slot = calibrated_arrived_time * (sint64)current_entry.spacing / (sint64)world()->ticks_per_world_month + (sint64)(calibrated_arrived_time<0?0:1);
+		// slot = (slot_search_time - delay_tolerance - spacing_shift + time_to_load) / spacing + 1
+		const sint64 calibrated_search_time = (sint64)slot_search_time - (sint64)delay_tolerance - (sint64)spacing_shift + (sint64)time_to_load;
+		sint64 slot = calibrated_search_time * (sint64)current_entry.spacing / (sint64)world()->ticks_per_world_month + (sint64)(calibrated_search_time<0?0:1);
 		// go_on_ticks = slot * spacing + spacing_shift
 		go_on_ticks = slot * world()->ticks_per_world_month / current_entry.spacing + spacing_shift;
 		// book the departure slot.
