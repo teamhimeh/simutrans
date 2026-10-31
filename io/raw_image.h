@@ -109,7 +109,7 @@ private:
 
 	raw_image_png_writer_t(const raw_image_png_writer_t &);
 	raw_image_png_writer_t &operator=(const raw_image_png_writer_t &);
-	void close(bool keep_file);
+	bool close(bool keep_file);
 
 public:
 	raw_image_png_writer_t(const char *filename, uint32 width, uint32 height, raw_image_t::format_t format);
