@@ -38,15 +38,15 @@ jobs:
       - name: Rename executable
         run: |
           if [ -n "${{ env.SUFFIX }}" ]; then
-            mv sim-WinGDI-OTRP.exe sim-WinGDI-OTRP${{ env.SUFFIX }}.exe
+            mv sim-WinGDI-OTRP.exe sim-WinGDI64-OTRP${{ env.SUFFIX }}.exe
           fi
         shell: msys2 {0}
 
       - name: Upload sim.exe
         uses: actions/upload-artifact@v4
         with:
-          name: sim-WinGDI-OTRP${{ env.SUFFIX }}.exe
-          path: ./sim-WinGDI-OTRP${{ env.SUFFIX }}.exe
+          name: sim-WinGDI64-OTRP${{ env.SUFFIX }}.exe
+          path: ./sim-WinGDI64-OTRP${{ env.SUFFIX }}.exe
 
   winsdl3:
     runs-on: windows-latest
