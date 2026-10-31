@@ -4,6 +4,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 #include "simversion.h"
 #include <string.h>
 #include <math.h>
@@ -7320,7 +7322,7 @@ const char *tool_build_land_chain_t::work( player_t *player, koord3d pos )
 		// eventually adjust production
 		sint32 initial_prod = -1;
 		if (!strempty(default_param)) {
-			initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+			initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 		}
 
 		koord3d build_pos = gr->get_pos();
@@ -7388,7 +7390,7 @@ const char *tool_city_chain_t::work( player_t *player, koord3d pos )
 	// eventually adjust production
 	sint32 initial_prod = -1;
 	if (!strempty(default_param)) {
-		initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+		initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 	}
 
 	// process ignore climates switch
@@ -7502,7 +7504,7 @@ const char *tool_build_factory_t::work( player_t *player, koord3d pos )
 		// eventually adjust production
 		sint32 initial_prod = -1;
 		if (!strempty(default_param)) {
-			initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+			initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 		}
 
 		fabrik_t *f = factory_builder_t::build_factory(NULL, fab, initial_prod, rotation, gr->get_pos(), welt->get_public_player());
@@ -11618,6 +11620,9 @@ bool tool_merge_player_t::init( player_t *player )
 }
 bool tool_change_factory_t::init( player_t* player )
 {
+	if (!default_param || !player) {
+		return false;
+	}
 	char tool=0;
 	koord pos2d;
 	// skip the rest of the command
@@ -11625,7 +11630,11 @@ bool tool_change_factory_t::init( player_t* player )
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi,%hi", &tool, &pos2d.x, &pos2d.y );
+	int header_length = 0;
+	if (sscanf( p, "%c,%hi,%hi%n", &tool, &pos2d.x, &pos2d.y, &header_length ) != 3 ||
+		((tool == 'p' || tool == 'e') && p[header_length] != ',')) {
+		return false;
+	}
 
 	// skip to the commands ...
 	uint8 z = 3;
@@ -11646,6 +11655,34 @@ bool tool_change_factory_t::init( player_t* player )
 		return false;
 	}	
 	switch (tool) {
+		case 'e': // prohibit automatic expansion
+		{
+			if (z != 0 || (strcmp(p, "0") != 0 && strcmp(p, "1") != 0) ||
+				factory->get_owner() != player || !factory->can_auto_expand()) {
+				return false;
+			}
+			factory->set_no_expand_factory(*p == '1');
+		}
+		break;
+		case 'p': // set monthly base production
+		{
+			if (z != 0 || *p < '0' || *p > '9') {
+				return false;
+			}
+			const sint64 limit = welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION);
+			char *end;
+			errno = 0;
+			const sint64 value = strtoll(p, &end, 10);
+			if (errno == ERANGE || *end != '\0' || value > limit || value < factory->get_min_editable_monthly_base_production()) {
+				return false;
+			}
+			const sint64 base_production = welt->inverse_scale_with_month_length(value);
+			if (base_production > fabrik_t::MAX_BASE_PRODUCTION) {
+				return false;
+			}
+			factory->set_edited_base_production((sint32)base_production);
+		}
+		break;
 		case 'd': // avoid destroy, avoid close after retire
 		{
 			factory->set_no_close_factory(!factory->is_no_close_factory());			
