@@ -153,6 +153,7 @@ wayobj_t::~wayobj_t()
 
 	mark_image_dirty( get_front_image_test(), 0 );
 	mark_image_dirty( get_image_test(), 0 );
+	mark_leg_b_dirty();
 	grund_t *gr = welt->lookup( get_pos() );
 	if( gr ) {
 		for( uint8 i = 0; i < 4; i++ ) {
@@ -441,6 +442,14 @@ void wayobj_t::calc_neighbour_images(const grund_t *gr, waytype_t wt) const
 	}
 }
 
+void wayobj_t::mark_leg_b_dirty() const
+{
+	if(  two_legs  ) {
+		mark_image_dirty( get_leg_image(leg_dir_b, leg_diagonal&2, false), 0 );
+		mark_image_dirty( get_leg_image(leg_dir_b, leg_diagonal&2, true), 0 );
+	}
+}
+
 
 void wayobj_t::calc_image()
 {
@@ -448,6 +457,7 @@ void wayobj_t::calc_image()
 	pthread_mutex_lock( &wayobj_calc_image_mutex );
 #endif
 	grund_t *gr = welt->lookup(get_pos());
+	mark_leg_b_dirty();
 	diagonal = false;
 	close_diagonal = 0;
 	two_legs = 0;

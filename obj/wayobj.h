@@ -71,6 +71,7 @@ private:
 	// recalculates the images of the wayobjs on the neighbouring tiles (not recursively)
 	void calc_neighbour_images(const grund_t *gr, waytype_t wt) const;
 
+	void mark_leg_b_dirty() const;
 
 public:
 	wayobj_t(koord3d pos, player_t *owner, ribi_t::ribi dir, const way_obj_desc_t *desc);
