@@ -186,7 +186,6 @@ void vehicle_base_t::rotate90()
 void vehicle_base_t::leave_tile()
 {
 	// first: release crossing
-	dbg->message("vehicle_base_t::leave_tile()","leave from %s",get_pos().get_str());
 	grund_t *gr = welt->lookup(get_pos());
 	if (gr) {
 		if (crossing_t* cr = gr->get_crossing()) {
@@ -6120,7 +6119,6 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 /* beware: we must un-reserve rail blocks... */
 void rail_vehicle_t::leave_tile()
 {
-	dbg->message("rail_vehicle_t::leave_tile()","leave tile");
 	vehicle_t::leave_tile();
 	// fix counters
 	// direction-aware: resolve the leg this vehicle actually occupies, relevant when two
