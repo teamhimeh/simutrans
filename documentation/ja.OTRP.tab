@@ -770,6 +770,33 @@ Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
 Distance (m)
 走行距離 (m)
+#------地形データ出力------
+Export heightmap
+地形データ出力
+Heightmap PNG
+地形データ出力
+Save as PNG
+PNG形式で保存
+Load mode:
+ロードモード:
+linear
+線形
+Export the terrain as a PNG heightmap for a new game.
+地形データを新規ゲーム用のPNG画像として出力します。
+Heightmap size:
+画像サイズ:
+Height limits:
+高さの下限・上限:
+Lake levels, buildings and ways are not stored.
+湖面水位・建物・道路や線路は保存されません。
+Please enter a heightmap filename.
+地形データのファイル名を入力してください。
+This file already exists or cannot be accessed. Choose another filename.
+ファイルが既に存在するかアクセスできません。別の名前を指定してください。
+Heightmap saved to:\n%s
+地形データを保存しました:\n%s
+Heightmap export failed. Check the filename and write permissions.
+地形データを出力できません。ファイル名と書込権限を確認してください。
 #------その他の翻訳------
 v%d (current version)
 v%d (現在のバージョン)
@@ -979,30 +1006,3 @@ Thumbnails
 サムネイル表示
 Large thumbnails
 大きく表示
-#地形データ出力
-Export heightmap
-地形データ出力
-Heightmap PNG
-地形データ出力
-Save as PNG
-PNG形式で保存
-Load mode:
-ロードモード:
-linear
-線形
-Export the terrain as a PNG heightmap for a new game.
-地形データを新規ゲーム用のPNG画像として出力します。
-Heightmap size:
-画像サイズ:
-Height limits:
-高さの下限・上限:
-Lake levels, buildings and ways are not stored.
-湖面水位・建物・道路や線路は保存されません。
-Please enter a heightmap filename.
-地形データのファイル名を入力してください。
-This file already exists or cannot be accessed. Choose another filename.
-ファイルが既に存在するかアクセスできません。別の名前を指定してください。
-Heightmap saved to:\n%s
-地形データを保存しました:\n%s
-Heightmap export failed. Check the filename and write permissions.
-地形データを出力できません。ファイル名と書込権限を確認してください。
