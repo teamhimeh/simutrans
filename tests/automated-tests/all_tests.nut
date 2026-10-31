@@ -306,6 +306,8 @@ all_tests <- [
 	test_loading_departure_slot_after_long_wait,
 	test_loading_departure_slot_delay_tolerance,
 	test_loading_departure_slot_wait_timeout,
+	test_departure_slot_allowance_timeout,
+	test_departure_slot_coupling_timeout,
 	test_loading_departure_slot_without_loading_limit,
 	test_loading_departure_slot_without_time_wait,
 	test_road_api,

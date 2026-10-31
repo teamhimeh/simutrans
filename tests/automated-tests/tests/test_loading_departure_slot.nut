@@ -19,7 +19,7 @@ function loading_slot_wait_for_stop(cnv)
 
 // Separate roads let both buses load without blocking each other. The adjacent
 // stops form one halt; both lines use the same departure slot group and stop index.
-function loading_slot_fixture(load, wait = 0, spacing = 4, shift = 0, tolerance = 0, timed = true)
+function loading_slot_fixture(load, wait = 0, spacing = 4, shift = 0, tolerance = 0, timed = true, extra_flags = 0)
 {
 	local pl = player_x(0)
 	// No previous journeys are needed to establish the test passenger route.
@@ -40,7 +40,7 @@ function loading_slot_fixture(load, wait = 0, spacing = 4, shift = 0, tolerance 
 			// Hold at the destination so the first departure remains observable.
 			schedule_entry_x(coord3d(x, 2, 0), 100, 0),
 		])
-		sched.entries[0].flags = timed ? 16 : 0 // WAIT_FOR_TIME
+		sched.entries[0].flags = (timed ? 16 : 0) | extra_flags // WAIT_FOR_TIME
 		sched.entries[0].spacing = spacing
 		sched.entries[0].spacing_shift = shift
 		sched.entries[0].delay_tolerance = tolerance
@@ -124,9 +124,9 @@ function test_loading_departure_slot_delay_tolerance()
 	ASSERT_EQUAL(f.convoys[0].get_schedule().current, 1)
 }
 
-function test_loading_departure_slot_wait_timeout()
+function loading_slot_timeout_case(load, flags)
 {
-	local f = loading_slot_fixture(50, 2, 4, 90)
+	local f = loading_slot_fixture(load, 2, 4, 90, 0, true, flags)
 	local month = world.get_time().ticks_per_month
 	f.depots[0].start_all_convoys(player_x(0))
 	loading_slot_wait_for_stop(f.convoys[0])
@@ -140,6 +140,23 @@ function test_loading_departure_slot_wait_timeout()
 	ASSERT_EQUAL(f.convoys[0].get_schedule().current, 0)
 	loading_slot_wait_until(next_slot + month / 8)
 	ASSERT_EQUAL(f.convoys[0].get_schedule().current, 1)
+}
+
+function test_loading_departure_slot_wait_timeout()
+{
+	loading_slot_timeout_case(50, 0)
+}
+
+function test_departure_slot_allowance_timeout()
+{
+	// WAIT_FOR_OTHER_CONVOY, with no loading condition to mask the bug.
+	loading_slot_timeout_case(0, 1 << 20)
+}
+
+function test_departure_slot_coupling_timeout()
+{
+	// WAIT_FOR_COUPLING | WAIT_COUPLING_DONE, again with minimum loading zero.
+	loading_slot_timeout_case(0, 1 | (1 << 10))
 }
 
 function test_loading_departure_slot_without_loading_limit()
