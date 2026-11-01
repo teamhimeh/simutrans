@@ -90,7 +90,8 @@ public:
 		FULL_LOAD_ACCELERATION = 1U << 2, // Always use full load acceleration.
 		FULL_LOAD_TIME         = 1U << 3, // Always use full load time at stop.
 		REVERSE_DEFAULT		   = 1U << 4, // reverse when next direction is opposite
-		NO_USE_ELECTRIC		   = 1U << 5  // not in service
+		NO_USE_ELECTRIC		   = 1U << 5, // not in service
+		SINGLE_FREIGHT_DESTINATION = 1U << 6  // Freight is loaded for only one destination at a time.
 	};
 
 	/**
@@ -175,6 +176,8 @@ public:
 
 	bool is_full_load_time() const { return (flags&FULL_LOAD_TIME)>0; }
 	void set_full_load_time(bool y) { y ? flags |= FULL_LOAD_TIME : flags &= ~FULL_LOAD_TIME; }
+	bool is_single_freight_destination() const { return (flags&SINGLE_FREIGHT_DESTINATION)>0; }
+	void set_single_freight_destination(bool y) { y ? flags |= SINGLE_FREIGHT_DESTINATION : flags &= ~SINGLE_FREIGHT_DESTINATION; }
 	uint32 get_additional_base_waiting_time() const { return additional_base_waiting_time; }
 	void set_additional_base_waiting_time(uint32 w) { additional_base_waiting_time = w; }
 	
@@ -277,8 +280,9 @@ public:
 	 * Resolve the demand-based skip section that the entry at the given index belongs to.
 	 * A section runs from a NO_GO_NO_USERS_SECTION_START entry up to and including the next
 	 * NO_GO_NO_USERS_SECTION_END entry, or up to the entry just before the next START entry
-	 * if no END is found first. Returns false if no enclosing START entry can be found
-	 * within one full loop over the entries (the index is then not part of any section).
+	 * if no END is found first. Returns false if the index is not part of any section
+	 * (no START entry within one full loop over the entries, or the index lies after
+	 * the END of the section started by the nearest preceding START entry).
 	 * out_start/out_end are only valid when this returns true and are entry indices
 	 * (out_end may be numerically before out_start if the section wraps past the end
 	 * of the entries array).

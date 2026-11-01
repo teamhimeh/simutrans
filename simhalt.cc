@@ -243,6 +243,20 @@ struct haltestelle_t::cargo_queue_t {
 		// Invalid const iterator
 		const_iterator end_iterator() const { return const_iterator(cargos.end()); }
 
+		// Returns true if any cargo (amount > 0) waiting here has the given next hop. Read-only.
+		bool has_zwischenziel(halthandle_t zwischenziel) const {
+			auto it = zwischenziel_index.find(zwischenziel.get_id());
+			if (it == zwischenziel_index.end()) {
+				return false;
+			}
+			for (const auto& item_iter : it->second) {
+				if (item_iter->cargo->goods.menge > 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+
 		zwischenziel_iterator zwischenziel_begin(halthandle_t zwischenziel) {
 			auto it = zwischenziel_index.find(zwischenziel.get_id());
 			if (it == zwischenziel_index.end() || it->second.empty()) {
@@ -5514,6 +5528,20 @@ void haltestelle_t::fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t
 		return;
 	}
 	wares->fetch_loadable_fresh_goods(to_array, destination_halts);
+}
+
+
+bool haltestelle_t::has_goods_for_zwischenziel(const uint8 goods_category_index, const vector_tpl<halthandle_t>& zwischenziele) const {
+	const cargo_queue_t *wares = cargo[goods_category_index];
+	if(  !wares  ||  wares->empty()  ) {
+		return false;
+	}
+	FOR(vector_tpl<halthandle_t>, const& zwischenziel, zwischenziele) {
+		if(  wares->has_zwischenziel(zwischenziel)  ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 

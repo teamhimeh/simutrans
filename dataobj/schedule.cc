@@ -1069,6 +1069,10 @@ bool schedule_t::get_no_go_no_users_section(uint8 index, uint8& out_start, uint8
 	// A single entry can carry both START and END: a one-entry section. This is
 	// also what a legacy single-stop NO_GO_NO_USERS entry is migrated to.
 	if(  entries[start].is_no_go_no_users_section_end()  ) {
+		if(  index!=start  ) {
+			// index lies after this one-entry section: not part of any section.
+			return false;
+		}
 		out_start = start;
 		out_end = start;
 		return true;
@@ -1093,6 +1097,12 @@ bool schedule_t::get_no_go_no_users_section(uint8 index, uint8& out_start, uint8
 	// out at j==start, and end is left at the entry just before start: the section
 	// then spans every other entry in the schedule. This bound (at most count-1
 	// iterations) also prevents an infinite loop for misconfigured flags.
+	// The backward scan finds the previous START even for an entry after that
+	// section's END, so check that index really lies within [start, end].
+	const bool inside = (start<=end) ? (start<=index  &&  index<=end) : (index>=start  ||  index<=end);
+	if(  !inside  ) {
+		return false;
+	}
 	out_start = start;
 	out_end = end;
 	return true;
@@ -1115,6 +1125,10 @@ void schedule_t::get_schedule_flag_text(cbuffer_t& buf, schedule_t* schedule)
 	}
 	if(  flag & schedule_t::FULL_LOAD_TIME  ) {
 		str[cnt] = 'G';
+		cnt++;
+	}
+	if(  flag & schedule_t::SINGLE_FREIGHT_DESTINATION  ) {
+		str[cnt] = 'W';
 		cnt++;
 	}
 	if(  !world()->get_settings().is_default_reverse()  &&  (flag & schedule_t::REVERSE_DEFAULT)>0  ) {

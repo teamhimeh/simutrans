@@ -501,6 +501,12 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_full_load_time.pressed = schedule->is_full_load_time();
 		add_component(&bt_full_load_time);
 
+		bt_single_freight_destination.init(button_t::square_state, "Single freight destination");
+		bt_single_freight_destination.set_tooltip(translator::translate("Each convoy loads freight for only one destination at a time. Passengers and mail are not affected."));
+		bt_single_freight_destination.add_listener(this);
+		bt_single_freight_destination.pressed = schedule->is_single_freight_destination();
+		add_component(&bt_single_freight_destination,3);
+
 
 		// max speed setting
 		lb_max_speed.set_tooltip(translator::translate("Limits the max speed of all convoys on this line."));
@@ -656,7 +662,6 @@ void schedule_gui_t::init(schedule_t* schedule_, player_t* player, convoihandle_
 		bt_no_go_no_users_section_end.add_listener(this);
 		bt_no_go_no_users_section_end.disable();
 		add_component(&bt_no_go_no_users_section_end);
-		add_component(&sp_load_settings);
 
 		bt_temp_load.init(button_t::square_state, "load temporary");
 		bt_temp_load.set_tooltip("Can load but not use for goods routing");
@@ -1830,6 +1835,10 @@ dbg->message("schedule_gui_t::action_triggered()","comp=%p combo=%p",comp,&line_
 		schedule->set_full_load_time(!schedule->is_full_load_time());
 		bt_full_load_time.pressed = schedule->is_full_load_time();
 	}
+	else if(comp == &bt_single_freight_destination) {
+		schedule->set_single_freight_destination(!schedule->is_single_freight_destination());
+		bt_single_freight_destination.pressed = schedule->is_single_freight_destination();
+	}
 	else if (comp == &bt_revert) {
 		// revert changes and tell listener
 
@@ -2254,6 +2263,7 @@ void schedule_gui_t::extract_schedule_settings(bool yesno) {
 	bt_tmp_schedule.set_visible(yesno);
 	bt_full_load_acceleration.set_visible(yesno);
 	bt_full_load_time.set_visible(yesno);
+	bt_single_freight_destination.set_visible(yesno);
 	lb_max_speed.set_visible(yesno);
 	numimp_max_speed.set_visible(yesno);
 	lb_departure_slot_group.set_visible(yesno);
