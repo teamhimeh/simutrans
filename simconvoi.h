@@ -931,6 +931,13 @@ public:
 	void lock_upcoming_section_decision() const;
 
 	/**
+	 * Forgets the go/no-go decisions of the sections the current stop is no longer part
+	 * of, so they are decided afresh when next asked. Called when the convoy stops
+	 * (hat_gehalten()) and when it skips on (next_stop_button_pressed()).
+	 */
+	void forget_left_section_decisions() const;
+
+	/**
 	 * Returns true if the coupled convoy chain this convoy belongs to stops at the entry
 	 * `offset` entries after the current one. Coupled convoys advance their (possibly
 	 * different) schedules together, so each one looks at its own entry at that offset.

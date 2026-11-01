@@ -4822,14 +4822,9 @@ void convoi_t::calc_loading_destination_halts(halthandle_t halt, inthashtable_tp
 }
 
 
-void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_steps)
+// forget the decisions of the sections the current stop is no longer part of
+void convoi_t::forget_left_section_decisions() const
 {
-	convoihandle_t c = self;
-
-	// Stopping here: forget the decisions of the skip sections this stop is not part of,
-	// so they are decided afresh (at the latest on departure from the stop before them,
-	// see lock_upcoming_section_decision()). The section this stop is in, if any, keeps
-	// its decision.
 	for(  uint32 i=0;  i<section_decisions.get_count();  ) {
 		if(  section_contains(section_decisions[i].start, section_decisions[i].end, schedule->get_current_stop())  ) {
 			i++;
@@ -4838,6 +4833,18 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 			section_decisions.remove_at(i);
 		}
 	}
+}
+
+
+void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_steps)
+{
+	convoihandle_t c = self;
+
+	// Stopping here: forget the decisions of the skip sections this stop is not part of,
+	// so they are decided afresh (at the latest on departure from the stop before them,
+	// see lock_upcoming_section_decision()). The section this stop is in, if any, keeps
+	// its decision.
+	forget_left_section_decisions();
 
 	if(  get_coupling_convoi().is_bound() && !is_coupled()  ) {
 		uncouple_convoy_by_schedule_setting();
@@ -7875,6 +7882,9 @@ void convoi_t::next_stop_button_pressed() {
 		}
 		c->change_line_to_next_if_needed();
 		c->schedule->advance();
+		// Moved on: a section left behind is decided afresh next time, and a section
+		// entered now is decided for this pass.
+		c->forget_left_section_decisions();
 		dbg->message("convoi_t::next_stop_button_pressed()","the next stop is %i",schedule->get_current_entry());
 		// c->set_schedule() is change convoy status to "EDIT_SCHEDULE".
 		// So, if the convoy is leading, it can recalculate the schedule by calling this function.
