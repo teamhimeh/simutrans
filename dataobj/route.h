@@ -155,7 +155,8 @@ public:
 	 * Finds route to a location, where @p tdriver->is_target becomes true.
 	 * @param max_depth is the maximum length of a route
 	 */
-	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, const bool length_based = false, bool coupling = false, const uint8 choose_margin=0, const bool ignore_length=false );
+	bool find_route(karte_t *w, const koord3d start, test_driver_t *tdriver, const uint32 max_khm, uint8 start_dir, uint32 max_depth, const bool need_electric, const bool allow_multi_convoys = false, const bool length_based = false, bool coupling = false, const uint8 choose_margin=0, const bool ignore_length=false );
+
 
 	/**
 	 * The heading with which the start tile of the next calc_route() was entered. It tells on
@@ -163,6 +164,7 @@ public:
 	 * it both legs are tried). Applies to the next calc_route() only.
 	 */
 	void set_start_heading(ribi_t::ribi heading) { next_start_heading = heading; }
+
 
 	/**
 	 * Calculates the route from @p start to @p target

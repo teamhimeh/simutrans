@@ -68,6 +68,9 @@ class onewaysign_info_t : public obj_infowin_t, public action_listener_t
 		// convoy it wants to couple with is present in the target halt.
 		button_t bt_guide_signal;
 
+		// can enter more than one convoys
+		button_t bt_allow_multi_convoys;
+
 		// detailed_oneway toggle
 		button_t bt_detailed_oneway;
 
