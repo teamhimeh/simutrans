@@ -119,6 +119,15 @@ private:
 
 	uint16 station_coverage_size;
 
+	// station coverage for each building waytype (indexed by waytype, only station waytypes are used)
+	uint16 station_coverage_size_wt[air_wt+1];
+
+	// coverage applied to sea tiles (not rivers)
+	uint16 station_coverage_size_water;
+
+	// sets station_coverage_size and all waytype and water coverages to cov
+	void set_all_station_coverages(uint16 cov);
+
 	// the maximum length of each convoi
 	uint8 max_rail_convoi_length;
 	uint8 max_road_convoi_length;
@@ -586,6 +595,28 @@ public:
 	double get_map_roughness() const {return map_roughness;}
 
 	uint16 get_station_coverage() const {return station_coverage_size;}
+
+	/// true for the waytypes which have their own station coverage
+	static bool has_station_coverage_wt(waytype_t wt) {
+		switch(  wt  ) {
+			case road_wt: case track_wt: case water_wt: case monorail_wt: case maglev_wt:
+			case tram_wt: case narrowgauge_wt: case air_wt:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/// coverage of a station building with this waytype; invalid_wt (no waytype building) returns get_station_coverage()
+	uint16 get_station_coverage(waytype_t wt) const {
+		return has_station_coverage_wt(wt) ? station_coverage_size_wt[wt] : station_coverage_size;
+	}
+
+	/// coverage applied to sea tiles (not rivers), whatever station tile covers them
+	uint16 get_station_coverage_water() const {return station_coverage_size_water;}
+
+	/// the largest coverage of all waytypes and water, i.e. the reach of any station tile
+	uint16 get_max_station_coverage() const;
 
 	uint8 get_max_rail_convoi_length() const {return max_rail_convoi_length;}
 	uint8 get_max_road_convoi_length() const {return max_road_convoi_length;}

@@ -57,7 +57,7 @@ settings_t::settings_t() :
 	city_count = 16;
 	mean_citizen_count = 1600;
 
-	station_coverage_size = 2;
+	set_all_station_coverages( 2 );
 
 	traffic_level = 5;
 
@@ -1286,6 +1286,16 @@ void settings_t::rdwr(loadsave_t *file)
 				}
 			}
 		}
+		if(  file->get_OTRP_version() >= 63  ) {
+			for(  uint8 i=0;  i<=air_wt;  i++  ) {
+				file->rdwr_short( station_coverage_size_wt[i] );
+			}
+			file->rdwr_short( station_coverage_size_water );
+		}
+		else if(  file->is_loading()  ) {
+			// before v63 all stations and sea tiles used the single station_coverage
+			set_all_station_coverages( station_coverage_size );
+		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
@@ -1865,7 +1875,22 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	maint_building = contents.get_int_clamped( "maintenance_building", maint_building, 1, 100000000 );
 
 	numbered_stations     = contents.get_int( "numbered_stations", numbered_stations ) != 0;
-	station_coverage_size = contents.get_int_clamped( "station_coverage", station_coverage_size, 0, 64);
+	if(  *contents.get( "station_coverage" )  ) {
+		// station_coverage sets the default of all waytypes and of water; the specific keys below override it
+		set_all_station_coverages( contents.get_int_clamped( "station_coverage", station_coverage_size, 0, 64 ) );
+	}
+	// station_coverage[road] etc.: coverage of stations of this waytype
+	{
+		static const waytype_t coverage_wts[] = { road_wt, track_wt, water_wt, monorail_wt, maglev_wt, tram_wt, narrowgauge_wt, air_wt };
+		static const char *const coverage_wt_names[] = { "road", "track", "water", "monorail_track", "maglev_track", "tram_track", "narrowgauge_track", "air" };
+		for(  uint8 i=0;  i<lengthof(coverage_wts);  i++  ) {
+			char buf[64];
+			sprintf( buf, "station_coverage[%s]", coverage_wt_names[i] );
+			station_coverage_size_wt[coverage_wts[i]] = contents.get_int_clamped( buf, station_coverage_size_wt[coverage_wts[i]], 0, 64 );
+		}
+	}
+	// coverage for sea tiles (not rivers)
+	station_coverage_size_water = contents.get_int_clamped( "station_coverage_water", station_coverage_size_water, 0, 64 );
 
 	// time stuff
 	bits_per_month = contents.get_int_clamped( "bits_per_month", bits_per_month, 1, 31 );
@@ -2374,6 +2399,27 @@ uint32 settings_t::get_base_waiting_ticks(waytype_t waytype) const {
 	}
 }
 
+
+void settings_t::set_all_station_coverages(uint16 cov)
+{
+	station_coverage_size = cov;
+	for(  uint8 i=0;  i<=air_wt;  i++  ) {
+		station_coverage_size_wt[i] = cov;
+	}
+	station_coverage_size_water = cov;
+}
+
+
+uint16 settings_t::get_max_station_coverage() const
+{
+	uint16 cov = max( station_coverage_size, station_coverage_size_water );
+	for(  uint8 i=0;  i<=air_wt;  i++  ) {
+		if(  has_station_coverage_wt( (waytype_t)i )  ) {
+			cov = max( cov, station_coverage_size_wt[i] );
+		}
+	}
+	return cov;
+}
 
 // convoy shipping revenue: the waytypes in table order, with their simuconf.tab names
 static const struct { waytype_t wt; const char *name; } shipping_revenue_wts[settings_t::SHIPPING_REVENUE_CARRIER_WT_COUNT] = {
