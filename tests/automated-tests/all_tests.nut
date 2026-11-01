@@ -34,6 +34,7 @@ include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
+include("tests/test_no_go_section")
 include("tests/test_transit_by_foot")
 include("tests/test_trees")
 include("tests/test_way_bridge")
@@ -242,6 +243,24 @@ all_tests <- [
 	test_transport_mail_valid_route,
 	test_transport_freight_valid_route,
 	test_transport_pax_no_load,
+	test_no_go_section_baseline,
+	test_no_go_section_single_stop,
+	test_no_go_section_single_stop_without_time_based_routing,
+	test_no_go_section_two_stops,
+	test_no_go_section_middle_entry,
+	test_no_go_section_waypoint_before_section,
+	test_no_go_section_two_sections,
+	test_no_go_section_freight_single_stop,
+	test_no_go_section_freight_single_stop_without_time_based_routing,
+	test_no_go_section_freight_committed,
+	test_no_go_section_abcd_no_goods,
+	test_no_go_section_abcd_b_to_d,
+	test_no_go_section_abcd_d_to_b,
+	test_no_go_section_abcd_freight_no_goods,
+	test_no_go_section_abcd_freight_b_to_d,
+	test_no_go_section_abcd_freight_d_to_b,
+	test_single_freight_destination_off,
+	test_single_freight_destination_on,
 	test_transport_pax_no_unload,
 	test_transport_pax_unload_all,
 	test_transport_pax_temp_load,

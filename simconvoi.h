@@ -21,6 +21,8 @@
 #include "vehicle/overtaker.h"
 #include "tpl/array_tpl.h"
 #include "tpl/minivec_tpl.h"
+#include "tpl/inthashtable_tpl.h"
+#include "tpl/vector_tpl.h"
 
 #include "convoihandle_t.h"
 #include "halthandle_t.h"
@@ -253,6 +255,29 @@ private:
 	* @author THLeaderH
 	*/
 	convoihandle_t coupling_convoi;
+
+	// Go/no-go decisions of this convoy's demand-based skip sections (see
+	// decide_section()). One entry per section [start, end] of this convoy's own
+	// schedule (inclusive, may wrap around the end of the schedule).
+	// A locked decision is fixed: it is taken when the convoy departs from the stop
+	// before the section (lock_upcoming_section_decision()), or at the first query once
+	// the convoy's current stop lies in the section, and kept until the convoy next
+	// stops at a halt outside the section (hat_gehalten()). An unlocked decision is
+	// provisional and valid only within the world step it was computed in.
+	// Not saved: always safe to recompute from schedule and cargo.
+	struct section_decision_t {
+		uint8 start;
+		uint8 end;
+		bool demand;
+		bool locked;
+		sint32 step;
+		section_decision_t() : start(0), end(0), demand(true), locked(false), step(-1) {}
+		section_decision_t(uint8 s, uint8 e, bool d, bool l, sint32 st) : start(s), end(e), demand(d), locked(l), step(st) {}
+	};
+	mutable vector_tpl<section_decision_t> section_decisions;
+	// True while section_has_demand() is running for decide_section(). Guards against
+	// the re-entry via has_own_demand_at_entry() -> calc_reachable_halts().
+	mutable bool section_evaluating;
 
 	/**
 	* a convoy that pulls me.
@@ -864,6 +889,119 @@ public:
 	void add_running_cost( const weg_t *weg );
 
 	bool is_users_at_next_stop() const;
+
+	/**
+	 * Wagonload-style single-destination loading (freight only - see below): returns
+	 * the halt this convoy is currently committed to carrying freight for, derived from
+	 * the freight it already has aboard (the destination of the first non-passenger,
+	 * non-mail ware packet found in any vehicle), or an unbound handle if it currently
+	 * carries no freight. A convoy with no freight aboard is free to commit to any
+	 * freight destination; one already carrying freight may only load more freight
+	 * bound for this same halt, until it unloads all of it and carries none again.
+	 * Passengers and mail are deliberately ignored here, so a bus or train stays free
+	 * to carry riders bound for many different stops at once, exactly as before this
+	 * feature existed. There is deliberately no separate stored "committed destination"
+	 * field: the freight itself is always the single source of truth, so this needs no
+	 * savegame state of its own.
+	 */
+	halthandle_t get_committed_destination() const;
+
+	/**
+	 * Returns true if this convoy itself wants to stop at the entry with the given index
+	 * of its own schedule: always for an entry outside any demand-based skip section,
+	 * otherwise the go/no-go decision of the enclosing section (see decide_section()).
+	 * Does not consider coupled convoys; see chain_wants_stop_at_offset() for that.
+	 */
+	bool would_stop_at_entry(uint8 index) const;
+
+	/**
+	 * Returns the go/no-go decision of this convoy's section [start, end]: a locked
+	 * decision if there is one, else a provisional one of this world step, else it is
+	 * computed with section_has_demand(). With lock, the decision is fixed until the
+	 * convoy next stops outside the section.
+	 */
+	bool decide_section(uint8 start, uint8 end, bool lock) const;
+
+	/**
+	 * Called on departure while still loading: fixes the decision of the section that
+	 * contains the next non-waypoint entry, if any, so that it is taken at the stop just
+	 * before the section (where has_demand_at_halt_before_section() applies). Decided
+	 * afresh with the cargo loaded here, unless the decision is already locked.
+	 */
+	void lock_upcoming_section_decision() const;
+
+	/**
+	 * Forgets the go/no-go decisions of the sections the current stop is no longer part
+	 * of, so they are decided afresh when next asked. Called when the convoy stops
+	 * (hat_gehalten()) and when it skips on (next_stop_button_pressed()).
+	 */
+	void forget_left_section_decisions() const;
+
+	/**
+	 * Returns true if the coupled convoy chain this convoy belongs to stops at the entry
+	 * `offset` entries after the current one. Coupled convoys advance their (possibly
+	 * different) schedules together, so each one looks at its own entry at that offset.
+	 * The chain stops if any convoy wants to: its entry is a waypoint, is outside any of
+	 * its skip sections, or its section has demand. It skips the entry only if every
+	 * convoy has a skip section without demand there.
+	 */
+	bool chain_wants_stop_at_offset(uint16 offset) const;
+
+	/**
+	 * Same as chain_wants_stop_at_offset(), for the entry with the given index of this
+	 * convoy's own schedule.
+	 */
+	bool chain_would_stop_at_entry(uint8 index) const;
+
+	/**
+	 * Returns the next schedule entry the coupled convoy chain will actually stop at
+	 * (see chain_wants_stop_at_offset()), from the current schedule position. Also
+	 * mirrors schedule_t::get_next_entry()'s handling of the dummy last entry of a
+	 * schedule with a valid next_line. Used for coupling rendezvous matching, which must
+	 * agree with what drive_to() will actually do.
+	 */
+	schedule_entry_t get_next_real_stop_entry() const;
+
+	/**
+	 * Same as get_next_real_stop_entry(), but scanning forward from the entry
+	 * `from_offset` entries after the current one.
+	 */
+	schedule_entry_t get_real_stop_entry_after_offset(uint16 from_offset) const;
+
+	/**
+	 * Returns true if any entry in the schedule range [start, end] (inclusive, may wrap
+	 * around the end of the schedule) has demand for this convoy: cargo already aboard
+	 * bound for that entry's halt, cargo waiting there that this convoy could load and
+	 * carry on, or cargo waiting at the stop just before the section bound for it (see
+	 * has_demand_at_halt_before_section(), only while loading there). Used to decide whether to enter a whole demand-based skip
+	 * section at once (see would_stop_at_entry()).
+	 */
+	bool section_has_demand(uint8 start, uint8 end) const;
+
+	/**
+	 * Returns true if this convoy has its own reason to stop at the given schedule
+	 * entry (onboard cargo bound for its halt, or loadable cargo waiting there
+	 * reachable by this convoy). This is the same check is_users_at_next_stop() used to
+	 * run only against the current entry; section_has_demand() runs it against every
+	 * member of a section instead.
+	 */
+	bool has_own_demand_at_entry(uint8 index) const;
+
+	/**
+	 * Returns true if this convoy is loading at the last real stop before the section
+	 * [start, end] and would load cargo there bound (next hop) for a halt inside the
+	 * section. That cargo can only be loaded if the convoy stops in the section, so it
+	 * counts as section demand.
+	 */
+	bool has_demand_at_halt_before_section(uint8 start, uint8 end) const;
+
+	/**
+	 * Calculates, per goods category, the halts (next hops) this convoy loads cargo for
+	 * at the given halt, as hat_gehalten() does (reachable halts from the schedule entry
+	 * from_index, which must be the given halt's entry, or from the current stop if
+	 * negative; time based routing and wagonload single destination applied).
+	 */
+	void calc_loading_destination_halts(halthandle_t halt, inthashtable_tpl<uint8, vector_tpl<halthandle_t>>& destination_halts, sint16 from_index = -1) const;
 
 	/**
 	 * moving the vehicles of a convoi and acceleration/deceleration

@@ -1397,13 +1397,9 @@ void vehicle_t::hop(grund_t* gr)
 			}
 			const koord3d ziel = cnv->get_schedule()->get_current_entry().pos;
 			cnv->set_schedule_target( cnv->is_waypoint(cnv->get_schedule()->get_current_entry()) ? ziel : koord3d::invalid );
-			c = cnv->self;
-			bool stop_next=true;
-			while(  c.is_bound()  ) {
-				stop_next&=c->is_users_at_next_stop();
-				c=c->get_coupling_convoi();
-			}
-			if(  !stop_next  ) {
+			// Skip the next entry only if every coupled convoy has a skip section without
+			// demand there (see convoi_t::chain_wants_stop_at_offset()).
+			if(  !cnv->chain_wants_stop_at_offset(0)  ) {
 				// skip next stop!
 				cnv->self->next_stop_button_pressed();
 			}

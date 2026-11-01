@@ -876,6 +876,13 @@ public:
 
 	void fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to, const uint8 goods_category_index, const vector_tpl<halthandle_t>& destination_halts);
 
+	/**
+	 * Returns true if any cargo of the given category waiting here has one of the given
+	 * halts as its next hop. Unlike fetch_loadable_fresh_goods(), this looks at all waiting
+	 * cargo (not only fresh cargo) and does not modify anything.
+	 */
+	bool has_goods_for_zwischenziel(const uint8 goods_category_index, const vector_tpl<halthandle_t>& zwischenziele) const;
+
 	// Book revenue for passengers that just boarded a vehicle at this halt.
 	void book_pax_boarding_revenue(uint16 boarded_pax);
 
