@@ -9,6 +9,8 @@
 #include "../boden/grund.h"
 #include "../simworld.h"
 #include "../display/simimg.h"
+#include "../display/simgraph.h"
+#include "../simcolor.h"
 #include "simobj.h"
 #include "../player/simplay.h"
 #include "../simtool.h"
@@ -102,6 +104,9 @@ static void unelectrify_way(const grund_t *gr, weg_t *weg, waytype_t wt)
 wayobj_t::wayobj_t(loadsave_t* const file) : obj_no_info_t()
 {
 	close_diagonal = 0;
+	two_legs = 0;
+	leg_diagonal = 0;
+	leg_dir_a = leg_dir_b = 0;
 	rdwr(file);
 }
 
@@ -111,6 +116,9 @@ wayobj_t::wayobj_t(koord3d const pos, player_t* const owner, ribi_t::ribi const 
 	desc = b;
 	dir = d;
 	close_diagonal = 0;
+	two_legs = 0;
+	leg_diagonal = 0;
+	leg_dir_a = leg_dir_b = 0;
 	set_owner(owner);
 }
 
@@ -145,6 +153,7 @@ wayobj_t::~wayobj_t()
 
 	mark_image_dirty( get_front_image_test(), 0 );
 	mark_image_dirty( get_image_test(), 0 );
+	mark_leg_b_dirty();
 	grund_t *gr = welt->lookup( get_pos() );
 	if( gr ) {
 		for( uint8 i = 0; i < 4; i++ ) {
@@ -274,6 +283,68 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 }
 
 
+void wayobj_t::display_extra_image(image_id image, int xpos, int ypos  CLIP_NUM_DEF) const
+{
+	if(  image == IMG_EMPTY  ) {
+		return;
+	}
+	const int raster_width = get_current_tile_raster_width();
+	const bool is_dirty = get_flag( obj_t::dirty );
+
+	xpos += tile_raster_scale_x( get_xoff(), raster_width );
+	ypos += tile_raster_scale_y( get_yoff(), raster_width );
+
+	const uint8 owner_n = get_owner_nr();
+	if(  owner_n != PLAYER_UNOWNED  ) {
+		if(  obj_t::show_owner  ) {
+			display_blend( image, xpos, ypos, owner_n, color_idx_to_rgb(welt->get_player(owner_n)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+		}
+		else if(  obj_t::get_flag( highlight )  ) {
+			// highlight this tile
+			display_blend( image, xpos, ypos, owner_n, color_idx_to_rgb(COL_RED) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+		}
+		else {
+			display_color( image, xpos, ypos, owner_n, true, is_dirty  CLIP_NUM_PAR);
+		}
+	}
+	else if(  obj_t::get_flag( highlight )  ) {
+		// highlight this tile
+		display_blend( image, xpos, ypos, owner_n, color_idx_to_rgb(COL_RED) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+	}
+	else {
+		display_normal( image, xpos, ypos, 0, true, is_dirty  CLIP_NUM_PAR);
+	}
+}
+
+
+void wayobj_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
+{
+	obj_t::display( xpos, ypos  CLIP_NUM_PAR );
+	if(  two_legs  ) {
+		display_extra_image( get_leg_image(leg_dir_b, leg_diagonal&2, false), xpos, ypos  CLIP_NUM_PAR );
+	}
+}
+
+
+#ifdef MULTI_THREAD
+void wayobj_t::display_after(int xpos, int ypos, const sint8 clip_num) const
+{
+	obj_t::display_after( xpos, ypos, clip_num );
+	if(  two_legs  ) {
+		display_extra_image( get_leg_image(leg_dir_b, leg_diagonal&2, true), xpos, ypos, clip_num );
+	}
+}
+#else
+void wayobj_t::display_after(int xpos, int ypos, bool is_global) const
+{
+	obj_t::display_after( xpos, ypos, is_global );
+	if(  two_legs  ) {
+		display_extra_image( get_leg_image(leg_dir_b, leg_diagonal&2, true), xpos, ypos );
+	}
+}
+#endif
+
+
 void wayobj_t::set_dir(ribi_t::ribi d)
 {
 	dir = d;
@@ -319,6 +390,8 @@ void wayobj_t::rotate90()
 		// horizontal <-> vertical
 		close_diagonal ^= 3;
 	}
+	leg_dir_a = ribi_t::rotate90( leg_dir_a );
+	leg_dir_b = ribi_t::rotate90( leg_dir_b );
 }
 
 
@@ -331,9 +404,50 @@ ribi_t::ribi wayobj_t::find_next_ribi(const grund_t *start, ribi_t::ribi const d
 		const wayobj_t* wo = to->get_wayobj( wt );
 		if(wo) {
 			r1 = wo->get_dir();
+			if(  has_two_legs(to, wt)  ) {
+				// the wayobj there spans both legs: only the leg connected to us counts
+				r1 &= to->get_weg_ribi_unmasked( wt, ribi_t::backward(dir) );
+			}
 		}
 	}
 	return r1;
+}
+
+
+bool wayobj_t::is_diagonal_leg(ribi_t::ribi leg_dir) const
+{
+	return  ribi_t::is_bend(leg_dir)  &&  desc->has_diagonal_image()
+		&&  (desc->get_back_diagonal_image_id(leg_dir)!=IMG_EMPTY  ||  desc->get_front_diagonal_image_id(leg_dir)!=IMG_EMPTY);
+}
+
+
+void wayobj_t::calc_neighbour_images(const grund_t *gr, waytype_t wt) const
+{
+	// with this, we avoid calling us endlessly
+	// HACK (originally by hajo?)
+	static int rekursion = 0;
+
+	if(rekursion == 0) {
+		grund_t *to;
+		rekursion++;
+		for(int r = 0; r < 4; r++) {
+			if(gr->get_neighbour(to, wt, ribi_t::nesw[r])) {
+				wayobj_t* wo = to->get_wayobj( wt );
+				if(wo) {
+					wo->calc_image();
+				}
+			}
+		}
+		rekursion--;
+	}
+}
+
+void wayobj_t::mark_leg_b_dirty() const
+{
+	if(  two_legs  ) {
+		mark_image_dirty( get_leg_image(leg_dir_b, leg_diagonal&2, false), 0 );
+		mark_image_dirty( get_leg_image(leg_dir_b, leg_diagonal&2, true), 0 );
+	}
 }
 
 
@@ -343,8 +457,12 @@ void wayobj_t::calc_image()
 	pthread_mutex_lock( &wayobj_calc_image_mutex );
 #endif
 	grund_t *gr = welt->lookup(get_pos());
+	mark_leg_b_dirty();
 	diagonal = false;
 	close_diagonal = 0;
+	two_legs = 0;
+	leg_diagonal = 0;
+	leg_dir_a = leg_dir_b = 0;
 	if(gr) {
 		const waytype_t wt = (desc->get_wtyp()==tram_wt) ? track_wt : desc->get_wtyp();
 		weg_t *w=gr->get_weg(wt);
@@ -361,20 +479,17 @@ void wayobj_t::calc_image()
 		}
 
 		ribi_t::ribi sec_way_ribi_unmasked = 0;
+		const bool on_two_legs = wt != any_wt  &&  has_two_legs(gr, wt);
 		if(wt == any_wt) {
 			if (weg_t *sec_w = gr->get_weg_nr(1)) {
 				sec_way_ribi_unmasked = sec_w->get_ribi_unmasked();
 			}
 		}
-		else if (gr->has_two_ways()) {
+		else if (on_two_legs) {
 			// two same-waytype disjoint diagonal legs: this one wayobj covers both (its dir
 			// mask below is unioned across them, same as the any_wt/powerline case above)
-			weg_t *leg0 = gr->get_weg_nr(0);
-			weg_t *leg1 = gr->get_weg_nr(1);
-			if (leg0 && leg1 && leg0->get_waytype()==wt && leg1->get_waytype()==wt) {
-				w = leg0;
-				sec_way_ribi_unmasked = leg1->get_ribi_unmasked();
-			}
+			w = gr->get_weg_nr(0);
+			sec_way_ribi_unmasked = gr->get_weg_nr(1)->get_ribi_unmasked();
 		}
 
 		set_yoff( -gr->get_weg_yoff() );
@@ -384,6 +499,35 @@ void wayobj_t::calc_image()
 		// if there is a slope, we are finished, only four choices here (so far)
 		hang = gr->get_weg_hang();
 		if(hang!=slope_t::flat) {
+#ifdef MULTI_THREAD
+			pthread_mutex_unlock( &wayobj_calc_image_mutex );
+#endif
+			return;
+		}
+
+		if(  on_two_legs  ) {
+			// each leg is drawn on its own, like the two ways below us: a bend leg always as
+			// a diagonal (see weg_t::check_diagonal()), so the two never overlap
+			const ribi_t::ribi dir_a = dir & w->get_ribi_unmasked();
+			const ribi_t::ribi dir_b = dir & sec_way_ribi_unmasked;
+			if(  ribi_t::is_bend(dir_a)  &&  ribi_t::is_bend(dir_b)  &&  desc->has_close_diagonal_image()  ) {
+				// both diagonals in one image: 1=northwest+southeast, 2=northeast+southwest
+				close_diagonal = (dir_a == ribi_t::northwest  ||  dir_a == ribi_t::southeast) ? 1 : 2;
+			}
+			else if(  dir_a  &&  dir_b  ) {
+				two_legs = 1;
+				leg_dir_a = dir_a;
+				leg_dir_b = dir_b;
+				leg_diagonal = (is_diagonal_leg(dir_a) ? 1 : 0) | (is_diagonal_leg(dir_b) ? 2 : 0);
+				mark_image_dirty( get_leg_image(leg_dir_b, leg_diagonal&2, false), 0 );
+				mark_image_dirty( get_leg_image(leg_dir_b, leg_diagonal&2, true), 0 );
+			}
+			else {
+				// we reach only one of the legs
+				diagonal = is_diagonal_leg(dir);
+			}
+			// curves next to us depend on our leg images (see find_next_ribi())
+			calc_neighbour_images( gr, wt );
 #ifdef MULTI_THREAD
 			pthread_mutex_unlock( &wayobj_calc_image_mutex );
 #endif
@@ -412,23 +556,7 @@ void wayobj_t::calc_image()
 			}
 
 			if(diagonal) {
-				// with this, we avoid calling us endlessly
-				// HACK (originally by hajo?)
-				static int rekursion = 0;
-
-				if(rekursion == 0) {
-					grund_t *to;
-					rekursion++;
-					for(int r = 0; r < 4; r++) {
-						if(gr->get_neighbour(to, wt, ribi_t::nesw[r])) {
-							wayobj_t* wo = to->get_wayobj( wt );
-							if(wo) {
-								wo->calc_image();
-							}
-						}
-					}
-					rekursion--;
-				}
+				calc_neighbour_images( gr, wt );
 
 				image_id after = desc->get_front_diagonal_image_id(dir);
 				image_id image = desc->get_back_diagonal_image_id(dir);

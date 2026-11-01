@@ -685,7 +685,8 @@ void weg_t::calc_image()
 				for(int r = 0; r < 4; r++) {
 					if(  from->get_neighbour(to, get_waytype(), ribi_t::nesw[r])  ) {
 						// can fail on water tiles
-						if(  weg_t *w=to->get_weg(get_waytype())  )  {
+						// (direction-aware: the leg connected to us, if there are two)
+						if(  weg_t *w=to->get_weg(get_waytype(), ribi_t::backward(ribi_t::nesw[r]))  )  {
 							// and will only change the outcome, if it has a diagonal image ...
 							if(  w->get_desc()->has_diagonal_image()  ) {
 								w->calc_image();
@@ -1185,12 +1186,14 @@ void weg_t::check_diagonal()
 
 	// get the ribis of the ways that connect to us
 	// r1 will be 45 degree clockwise ribi (eg northeast->east), r2 will be anticlockwise ribi (eg northeast->north)
+	// (direction-aware: on a neighbour with two same-waytype disjoint diagonal legs, only the
+	// leg connected to us counts)
 	if(  from->get_neighbour(to, get_waytype(), ribi_t::rotate45(ribi))  ) {
-		r1 = to->get_weg_ribi_unmasked(get_waytype());
+		r1 = to->get_weg_ribi_unmasked(get_waytype(), ribi_t::backward(ribi_t::rotate45(ribi)));
 	}
 
 	if(  from->get_neighbour(to, get_waytype(), ribi_t::rotate45l(ribi))  ) {
-		r2 = to->get_weg_ribi_unmasked(get_waytype());
+		r2 = to->get_weg_ribi_unmasked(get_waytype(), ribi_t::backward(ribi_t::rotate45l(ribi)));
 	}
 
 	// diagonal if r1 or r2 are our reverse and neither one is 90 degree rotation of us
@@ -1231,7 +1234,7 @@ void weg_t::check_close_diagonal()
 			// only happens during construction of ways
 			return;
 		}
-		r[i] = to->get_weg_ribi_unmasked(get_waytype());
+		r[i] = to->get_weg_ribi_unmasked(get_waytype(), ribi_t::backward(ribi_t::nesw[i]));
 		if(  !ribi_t::is_bend(r[i])  ) {
 			// only one entry point
 			if(  non_bent++  ) {

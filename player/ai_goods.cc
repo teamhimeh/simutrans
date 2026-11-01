@@ -397,7 +397,7 @@ bool ai_goods_t::create_ship_transport_vehikel(fabrik_t *qfab, int anz_vehikel)
 	koord pos1 = platz1 - koord(gr->get_grund_hang())*h->get_size().y;
 	koord best_pos = pos1;
 	// sea tiles covered by the dock
-	sint16 const cov = max( (sint16)welt->get_settings().get_station_coverage(water_wt), welt->get_settings().get_station_coverage_water() );
+	uint16 const cov = max( welt->get_settings().get_station_coverage(water_wt), welt->get_settings().get_station_coverage_water() );
 	for(  int y = pos1.y - cov; y <= pos1.y + cov; ++y  ) {
 		for(  int x = pos1.x - cov; x <= pos1.x + cov; ++x  ) {
 			koord p(x,y);

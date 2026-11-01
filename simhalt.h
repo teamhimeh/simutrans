@@ -782,6 +782,12 @@ public:
 	/// re-adds this halt to the haltlists of all covered tiles
 	void refresh_coverage();
 
+	/**
+	 * Recalculates the coverage of all station tiles and rebuilds all haltlists and factory links.
+	 * Needed after the station coverage settings were changed.
+	 */
+	static void recalc_all_coverages();
+
 	uint32 get_capacity(uint8 typ) const { return capacity[typ]; }
 
 	bool existiert_in_welt() const;

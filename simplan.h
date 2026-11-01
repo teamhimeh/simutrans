@@ -202,6 +202,9 @@ public:
 	 */
 	void sort_haltlist();
 
+	/// removes all halts from the halt list (e.g. before all coverages are recalculated)
+	void clear_haltlist();
+
 
 	bool is_connected(halthandle_t halt) const;
 

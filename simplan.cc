@@ -231,7 +231,7 @@ void planquadrat_t::boden_ersetzen(grund_t *alt, grund_t *neu)
 		}
 		delete alt;
 	}
-	if(  water_changed  &&  welt->get_settings().get_station_coverage_water() >= 0  ) {
+	if(  water_changed  ) {
 		update_haltlist();
 	}
 }
@@ -761,6 +761,15 @@ struct halt_dist_node {
 		return a.halt == b.halt;
 	}
 };
+
+void planquadrat_t::clear_haltlist()
+{
+	delete [] halt_list;
+	halt_list = NULL;
+	halt_list_count = 0;
+	get_kartenboden()->set_flag(grund_t::dirty);
+}
+
 
 void planquadrat_t::sort_haltlist()
 {

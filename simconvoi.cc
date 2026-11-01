@@ -3499,6 +3499,9 @@ void convoi_t::rdwr(loadsave_t *file)
 			fahr.resize(anz_vehikel, NULL);
 		}
 		owner = welt->get_player( owner_n );
+		if(  file->get_OTRP_version()<63  &&  owner  ) {
+			owner->book_convoi_number(1);
+		}
 
 		// sanity check for values ... plus correction
 		if(sp_soll < 0) {
@@ -4508,15 +4511,21 @@ bool can_depart(convoihandle_t cnv, halthandle_t halt, uint32 arrived_time, uint
 			cnv->set_arrived_time(arrived_time);
 			dbg->warning("can_depart", "%s: arrived time is not registered. replaced to %u", cnv->get_name(), arrived_time);
 		}
+		// Search from the first booking attempt, after all reservation conditions
+		// are satisfied (loading, departure allowance, coupling, or resuming service).
+		// Arrival-based slots may already be long past after waiting for any of these.
+		// Keep arrived_time for waiting limits, statistics and the booking identity;
+		// hat_gehalten() retains the booked slot instead of recalculating it each step.
+		const uint32 slot_search_time = world()->get_ticks();
 		// consider spacing
 		// subtract wait_lock (time_to_load) from spacing_shift
 		const sint64 spacing_shift = (sint64)current_entry.spacing_shift * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
 		// NOTE: Treating spacing as int causes numerical error due to decimal amount.
 		// const sint32 spacing = world()->ticks_per_world_month / current_entry.spacing;
 		const uint64 delay_tolerance = (uint64)current_entry.delay_tolerance * world()->ticks_per_world_month / world()->get_settings().get_spacing_shift_divisor();
-		// slot = (arrived_time - delay_tolerance - spacing_shift) / spacing + 1
-		const sint64 calibrated_arrived_time = (sint64)arrived_time - (sint64)delay_tolerance - (sint64)spacing_shift + (sint64)time_to_load;
-		sint64 slot = calibrated_arrived_time * (sint64)current_entry.spacing / (sint64)world()->ticks_per_world_month + (sint64)(calibrated_arrived_time<0?0:1);
+		// slot = (slot_search_time - delay_tolerance - spacing_shift + time_to_load) / spacing + 1
+		const sint64 calibrated_search_time = (sint64)slot_search_time - (sint64)delay_tolerance - (sint64)spacing_shift + (sint64)time_to_load;
+		sint64 slot = calibrated_search_time * (sint64)current_entry.spacing / (sint64)world()->ticks_per_world_month + (sint64)(calibrated_search_time<0?0:1);
 		// go_on_ticks = slot * spacing + spacing_shift
 		go_on_ticks = slot * world()->ticks_per_world_month / current_entry.spacing + spacing_shift;
 		// book the departure slot.
@@ -8119,6 +8128,10 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 		k = k->get_coupling_convoi();
 	}
 
+	// toll for the whole crossing, paid to the carrier; needs c's last_stop_pos, which is still the
+	// port it boarded at, so it must happen before c books the revenue of this leg
+	book_shipping_revenue( c, target->get_pos() );
+
 	// detach from the carrier before starting, so nothing can observe a half-shipped convoy
 	shipped_convois.remove( c );
 	c->carrier_convoi      = convoihandle_t();
@@ -8656,7 +8669,44 @@ void convoi_t::book_shipping_toll()
 		// it - and only against the chain head, which is what shipped_convois holds
 		c->book( -toll_convoy, CONVOI_WAYTOLL );
 		c->book( -toll_convoy, CONVOI_PROFIT );
+		book( toll_convoy, CONVOI_WAYTOLL );
+		book( toll_convoy, CONVOI_PROFIT );
 	}
+}
+
+
+void convoi_t::book_shipping_revenue(convoihandle_t c, koord3d landing)
+{
+	if(  !c.is_bound()  ||  c->get_vehicle_count() == 0  ||  anz_vehikel == 0  ||  get_schedule() == NULL  ) {
+		return;
+	}
+	// no toll between a player's own convoys
+	if(  c->get_owner() == get_owner()  ) {
+		return;
+	}
+	// schedule waytypes, because front()->get_waytype() reports track_wt for trams
+	const waytype_t carrier_wt = get_schedule()->get_waytype();
+	const waytype_t shipped_wt = c->get_schedule() ? c->get_schedule()->get_waytype() : c->front()->get_waytype();
+	const sint64 value = welt->get_settings().get_shipping_revenue( shipped_wt, carrier_wt );
+	if(  value <= 0  ) {
+		return;
+	}
+	// priced like freight: per tile between the port of boarding and the landing, and per tile
+	// of deck the whole carried chain takes up
+	const sint64 dist = koord_distance( c->front()->last_stop_pos, landing );
+	const sint64 revenue = value * dist * (sint64)c->get_shipping_length() / CARUNITS_PER_TILE;
+	if(  revenue <= 0  ) {
+		return;
+	}
+	// Booked as way toll, exactly like book_shipping_toll(): the riding convoy's owner pays the
+	// carrier's owner.
+	get_owner()->book_toll_received( revenue, carrier_wt );
+	c->get_owner()->book_toll_paid( -revenue, shipped_wt );
+	// against the chain head, as with the shipping toll
+	c->book( -revenue, CONVOI_WAYTOLL );
+	c->book( -revenue, CONVOI_PROFIT );
+	book( revenue, CONVOI_WAYTOLL );
+	book( revenue, CONVOI_PROFIT );
 }
 
 

@@ -377,7 +377,7 @@ bool ai_passenger_t::create_water_transport_vehikel(const stadt_t* start_stadt, 
 	}
 
 	// sea tiles covered by the harbour (dock and the joined bus stop)
-	sint16 const cov = max( (sint16)max( welt->get_settings().get_station_coverage(water_wt), welt->get_settings().get_station_coverage(road_wt) ), welt->get_settings().get_station_coverage_water() );
+	uint16 const cov = max( max( welt->get_settings().get_station_coverage(water_wt), welt->get_settings().get_station_coverage(road_wt) ), welt->get_settings().get_station_coverage_water() );
 	// now we have harbour => find start position for ships
 	koord pos1 = start_harbour-start_dx;
 	koord start_pos = pos1;

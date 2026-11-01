@@ -54,6 +54,13 @@ public:
 		MAP_BASED
 	} climate_generate_t;
 
+	// convoy shipping revenue table: every waytype that can be carried, and additionally air
+	// (last), which can only carry
+	enum {
+		SHIPPING_REVENUE_SHIPPED_WT_COUNT = 7,
+		SHIPPING_REVENUE_CARRIER_WT_COUNT = 8
+	};
+
 private:
 	sint32 size_x, size_y;
 	sint32 map_number;
@@ -112,11 +119,14 @@ private:
 
 	uint16 station_coverage_size;
 
-	// station coverage for each building waytype; -1 means station_coverage_size is used
-	sint16 station_coverage_size_wt[air_wt+1];
+	// station coverage for each building waytype (indexed by waytype, only station waytypes are used)
+	uint16 station_coverage_size_wt[air_wt+1];
 
-	// coverage applied to sea tiles (not rivers); -1 means the coverage of the station tile is used
-	sint16 station_coverage_size_water;
+	// coverage applied to sea tiles (not rivers)
+	uint16 station_coverage_size_water;
+
+	// sets station_coverage_size and all waytype and water coverages to cov
+	void set_all_station_coverages(uint16 cov);
 
 	// the maximum length of each convoi
 	uint8 max_rail_convoi_length;
@@ -361,6 +371,18 @@ private:
 	 */
 	sint32 shipping_income_percentage;
 
+	/**
+	 * Convoy shipping: revenue the carrier earns for carrying a convoy, as
+	 * shipping_revenue[shipped waytype][carrier waytype] (indices from
+	 * get_shipping_revenue_wt_index()). Unit: 1/100 credit per tile travelled per tile
+	 * (CARUNITS_PER_TILE) of carried convoy length. Set in simuconf.tab as
+	 * revenue_<shipped>_shipped_by_<carrier>, e.g. revenue_road_shipped_by_water.
+	 * Booked as way toll: the carried convoy's owner pays it to the carrier's owner when put
+	 * ashore, on top of toll_shipping_percentage; nothing is paid between a player's own
+	 * convoys. 0 (the default) charges nothing.
+	 */
+	sint32 shipping_revenue[SHIPPING_REVENUE_SHIPPED_WT_COUNT][SHIPPING_REVENUE_CARRIER_WT_COUNT];
+
 	// multipliers [%] applied on the pakset values of maintenance and running costs
 	sint32 maintenance_cost_multiplier_way;
 	sint32 maintenance_cost_multiplier_overhead;
@@ -574,16 +596,24 @@ public:
 
 	uint16 get_station_coverage() const {return station_coverage_size;}
 
-	/// coverage of a station building with this waytype; invalid_wt (no waytype building) returns get_station_coverage()
-	uint16 get_station_coverage(waytype_t wt) const {
-		if(  wt>ignore_wt  &&  wt<=air_wt  &&  station_coverage_size_wt[wt]>=0  ) {
-			return (uint16)station_coverage_size_wt[wt];
+	/// true for the waytypes which have their own station coverage
+	static bool has_station_coverage_wt(waytype_t wt) {
+		switch(  wt  ) {
+			case road_wt: case track_wt: case water_wt: case monorail_wt: case maglev_wt:
+			case tram_wt: case narrowgauge_wt: case air_wt:
+				return true;
+			default:
+				return false;
 		}
-		return station_coverage_size;
 	}
 
-	/// coverage applied to sea tiles; -1 if the coverage of the station tile is used
-	sint16 get_station_coverage_water() const {return station_coverage_size_water;}
+	/// coverage of a station building with this waytype; invalid_wt (no waytype building) returns get_station_coverage()
+	uint16 get_station_coverage(waytype_t wt) const {
+		return has_station_coverage_wt(wt) ? station_coverage_size_wt[wt] : station_coverage_size;
+	}
+
+	/// coverage applied to sea tiles (not rivers), whatever station tile covers them
+	uint16 get_station_coverage_water() const {return station_coverage_size_water;}
 
 	/// the largest coverage of all waytypes and water, i.e. the reach of any station tile
 	uint16 get_max_station_coverage() const;
@@ -807,6 +837,12 @@ public:
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
 	sint32 get_toll_shipping_percentage() const { return toll_shipping_percentage; }
 	sint32 get_shipping_income_percentage() const { return shipping_income_percentage; }
+	/// revenue [1/100 credit per tile per tile of convoy length] for a `shipped` convoy aboard a `carrier`
+	sint32 get_shipping_revenue(waytype_t shipped, waytype_t carrier) const;
+	/// index into shipping_revenue for a waytype, or -1 if it has none (air can only be a carrier)
+	static sint8 get_shipping_revenue_wt_index(waytype_t wt);
+	/// simuconf.tab key (and settings dialog label) for a shipping_revenue entry
+	static const char *get_shipping_revenue_name(uint8 shipped_idx, uint8 carrier_idx);
 
 	sint32 get_maintenance_cost_multiplier_way() const { return maintenance_cost_multiplier_way; }
 	sint32 get_maintenance_cost_multiplier_overhead() const { return maintenance_cost_multiplier_overhead; }

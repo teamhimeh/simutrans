@@ -4852,7 +4852,7 @@ uint16 haltestelle_t::get_tile_coverage(const grund_t *gr)
 
 uint16 haltestelle_t::get_tile_reach(const tile_t &tile)
 {
-	return max( (sint16)tile.coverage, welt->get_settings().get_station_coverage_water() );
+	return max( tile.coverage, welt->get_settings().get_station_coverage_water() );
 }
 
 
@@ -4861,13 +4861,10 @@ bool haltestelle_t::is_tile_covering(const tile_t &tile, koord pos)
 	koord const d = tile.grund->get_pos().get_2d() - pos;
 	sint16 const dist = max( abs(d.x), abs(d.y) );
 	sint16 cov = tile.coverage;
-	sint16 const cov_water = welt->get_settings().get_station_coverage_water();
-	if(  cov_water >= 0  ) {
-		// sea tiles have their own coverage (rivers are not water ground)
-		const grund_t *gr = welt->lookup_kartenboden(pos);
-		if(  gr  &&  gr->is_water()  ) {
-			cov = cov_water;
-		}
+	// sea tiles have their own coverage (rivers are not water ground)
+	const grund_t *gr = welt->lookup_kartenboden(pos);
+	if(  gr  &&  gr->is_water()  ) {
+		cov = welt->get_settings().get_station_coverage_water();
 	}
 	return dist <= cov;
 }
@@ -4917,6 +4914,38 @@ void haltestelle_t::refresh_coverage()
 	FOR(slist_tpl<tile_t>, const& i, tiles) {
 		add_tile_coverage( i, false );
 	}
+}
+
+
+void haltestelle_t::recalc_all_coverages()
+{
+	koord const size = welt->get_size();
+	for(  sint16 y = 0;  y < size.y;  y++  ) {
+		for(  sint16 x = 0;  x < size.x;  x++  ) {
+			welt->access(x, y)->clear_haltlist();
+		}
+	}
+
+	FOR(vector_tpl<halthandle_t>, const halt, alle_haltestellen) {
+		for(  tile_t &i : halt->tiles  ) {
+			i.coverage = get_tile_coverage( i.grund );
+			// sorted afterwards
+			halt->add_tile_coverage( i, true );
+		}
+	}
+
+	for(  sint16 y = 0;  y < size.y;  y++  ) {
+		for(  sint16 x = 0;  x < size.x;  x++  ) {
+			welt->access(x, y)->sort_haltlist();
+		}
+	}
+
+	FOR(vector_tpl<halthandle_t>, const halt, alle_haltestellen) {
+		halt->reconnect_factories();
+	}
+
+	// foot path connections depend on the coverage too
+	welt->set_schedule_counter();
 }
 
 
@@ -5115,10 +5144,19 @@ bool haltestelle_t::existiert_in_welt() const
  */
 void haltestelle_t::mark_unmark_coverage(const bool mark) const
 {
-	// iterate over all tiles
+	// iterate over all tiles and mark the tiles they actually cover
+	// (coverage depends on the building waytype, sea tiles use station_coverage_water)
 	FOR(slist_tpl<tile_t>, const& i, tiles) {
-		koord const size(i.coverage * 2 + 1, i.coverage * 2 + 1);
-		welt->mark_area(i.grund->get_pos() - size / 2, size, mark);
+		koord3d const pos = i.grund->get_pos();
+		sint16 const reach = get_tile_reach(i);
+		for(  sint16 y = -reach;  y <= reach;  y++  ) {
+			for(  sint16 x = -reach;  x <= reach;  x++  ) {
+				koord const p = pos.get_2d() + koord(x, y);
+				if(  is_tile_covering(i, p)  ) {
+					welt->mark_area( koord3d(p, pos.z), koord(1, 1), mark );
+				}
+			}
+		}
 	}
 }
 
