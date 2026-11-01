@@ -378,7 +378,7 @@ void schedule_t::rdwr(loadsave_t *file)
 				entries[i].set_stop_flags((uint32)0);
 			}
 			if(  file->is_loading()  &&  file->get_OTRP_version()<63  &&  entries[i].get_stop_flags()&schedule_entry_t::NO_GO_NO_USERS  ) {
-				// Savegames older than OTRP v62 only had a single-stop no-go-no-users
+				// Savegames older than OTRP v63 only had a single-stop no-go-no-users
 				// flag. Migrate it into a one-entry section (start and end on the same
 				// entry), which is what the new demand-based skip logic looks at.
 				entries[i].set_no_go_no_users_section_start(true);
@@ -1099,7 +1099,8 @@ bool schedule_t::get_no_go_no_users_section(uint8 index, uint8& out_start, uint8
 	// iterations) also prevents an infinite loop for misconfigured flags.
 	// The backward scan finds the previous START even for an entry after that
 	// section's END, so check that index really lies within [start, end].
-	const bool inside = (start<=end) ? (start<=index  &&  index<=end) : (index>=start  ||  index<=end);
+	// Here, end should be index < end because we should check users at current halt.
+	const bool inside = (start<=end) ? (start<=index  &&  index<end) : (index>=start  ||  index<end);
 	if(  !inside  ) {
 		return false;
 	}

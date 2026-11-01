@@ -6847,7 +6847,7 @@ halthandle_t convoi_t::get_committed_destination() const {
 				continue;
 			}
 			if(  ware.get_ziel().is_bound()  ) {
-				return ware.get_ziel();
+				return ware.get_zwischenziel();
 			}
 		}
 	}
