@@ -638,7 +638,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			if(gb) {
 				// no halt => citybuilding => do not touch
 				// also check for too high buildings ...
-				if(gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
+				if(gb->get_tile()->get_desc()->get_height_clearance() > get_way_height_offset(to)) {
 					return false;
 				}
 				if(!check_owner(gb->get_owner(),player_builder)) {
@@ -2241,6 +2241,30 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 /*
  * calc_straight_route (maximum one curve, including diagonals)
  */
+void way_builder_t::check_dual_leg_merges()
+{
+	if(  desc==NULL  ) {
+		return;
+	}
+	const waytype_t wtyp = desc->get_wtyp();
+	for(  uint32 i=0;  i<get_count();  i++  ) {
+		const grund_t *gr = welt->lookup(route[i]);
+		if(  gr==NULL  ||  !gr->would_merge_same_waytype_legs(wtyp, route.get_short_ribi(i))  ) {
+			continue;
+		}
+		// merging rebuilds both legs into one way: both must be ours, and no halt may be here
+		// (a halt cannot sit on the resulting junction)
+		if(  gr->is_halt()
+		  ||  !check_owner(gr->get_weg_nr(0)->get_owner(), player_builder)
+		  ||  !check_owner(gr->get_weg_nr(1)->get_owner(), player_builder)  ) {
+			route.clear();
+			terraform_index.clear();
+			return;
+		}
+	}
+}
+
+
 void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 {
 	DBG_MESSAGE("way_builder_t::calc_straight_route()","from %d,%d,%d to %d,%d,%d",start.x,start.y,start.z, ziel.x,ziel.y,ziel.z );
@@ -2256,6 +2280,7 @@ void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 			route_reversed = true;
 		}
 	}
+	check_dual_leg_merges();
 }
 
 
@@ -2306,6 +2331,7 @@ uint32 ms = dr_time();
 			if(cost2 < 0) {
 				intern_calc_route_elevated(ziel[0], start[0]);
 				route_reversed = true;
+				check_dual_leg_merges();
 				return route_reversed;
 			}
 		}
@@ -2315,6 +2341,7 @@ uint32 ms = dr_time();
 			if(cost2 < 0) {
 				intern_calc_route( ziel, start );
 				route_reversed = true;
+				check_dual_leg_merges();
 				return route_reversed;
 			}
 		}
@@ -2343,6 +2370,7 @@ uint32 ms = dr_time();
 #endif
 	}
 	INT_CHECK("wegbauer 778");
+	check_dual_leg_merges();
 #ifdef DEBUG_ROUTES
 DBG_MESSAGE("calc_route::calc_route", "took %u ms", dr_time() - ms );
 #endif
@@ -2702,6 +2730,27 @@ void way_builder_t::build_elevated()
 
 
 
+/**
+ * true when two same-waytype disjoint diagonal legs coexist on @p gr and one of them already
+ * owns every direction in @p ribi. The tile is then already connected that way, so the caller
+ * must not hand the ribi to weg_erweitern(): its leg choice could add the same direction to
+ * the OTHER leg too (e.g. when that leg's descriptor matches the new one), leaving two ways
+ * leaving the tile in the same direction.
+ */
+static bool is_direction_already_built(const grund_t *gr, waytype_t wt, ribi_t::ribi ribi)
+{
+	if(  ribi==ribi_t::none  ||  !gr->has_two_same_waytype_ways()  ||  gr->get_weg_nr(0)->get_waytype()!=wt  ) {
+		return false;
+	}
+	for(  uint8 i=0;  i<2;  i++  ) {
+		if(  (gr->get_weg_nr(i)->get_ribi_unmasked() & ribi)==ribi  ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
 void way_builder_t::build_road()
 {
 	// only public player or cities (sp==NULL) can build cityroads with sidewalk
@@ -2726,7 +2775,9 @@ void way_builder_t::build_road()
 		grund_t* gr = welt->lookup(route[i]);
 		sint64 cost = 0;
 
-		bool extend = gr->weg_erweitern(road_wt, route.get_short_ribi(i), desc, straight_route_mode);
+		// a leg already owning this direction counts as extended; get_weg(road_wt, ribi) below picks it
+		bool extend = is_direction_already_built(gr, road_wt, route.get_short_ribi(i))
+			||  gr->weg_erweitern(road_wt, route.get_short_ribi(i), desc, straight_route_mode);
 
 		// bridges/tunnels have their own track type and must not upgrade
 		if(gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden) {
@@ -2832,7 +2883,9 @@ void way_builder_t::build_track()
 				continue;
 			}
 
-			bool const extend = gr->weg_erweitern(desc->get_wtyp(), ribi, desc, straight_route_mode);
+			// a leg already owning this direction counts as extended; get_weg(wtyp, ribi) below picks it
+			bool const extend = is_direction_already_built(gr, desc->get_wtyp(), ribi)
+				||  gr->weg_erweitern(desc->get_wtyp(), ribi, desc, straight_route_mode);
 
 			// bridges/tunnels have their own track type and must not upgrade
 			if((gr->get_typ()==grund_t::brueckenboden ||  gr->get_typ()==grund_t::tunnelboden)  &&  gr->get_weg_nr(0)->get_waytype()==desc->get_wtyp()) {

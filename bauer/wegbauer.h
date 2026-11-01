@@ -200,6 +200,10 @@ private:
 
 	sint32 intern_calc_route_elevated(const koord3d start, const koord3d ziel);
 
+	// clears the route when building it would merge two same-waytype diagonal legs on a tile
+	// where a leg is not ours or a halt sits (see grund_t::would_merge_same_waytype_legs())
+	void check_dual_leg_merges();
+
 	// runways need to meet some special conditions enforced here
 	bool intern_calc_route_runways(koord3d start, const koord3d ziel);
 

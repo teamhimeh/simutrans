@@ -116,7 +116,8 @@ public:
 	void update_label()
 	{
 		stop.buf().printf("%i) ", number+1);
-		if(  waytype!=water_wt && !cnv->is_waypoint(entry)  ) {
+		const grund_t *gr = welt->lookup(entry.pos);
+		if( waytype!=water_wt && !cnv->is_waypoint(entry) && !(gr && gr->get_depot()) ) {
 			// ships do not use halt length, so we do not write
 			stop.buf().printf("[%.2f] ", (double) halt_length_in_vehicle_step()/VEHICLE_STEPS_PER_TILE);
 		}
@@ -283,14 +284,20 @@ void convoi_stops_list_t::update_schedule()
 			entries.append( new_component<convoi_stops_list_item_t>(player, gui_schedule->at(i), i, cnv));
 			entries.back()->add_listener( this );
 		}
-		entries[ gui_schedule->get_current_stop() ]->set_active(true);
+		const uint8 current = gui_schedule->get_current_stop();
+		if(  current < entries.get_count()  ) {
+			entries[ current ]->set_active(true);
+		}
 	}
 	set_size(get_min_size());
 }
 
 void convoi_stops_list_t::draw(scr_coord offset)
 {
-	if(  !cnv->get_schedule()->matches(world(),gui_schedule) || !entries[ cnv->get_schedule()->get_current_stop() ]->is_active()  ) {
+	const uint8 current = cnv->get_schedule()->get_current_stop();
+	if(  !cnv->get_schedule()->matches(world(),gui_schedule)
+		||  (current >= entries.get_count()  &&  !cnv->get_schedule()->empty())
+		||  (current < entries.get_count()  &&  !entries[ current ]->is_active())  ) {
 		update_schedule();
 	}
 	update_whole_route_overlay();

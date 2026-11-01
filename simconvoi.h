@@ -519,7 +519,7 @@ private:
 	*/
 	bool insert_route_convoy_on();
 	koord3d const find_tiles_convoy_on(convoihandle_t const inspecting, const grund_t* g, ribi_t::ribi next_dir);
-	koord3d const search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n);
+	koord3d const search_next_convoy_tile(convoihandle_t inspecting, const grund_t* g, ribi_t::ribi back_dir, uint8 depth, koord3d* buf, uint8& n, const vector_tpl<koord3d>* searched_tiles = NULL);
 	bool insert_route_to_draw_diagonal();
 	// alte_richtung of coupled convoy is set by the head convoy.
 	void set_alte_richtung(ribi_t::ribi r) { alte_richtung = r; }
@@ -1519,6 +1519,20 @@ public:
 	uint32 get_arrived_time() const { return arrived_time; }
 	uint32 get_departure_time() const { return scheduled_departure_time; } // in ticks.
 	void reset_departure_time() { scheduled_departure_time = 0; }
+	/**
+	 * Give the booked departure slot back to the halt and forget it.
+	 * Use this when the convoy leaves the stop WITHOUT departing in its slot (next stop button,
+	 * schedule change, boarding a carrier). A normal departure must keep the slot booked
+	 * until it expires, so that a delayed convoy cannot take the same slot again.
+	 * If halt is unbound, the halt at the current position is used.
+	 */
+	void release_departure_slot(halthandle_t halt = halthandle_t());
+	/**
+	 * true while the whole convoy (judged by the most parent convoy) stays at halt for loading.
+	 * Judged by the state and the schedule entry, not by the tile of the front vehicle:
+	 * when the platform is shorter than the convoy, the front vehicle may stand on a non-platform tile.
+	 */
+	bool is_staying_at(halthandle_t halt) const;
 	uint32 get_coupling_delay_tolerance() const { return scheduled_coupling_delay_tolerance; }
 
 	// register journey time to the current schedule entry

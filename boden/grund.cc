@@ -1972,34 +1972,74 @@ bool grund_t::has_depot() const
 }
 
 
+bool grund_t::would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi) const
+{
+	if(  !has_two_ways()  ) {
+		return false;
+	}
+	const weg_t *leg0 = get_weg_nr(0);
+	const weg_t *leg1 = get_weg_nr(1);
+	if(  !leg0  ||  !leg1  ||  leg0->get_waytype()!=wegtyp  ||  leg1->get_waytype()!=wegtyp  ) {
+		return false;
+	}
+	const bool on0 = (ribi & leg0->get_ribi_unmasked())!=0;
+	const bool on1 = (ribi & leg1->get_ribi_unmasked())!=0;
+	if(  on0  &&  on1  ) {
+		return true;
+	}
+	if(  on0  ||  on1  ) {
+		const ribi_t::ribi combined = (on0 ? leg0 : leg1)->get_ribi_unmasked() | ribi;
+		return !ribi_t::is_bend(combined)  &&  !ribi_t::is_single(combined);
+	}
+	return false;
+}
+
+
+void grund_t::merge_same_waytype_legs(weg_t *removed_leg)
+{
+	weg_t *kept_leg = get_weg_nr(0)==removed_leg ? get_weg_nr(1) : get_weg_nr(0);
+	const ribi_t::ribi removed_ribi = removed_leg->get_ribi_unmasked();
+	removed_leg->mark_image_dirty( get_image(), 0 );
+	removed_leg->cleanup( NULL );
+	delete removed_leg;
+	flags &= ~has_way2;
+	kept_leg->ribi_add( removed_ribi );
+	// the tile's one wayobj spanned both legs and now lies on a single way, which (as any
+	// single way) is electrified wherever the catenary is - even if only the removed leg was
+	if(  wayobj_t *wo = get_wayobj( kept_leg->get_waytype() )  ) {
+		wo->update_electrification();
+	}
+}
+
+
 bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_t* new_desc, bool allow_same_waytype_dual_leg)
 {
 	// two same-waytype ways already coexist here as disjoint diagonal legs (see below) and
-	// the ribi now being built spans bits from BOTH legs (e.g. a straight N-S/E-W through
-	// connection) => the player is asserting full connectivity here. Merge the two legs back
-	// into a single way (deleting the second one) before doing the ordinary extend below.
-	if(  has_two_ways()  ) {
-		weg_t *leg0 = get_weg_nr(0);
-		weg_t *leg1 = get_weg_nr(1);
-		if(  leg0  &&  leg1  &&  leg0->get_waytype()==wegtyp  &&  leg1->get_waytype()==wegtyp
-		  &&  (ribi & leg0->get_ribi_unmasked())  &&  (ribi & leg1->get_ribi_unmasked())  ) {
-			const ribi_t::ribi leg1_ribi = leg1->get_ribi_unmasked();
-			leg1->mark_image_dirty( get_image(), 0 );
-			leg1->cleanup( NULL );
-			delete leg1;
-			flags &= ~has_way2;
-			leg0->ribi_add( leg1_ribi );
+	// the ribi now being built either spans bits from BOTH legs (e.g. a straight N-S/E-W
+	// through connection), or touches one leg only but would turn that leg into a junction
+	// (e.g. a route passing through this tile, entering on one of the leg's bits and leaving
+	// on a free one) => the player is asserting full connectivity here. Merge the two legs
+	// back into a single way (deleting the second one) before doing the ordinary extend below.
+	// The way builder refuses such routes beforehand when a leg is someone else's or a halt
+	// is here (way_builder_t::check_dual_leg_merges()); other callers may still get here.
+	if(  would_merge_same_waytype_legs( wegtyp, ribi )  ) {
+		// a halt cannot sit on a junction tile (see weg_entfernen())
+		if(  is_halt()  ) {
+			haltestelle_t::remove( NULL, get_pos() );
 		}
+		merge_same_waytype_legs( get_weg_nr(1) );
 	}
 
 	// resolve which way we're extending. When two same-waytype legs still coexist (the second
 	// leg's own tiles being built one at a time, before it's fully connected), get_weg(wegtyp)
-	// alone can't tell them apart. Since the two legs' bits always partition disjointly, adding
+	// alone can't tell them apart. A leg already owning any bit of ribi always wins: the two
+	// legs never share a direction, so giving that bit to the other leg as well would build
+	// two ways leaving the tile in the same direction. Otherwise (ribi entirely new here),
+	// since the two legs' bits always partition disjointly, adding
 	// this bit to the WRONG leg would push it past a valid bend (>2 bits); prefer whichever leg
 	// stays a valid bend/single afterward -- that works even when both legs share an identical
-	// descriptor (in which case descriptor matching alone can't disambiguate). Descriptor match,
-	// then already-overlapping ribi, are only used as tie-breakers for the rare case where
-	// both legs would stay valid.
+	// descriptor (in which case descriptor matching alone can't disambiguate). Descriptor match
+	// is only used as a tie-breaker for the rare case where both legs would stay valid.
 	weg_t *weg = NULL;
 	if(  has_two_ways()  ) {
 		weg_t *leg0 = get_weg_nr(0);
@@ -2013,12 +2053,12 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 			};
 			bool ok0 = stays_valid(leg0);
 			bool ok1 = stays_valid(leg1);
-			if(  ok0  &&  !ok1  ) weg = leg0;
+			if(  leg0->get_ribi_unmasked() & ribi  ) weg = leg0;
+			else if(  leg1->get_ribi_unmasked() & ribi  ) weg = leg1;
+			else if(  ok0  &&  !ok1  ) weg = leg0;
 			else if(  ok1  &&  !ok0  ) weg = leg1;
 			else if(  new_desc  &&  leg0->get_desc()==new_desc  ) weg = leg0;
 			else if(  new_desc  &&  leg1->get_desc()==new_desc  ) weg = leg1;
-			else if(  leg0->get_ribi_unmasked() & ribi  ) weg = leg0;
-			else if(  leg1->get_ribi_unmasked() & ribi  ) weg = leg1;
 			else weg = leg0;
 		}
 	}
@@ -2044,12 +2084,11 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 		weg->ribi_add(ribi);
 		weg->count_sign();
 		if(weg->is_electrified()) {
-			wayobj_t *wo = get_wayobj( wegtyp );
-			if( (ribi & wo->get_dir()) == 0 ) {
-				// ribi isn't set at wayobj;
+			if(  wayobj_t *wo = get_wayobj( wegtyp )  ) {
 				for( uint8 i = 0; i < 4; i++ ) {
-					// Add ribis to adjacent wayobj.
-					if( ribi_t::nesw[i] & ribi ) {
+					// Add ribis, which aren't set at wayobj yet, to it and to adjacent wayobj.
+					// (set_dir() also electrifies the leg reached on a two-leg tile)
+					if( ribi_t::nesw[i] & ribi & ~wo->get_dir() ) {
 						grund_t *next_gr;
 						if( get_neighbour( next_gr, wegtyp, ribi_t::nesw[i] ) ) {
 							wayobj_t *wo2 = next_gr->get_wayobj( wegtyp );
@@ -2198,12 +2237,7 @@ sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 								if(  to->is_halt()  ) {
 									haltestelle_t::remove( NULL, to->get_pos() );
 								}
-								const ribi_t::ribi remaining_bit = weg2->get_ribi_unmasked();
-								weg2->mark_image_dirty( to->get_image(), 0 );
-								weg2->cleanup( NULL );
-								delete weg2;
-								to->flags &= ~has_way2;
-								other_leg->ribi_add( remaining_bit );
+								to->merge_same_waytype_legs( weg2 );
 							}
 						}
 						to->calc_image();
