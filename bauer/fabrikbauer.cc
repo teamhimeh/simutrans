@@ -149,7 +149,7 @@ public:
 				}
 				if(  0 <= x  &&  x < w  &&  0 <= y  &&  y < h  ) {
 					// actual factorz tile: is there something top like elevated monorails?
-					if(  gr->get_leitung()!=NULL  ||  welt->lookup(gr->get_pos()+koord3d(0,0,1)  )!=NULL) {
+					if(  gr->get_leitung()!=NULL  ||  welt->lookup_no_dummy(gr->get_pos()+koord3d(0,0,1)  )!=NULL) {
 						// something on top (monorail or power lines)
 						return false;
 					}
@@ -638,11 +638,38 @@ int factory_builder_t::build_link(koord3d* parent, const factory_desc_t* info, s
 	// if a factory is not rotate-able, rotate the world until we can save it
 	if(welt->cannot_save()  &&  parent==NULL  &&  !can_factory_tree_rotate(info)  ) {
 		org_rotation = welt->get_settings().get_rotation();
+		const building_desc_t *bdesc = info->get_building();
+		// size of the already checked area; x and y are swapped with every rotation
+		koord checked_size = bdesc->get_size(rotate);
 		for(  int i=0;  i<3  &&  welt->cannot_save();  i++  ) {
-			pos->rotate90( welt->get_size().y-info->get_building()->get_y(rotate) );
+			pos->rotate90( welt->get_size().y-checked_size.y );
 			welt->rotate90();
+			checked_size = koord( checked_size.y, checked_size.x );
 		}
 		assert( !welt->cannot_save() );
+
+		// the factory must be built exactly on the checked area => use a layout with the same size
+		// (city factories search their place below anyway)
+		if(  info->get_placement() != factory_desc_t::City  &&  bdesc->get_size(rotate) != checked_size  ) {
+			int new_rotate = -1;
+			for(  int r = 1;  r < bdesc->get_all_layouts()  &&  new_rotate < 0;  r++  ) {
+				if(  bdesc->get_size( (rotate + r) % bdesc->get_all_layouts() ) == checked_size  ) {
+					new_rotate = (rotate + r) % bdesc->get_all_layouts();
+				}
+			}
+			if(  new_rotate < 0  ) {
+				// no matching layout: cannot build here; restore the rotation
+				dbg->warning( "factory_builder_t::build_link()", "%s does not fit on the checked area after rotation", info->get_name() );
+				for(  int i = 0;  i < 4  &&  welt->get_settings().get_rotation() != org_rotation;  ++i  ) {
+					pos->rotate90( welt->get_size().y-checked_size.y );
+					welt->rotate90();
+					checked_size = koord( checked_size.y, checked_size.x );
+				}
+				welt->update_map();
+				return 0;
+			}
+			rotate = new_rotate;
+		}
 	}
 
 	// in town we need a different place search

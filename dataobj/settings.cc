@@ -10,6 +10,7 @@
 #include "environment.h"
 #include "../pathes.h"
 #include "../simconst.h"
+#include "../simcolor.h"
 #include "../simtypes.h"
 #include "../simdebug.h"
 #include "../simworld.h"
@@ -2261,70 +2262,66 @@ void settings_t::set_default_player_color(uint8 player_nr, uint8 color1, uint8 c
 // returns default player colors for new players
 void settings_t::set_player_color_to_default(player_t* const player) const
 {
+	// number of selectable color families (each family has 8 shades)
+	const uint8 color_family_count = SPECIAL_COLOR_COUNT / 8;
 	karte_ptr_t welt;
-	uint8 color1 = default_player_color[player->get_player_nr()][0];
-	if(  color1 == 255  ) {
+	const uint8 player_nr = player->get_player_nr();
+
+	uint8 color1 = default_player_color[player_nr][0];
+	if(  color1 >= color_family_count  ) {
+		color1 = player_nr % color_family_count;
 		if(  default_player_color_random  ) {
 			// build a vector with all colors
-			minivec_tpl<uint8>all_colors1(28);
-			for(  uint8 i=0;  i<28;  i++  ) {
+			minivec_tpl<uint8>all_colors1(color_family_count);
+			for(  uint8 i=0;  i<color_family_count;  i++  ) {
 				all_colors1.append(i);
 			}
 			// remove all used colors
 			for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
 				player_t *test_sp = welt->get_player(i);
+				uint8 rem = 255;
 				if(  test_sp  &&  player!=test_sp  ) {
-					uint8 rem = 1<<(player->get_player_color1()/8);
-					if(  all_colors1.is_contained(rem)  ) {
-						all_colors1.remove( rem );
-					}
+					rem = test_sp->get_player_color1()/8;
 				}
-				else if(  default_player_color[i][0]!=255  ) {
-					uint8 rem = default_player_color[i][0];
-					if(  all_colors1.is_contained(rem)  ) {
-						all_colors1.remove( rem );
-					}
+				else if(  default_player_color[i][0]<color_family_count  ) {
+					rem = default_player_color[i][0];
 				}
+				all_colors1.remove( rem );
 			}
-			// now choose a random empty color
-			color1 = pick_any(all_colors1);
-		}
-		else {
-			color1 = player->get_player_nr();
+			// now choose a random empty color (if all are used, keep the fallback)
+			if(  !all_colors1.empty()  ) {
+				color1 = pick_any(all_colors1);
+			}
 		}
 	}
 
-	uint8 color2 = default_player_color[player->get_player_nr()][1];
-	if(  color2 == 255  ) {
+	uint8 color2 = default_player_color[player_nr][1];
+	if(  color2 >= color_family_count  ) {
+		color2 = (player_nr + 3) % color_family_count;
 		if(  default_player_color_random  ) {
 			// build a vector with all colors
-			minivec_tpl<uint8>all_colors2(28);
-			for(  uint8 i=0;  i<28;  i++  ) {
+			minivec_tpl<uint8>all_colors2(color_family_count);
+			for(  uint8 i=0;  i<color_family_count;  i++  ) {
 				all_colors2.append(i);
 			}
 			// remove color1
-			all_colors2.remove( color1/8 );
+			all_colors2.remove( color1 );
 			// remove all used colors
 			for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
 				player_t *test_sp = welt->get_player(i);
+				uint8 rem = 255;
 				if(  test_sp  &&  player!=test_sp  ) {
-					uint8 rem = 1<<(player->get_player_color2()/8);
-					if(  all_colors2.is_contained(rem)  ) {
-						all_colors2.remove( rem );
-					}
+					rem = test_sp->get_player_color2()/8;
 				}
-				else if(  default_player_color[i][1]!=255  ) {
-					uint8 rem = default_player_color[i][1];
-					if(  all_colors2.is_contained(rem)  ) {
-						all_colors2.remove( rem );
-					}
+				else if(  default_player_color[i][1]<color_family_count  ) {
+					rem = default_player_color[i][1];
 				}
+				all_colors2.remove( rem );
 			}
-			// now choose a random empty color
-			color2 = pick_any(all_colors2);
-		}
-		else {
-			color2 = player->get_player_nr() + 3;
+			// now choose a random empty color (if all are used, keep the fallback)
+			if(  !all_colors2.empty()  ) {
+				color2 = pick_any(all_colors2);
+			}
 		}
 	}
 

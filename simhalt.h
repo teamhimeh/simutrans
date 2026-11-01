@@ -1014,10 +1014,19 @@ public:
 	 * @returns true when the departure slot was successfully booked. false when denied.
 	 */
 	bool book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp_tick, convoihandle_t cnv);
+
+	/*
+	 * true when the departure slots of both convoys compete with each other,
+	 * i.e. both convoys have lines and their departure_slot_group_id are the same.
+	 */
+	static bool is_same_departure_slot_group(convoihandle_t a, convoihandle_t b);
 	
 	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
 	
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
+
+	// true when the slot is booked by cnv or by another convoy coupled with it (compared by the most parent convoy).
+	bool is_departure_booked_by(uint32 dep_tick, convoihandle_t cnv) const;
 
 	void extinguish_all_waiting_goods();
 

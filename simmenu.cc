@@ -5,6 +5,10 @@
 
 #include <string>
 #include <algorithm>
+#include <vector>
+#include <cerrno>
+#include <sys/stat.h>
+#include "sys/simsys.h"
 
 #include "unicode.h"
 
@@ -535,7 +539,7 @@ bool check_tool_availability(const tool_t *tool, uint16 time)
 static utf32 str_to_key( const char *str, uint8 *modifier )
 {
 	*modifier = 0;	// default no modufier check
-	if(  str[1]==','  ||  str[1]<=' ') {
+	if(  str[1]==','  ||  (uint8)str[1]<=' ') {
 		return (uint8)*str;
 	}
 	else {
@@ -547,7 +551,8 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 			else {
 				*modifier = 2;
 				// only single character following =>make is 1..26 value
-				if(  isalpha( str[1] )  ) {
+				if(  ((str[1] >= 'a' && str[1] <= 'z') || (str[1] >= 'A' && str[1] <= 'Z'))
+					&& (str[2] == ',' || (uint8)str[2] <= ' ')  ) {
 					return tolower(str[1]) - 'a' + 1;
 				}
 				str++;
@@ -558,8 +563,15 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 			if(  str[ 1 ] == '+' ||  str[1]==0  ) {
 				return '+';
 			}
-			*modifier = 1;
+			*modifier |= 1;
 			str++;
+		}
+		// A literal character can also follow Ctrl/Shift prefixes.
+		if ((uint8)*str >= ' ' && (str[1] == ',' || (uint8)str[1] <= ' ')) {
+			if ((*modifier & SIM_MOD_CTRL) && ((*str >= 'a' && *str <= 'z') || (*str >= 'A' && *str <= 'Z'))) {
+				return tolower(*str) - 'a' + 1;
+			}
+			return (uint8)*str;
 		}
 		// direct value (decimal)
 		if(str[0]=='#') {
@@ -569,7 +581,7 @@ static utf32 str_to_key( const char *str, uint8 *modifier )
 		if(  127<(uint8)*str  ) {
 			size_t len = 0;
 			utf32 const c = utf8_decoder_t::decode((utf8 const *)str, len);
-			if(str[len]==',') {
+			if(len > 0 && (str[len]==',' || (uint8)str[len]<=' ')) {
 				return c;
 			}
 		}
@@ -668,10 +680,358 @@ static bool compare_tool(tool_t const* const a, tool_t const* const b)
 }
 
 
+namespace {
+struct shortcut_t {
+	tool_t *tool;
+	std::string name;
+	uint16 default_key;
+	uint8 default_flags;
+	shortcut_t(tool_t *t, const char *n) : tool(t), name(n), default_key(0), default_flags(0) {}
+};
+std::vector<shortcut_t> shortcuts;
+struct shortcut_source_t { tool_t *tool; std::string name; };
+std::vector<shortcut_source_t> shortcut_sources;
+std::string shortcut_menu_path;
+std::string shortcut_default_path;
+
+void register_shortcut(tool_t *tool, const char *name)
+{
+	if (tool->get_id() == tool_t::dummy_id) { return; }
+	shortcut_sources.push_back({tool, name});
+	for (const shortcut_t &s : shortcuts) {
+		if (s.tool == tool) { return; }
+	}
+	shortcuts.push_back(shortcut_t(tool, name));
+}
+
+bool shortcut_requires_parameter(const shortcut_t &s)
+{
+	if (s.tool->get_default_param()) { return false; }
+	switch (s.tool->get_id()) {
+		case GENERAL_TOOL | TOOL_BUILD_WAY:
+		case GENERAL_TOOL | TOOL_BUILD_BRIDGE:
+		case GENERAL_TOOL | TOOL_BUILD_TUNNEL:
+		case GENERAL_TOOL | TOOL_WAYREMOVER:
+		case GENERAL_TOOL | TOOL_BUILD_WAYOBJ:
+		case GENERAL_TOOL | TOOL_BUILD_STATION:
+		case GENERAL_TOOL | TOOL_BUILD_ROADSIGN:
+		case GENERAL_TOOL | TOOL_BUILD_DEPOT:
+		case GENERAL_TOOL | TOOL_CHANGE_CITY_SIZE:
+		case GENERAL_TOOL | TOOL_CHANGE_WATER_HEIGHT:
+		case GENERAL_TOOL | TOOL_SET_CLIMATE:
+		case GENERAL_TOOL | TOOL_REMOVE_WAYOBJ:
+		case SIMPLE_TOOL | TOOL_CHANGE_GAME_SPEED:
+		case SIMPLE_TOOL | TOOL_TRAFFIC_LEVEL:
+		case SIMPLE_TOOL | TOOL_MOVE_MAP:
+			return true;
+	}
+	return false;
+}
+
+// Keep the original bytes, comments, line endings and non-key fields intact.
+bool read_shortcut_file(const std::string &path, std::string &data)
+{
+	FILE *file = dr_fopen(path.c_str(), "rb");
+	if (!file) { return false; }
+	data.clear(); char block[4096]; size_t n;
+	while ((n = fread(block, 1, sizeof(block), file)) != 0) { data.append(block, n); }
+	const bool ok = !ferror(file); fclose(file); return ok;
+}
+
+bool write_shortcut_file(const std::string &path, const std::string &data)
+{
+	const std::string temporary = path + ".tmp";
+	FILE *file = dr_fopen(temporary.c_str(), "wb");
+	if (!file) { return false; }
+	bool ok = fwrite(data.data(), 1, data.size(), file) == data.size();
+	ok = fclose(file) == 0 && ok;
+	if (!ok) { dr_remove(temporary.c_str()); return false; }
+#ifdef _WIN32
+	ok = dr_rename(temporary.c_str(), path.c_str()) == 0;
+#else
+	ok = rename(temporary.c_str(), path.c_str()) == 0;
+#endif
+	if (!ok) { dr_remove(temporary.c_str()); }
+	return ok;
+}
+
+bool ensure_shortcut_backup()
+{
+	std::string original;
+	struct stat st;
+	if (dr_stat(shortcut_default_path.c_str(), &st) == 0) { return read_shortcut_file(shortcut_default_path, original); }
+	// Only a missing file may be created; other errors must not replace it.
+	if (errno != ENOENT) { return false; }
+	return read_shortcut_file(shortcut_menu_path, original) && write_shortcut_file(shortcut_default_path, original);
+}
+
+// Find a field without splitting commas inside tool expressions.
+size_t shortcut_field(const std::string &value, unsigned field)
+{
+	size_t pos = 0; unsigned depth = 0;
+	while (field && pos < value.size()) {
+		const char c = value[pos++];
+		if (c == '(') { depth++; }
+		else if (c == ')' && depth) { depth--; }
+		else if (c == ',' && !depth) { field--; }
+	}
+	return field ? std::string::npos : pos;
+}
+unsigned shortcut_key_field(const std::string &name)
+{
+	return name.compare(0, 13, "general_tool[") == 0 ? 3 : name.compare(0, 8, "toolbar[") == 0 ? 2 : 1;
+}
+
+bool shortcut_has_key(const std::string &name, const std::string &value)
+{
+	size_t pos = shortcut_field(value, shortcut_key_field(name));
+	if (pos == std::string::npos) { return false; }
+	while (pos < value.size() && (value[pos] == ' ' || value[pos] == '\t')) { pos++; }
+	return pos < value.size() && value[pos] != ',' && value[pos] != '\r' && value[pos] != '\n';
+}
+
+std::pair<uint16, uint8> shortcut_from_value(const std::string &name, const std::string &value)
+{
+	size_t pos = shortcut_field(value, shortcut_key_field(name));
+	if (pos == std::string::npos) { return {0, 0}; }
+	while (pos < value.size() && value[pos] == ' ') { pos++; }
+	if (pos == value.size() || value[pos] == ',' || value[pos] == '\r' || value[pos] == '\n') { return {0, 0}; }
+	uint8 flags = 0;
+	const uint16 key = (uint16)str_to_key(value.c_str() + pos, &flags);
+	return {key == 0xFFFF ? (uint16)0 : key, flags};
+}
+
+std::string shortcut_to_value(uint16 key, uint8 flags)
+{
+	if (key == 0 || key == 0xFFFF) { return ""; }
+	std::string prefix;
+	if (flags & SIM_MOD_CTRL) { prefix += '^'; }
+	if (flags & SIM_MOD_SHIFT) { prefix += '+'; }
+	std::string value;
+	if (key >= SIM_KEY_F1 && key <= SIM_KEY_F15) { value = "F" + std::to_string(key - SIM_KEY_F1 + 1); }
+	else if (key >= SIM_KEY_NUMPAD_BASE && key <= SIM_KEY_UPRIGHT) { value = "NUM_" + std::to_string(key - SIM_KEY_NUMPAD_BASE); }
+	else if (key <= 26 && (flags & SIM_MOD_CTRL)) { value = char('A' + key - 1); }
+	else {
+		switch (key) {
+			case SIM_KEY_SPACE: value = "SPACE"; break;
+			case SIM_KEY_ESCAPE: value = "ESC"; break;
+			case SIM_KEY_DELETE: value = "DELETE"; break;
+			case SIM_KEY_HOME: value = "HOME"; break;
+			case SIM_KEY_END: value = "END"; break;
+			case SIM_KEY_SCROLLLOCK: value = "SCROLLLOCK"; break;
+			case ',': value = "COMMA"; break;
+			default:
+				if (key >= ' ' && key != SIM_KEY_PGUP && key != SIM_KEY_PGDN) {
+					char text[8];
+					text[utf16_to_utf8(key, (utf8*)text)] = '\0';
+					value = text;
+				}
+		}
+	}
+	// Use the traditional spelling only when it preserves the exact key and flags.
+	uint8 parsed_flags;
+	const std::string candidate = prefix + value;
+	if (!value.empty() && str_to_key(candidate.c_str(), &parsed_flags) == key && parsed_flags == flags) {
+		const std::string toolbar_candidate = candidate + ",";
+		if (str_to_key(toolbar_candidate.c_str(), &parsed_flags) == key && parsed_flags == flags) { return candidate; }
+	}
+	return prefix + "#" + std::to_string(key);
+}
+
+bool load_shortcut_values(const std::string &path, bool defaults)
+{
+	tabfile_t file;
+	if (!file.open(path.c_str())) { return false; }
+	tabfileobj_t contents; file.read(contents);
+	for (shortcut_t &s : shortcuts) {
+		std::pair<uint16, uint8> binding(0, 0);
+		for (const shortcut_source_t &source : shortcut_sources) {
+			if (source.tool != s.tool) { continue; }
+			const std::string value = contents.get(source.name.c_str());
+			const auto candidate = shortcut_from_value(source.name, value);
+			// A bare toolbar reference inherits the same tool, but sets no key.
+			if (source.name == s.name || shortcut_has_key(source.name, value)) { binding = candidate; }
+		}
+		if (defaults) { s.default_key = binding.first; s.default_flags = binding.second; }
+		else { s.tool->command_key = binding.first; s.tool->command_flags = binding.second; }
+	}
+	return true;
+}
+
+void rebuild_shortcuts()
+{
+	tool_t::char_to_tool.clear();
+	for (const shortcut_t &s : shortcuts) {
+		if (s.tool->command_key > 0 && s.tool->command_key != 0xFFFF) {
+			tool_t::char_to_tool.append(s.tool);
+		}
+	}
+	std::stable_sort(tool_t::char_to_tool.begin(), tool_t::char_to_tool.end(), compare_tool);
+}
+
+bool save_shortcuts(tool_t *changed = NULL)
+{
+	// Creating the backup is reserved for opening the Keybindings tab.
+	std::string backup;
+	if (!read_shortcut_file(shortcut_default_path, backup)) { return false; }
+	std::string input;
+	if (!read_shortcut_file(shortcut_menu_path, input)) { return false; }
+	std::string output;
+	std::vector<std::string> found;
+	for (size_t start = 0; start < input.size();) {
+		size_t end = input.find('\n', start); if (end == std::string::npos) { end = input.size(); } else { end++; }
+		std::string line = input.substr(start, end - start); start = end;
+		const size_t eq = line.find('=');
+		const size_t first = line.find_first_not_of(" \t\r\n");
+		if (eq != std::string::npos && first != std::string::npos && line[first] != '#') {
+			std::string name = line.substr(first, eq - first);
+			name.erase(name.find_last_not_of(" \t") + 1);
+			for (const shortcut_t &s : shortcuts) {
+				if (changed && s.tool != changed) { continue; }
+				bool matching = name == s.name;
+				for (const shortcut_source_t &source : shortcut_sources) {
+					if (source.tool == s.tool && source.name == name && shortcut_has_key(name, line.substr(eq + 1))) { matching = true; }
+				}
+				if (!matching) { continue; }
+				found.push_back(s.name);
+				const auto current = shortcut_from_value(name, line.substr(eq + 1));
+				if (!changed && current.first == s.tool->command_key && current.second == s.tool->command_flags) { break; }
+				const unsigned field = shortcut_key_field(name);
+				std::string value = line.substr(eq + 1);
+				size_t pos = shortcut_field(value, field);
+				if (pos == std::string::npos) {
+					const size_t eol = value.find_first_of("\r\n");
+					const std::string ending = eol == std::string::npos ? "" : value.substr(eol);
+					if (eol != std::string::npos) { value.erase(eol); }
+					while ((pos = shortcut_field(value, field)) == std::string::npos) { value += ','; }
+					value += ending;
+				}
+				size_t last = value.find_first_of(",\r\n", pos); if (last == std::string::npos) { last = value.size(); }
+				// Preserve surrounding whitespace in the key field.
+				size_t key_start = pos; while (key_start < last && (value[key_start] == ' ' || value[key_start] == '\t')) { key_start++; }
+				size_t comment = value.find(" #", key_start);
+				if (comment != std::string::npos && comment < last) { last = comment; }
+				size_t key_end = last; while (key_end > key_start && (value[key_end-1] == ' ' || value[key_end-1] == '\t')) { key_end--; }
+				value.replace(key_start, key_end - key_start, shortcut_to_value(s.tool->command_key, s.tool->command_flags));
+				line = line.substr(0, eq + 1) + value;
+				break;
+			}
+		}
+		output += line;
+	}
+	for (const shortcut_t &s : shortcuts) {
+		if ((!changed || changed == s.tool) && std::find(found.begin(), found.end(), s.name) == found.end()) { return false; }
+	}
+	return write_shortcut_file(shortcut_menu_path, output);
+}
+
+}
+
+uint32 tool_t::get_shortcut_count() { return (uint32)shortcuts.size(); }
+tool_t *tool_t::get_shortcut_tool(uint32 index) { return shortcuts.at(index).tool; }
+const char *tool_t::get_shortcut_name(uint32 index) { return shortcuts.at(index).name.c_str(); }
+
+bool tool_t::is_shortcut_key_allowed(uint16 key, uint8 modifiers)
+{
+	if (key == 0 || key == 0xFFFF || key == SIM_KEY_ESCAPE || key == SIM_KEY_DELETE
+		|| key == SIM_KEY_F1 || (key >= SIM_KEY_DOWNLEFT && key <= SIM_KEY_UPRIGHT)) { return false; }
+	if ((key == SIM_KEY_BACKSPACE || key == SIM_KEY_ENTER) && modifiers == 0) { return false; }
+	return true;
+}
+
+std::string tool_t::get_shortcut_key_name(uint16 key, uint8 modifiers)
+{
+	if (key == 0 || key == 0xFFFF) { return translator::translate("Unassigned"); }
+	std::string name;
+	if (modifiers & SIM_MOD_CTRL) { name += "Ctrl + "; }
+	if (modifiers & SIM_MOD_SHIFT) { name += "Shift + "; }
+	if (key >= SIM_KEY_F1 && key <= SIM_KEY_F15) { return name + "F" + std::to_string(key - SIM_KEY_F1 + 1); }
+	if (key <= 26) { return name + char('@' + key); }
+	switch (key) {
+		case SIM_KEY_SPACE: return name + "Space";
+		case SIM_KEY_ESCAPE: return name + "Esc";
+		case SIM_KEY_DELETE: return name + "Delete";
+		case SIM_KEY_HOME: return name + "Home";
+		case SIM_KEY_END: return name + "End";
+		case SIM_KEY_PGUP: return name + "Page Up";
+		case SIM_KEY_PGDN: return name + "Page Down";
+		case SIM_KEY_SCROLLLOCK: return name + "Scroll Lock";
+	}
+	if (key >= SIM_KEY_NUMPAD_BASE && key <= SIM_KEY_UPRIGHT) { return name + "Numpad " + std::to_string(key - SIM_KEY_NUMPAD_BASE); }
+	char text[8];
+	text[utf16_to_utf8(key, (utf8*)text)] = '\0';
+	return name + text;
+}
+
+sint32 tool_t::find_shortcut_conflict(uint32 index, uint16 key, uint8 modifiers)
+{
+	if (!key) { return -1; }
+	for (uint32 i = 0; i < shortcuts.size(); i++) {
+		const tool_t *t = shortcuts[i].tool;
+		// A zero modifier mask accepts any modifiers in interactive_event.
+		if (i != index && t->command_key == key &&
+			(t->command_flags == 0 || modifiers == 0 || t->command_flags == modifiers)) { return i; }
+	}
+	return -1;
+}
+
+bool tool_t::set_shortcut(uint32 index, uint16 key, uint8 modifiers)
+{
+	if (index >= shortcuts.size() || (key && (!is_shortcut_key_allowed(key, modifiers)
+		|| find_shortcut_conflict(index, key, modifiers) >= 0))) { return false; }
+	tool_t *t = shortcuts[index].tool;
+	const uint16 old_key = t->command_key;
+	const uint8 old_flags = t->command_flags;
+	t->command_key = key;
+	t->command_flags = modifiers;
+	if (!save_shortcuts(t)) {
+		t->command_key = old_key;
+		t->command_flags = old_flags;
+		return false;
+	}
+	rebuild_shortcuts();
+	return true;
+}
+
+bool tool_t::reload_shortcuts()
+{
+	if (!load_shortcut_values(shortcut_menu_path, false)) { return false; }
+	rebuild_shortcuts();
+	return ensure_shortcut_backup();
+}
+
+bool tool_t::reset_shortcuts()
+{
+	if (!load_shortcut_values(shortcut_default_path, true)) { return false; }
+	std::vector<std::pair<uint16, uint8> > old;
+	for (shortcut_t &s : shortcuts) {
+		old.push_back(std::make_pair(s.tool->command_key, s.tool->command_flags));
+		s.tool->command_key = s.default_key;
+		s.tool->command_flags = s.default_flags;
+	}
+	if (!save_shortcuts()) {
+		for (size_t i = 0; i < shortcuts.size(); i++) {
+			shortcuts[i].tool->command_key = old[i].first;
+			shortcuts[i].tool->command_flags = old[i].second;
+		}
+		return false;
+	}
+	rebuild_shortcuts();
+	return true;
+}
+
 // read a tab file to add images, cursors and sound to the tools
 bool tool_t::read_menu(const std::string &menuconf_path)
 {
 	char_to_tool.clear();
+	shortcuts.clear();
+	shortcut_sources.clear();
+	shortcut_menu_path = menuconf_path;
+	if (!menuconf_path.empty() && menuconf_path[0] != '/' && menuconf_path[0] != '\\' && (menuconf_path.size() < 2 || menuconf_path[1] != ':')) {
+		char cwd[4096];
+		if (dr_getcwd(cwd, sizeof(cwd))) { shortcut_menu_path = std::string(cwd) + "/" + menuconf_path; }
+	}
+	shortcut_default_path = shortcut_menu_path.substr(0, shortcut_menu_path.find_last_of("/\\") + 1) + "menuconf.default.tab";
 	tabfile_t menuconf;
 
 	// only use pak specific menus, since otherwise images may be missing
@@ -730,6 +1090,7 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 				continue;
 			}
 
+			if (*str) { register_shortcut(tool, id); }
 			while(*str==' ') {
 				str++;
 			}
@@ -1017,13 +1378,26 @@ bool tool_t::read_menu(const std::string &menuconf_path)
 					addtool->default_param = strdup(param_str);
 				}
 				toolbar_tool[i]->append(addtool);
+				register_shortcut(addtool, id);
 			}
 		}
 	}
 	toolbar_tool.append( toolbar_last_used_t::last_used_tools );
 
-	// sort characters
-	std::sort(char_to_tool.begin(), char_to_tool.end(), compare_tool);
+	// Shared toolbar tools may have received their final binding later.
+	// Bare builder templates cannot be invoked without a descriptor/parameter.
+	shortcuts.erase(std::remove_if(shortcuts.begin(), shortcuts.end(), shortcut_requires_parameter), shortcuts.end());
+	for (shortcut_t &s : shortcuts) {
+		// Toolbar copies inherit fields, but only explicitly registered keys
+		// were active in the original menu lookup.
+		if (!char_to_tool.is_contained(s.tool)) {
+			s.tool->command_key = 0;
+			s.tool->command_flags = 0;
+		}
+		s.default_key = s.tool->command_key;
+		s.default_flags = s.tool->command_flags;
+	}
+	rebuild_shortcuts();
 	return true;
 }
 
