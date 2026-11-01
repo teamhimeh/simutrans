@@ -8441,6 +8441,8 @@ void convoi_t::book_shipping_toll()
 		// it - and only against the chain head, which is what shipped_convois holds
 		c->book( -toll_convoy, CONVOI_WAYTOLL );
 		c->book( -toll_convoy, CONVOI_PROFIT );
+		book( toll_convoy, CONVOI_WAYTOLL );
+		book( toll_convoy, CONVOI_PROFIT );
 	}
 }
 
@@ -8475,6 +8477,8 @@ void convoi_t::book_shipping_revenue(convoihandle_t c, koord3d landing)
 	// against the chain head, as with the shipping toll
 	c->book( -revenue, CONVOI_WAYTOLL );
 	c->book( -revenue, CONVOI_PROFIT );
+	book( revenue, CONVOI_WAYTOLL );
+	book( revenue, CONVOI_PROFIT );
 }
 
 
