@@ -265,6 +265,11 @@ settings_t::settings_t() :
 	// convoy shipping: mirrors the way toll by default, and carrying earns only the toll
 	toll_shipping_percentage = 0;
 	shipping_income_percentage = 0;
+	for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+		for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+			shipping_revenue[i][j] = 0;
+		}
+	}
 	way_toll_waycost_percentage = 0;
 	maintenance_cost_multiplier_way = 100;
 	maintenance_cost_multiplier_overhead = 100;
@@ -1266,6 +1271,21 @@ void settings_t::rdwr(loadsave_t *file)
 			toll_shipping_percentage = way_toll_runningcost_percentage;
 			shipping_income_percentage = 0;
 		}
+		if(  file->get_OTRP_version() >= 63  ) {
+			for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+				for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+					file->rdwr_long( shipping_revenue[i][j] );
+				}
+			}
+		}
+		else if(  file->is_loading()  ) {
+			// carrying a convoy earned nothing by itself before v63
+			for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+				for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+					shipping_revenue[i][j] = 0;
+				}
+			}
+		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
@@ -1918,6 +1938,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// existed; naming toll_shipping_percentage explicitly overrides that.
 	toll_shipping_percentage   = contents.get_int_clamped("toll_shipping_percentage",   way_toll_runningcost_percentage, 0, 100 );
 	shipping_income_percentage = contents.get_int_clamped("shipping_income_percentage", shipping_income_percentage,      0, 100 );
+	for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+		for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+			shipping_revenue[i][j] = contents.get_int_clamped( get_shipping_revenue_name(i, j), shipping_revenue[i][j], 0, 1000000 );
+		}
+	}
 	maintenance_cost_multiplier_way      = contents.get_int_clamped("maintenance_cost_multiplier_way",      maintenance_cost_multiplier_way,      1, 250 );
 	maintenance_cost_multiplier_overhead = contents.get_int_clamped("maintenance_cost_multiplier_overhead", maintenance_cost_multiplier_overhead, 1, 250 );
 	running_cost_multiplier_vehicle      = contents.get_int_clamped("running_cost_multiplier_vehicle",      running_cost_multiplier_vehicle,      1, 250 );
@@ -2347,4 +2372,60 @@ uint32 settings_t::get_base_waiting_ticks(waytype_t waytype) const {
 	else {
 		return base_waiting_ticks_for_rail_convoi;
 	}
+}
+
+
+// convoy shipping revenue: the waytypes in table order, with their simuconf.tab names
+static const struct { waytype_t wt; const char *name; } shipping_revenue_wts[settings_t::SHIPPING_REVENUE_CARRIER_WT_COUNT] = {
+	{ road_wt,        "road"        },
+	{ track_wt,       "track"       },
+	{ tram_wt,        "tram"        },
+	{ monorail_wt,    "monorail"    },
+	{ maglev_wt,      "maglev"      },
+	{ narrowgauge_wt, "narrowgauge" },
+	{ water_wt,       "water"       },
+	// air can carry but is never carried, so it must stay last (outside the shipped range)
+	{ air_wt,         "air"         }
+};
+
+
+sint8 settings_t::get_shipping_revenue_wt_index(waytype_t wt)
+{
+	for(  uint8 i = 0;  i < SHIPPING_REVENUE_CARRIER_WT_COUNT;  i++  ) {
+		if(  shipping_revenue_wts[i].wt == wt  ) {
+			return (sint8)i;
+		}
+	}
+	return -1;
+}
+
+
+const char *settings_t::get_shipping_revenue_name(uint8 shipped_idx, uint8 carrier_idx)
+{
+	// built once; the settings dialog keeps pointers to these labels, so they must stay put
+	static char names[SHIPPING_REVENUE_SHIPPED_WT_COUNT][SHIPPING_REVENUE_CARRIER_WT_COUNT][64];
+	static bool initialized = false;
+	if(  !initialized  ) {
+		for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+			for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+				sprintf( names[i][j], "revenue_%s_shipped_by_%s", shipping_revenue_wts[i].name, shipping_revenue_wts[j].name );
+			}
+		}
+		initialized = true;
+	}
+	if(  shipped_idx >= SHIPPING_REVENUE_SHIPPED_WT_COUNT  ||  carrier_idx >= SHIPPING_REVENUE_CARRIER_WT_COUNT  ) {
+		return "";
+	}
+	return names[shipped_idx][carrier_idx];
+}
+
+
+sint32 settings_t::get_shipping_revenue(waytype_t shipped, waytype_t carrier) const
+{
+	const sint8 i = get_shipping_revenue_wt_index( shipped );
+	const sint8 j = get_shipping_revenue_wt_index( carrier );
+	if(  i < 0  ||  i >= SHIPPING_REVENUE_SHIPPED_WT_COUNT  ||  j < 0  ) {
+		return 0;
+	}
+	return shipping_revenue[i][j];
 }
