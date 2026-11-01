@@ -1099,8 +1099,11 @@ bool schedule_t::get_no_go_no_users_section(uint8 index, uint8& out_start, uint8
 	// iterations) also prevents an infinite loop for misconfigured flags.
 	// The backward scan finds the previous START even for an entry after that
 	// section's END, so check that index really lies within [start, end].
-	// Here, end should be index < end because we should check users at current halt.
-	const bool inside = (start<=end) ? (start<=index  &&  index<end) : (index>=start  ||  index<end);
+	if(  (end+1)%count==start  ) {
+		// we loop at current halt. so, current halt should be outside of the halt because we need to re-check goods at here!
+		return false;
+	}
+	const bool inside = (start<=end) ? (start<=index  &&  index<=end) : (index>=start  ||  index<=end);
 	if(  !inside  ) {
 		return false;
 	}

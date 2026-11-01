@@ -6846,7 +6846,7 @@ halthandle_t convoi_t::get_committed_destination() const {
 			if(  ware.is_passenger()  ||  ware.is_mail()  ) {
 				continue;
 			}
-			if(  ware.get_ziel().is_bound()  ) {
+			if(  ware.get_zwischenziel().is_bound()  ) {
 				return ware.get_zwischenziel();
 			}
 		}
