@@ -24,7 +24,7 @@ class overtaking_mode_frame_t : public gui_frame_t, private action_listener_t
 {
 private:
 	static overtaking_mode_t overtaking_mode;
-	static char mode_name[6][20];
+	static char mode_name[8][32];
 	player_t *player;
 	tool_build_way_t* tool_w;
 	tool_build_bridge_t* tool_b;
@@ -35,7 +35,7 @@ private:
 	sint8 vehicle_offset_value;
 	bool vehicle_offset_mode_value;
 	uint8 tool_class; // 0:way, 1:bridge, 2:tunnel, 3:change_way_settings, 4:change_way_offset
-	button_t mode_button[6];
+	button_t mode_button[8];
 	gui_divider_t divider[2];
 	button_t avoid_cityroad_button;
 	button_t citycar_no_entry_button;

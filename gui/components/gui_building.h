@@ -37,6 +37,9 @@ public:
 
 	void draw(scr_coord offset) OVERRIDE;
 
+	/// Fit the complete building in a rectangle, retaining its aspect ratio.
+	void draw_scaled(scr_coord offset, scr_size bounds);
+
 	bool infowin_event(const event_t *ev) OVERRIDE;
 };
 

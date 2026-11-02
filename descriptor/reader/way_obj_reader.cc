@@ -20,6 +20,11 @@
 void way_obj_reader_t::register_obj(obj_desc_t *&data)
 {
 	way_obj_desc_t *desc = static_cast<way_obj_desc_t *>(data);
+
+	// has diagonals/close diagonals?
+	desc->diagonals = (desc->get_back_diagonal_image_id(ribi_t::northeast) != IMG_EMPTY || desc->get_front_diagonal_image_id(ribi_t::northeast) != IMG_EMPTY);
+	desc->close_diagonals = (desc->get_back_close_diagonal_image_id(0) != IMG_EMPTY || desc->get_front_close_diagonal_image_id(0) != IMG_EMPTY);
+
 	wayobj_t::register_desc(desc);
 
 	checksum_t *chk = new checksum_t();
@@ -55,6 +60,8 @@ obj_desc_t * way_obj_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 	}
 
 	way_obj_desc_t *desc = new way_obj_desc_t();
+	desc->diagonals = false;       // will be set in register_obj()
+	desc->close_diagonals = false;
 
 	if (version == 2) {
 		// Cost/maintenance as sint64

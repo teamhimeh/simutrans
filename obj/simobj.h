@@ -264,7 +264,7 @@ public:
 	/**
 	 * Called after the world is completely loaded from savegame
 	 */
-	virtual void finish_rd() {}
+	virtual void finish_rd(const uint8 /*loaded_OTRP_version*/) {}
 
 	/**
 	 * @return position
@@ -303,7 +303,7 @@ public:
 	 * Draw background image of object
 	 * (everything that could be potentially behind vehicles)
 	 */
-	void display(int xpos, int ypos  CLIP_NUM_DEF) const;
+	virtual void display(int xpos, int ypos  CLIP_NUM_DEF) const;
 
 	/**
 	 * Draw foreground image

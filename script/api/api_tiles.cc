@@ -249,7 +249,7 @@ void export_tiles(HSQUIRRELVM vm)
 	 * @param wt waytype
 	 * @returns way object or null
 	 */
-	register_method(vm, &grund_t::get_weg, "get_way");
+	register_method<weg_t* (grund_t::*)(waytype_t) const>(vm, &grund_t::get_weg, "get_way");
 	/**
 	 * Return directions in which ways on this tile go. One-way signs are ignored here.
 	 * @param wt waytype

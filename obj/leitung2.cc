@@ -342,7 +342,7 @@ void leitung_t::info(cbuffer_t & buf) const
 }
 
 
-void leitung_t::finish_rd()
+void leitung_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
 #ifdef MULTI_THREAD
 	pthread_mutex_lock( &verbinde_mutex );
@@ -556,9 +556,9 @@ void pumpe_t::rdwr(loadsave_t * file)
 }
 
 
-void pumpe_t::finish_rd()
+void pumpe_t::finish_rd(const uint8 loaded_OTRP_version)
 {
-	leitung_t::finish_rd();
+	leitung_t::finish_rd( loaded_OTRP_version );
 
 	assert(get_net());
 
@@ -899,9 +899,9 @@ void senke_t::rdwr(loadsave_t *file)
 	}
 }
 
-void senke_t::finish_rd()
+void senke_t::finish_rd(const uint8 loaded_OTRP_version)
 {
-	leitung_t::finish_rd();
+	leitung_t::finish_rd( loaded_OTRP_version );
 
 	assert(get_net());
 

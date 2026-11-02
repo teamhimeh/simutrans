@@ -47,6 +47,7 @@ class tool_t;
 class scenario_t;
 class message_t;
 class way_desc_t;
+class building_desc_t;
 class network_world_command_t;
 class goods_desc_t;
 class memory_rw_t;
@@ -1044,7 +1045,7 @@ public:
 	 */
 	uint32 ticks_per_world_month;
 
-	void set_ticks_per_world_month_shift(uint32 bits) {ticks_per_world_month_shift = bits; ticks_per_world_month = (1 << ticks_per_world_month_shift); }
+	void set_ticks_per_world_month_shift(uint32 bits) {ticks_per_world_month_shift = bits; ticks_per_world_month = (1u << ticks_per_world_month_shift); }
 
 	/**
 	 * Converts speed (yards per tick) into tiles per month
@@ -1342,6 +1343,13 @@ public:
 	}
 
 	/**
+	 * Like lookup(), but ignores the dummy grounds of tool previews (tunnel, elevated way).
+	 * These exist only on the client using the tool, so any check during the simulation
+	 * (e.g. where to build a building) must use this, or network games desync.
+	 */
+	grund_t *lookup_no_dummy(const koord3d &pos) const;
+
+	/**
 	 * This function takes grid coordinates as a parameter and a desired height (koord3d).
 	 * Will return the ground_t object that intersects with it in it's north corner if possible.
 	 * If that tile doesn't exist, returns the one that intersects with it in other corner.
@@ -1492,6 +1500,10 @@ public:
 	 * @note Useful for finish_rd
 	 */
 	uint32 load_version;
+
+	/// OTRP version of the savegame being loaded, so that finish_rd() of map objects can make
+	/// version dependent corrections. OTRP_VERSION_MAJOR while no savegame is being read.
+	uint8 load_otrp_version;
 
 	/**
 	 * Checks if the planquadrat (tile) at coordinate (x,y)
@@ -1837,7 +1849,7 @@ public:
 	/**
 	 * @return true, if square in place (i,j) with size w, h is constructible.
 	 */
-	bool square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const;
+	bool square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl, const building_desc_t *desc = NULL) const;
 
 	/**
 	 * @return A list of all buildable squares with size w, h.

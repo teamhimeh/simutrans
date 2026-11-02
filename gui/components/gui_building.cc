@@ -70,6 +70,49 @@ void gui_building_t::draw(scr_coord offset)
 }
 
 
+void gui_building_t::draw_scaled(scr_coord offset, scr_size bounds)
+{
+	const scr_size original = get_min_size();
+	if (!desc || original.w <= 0 || original.h <= 0 || bounds.w <= 0 || bounds.h <= 0) {
+		return;
+	}
+	int numerator = 1, denominator = 1;
+	if (original.w > bounds.w || original.h > bounds.h) {
+		if ((sint64)bounds.w*original.h <= (sint64)bounds.h*original.w) {
+			numerator = bounds.w;
+			denominator = original.w;
+		}
+		else {
+			numerator = bounds.h;
+			denominator = original.h;
+		}
+	}
+	const scr_coord origin = offset + get_pos() + scr_coord(
+		(bounds.w-original.w*numerator/denominator)/2,
+		(bounds.h-original.h*numerator/denominator)/2);
+	const int rw4 = get_base_tile_raster_width()/4;
+	for (int i = 0; i < desc->get_x(layout); i++) {
+		for (int j = 0; j < desc->get_y(layout); j++) {
+			image_id id = desc->get_tile(layout, i, j)->get_background(0, 0, 0);
+			if (id == IMG_EMPTY) {
+				id = desc->get_tile(layout, i, j)->get_foreground(0, 0);
+			}
+			if (id == IMG_EMPTY) {
+				continue;
+			}
+			scr_coord_val x, y, w, h;
+			display_get_base_image_offset(id, &x, &y, &w, &h);
+			x += 2*(i-j)*rw4-tl.x;
+			y += (i+j)*rw4-tl.y;
+			const int left = x*numerator/denominator;
+			const int top = y*numerator/denominator;
+			display_base_img_scaled(id, scr_rect(origin + scr_coord(left, top), scr_size(
+				(x+w)*numerator/denominator-left, (y+h)*numerator/denominator-top)));
+		}
+	}
+}
+
+
 bool gui_building_t::infowin_event(const event_t *ev) {
 	if (IS_LEFTRELEASE(ev)) {
 		call_listeners( (value_t)layout);

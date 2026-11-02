@@ -15,14 +15,14 @@ signal(s)
 	bt_end_of_choose.init( button_t::square_state, translator::translate("end of choose signal") );
 	bt_end_of_choose.add_listener(this);
 	bt_end_of_choose.pressed = signal->is_flag_end_of_choose();
-	if(  signal->get_waytype()!=road_wt && signal->get_waytype()!=water_wt && signal->get_waytype()!=air_wt  ) {
+	if(  signal->get_waytype()!=water_wt && signal->get_waytype()!=air_wt  ) {
 		add_component(&bt_end_of_choose);
 	}
 
 	bt_end_of_guide.init( button_t::square_state, translator::translate("try coupling convoy not enter here") );
 	bt_end_of_guide.add_listener(this);
 	bt_end_of_guide.pressed = signal->is_flag_end_of_guide();
-	if(  signal->get_waytype()!=road_wt && signal->get_waytype()!=water_wt && signal->get_waytype()!=air_wt  ) {
+	if(  signal->get_waytype()!=water_wt && signal->get_waytype()!=air_wt  ) {
 		add_component(&bt_end_of_guide);
 	}
 	

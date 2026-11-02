@@ -44,6 +44,8 @@ private:
 	void add_section(std::string &name);
 
 protected:
+	virtual bool close_after_ok() const { return true; }
+	const char *get_input_filename() const { return ibuf; }
 
 	/**
 	 * Entries in list can be actual file entries or

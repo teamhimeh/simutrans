@@ -51,6 +51,8 @@ public:
 	*/
 	const char* get_help_filename() const OVERRIDE { return "groundobj_build.txt"; }
 
+	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
+
 	uint32 get_rdwr_id() OVERRIDE { return magic_groundobj_edit; }
 };
 

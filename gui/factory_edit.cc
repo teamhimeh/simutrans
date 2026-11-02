@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "../simworld.h"
+#include "../simfab.h"
 #include "../simtool.h"
 
 #include "../bauer/fabrikbauer.h"
@@ -144,6 +145,8 @@ factory_edit_frame_t::factory_edit_frame_t(player_t* player_) :
 	// add water to climate selection
 	cb_climates.new_component<gui_climates_item_t>(climate::water_climate);
 
+	init_thumbnail_options();
+
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_MAIL);
@@ -161,7 +164,11 @@ factory_edit_frame_t::factory_edit_frame_t(player_t* player_) :
 
 	tbl->new_component<gui_label_t>("Produktion");
 
-	inp_production.set_limits(0,welt->scale_with_month_length(65536));
+	sint64 minimum_production = welt->scale_with_month_length(1);
+	if (welt->inverse_scale_with_month_length(minimum_production) < 1) {
+		++minimum_production;
+	}
+	inp_production.set_limits((sint32)minimum_production, (sint32)welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION));
 	inp_production.add_listener( this );
 	tbl->add_component(&inp_production);
 	cont_options.end_table();
@@ -232,13 +239,20 @@ void factory_edit_frame_t::fill_list()
 			i->is_producer_only() ? color_idx_to_rgb(40 + env_t::gui_player_color_dark)            :
 			SYSCOL_TEXT;
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
-		scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		if (bt_thumbnails.pressed) {
+			scl.new_component<building_thumbnail_t>(i->get_building(), name, get_thumbnail_size());
+		}
+		else {
+			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		}
 		if (i == fac_desc) {
 			scl.set_selection(scl.get_count()-1);
 		}
 	}
+	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
+	show_selected_building();
 
 	reset_min_windowsize();
 }
@@ -248,7 +262,11 @@ void factory_edit_frame_t::fill_list()
 bool factory_edit_frame_t::action_triggered( gui_action_creator_t *comp,value_t e)
 {
 	// only one chain can be shown
-	if(  comp==&bt_city_chain  ) {
+	if (comp == &bt_thumbnails) {
+		bt_thumbnails.pressed = !bt_thumbnails.pressed;
+		fill_list();
+	}
+	else if(  comp==&bt_city_chain  ) {
 		bt_city_chain.pressed ^= 1;
 		if(bt_city_chain.pressed) {
 			bt_land_chain.pressed = 0;
@@ -316,10 +334,10 @@ void factory_edit_frame_t::change_item_info(sint32 entry)
 				sint32 min_fields = field_group_desc->get_min_fields();
 				while(  min_fields-- > 0  ) {
 					const uint16 field_class_index = field_class_indices.at_weight( sim_async_rand( field_class_indices.get_sum_weight() ) );
-					production += field_group_desc->get_field_class(field_class_index)->get_field_production();
+					production = min(fabrik_t::MAX_BASE_PRODUCTION, production + field_group_desc->get_field_class(field_class_index)->get_field_production());
 				}
 			}
-			production = welt->scale_with_month_length(production);
+			production = welt->scale_with_month_length(min(production, fabrik_t::MAX_BASE_PRODUCTION));
 			inp_production.set_value( production);
 			// show produced goods
 			buf.clear();
@@ -459,7 +477,9 @@ void factory_edit_frame_t::set_windowsize(scr_size size)
 
 void factory_edit_frame_t::rdwr( loadsave_t *file ) {
 	uint8 button_pressed_flags = bt_city_chain.pressed | (bt_land_chain.pressed<<1) | (bt_no_supply.pressed<<2) | (bt_must_supply.pressed<<3) | (bt_no_product.pressed<<4) | (bt_must_product.pressed<<5);
+	button_pressed_flags |= bt_thumbnails.pressed << 6;
 	file->rdwr_byte(button_pressed_flags);
+	bt_thumbnails.pressed = (button_pressed_flags >> 6) & 1;
 	bt_city_chain.pressed = button_pressed_flags & 1;
 	bt_land_chain.pressed = (button_pressed_flags>>1) & 1;
 	bt_no_supply.pressed = (button_pressed_flags>>2) & 1;

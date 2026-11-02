@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include "../simversion.h"
 
 #include "../simdebug.h"
 #include "../simworld.h"
@@ -337,6 +338,13 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	if (bd->has_two_ways() && !bd->hat_weg(wtyp)) {
 		return false;
 	}
+	// two same-waytype disjoint diagonal legs already coexist here and we're building that
+	// same waytype again (continuing/merging one of them): there is no "other" way to check
+	// a crossing against - both existing slots are already our own waytype, and no
+	// crossing_desc is ever defined for a waytype crossing itself.
+	if (bd->has_two_ways() && bd->get_weg_nr(0)->get_waytype()==wtyp && bd->get_weg_nr(1)->get_waytype()==wtyp) {
+		return true;
+	}
 	const weg_t *w = bd->get_weg_nr(0);
 	// index of our wtype at the tile (must exists due to triple-crossing-check above)
 	const uint8 iwtyp = w->get_waytype() != wtyp;
@@ -509,6 +517,10 @@ bool way_builder_t::check_building( const grund_t *to, const koord dir ) const
 			// horizontal
 			gb_connected_direction = (layout&1) ? ribi_t::northwest : ribi_t::southeast;
 		}
+		if(  gb->get_tile2()  ) {
+			// closed diagonal stop: the second platform is on the other leg
+			gb_connected_direction |= gebaeude_t::get_diagonal_layout_ribi( gb->get_tile2()->get_layout() );
+		}
 		return r & gb_connected_direction;
 	}
 	return true;
@@ -630,7 +642,7 @@ bool way_builder_t::is_allowed_step(const grund_t *from, const grund_t *to, sint
 			if(gb) {
 				// no halt => citybuilding => do not touch
 				// also check for too high buildings ...
-				if(gb->get_tile()->get_background(0,1,0)!=IMG_EMPTY) {
+				if(gb->get_tile()->get_desc()->get_height_clearance() > get_way_height_offset(to)) {
 					return false;
 				}
 				if(!check_owner(gb->get_owner(),player_builder)) {
@@ -1257,6 +1269,7 @@ way_builder_t::way_builder_t(player_t* player) : next_gr(32)
 	keep_existing_city_roads = false;
 	keep_existing_faster_ways = false;
 	build_sidewalk = false;
+	straight_route_mode = false;
 
 	vehicle_offset = 0;
 }
@@ -2232,9 +2245,34 @@ bool way_builder_t::intern_calc_route_runways(koord3d start3d, const koord3d zie
 /*
  * calc_straight_route (maximum one curve, including diagonals)
  */
+void way_builder_t::check_dual_leg_merges()
+{
+	if(  desc==NULL  ) {
+		return;
+	}
+	const waytype_t wtyp = desc->get_wtyp();
+	for(  uint32 i=0;  i<get_count();  i++  ) {
+		const grund_t *gr = welt->lookup(route[i]);
+		if(  gr==NULL  ||  !gr->would_merge_same_waytype_legs(wtyp, route.get_short_ribi(i))  ) {
+			continue;
+		}
+		// merging rebuilds both legs into one way: both must be ours, and no halt may be here
+		// (a halt cannot sit on the resulting junction)
+		if(  gr->is_halt()
+		  ||  !check_owner(gr->get_weg_nr(0)->get_owner(), player_builder)
+		  ||  !check_owner(gr->get_weg_nr(1)->get_owner(), player_builder)  ) {
+			route.clear();
+			terraform_index.clear();
+			return;
+		}
+	}
+}
+
+
 void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 {
 	DBG_MESSAGE("way_builder_t::calc_straight_route()","from %d,%d,%d to %d,%d,%d",start.x,start.y,start.z, ziel.x,ziel.y,ziel.z );
+	straight_route_mode = true;
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
 		// these are straight anyway ...
 		intern_calc_route_runways(start, ziel);
@@ -2246,6 +2284,7 @@ void way_builder_t::calc_straight_route(koord3d start, const koord3d ziel)
 			route_reversed = true;
 		}
 	}
+	check_dual_leg_merges();
 }
 
 
@@ -2265,6 +2304,7 @@ bool way_builder_t::calc_route(const vector_tpl<koord3d> &start, const vector_tp
 #ifdef DEBUG_ROUTES
 uint32 ms = dr_time();
 #endif
+	straight_route_mode = false;
 	INT_CHECK("simbau 740");
 
 	if(bautyp==luft  &&  desc->get_styp()==type_runway) {
@@ -2295,6 +2335,7 @@ uint32 ms = dr_time();
 			if(cost2 < 0) {
 				intern_calc_route_elevated(ziel[0], start[0]);
 				route_reversed = true;
+				check_dual_leg_merges();
 				return route_reversed;
 			}
 		}
@@ -2304,6 +2345,7 @@ uint32 ms = dr_time();
 			if(cost2 < 0) {
 				intern_calc_route( ziel, start );
 				route_reversed = true;
+				check_dual_leg_merges();
 				return route_reversed;
 			}
 		}
@@ -2332,6 +2374,7 @@ uint32 ms = dr_time();
 #endif
 	}
 	INT_CHECK("wegbauer 778");
+	check_dual_leg_merges();
 #ifdef DEBUG_ROUTES
 DBG_MESSAGE("calc_route::calc_route", "took %u ms", dr_time() - ms );
 #endif
@@ -2605,7 +2648,7 @@ bool way_builder_t::build_tunnel_tile()
 				leitung_t *lt = new leitung_t(tunnel->get_pos(), player_builder);
 				lt->set_desc( wb );
 				tunnel->obj_add( lt );
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 			}
 			tunnel->calc_image();
 			cost -= tunnel_desc->get_price();
@@ -2691,6 +2734,27 @@ void way_builder_t::build_elevated()
 
 
 
+/**
+ * true when two same-waytype disjoint diagonal legs coexist on @p gr and one of them already
+ * owns every direction in @p ribi. The tile is then already connected that way, so the caller
+ * must not hand the ribi to weg_erweitern(): its leg choice could add the same direction to
+ * the OTHER leg too (e.g. when that leg's descriptor matches the new one), leaving two ways
+ * leaving the tile in the same direction.
+ */
+static bool is_direction_already_built(const grund_t *gr, waytype_t wt, ribi_t::ribi ribi)
+{
+	if(  ribi==ribi_t::none  ||  !gr->has_two_same_waytype_ways()  ||  gr->get_weg_nr(0)->get_waytype()!=wt  ) {
+		return false;
+	}
+	for(  uint8 i=0;  i<2;  i++  ) {
+		if(  (gr->get_weg_nr(i)->get_ribi_unmasked() & ribi)==ribi  ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
 void way_builder_t::build_road()
 {
 	// only public player or cities (sp==NULL) can build cityroads with sidewalk
@@ -2715,7 +2779,9 @@ void way_builder_t::build_road()
 		grund_t* gr = welt->lookup(route[i]);
 		sint64 cost = 0;
 
-		bool extend = gr->weg_erweitern(road_wt, route.get_short_ribi(i));
+		// a leg already owning this direction counts as extended; get_weg(road_wt, ribi) below picks it
+		bool extend = is_direction_already_built(gr, road_wt, route.get_short_ribi(i))
+			||  gr->weg_erweitern(road_wt, route.get_short_ribi(i), desc, straight_route_mode);
 
 		// bridges/tunnels have their own track type and must not upgrade
 		if(gr->get_typ()==grund_t::brueckenboden  ||  gr->get_typ()==grund_t::tunnelboden) {
@@ -2732,7 +2798,9 @@ void way_builder_t::build_road()
 		strasse_t * str;
 
 		if(extend) {
-			str = (strasse_t*)gr->get_weg(road_wt);
+			// disambiguate between two same-waytype disjoint diagonal legs, if present, using
+			// the ribi bit weg_erweitern() just added -- only the leg it actually extended has it
+			str = (strasse_t*)gr->get_weg(road_wt, route.get_short_ribi(i));
 
 			if(gr->get_typ()==grund_t::monorailboden && (bautyp&elevated_flag)==0) {
 				// To make changing of overtaking_mode easy, only update overtaking_mode and ribi_mask_oneway
@@ -2742,7 +2810,7 @@ void way_builder_t::build_road()
 				str->set_way_building(false);// show ribi
 			}
 			// keep faster ways or if it is the same way ... (@author prissi)
-			else if((str->get_desc()==desc  &&  str->get_overtaking_mode()==overtaking_mode  &&  str->get_street_flag()==street_flag  )
+			else if((str->get_desc()==desc  &&  str->get_overtaking_mode_raw()==overtaking_mode  &&  str->get_street_flag()==street_flag  )
 				||  keep_existing_ways
 				||  (keep_existing_city_roads  &&  str->hat_gehweg())
 				||  (keep_existing_faster_ways  &&  str->get_desc()->get_topspeed()>desc->get_topspeed())
@@ -2771,7 +2839,7 @@ void way_builder_t::build_road()
 				str->set_owner(player_builder);
 				str->set_way_building(false);// show ribi
 				if (crossing_t* crossing = gr->get_crossing()) {
-					crossing->finish_rd();
+					crossing->finish_rd( OTRP_VERSION_MAJOR );
 				}
 			}
 			str->set_vehicle_offset(vehicle_offset);
@@ -2785,7 +2853,7 @@ void way_builder_t::build_road()
 			str->set_street_flag(street_flag);
 			str->set_gehweg(add_sidewalk);
 			str->set_vehicle_offset(vehicle_offset);
-			cost = -gr->neuen_weg_bauen(str, route.get_short_ribi(i), player_builder)-desc->get_price();
+			cost = -gr->neuen_weg_bauen(str, route.get_short_ribi(i), player_builder, straight_route_mode)-desc->get_price();
 
 			// into UNDO-list, so we can remove it later
 			if(player_builder!=NULL) {
@@ -2819,7 +2887,9 @@ void way_builder_t::build_track()
 				continue;
 			}
 
-			bool const extend = gr->weg_erweitern(desc->get_wtyp(), ribi);
+			// a leg already owning this direction counts as extended; get_weg(wtyp, ribi) below picks it
+			bool const extend = is_direction_already_built(gr, desc->get_wtyp(), ribi)
+				||  gr->weg_erweitern(desc->get_wtyp(), ribi, desc, straight_route_mode);
 
 			// bridges/tunnels have their own track type and must not upgrade
 			if((gr->get_typ()==grund_t::brueckenboden ||  gr->get_typ()==grund_t::tunnelboden)  &&  gr->get_weg_nr(0)->get_waytype()==desc->get_wtyp()) {
@@ -2827,7 +2897,10 @@ void way_builder_t::build_track()
 			}
 
 			if(extend) {
-				weg_t* const weg = gr->get_weg(desc->get_wtyp());
+				// disambiguate between two same-waytype disjoint diagonal legs, if present,
+				// using the ribi bit weg_erweitern() just added -- only the leg it actually
+				// extended has it
+				weg_t* const weg = gr->get_weg(desc->get_wtyp(), ribi);
 				bool change_desc = true;
 
 				// do not touch fences, tram way etc. if there is already same way with different type
@@ -2877,7 +2950,7 @@ void way_builder_t::build_track()
 					// respect speed limit of crossing
 					weg->count_sign();
 					if (crossing_t* crossing = gr->get_crossing()) {
-						crossing->finish_rd();
+						crossing->finish_rd( OTRP_VERSION_MAJOR );
 					}
 				}
 				weg->set_vehicle_offset(vehicle_offset);
@@ -2886,7 +2959,7 @@ void way_builder_t::build_track()
 				weg_t* const sch = weg_t::alloc(desc->get_wtyp());
 				sch->set_desc(desc);
 
-				cost = -gr->neuen_weg_bauen(sch, ribi, player_builder)-desc->get_price();
+				cost = -gr->neuen_weg_bauen(sch, ribi, player_builder, straight_route_mode)-desc->get_price();
 				sch->set_vehicle_offset(vehicle_offset);
 
 				// connect canals to sea
@@ -2964,7 +3037,7 @@ void way_builder_t::build_powerline()
 			lt->set_desc(desc);
 			player_t::book_construction_costs(player_builder, -desc->get_price(), gr->get_pos().get_2d(), powerline_wt);
 			// this adds maintenance
-			lt->leitung_t::finish_rd();
+			lt->leitung_t::finish_rd( OTRP_VERSION_MAJOR );
 			minimap_t::get_instance()->calc_map_pixel( gr->get_pos().get_2d() );
 		}
 

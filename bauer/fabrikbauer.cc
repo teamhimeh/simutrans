@@ -149,7 +149,7 @@ public:
 				}
 				if(  0 <= x  &&  x < w  &&  0 <= y  &&  y < h  ) {
 					// actual factorz tile: is there something top like elevated monorails?
-					if(  gr->get_leitung()!=NULL  ||  welt->lookup(gr->get_pos()+koord3d(0,0,1)  )!=NULL) {
+					if(  gr->get_leitung()!=NULL  ||  welt->lookup_no_dummy(gr->get_pos()+koord3d(0,0,1)  )!=NULL) {
 						// something on top (monorail or power lines)
 						return false;
 					}
@@ -638,11 +638,38 @@ int factory_builder_t::build_link(koord3d* parent, const factory_desc_t* info, s
 	// if a factory is not rotate-able, rotate the world until we can save it
 	if(welt->cannot_save()  &&  parent==NULL  &&  !can_factory_tree_rotate(info)  ) {
 		org_rotation = welt->get_settings().get_rotation();
+		const building_desc_t *bdesc = info->get_building();
+		// size of the already checked area; x and y are swapped with every rotation
+		koord checked_size = bdesc->get_size(rotate);
 		for(  int i=0;  i<3  &&  welt->cannot_save();  i++  ) {
-			pos->rotate90( welt->get_size().y-info->get_building()->get_y(rotate) );
+			pos->rotate90( welt->get_size().y-checked_size.y );
 			welt->rotate90();
+			checked_size = koord( checked_size.y, checked_size.x );
 		}
 		assert( !welt->cannot_save() );
+
+		// the factory must be built exactly on the checked area => use a layout with the same size
+		// (city factories search their place below anyway)
+		if(  info->get_placement() != factory_desc_t::City  &&  bdesc->get_size(rotate) != checked_size  ) {
+			int new_rotate = -1;
+			for(  int r = 1;  r < bdesc->get_all_layouts()  &&  new_rotate < 0;  r++  ) {
+				if(  bdesc->get_size( (rotate + r) % bdesc->get_all_layouts() ) == checked_size  ) {
+					new_rotate = (rotate + r) % bdesc->get_all_layouts();
+				}
+			}
+			if(  new_rotate < 0  ) {
+				// no matching layout: cannot build here; restore the rotation
+				dbg->warning( "factory_builder_t::build_link()", "%s does not fit on the checked area after rotation", info->get_name() );
+				for(  int i = 0;  i < 4  &&  welt->get_settings().get_rotation() != org_rotation;  ++i  ) {
+					pos->rotate90( welt->get_size().y-checked_size.y );
+					welt->rotate90();
+					checked_size = koord( checked_size.y, checked_size.x );
+				}
+				welt->update_map();
+				return 0;
+			}
+			rotate = new_rotate;
+		}
 	}
 
 	// in town we need a different place search
@@ -765,7 +792,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 	}
 
 	// how much do we need?
-	sint32 consumption = our_fab->get_base_production()*supplier->get_consumption();
+	sint64 consumption = (sint64)our_fab->get_base_production()*supplier->get_consumption();
 
 	slist_tpl<factories_to_crossconnect_t> factories_to_correct;
 	slist_tpl<fabrik_t *> new_factories;           // since the cross-correction must be done later
@@ -774,7 +801,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 	int lcount = supplier->get_supplier_count();
 	int lfound = 0; // number of found producers
 
-	DBG_MESSAGE("factory_builder_t::build_chain_link","supplier_count %i, lcount %i (need %i of %s)",info->get_supplier_count(),lcount,consumption,ware->get_name());
+	DBG_MESSAGE("factory_builder_t::build_chain_link","supplier_count %i, lcount %i (need %lld of %s)",info->get_supplier_count(),lcount,consumption,ware->get_name());
 
 	// search if there already is one or two (cross-connect everything if possible)
 	FOR(slist_tpl<fabrik_t*>, const fab, welt->get_fab_list()) {
@@ -794,7 +821,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 				const factory_desc_t* const fd = fab->get_desc();
 				for (uint gg = 0; gg < fd->get_product_count(); gg++) {
 					if (fd->get_product(gg)->get_output_type() == ware && fab->get_lieferziele().get_count() < 10) { // does not make sense to split into more ...
-						sint32 production_left = fab->get_base_production() * fd->get_product(gg)->get_factor();
+						sint64 production_left = (sint64)fab->get_base_production() * fd->get_product(gg)->get_factor();
 						const vector_tpl <koord> & lieferziele = fab->get_lieferziele();
 
 						// decrease remaining production by supplier demand
@@ -803,7 +830,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 							fabrik_t* const zfab = fabrik_t::get_fab(i);
 							for(int zz=0;  zz<zfab->get_desc()->get_supplier_count();  zz++) {
 								if(zfab->get_desc()->get_supplier(zz)->get_input_type()==ware) {
-									production_left -= zfab->get_base_production()*zfab->get_desc()->get_supplier(zz)->get_consumption();
+									production_left -= (sint64)zfab->get_base_production()*zfab->get_desc()->get_supplier(zz)->get_consumption();
 									break;
 								}
 							}
@@ -814,7 +841,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 							if(production_left>0) {
 								consumption -= production_left;
 								fab->add_lieferziel(our_fab->get_pos().get_2d());
-								DBG_MESSAGE("factory_builder_t::build_chain_link","supplier %s can supply approx %i of %s to us", fd->get_name(), production_left, ware->get_name());
+								DBG_MESSAGE("factory_builder_t::build_chain_link","supplier %s can supply approx %lld of %s to us", fd->get_name(), production_left, ware->get_name());
 							}
 							else {
 								/* we steal something; however the total capacity
@@ -916,10 +943,10 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 		const factory_desc_t* const fd = fab->get_desc();
 		for (uint gg = 0; gg < fab->get_desc()->get_product_count(); gg++) {
 			if (fd->get_product(gg)->get_output_type() == ware) {
-				sint32 production = fab->get_base_production() * fd->get_product(gg)->get_factor();
+				sint64 production = (sint64)fab->get_base_production() * fd->get_product(gg)->get_factor();
 				// the take care of how much this factory could supply
 				consumption -= production;
-				DBG_MESSAGE("factory_builder_t::build_chain_link", "new supplier %s can supply approx %i of %s to us", fd->get_name(), production, ware->get_name());
+				DBG_MESSAGE("factory_builder_t::build_chain_link", "new supplier %s can supply approx %lld of %s to us", fd->get_name(), production, ware->get_name());
 				break;
 			}
 		}

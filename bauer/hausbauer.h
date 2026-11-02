@@ -15,6 +15,7 @@
 #include "../tpl/stringhashtable_tpl.h"
 
 class gebaeude_t;
+class grund_t;
 class karte_ptr_t;
 class player_t;
 class tool_selector_t;
@@ -156,6 +157,11 @@ public:
 	// desc has to have 48 layouts.
 	static gebaeude_t* build_station_on_diagonal_way(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi way_connection, halthandle_t halt);
 
+	// Build a stop on a closed diagonal tile (two disjoint diagonal legs @p leg1 and @p leg2 of
+	// the stop's waytype): one building with a platform image for each leg (see gebaeude_t::get_tile2()).
+	// desc has to have 48 layouts.
+	static gebaeude_t* build_station_on_closed_diagonal(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi leg1, const ribi_t::ribi leg2, halthandle_t halt);
+
 	// Build a stop on a sloped way tile.
 	// Slope image offsets per flat pattern: N/W single=+48, S/E single=+64, N/W double=+80, S/E double=+96.
 	// If the descriptor does not have slope images the flat layout is used unchanged.
@@ -166,8 +172,45 @@ public:
 
 	/// @returns city building list of type @p typ (res/com/ind)
 	static const vector_tpl<const building_desc_t *> *get_citybuilding_list(building_desc_t::btype  typ);
-	
+
+	/**
+	 * Removes all objects from a building tile which must not share a tile with a building.
+	 * Kept are: @p keep (the building of this tile), power lines/transformers, bridge pillars,
+	 * labels, smoke and moving objects (vehicles). Trees etc. are deleted. Other buildings are removed
+	 * completely (all their tiles, using remove()), so no broken pieces of them remain.
+	 * If @p keep is NULL, the ground @p gr may be replaced (natural ground restored): look it up again.
+	 * Tiles with ways are not touched (stops have their own rules).
+	 * @param keep the building to keep on this tile, may be NULL (i.e. before a new building is placed)
+	 * @return number of removed objects
+	 */
+	static uint32 remove_invalid_objects_on_building_tile(grund_t *gr, const gebaeude_t *keep, player_t *player);
+
+	/**
+	 * Same as remove_invalid_objects_on_building_tile() for all tiles of the building @p gb
+	 * (any kind: city building, factory, townhall, headquarters, ...), if it is a multitile building.
+	 * Use after the tiles of an existing building were changed in place (upgrade, rotation, ...).
+	 * @return number of removed objects
+	 */
+	static uint32 remove_invalid_objects_on_multitile_building(const gebaeude_t *gb, player_t *player);
+
+	/**
+	 * @return true if there are ways on this ground. Also finds way objects
+	 * which were moved onto a foundation (without the has_way flags of the ground).
+	 */
+	static bool has_way_objects(const grund_t *gr);
+
+	/**
+	 * Called after loading (after all objects are finished):
+	 * checks all tiles of multitile buildings and of townhalls, factories, attractions, monuments
+	 * and headquarters (any size): corrects their way flags and removes invalid objects there.
+	 */
+	static void cleanup_multitile_buildings_finish_rd();
+
 private:
+	// Layout of a stop on the diagonal leg @p way_connection at @p pos. Also clears the
+	// end bits of the neighbouring stops along this leg.
+	static uint8 calc_diagonal_station_layout(koord3d pos, const ribi_t::ribi way_connection);
+
 	static gebaeude_t* build_station_extension_depot_with_complete_layout_bits(player_t* player, koord3d pos, int layout, const building_desc_t* desc, void* param);
 };
 

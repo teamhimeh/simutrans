@@ -142,13 +142,14 @@ enum {
 	TOOL_SHOW_FACTORY_STORAGE,
 	TOOL_MERGE_PLAYER,
 	TOOL_CHANGE_HALT,
-	TOOL_HALT_PERMISSION,
 	TOOL_CHANGE_FACTORY,
 	TOOL_RESET_GAME_SPEED,
 	TOOL_FIX_GAME_SPEED,
 	TOOL_SHOW_WAY_OFFSET_LABEL,
 	TOOL_SHOW_ONLY_OWN_VEHICLE_STATES,
 	TOOL_FOLLOW_CONVOI_UNDERGROUND,
+	TOOL_EXPORT_MINIMAP,
+	TOOL_HALT_PERMISSION,
 	SIMPLE_TOOL_COUNT,
 	SIMPLE_TOOL = 0x2000
 };
@@ -282,6 +283,17 @@ public:
 	/// Read tool, toolbar configuration and tool shortcuts from @p menuconf
 	/// @param menuconf Path to file to read
 	static bool read_menu(const std::string &menuconf);
+
+	// Keybindings are synchronized with menuconf.tab; defaults use its first-run backup.
+	static uint32 get_shortcut_count();
+	static tool_t *get_shortcut_tool(uint32 index);
+	static const char *get_shortcut_name(uint32 index);
+	static std::string get_shortcut_key_name(uint16 key, uint8 modifiers);
+	static bool is_shortcut_key_allowed(uint16 key, uint8 modifiers);
+	static sint32 find_shortcut_conflict(uint32 index, uint16 key, uint8 modifiers);
+	static bool set_shortcut(uint32 index, uint16 key, uint8 modifiers);
+	static bool reset_shortcuts();
+	static bool reload_shortcuts();
 
 	static uint16 const dummy_id = 0xFFFFU;
 

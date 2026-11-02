@@ -34,6 +34,7 @@
 #include "../boden/grund.h"
 #include "../obj/simobj.h"
 #include "../player/simplay.h"
+#include "../gui/minimap.h"
 
 
 // ---------------------------------------------------------------------------
@@ -302,6 +303,42 @@ static std::string tool_capture_screen()
 		+ ",\"mimeType\":\"image/png\"}]}";
 }
 
+// Renders the whole minimap (entire world, not just the visible viewport) to
+// a PNG file on disk, using the same bounded-memory strip export the "Export
+// map image" button in the map window uses. The map can be far larger than
+// the screen, so unlike capture_screen this does not embed the image inline.
+// The optional "mapmode" selects the map mode for this export only; the mode
+// of the map window is left unchanged.
+static std::string tool_export_minimap(karte_t *welt, const std::string &args_json)
+{
+	if (!welt) {
+		return text_content("{\"error\":\"world not ready\"}");
+	}
+
+	std::string mapmode = mcp_server_t::json_get_raw(args_json, "mapmode");
+	if (mapmode == "null") {
+		mapmode.clear();
+	}
+	else if (!mapmode.empty() && mapmode[0] == '"') {
+		mapmode = mcp_server_t::json_get_string(args_json, "mapmode");
+	}
+	minimap_t::MAP_DISPLAY_MODE export_mode;
+	if (!minimap_t::parse_display_mode(mapmode.c_str(), export_mode)) {
+		return text_content("{\"error\":\"invalid mapmode: " + jesc(mapmode) + "\"}");
+	}
+
+	std::string filename;
+	if (!minimap_t::get_instance()->export_to_png(filename, export_mode)) {
+		return text_content("{\"error\":\"failed to export minimap\"}");
+	}
+	// exclusive modes still export, but the image may lack some of them
+	std::string conflicts;
+	if (!minimap_t::check_display_mode(export_mode, conflicts)) {
+		return text_content("{\"result\":" + jstr(filename) + ",\"warning\":" + jstr("you set exclusive map options: " + conflicts) + "}");
+	}
+	return text_content("{\"result\":" + jstr(filename) + "}");
+}
+
 
 // ---------------------------------------------------------------------------
 // Tool registry
@@ -335,6 +372,26 @@ static const tool_def_t TOOL_DEFS[] = {
 		"Capture the current Simutrans window as a PNG image. "
 		"Use this to inspect the actual on-screen game view and GUI state.",
 		"{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+	},
+	{
+		"export_minimap",
+		"Render the entire minimap (the whole world, not just what fits on screen) "
+		"to a PNG file in the screenshot folder and return its path. "
+		"Use this to inspect the full map layout rather than the current viewport. "
+		"The map mode of the map window is not changed.",
+		"{\"type\":\"object\","
+		 "\"properties\":{"
+		   "\"mapmode\":{\"type\":[\"string\",\"integer\"],"
+		                 "\"description\":\"optional map mode for this export; default is the map window's mode. "
+		                 "Either a bit mask or names joined by '|', e.g. 'MAP_TOWN|MAP_LINES'. "
+		                 "Exclusive modes (e.g. two of PASSENGER/MAIL/FREIGHT/TRAFFIC/TRACKS/SPEEDLIMIT/POWERLINES/FOREST/OWNER/LEVEL, "
+		                 "two halt modes STATUS/SERVICE/WAITING/WAITCHANGE/ORIGIN/TRANSFER, or such a base mode with "
+		                 "HIDE_CONTOUR/CLIMATES) still export, but a 'warning' is returned. Names (MAP_ prefix optional, "
+		                 "case insensitive): PLAIN, TOWN, PASSENGER, MAIL, FREIGHT, STATUS, SERVICE, TRAFFIC, ORIGIN, "
+		                 "TRANSFER, WAITING, TRACKS, SPEEDLIMIT, POWERLINES, TOURIST, FACTORIES, DEPOT, FOREST, CITYLIMIT, "
+		                 "PAX_DEST, OWNER, LINES, LEVEL, WAITCHANGE, HIDE_CONTOUR, CLIMATES, CITIZENS, CITY_GROWTH, LABELS\"}"
+		 "},"
+		 "\"additionalProperties\":false}"
 	},
 	{
 		"get_tile_info",
@@ -401,6 +458,10 @@ std::string mcp_tools::tools_call(const std::string &name,
 
 	if (name == "capture_screen") {
 		return tool_capture_screen();
+	}
+
+	if (name == "export_minimap") {
+		return tool_export_minimap(welt, args_json);
 	}
 
 	if (name == "get_tile_info") {

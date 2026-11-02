@@ -22,6 +22,8 @@
 
 #include "citybuilding_edit.h"
 #include "components/gui_label.h"
+#include "messagebox.h"
+#include "citybuilding_preset_frame.h"
 
 char citybuilding_edit_frame_t::name_filter_value[64] = "";
 
@@ -120,6 +122,19 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 	cont_filter.add_component(&name_filter_input);
 	name_filter_input.add_listener(this);
 
+	gui_aligned_container_t *preset_buttons = cont_filter.add_table(2, 0);
+	bt_preset_load.init(button_t::roundbox, "Load preset");
+	bt_preset_save.init(button_t::roundbox, "Save preset");
+	bt_preset_load.set_tooltip("Load a building preset file.");
+	bt_preset_save.set_tooltip("Save the selected buildings to a preset file.");
+	preset_buttons->add_component(&bt_preset_load);
+	preset_buttons->add_component(&bt_preset_save);
+	cont_filter.end_table();
+	bt_preset_load.add_listener(this);
+	bt_preset_save.add_listener(this);
+
+	init_thumbnail_options();
+
 	// add to sorting selection
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_PAX);
 	cb_sortedby.new_component<gui_sorting_item_t>(gui_sorting_item_t::BY_LEVEL_MAIL);
@@ -139,6 +154,57 @@ citybuilding_edit_frame_t::citybuilding_edit_frame_t(player_t* player_) :
 	fill_list();
 
 	reset_min_windowsize();
+}
+
+citybuilding_edit_frame_t::~citybuilding_edit_frame_t()
+{
+	destroy_win(magic_citybuilding_preset_confirm);
+	destroy_win(magic_citybuilding_preset_file);
+}
+
+void citybuilding_edit_frame_t::load_preset(const citybuilding_preset_t &preset)
+{
+	for (sint32 i = 0; i < scl.get_count(); ++i) {
+		if (gui_scrolled_list_t::scrollitem_t *item = scl.get_element(i)) item->selected = false;
+	}
+	sint32 first = -1;
+	uint32 selected = 0;
+	for (uint32 i = 0; i < building_list.get_count(); ++i) {
+		for (std::vector<std::string>::const_iterator name = preset.buildings.begin(); name != preset.buildings.end(); ++name) {
+			if (*name == building_list[i]->get_name()) {
+				if (first < 0) {
+					first = (sint32)i;
+					scl.set_selection(first);
+				}
+				else if (gui_scrolled_list_t::scrollitem_t *item = scl.get_element((sint32)i)) item->selected = true;
+				++selected;
+				break;
+			}
+		}
+	}
+	if (first < 0) scl.set_selection(-1);
+	restoring_preset = true;
+	change_item_info(first);
+	restoring_preset = false;
+	cbuffer_t message;
+	message.printf(translator::translate("Preset loaded: %u / %u buildings selected"), selected, (uint32)preset.buildings.size());
+	create_win(new news_img(message.get_str()), w_time_delete, magic_none);
+}
+
+void citybuilding_edit_frame_t::save_preset()
+{
+	citybuilding_preset_t preset;
+	vector_tpl<sint32> selections = scl.get_selections();
+	for (uint32 i = 0; i < selections.get_count(); ++i) {
+		if (selections[i] >= 0 && (uint32)selections[i] < building_list.get_count()) preset.buildings.push_back(building_list[selections[i]]->get_name());
+	}
+	if (preset.buildings.empty()) {
+		create_win(new news_img(translator::translate("Please choose buildings first.")), w_time_delete, magic_none);
+		return;
+	}
+	destroy_win(magic_citybuilding_preset_confirm);
+	destroy_win(magic_citybuilding_preset_file);
+	create_win(new citybuilding_preset_frame_t(this, false, preset), w_info, magic_citybuilding_preset_file);
 }
 // put item in list according to filter/sorter
 void citybuilding_edit_frame_t::put_item_in_list( const building_desc_t* desc )
@@ -168,6 +234,12 @@ void citybuilding_edit_frame_t::put_item_in_list( const building_desc_t* desc )
 // fill the current building_list
 void citybuilding_edit_frame_t::fill_list()
 {
+	vector_tpl<const building_desc_t *> selected_buildings;
+	FOR(vector_tpl<sint32>, idx, scl.get_selections()) {
+		if (idx >= 0 && (uint32)idx < building_list.get_count()) {
+			selected_buildings.append(building_list[idx]);
+		}
+	}
 	building_list.clear();
 
 	if(bt_res.pressed) {
@@ -207,13 +279,24 @@ void citybuilding_edit_frame_t::fill_list()
 			default:                        color = SYSCOL_TEXT;                                                    break;
 		}
 		char const* const name = get_sortedby()==gui_sorting_item_t::BY_NAME_OBJECT ?  i->get_name() : translator::translate(i->get_name());
-		scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		if (bt_thumbnails.pressed) {
+			scl.new_component<building_thumbnail_t>(i, name, get_thumbnail_size());
+		}
+		else {
+			scl.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(name, color);
+		}
 		if (i == desc) {
 			scl.set_selection(scl.get_count()-1);
 		}
 	}
+	// Restore all selected buildings after rebuilding the view.
+	for (sint32 idx = 0; idx < scl.get_count(); idx++) {
+		scl.get_element(idx)->selected = selected_buildings.is_contained(building_list[idx]);
+	}
+	update_thumbnail_columns();
 	// always update current selection (since the tool may depend on it)
 	change_item_info( scl.get_selection() );
+	show_selected_building();
 
 	reset_min_windowsize();
 }
@@ -223,7 +306,11 @@ void citybuilding_edit_frame_t::fill_list()
 bool citybuilding_edit_frame_t::action_triggered( gui_action_creator_t *comp,value_t e)
 {
 	// only one chain can be shown
-	if(  comp==&bt_res  ) {
+	if (comp == &bt_thumbnails) {
+		bt_thumbnails.pressed = !bt_thumbnails.pressed;
+		fill_list();
+	}
+	else if(  comp==&bt_res  ) {
 		bt_res.pressed ^= 1;
 		fill_list();
 	}
@@ -233,6 +320,14 @@ bool citybuilding_edit_frame_t::action_triggered( gui_action_creator_t *comp,val
 	}
 	else if(  comp==&name_filter_input  ) {
 		fill_list();
+	}
+	else if (comp == &bt_preset_load) {
+		destroy_win(magic_citybuilding_preset_confirm);
+		destroy_win(magic_citybuilding_preset_file);
+		create_win(new citybuilding_preset_frame_t(this, true, citybuilding_preset_t()), w_info, magic_citybuilding_preset_file);
+	}
+	else if (comp == &bt_preset_save) {
+		save_preset();
 	}
 	else if(  comp==&bt_ind  ) {
 		bt_ind.pressed ^= 1;
@@ -282,6 +377,8 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 				buf.append("\n");
 			}
 
+			// Keep the rotation setting when restoring a preset.
+			const uint8 previous_rotation = get_rotation();
 			// reset combobox
 			cb_rotation.clear_elements();
 			cb_rotation.new_component<gui_rotation_item_t>(gui_rotation_item_t::random);
@@ -294,6 +391,21 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 			}
 			else {
 				cb_rotation.set_selection(2);
+			}
+			if (restoring_preset) {
+				bool found = false;
+				for (sint32 i = 0; i < cb_rotation.count_elements(); ++i) {
+					gui_rotation_item_t *item = dynamic_cast<gui_rotation_item_t *>(cb_rotation.get_element(i));
+					if (item && (uint8)item->get_rotation() == previous_rotation) {
+						cb_rotation.set_selection(i);
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					cb_rotation.new_component<gui_rotation_item_t>(previous_rotation);
+					cb_rotation.set_selection(cb_rotation.count_elements() - 1);
+				}
 			}
 		}
 
@@ -321,8 +433,10 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 		}
 		buf.clear();
 		building_image.init(NULL, 0);
-		cb_rotation.clear_elements();
-		cb_rotation.new_component<gui_rotation_item_t>(gui_rotation_item_t::random);
+		if (!restoring_preset) {
+			cb_rotation.clear_elements();
+			cb_rotation.new_component<gui_rotation_item_t>(gui_rotation_item_t::random);
+		}
 	}
 	info_text.recalc_size();
 	reset_min_windowsize();
@@ -332,7 +446,9 @@ void citybuilding_edit_frame_t::change_item_info(sint32 entry)
 void citybuilding_edit_frame_t::rdwr( loadsave_t *file )
 {
 	uint8 button_pressed_flags = bt_res.pressed | (bt_com.pressed<<1) | (bt_ind.pressed<<2);
+	button_pressed_flags |= bt_thumbnails.pressed << 3;
 	file->rdwr_byte(button_pressed_flags);
+	bt_thumbnails.pressed = (button_pressed_flags >> 3) & 1;
 	bt_res.pressed = button_pressed_flags & 1;
 	bt_com.pressed = (button_pressed_flags >> 1) & 1;
 	bt_ind.pressed = (button_pressed_flags >> 2) & 1;

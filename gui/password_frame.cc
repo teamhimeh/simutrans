@@ -53,19 +53,36 @@ password_frame_t::password_frame_t( player_t *player ) :
 	// Unlock button: clears the password (unlocks the player slot)
 	unlock_button.init( button_t::roundbox | button_t::flexible, "Clear Password" );
 	unlock_button.add_listener(this);
-	// enabled when: player is locked AND
-	//   (active player is this player, OR allow_unlock_by_public && active is public player (unlocked))
+	update_unlock_button();
+	add_component( &unlock_button, 2 );
+
+	reset_min_windowsize();
+	set_windowsize(get_min_windowsize() );
+}
+
+
+void password_frame_t::update_unlock_button()
+{
+	// enabled when: a password is set AND no unlock request is pending AND
+	//   (this player is unlocked and active, OR allow_unlock_by_public && active is public player (unlocked))
 	const bool active_is_this   = welt->get_active_player_nr() == player->get_player_nr();
 	const bool public_can_unlock = welt->get_settings().get_allow_unlock_by_public()
 	                               &&  welt->get_active_player_nr() == PUBLIC_PLAYER_NR
 	                               &&  !welt->get_public_player()->is_locked();
 	// use welt->is_player_password_set(): on a network client the local hash is not
 	// authoritative, the server reports the password-set state via nwc_auth_player_t
-	unlock_button.enable(  welt->is_player_password_set(player->get_player_nr())  &&  ( (!player->is_locked()  &&  active_is_this)  ||  public_can_unlock) );
-	add_component( &unlock_button, 2 );
+	unlock_button.enable(  welt->is_player_password_set(player->get_player_nr())
+	                       &&  !player->is_unlock_pending()
+	                       &&  ( (!player->is_locked()  &&  active_is_this)  ||  public_can_unlock)  );
+}
 
-	reset_min_windowsize();
-	set_windowsize(get_min_windowsize() );
+
+void password_frame_t::draw(scr_coord pos, scr_size size)
+{
+	// lock state / password-set state may change while the window is open
+	// (server answer, other client or nettool changed the password)
+	update_unlock_button();
+	gui_frame_t::draw(pos, size);
 }
 
 
@@ -145,6 +162,10 @@ bool password_frame_t::action_triggered( gui_action_creator_t *comp, value_t p )
 	}
 
 	if(  comp == &unlock_button  ) {
+		if (player->is_unlock_pending()) {
+			// request already sent, wait for the server
+			return true;
+		}
 		// clear password hash to unlock the player
 		pwd_hash_t empty_hash;
 		welt->store_player_password_hash( player->get_player_nr(), empty_hash );

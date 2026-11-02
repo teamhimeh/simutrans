@@ -4,6 +4,7 @@
  */
 
 #include <string.h>
+#include "../simversion.h"
 
 #include "../simdebug.h"
 #include "../simtool.h"
@@ -24,10 +25,12 @@
 #include "../gui/minimap.h"
 
 #include "../descriptor/bridge_desc.h"
+#include "../descriptor/building_desc.h"
 
 #include "../dataobj/marker.h"
 #include "../dataobj/scenario.h"
 #include "../obj/bruecke.h"
+#include "../obj/gebaeude.h"
 #include "../obj/leitung2.h"
 #include "../obj/pillar.h"
 #include "../obj/signal.h"
@@ -283,6 +286,17 @@ bool bridge_builder_t::is_blocked(koord3d pos, ribi_t::ribi check_ribi, const ch
 			// monorail tiles will be checked in is_monorail_junction
 			error_msg = "Tile not empty.";
 			return true;
+		}
+	}
+
+	// check for buildings below that are too tall for the clearance left underneath
+	if(  grund_t *gr_ground = welt->lookup_kartenboden( pos.get_2d() )  ) {
+		if(  gebaeude_t *gb = gr_ground->find<gebaeude_t>()  ) {
+			const sint8 gap_z = pos.z - gr_ground->get_hoehe();
+			if(  gap_z > 0  &&  gb->get_tile()->get_desc()->get_height_clearance() > gap_z  ) {
+				error_msg = "Bridge blocked by building below.";
+				return true;
+			}
 		}
 	}
 
@@ -810,7 +824,7 @@ void bridge_builder_t::build_bridge(player_t *player, const koord3d start, const
 				lt = new leitung_t(start_gr->get_pos(), player);
 				lt->set_desc( way_desc );
 				start_gr->obj_add( lt );
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 			}
 		}
 		else if(  !start_gr->weg_erweitern( desc->get_waytype(), ribi )  ) {
@@ -853,14 +867,14 @@ void bridge_builder_t::build_bridge(player_t *player, const koord3d start, const
 		else {
 			leitung_t *lt = new leitung_t(bruecke->get_pos(), player);
 			bruecke->obj_add( lt );
-			lt->finish_rd();
+			lt->finish_rd( OTRP_VERSION_MAJOR );
 		}
 		grund_t *gr = welt->lookup_kartenboden(pos.get_2d());
 		sint16 height = pos.z - gr->get_pos().z;
 		bruecke_t *br = new bruecke_t(bruecke->get_pos(), player, desc, desc->get_straight(ribi,height-slope_t::max_diff(gr->get_grund_hang())));
 		bruecke->obj_add(br);
 		bruecke->calc_image();
-		br->finish_rd();
+		br->finish_rd( OTRP_VERSION_MAJOR );
 //DBG_MESSAGE("bool bridge_builder_t::build_bridge()","at (%i,%i)",pos.x,pos.y);
 		if(desc->get_pillar()>0  &&  !gr->hat_weg(air_wt)) {
 			// make a new pillar here (never on airways)
@@ -918,7 +932,7 @@ void bridge_builder_t::build_bridge(player_t *player, const koord3d start, const
 				player_t::book_construction_costs(player, -way_desc->get_price(), gr->get_pos().get_2d(), powerline_wt);
 				gr->obj_add(lt);
 				lt->set_desc(way_desc);
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 			}
 			lt->calc_neighbourhood();
 		}
@@ -1014,11 +1028,11 @@ void bridge_builder_t::build_ramp(player_t* player, koord3d end, ribi_t::ribi ri
 			player_t::add_maintenance( player, -lt->get_desc()->get_maintenance(), powerline_wt);
 		}
 		// connect to neighbor tiles and networks, add maintenance
-		lt->finish_rd();
+		lt->finish_rd( OTRP_VERSION_MAJOR );
 	}
 	bruecke_t *br = new bruecke_t(end, player, desc, img);
 	bruecke->obj_add( br );
-	br->finish_rd();
+	br->finish_rd( OTRP_VERSION_MAJOR );
 	bruecke->calc_image();
 }
 
@@ -1231,7 +1245,7 @@ const char *bridge_builder_t::remove(player_t *player, koord3d pos_start, waytyp
 				delete lt;
 				// .. now create powerline to create new powernet
 				lt = new leitung_t(gr->get_pos(), old_owner);
-				lt->finish_rd();
+				lt->finish_rd( OTRP_VERSION_MAJOR );
 				gr->obj_add(lt);
 			}
 		}

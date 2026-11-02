@@ -149,6 +149,14 @@ private:
 	bool keep_existing_faster_ways;
 	bool keep_existing_city_roads;
 
+	/**
+	 * true when the current route was computed by calc_straight_route() (ctrl-pressed,
+	 * single-segment building), false for the Dijkstra calc_route(). Only in straight-route
+	 * mode can build_track()/build_road() add a same-waytype-different-descriptor way as an
+	 * independent second diagonal leg (weg_nr(1)) instead of extending the existing way.
+	 */
+	bool straight_route_mode;
+
 	bool build_sidewalk;
 
 	uint32 maximum;    // hoechste Suchtiefe
@@ -191,6 +199,10 @@ private:
 	void intern_calc_straight_route(const koord3d start, const koord3d ziel);
 
 	sint32 intern_calc_route_elevated(const koord3d start, const koord3d ziel);
+
+	// clears the route when building it would merge two same-waytype diagonal legs on a tile
+	// where a leg is not ours or a halt sits (see grund_t::would_merge_same_waytype_legs())
+	void check_dual_leg_merges();
 
 	// runways need to meet some special conditions enforced here
 	bool intern_calc_route_runways(koord3d start, const koord3d ziel);

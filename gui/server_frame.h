@@ -33,7 +33,10 @@ private:
 	bool custom_valid;      // Custom server entry is valid
 
 	gui_textinput_t addinput, nick;
-	static char newserver_name[2048];
+	char server_address[2048];
+	std::string server_settings_path;
+	void load_server_address();
+	void save_server_address();
 
 	gui_scrolled_list_t serverlist;
 	button_t add, join, find_mismatch;
@@ -133,6 +136,7 @@ private:
 
 public:
 	server_frame_t();
+	~server_frame_t();
 
 	void draw(scr_coord pos, scr_size size) OVERRIDE;
 

@@ -22,6 +22,29 @@ void way_reader_t::register_obj(obj_desc_t *&data)
 {
 	way_desc_t *desc = static_cast<way_desc_t *>(data);
 
+	// find out if we really have front images
+	desc->front_images = false;
+	if (desc->front_image_lists) {
+		bool no_front = true;
+		for (int i = 0;  i < 3 && no_front;  i++) {
+			uint16 n = desc->image_list_base_index(0, true) + i;
+			no_front = desc->get_child<image_list_t>(n)->is_empty();
+		}
+		for (int i = 0;  i < 3 && no_front;  i++) {
+			uint16 n = desc->image_list_base_index(1, true) + i;
+			no_front = desc->get_child<image_list_t>(n)->is_empty();
+		}
+		// if all lists contains no images => no front images
+		desc->front_images = !no_front;
+	}
+
+	// just calculate those once
+	const uint16 front_base = desc->image_list_base_index(false, true);
+	desc->diagonals = desc->get_child<image_list_t>(4)->get_image_id(0) != IMG_EMPTY  ||  desc->get_child<image_list_t>(front_base + 2)->get_image_id(0) != IMG_EMPTY;
+	desc->close_diagonals = desc->get_close_diagonal_image_id(0, 0, false) != IMG_EMPTY  ||  desc->get_close_diagonal_image_id(0, 0, true) != IMG_EMPTY;
+	desc->switches = desc->get_child<image_list_t>(2)->get_count() > 16  ||  desc->get_child<image_list_t>(front_base)->get_count() > 16;
+	desc->switches_ex = desc->get_child<image_list_t>(2)->get_count() > 26  ||  desc->get_child<image_list_t>(front_base)->get_count() > 26;
+
 	way_builder_t::register_desc(desc);
 	obj_for_xref(get_type(), desc->get_name(), data);
 
@@ -243,7 +266,13 @@ obj_desc_t * way_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->clip_below = desc->wtyp != powerline_wt;
 	}
 	// front images from version 5 on
-	desc->front_images = version > 4;
+	desc->front_image_lists = version > 4;
+	// will be checked and set in register_obj()
+	desc->front_images = desc->front_image_lists;
+	desc->diagonals = false;
+	desc->close_diagonals = false;
+	desc->switches = false;
+	desc->switches_ex = false;
 
 	DBG_DEBUG("way_reader_t::read_node()",
 	     "version=%d, price=%d, maintenance=%d, topspeed=%d, max_weight=%d, "

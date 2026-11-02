@@ -6,6 +6,9 @@
 #ifndef GUI_DISPLAY_SETTINGS_H
 #define GUI_DISPLAY_SETTINGS_H
 
+#include <memory>
+#include <vector>
+
 
 #include "simwin.h"
 #include "gui_frame.h"
@@ -90,6 +93,28 @@ public:
 /**
  * Display settings dialog
  */
+class shortcut_row_t;
+
+class shortcut_settings_t : public gui_aligned_container_t, public action_listener_t
+{
+	gui_aligned_container_t rows_table;
+	gui_scrollpane_t rows_scroll;
+	std::vector<std::unique_ptr<shortcut_row_t> > rows;
+	gui_label_t status;
+	std::string status_text;
+	button_t reset;
+	sint32 capturing_row;
+	void refresh();
+public:
+	shortcut_settings_t();
+	~shortcut_settings_t();
+	void draw(scr_coord offset) OVERRIDE;
+	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
+	bool capture_event(const event_t *);
+	void cancel_capture();
+	void reload();
+};
+
 class color_gui_t : public gui_frame_t, private action_listener_t
 {
 private:
@@ -98,6 +123,7 @@ private:
 	transparency_settings_t transparency_settings;
 	station_settings_t station_settings;
 	traffic_settings_t traffic_settings;
+	shortcut_settings_t shortcut_settings;
 	gui_scrollpane_t scrolly_gui, scrolly_map, scrolly_transparency, scrolly_station, scrolly_traffic;
 	gui_tab_panel_t tabs;
 
@@ -115,6 +141,7 @@ public:
 	void draw(scr_coord pos, scr_size size) OVERRIDE;
 
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
+	bool infowin_event(const event_t*) OVERRIDE;
 
 	uint32 get_rdwr_id() OVERRIDE { return magic_color_gui_t; }
 

@@ -99,6 +99,7 @@
 #include "bauer/hausbauer.h"
 #include "bauer/vehikelbauer.h"
 
+#include "descriptor/building_desc.h"
 #include "descriptor/ground_desc.h"
 #include "descriptor/intro_dates.h"
 
@@ -2075,21 +2076,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	set_schedule_counter();
 
 	// Refresh the haltlist for the affected tiles / stations.
-	// It is enough to check the tile just at the border ...
-	uint16 const cov = settings.get_station_coverage();
+	// It is enough to check the stations with tiles just at the border ...
+	uint16 const cov = settings.get_max_station_coverage();
+	vector_tpl<halthandle_t> border_halts;
 	if(  old_y < new_size_y  ) {
 		for(  sint16 y=0;  y<old_y;  y++  ) {
 			for(  sint16 x=max(0,old_x-cov);  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=max(0,x-cov);  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=y;  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
@@ -2100,18 +2097,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 			for(  sint16 x=0;  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=x;  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=max(0,y-cov);  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
 		}
+	}
+	// re-adding the whole coverage also covers the new tiles
+	FOR(vector_tpl<halthandle_t>, const h, border_halts) {
+		h->refresh_coverage();
 	}
 	clear_random_mode( MAP_CREATE_RANDOM );
 
@@ -2171,6 +2167,7 @@ karte_t::karte_t() :
 
 	// for new world just set load version to current savegame version
 	load_version = loadsave_t::int_version( env_t::savegame_version_str, NULL ).version;
+	load_otrp_version = OTRP_VERSION_MAJOR;
 
 	// standard prices
 	goods_manager_t::set_multiplier( 1000 );
@@ -4835,7 +4832,14 @@ bool karte_t::is_water(koord k, koord dim) const
 }
 
 
-bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const
+grund_t *karte_t::lookup_no_dummy(const koord3d &pos) const
+{
+	grund_t *gr = lookup(pos);
+	return (gr  &&  !gr->is_dummy_ground()) ? gr : NULL;
+}
+
+
+bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl, const building_desc_t *desc) const
 {
 	if(k.x < 0  ||  k.y < 0  ||  k.x+w > get_size().x || k.y+h > get_size().y) {
 		return false;
@@ -4865,9 +4869,17 @@ bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_b
 					test_climate = water_climate;
 				}
 			}
+			// is there an elevated way/bridge above that this building would be too tall to fit under?
+			bool blocked_above = false;
+			if(  desc  &&  desc->get_height_clearance() > 0  ) {
+				for(  uint8 z = 1;  z <= desc->get_height_clearance()  &&  !blocked_above;  z++  ) {
+					blocked_above = lookup_no_dummy( gr->get_pos() + koord3d(0,0,z) ) != NULL;
+				}
+			}
+
 			if( (platz_max_h != max_height  &&  platz_base_h != gr->get_hoehe())  ||  !gr->ist_natur()  ||  gr->kann_alle_obj_entfernen(NULL) != NULL  ||
-			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup( gr->get_pos()+koord3d(0,0,1) ) ||
-			     (slope_t::max_diff(slope)==2 && lookup( gr->get_pos()+koord3d(0,0,2) )) ))  ) {
+			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup_no_dummy( gr->get_pos()+koord3d(0,0,1) ) ||
+			     (slope_t::max_diff(slope)==2 && lookup_no_dummy( gr->get_pos()+koord3d(0,0,2) )) ))  ||  blocked_above  ) {
 				if(  last_y  ) {
 					*last_y = k_check.y;
 				}
@@ -5452,7 +5464,7 @@ void karte_t::plans_finish_rd( sint16 x_min, sint16 x_max, sint16 y_min, sint16 
 				for(  int n = 0;  n < gr->get_top();  n++  ) {
 					obj_t *obj = gr->obj_bei(n);
 					if(obj) {
-						obj->finish_rd();
+						obj->finish_rd( load_otrp_version );
 					}
 				}
 				if(  load_version<=111000  &&  gr->ist_natur()  ) {
@@ -5544,6 +5556,12 @@ DBG_MESSAGE("karte_t::load()", "%d ways loaded",weg_t::get_alle_wege().get_count
 	ls.set_progress( (get_size().y*3)/2+256 );
 
 	world_xy_loop(&karte_t::plans_finish_rd, SYNCX_FLAG);
+
+	// correct way flags and remove invalid objects on tiles of multitile and special buildings (not multithread safe, so after plans_finish_rd)
+	// only on the server (or offline): a network client must keep the server's game state
+	if(  !env_t::networkmode  ||  env_t::server  ) {
+		hausbauer_t::cleanup_multitile_buildings_finish_rd();
+	}
 
 	// update power nets with correct power
 	powernet_t::step_all(1);
@@ -5802,7 +5820,10 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 
 	if(  file->is_version_atleast(102, 4)  ) {
-		if(  env_t::restore_UI  ) {
+		// standard 124.3+ dialogs save their state differently (e.g. halt_info without sort mode,
+		// new window ids), so their windows cannot be restored; skipping is safe at the end of file
+		const bool std_dialogs_unreadable = file->get_OTRP_version() == 0  &&  file->is_version_atleast(124, 3);
+		if(  env_t::restore_UI  &&  !std_dialogs_unreadable  ) {
 			file->rdwr_byte( active_player_nr );
 			active_player = players[active_player_nr];
 			/* restore all open windows
@@ -5832,6 +5853,7 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 
 	// loading finished, reset savegame version to current
 	load_version = loadsave_t::int_version( env_t::savegame_version_str, NULL ).version;
+	load_otrp_version = OTRP_VERSION_MAJOR;
 
 	dbg->warning("karte_t::load()","loaded savegame from %i/%i, next month=%i, ticks=%i (per month=1<<%i)",last_month,last_year,next_month_ticks,ticks,karte_t::ticks_per_world_month_shift);
 }
@@ -5866,6 +5888,7 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 	if (file->is_loading()) {
 		// some functions (finish_rd) need to know what version was loaded
 		load_version = file->get_version_int();
+		load_otrp_version = file->get_OTRP_version();
 		loaded_rotation = settings.get_rotation();
 	}
 	else {

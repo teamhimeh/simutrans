@@ -440,6 +440,12 @@ public:
 	// (called when removed by player, or by town)
 	void remove_gebaeude_from_stadt(gebaeude_t *gb);
 
+	/// @return true, if a townhall tile can be built on this ground (replacing a 1x1 city building is ok)
+	static bool is_tile_ok_for_townhall(const grund_t *gr);
+
+	// removes only this single house tile from the city house list (e.g. an invalid duplicate tile)
+	void remove_gebaeude_tile_from_stadt(gebaeude_t *gb);
+
 	/**
 	 * This function adds houses to the city house list.
 	 * @param ordered true for multithreaded loading, will insert buidings ordered, will not update city limits

@@ -953,6 +953,15 @@ public:
 	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
+class tool_export_minimap_t : public tool_t {
+public:
+	tool_export_minimap_t() : tool_t(TOOL_EXPORT_MINIMAP | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE;
+	bool init(player_t * ) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
 // builds next chain
 class tool_increase_industry_t : public tool_t {
 public:
@@ -1002,7 +1011,7 @@ class tool_change_game_speed_t : public tool_t {
 public:
 	tool_change_game_speed_t() : tool_t(TOOL_CHANGE_GAME_SPEED | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE {
-		int factor = atoi(default_param);
+		int factor = default_param ? atoi(default_param) : 0;
 		return factor>0 ? translator::translate("Accelerate time") : translator::translate("Deccelerate time");
 	}
 	bool init( player_t *player ) OVERRIDE {
@@ -1018,6 +1027,7 @@ class tool_reset_game_speed_t : public tool_t {
 public:
 	tool_reset_game_speed_t() : tool_t(TOOL_RESET_GAME_SPEED | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE {
+		return translator::translate("Reset game speed");
 	}
 	bool init( player_t *player ) OVERRIDE {
 		if(  !env_t::networkmode  ||  player->is_public_service()  ) {
@@ -1032,7 +1042,7 @@ class tool_fix_game_speed_t : public tool_t {
 public:
 	tool_fix_game_speed_t() : tool_t(TOOL_FIX_GAME_SPEED | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE {
-		env_t::networkmode? translator::translate("Fix game speed."): translator::translate("deactivated in offline mode");
+		return env_t::networkmode? translator::translate("Fix game speed."): translator::translate("deactivated in offline mode");
 	}
 	image_id get_icon(player_t*) const OVERRIDE { return env_t::networkmode ? icon : IMG_EMPTY; }
 	bool is_selected() const OVERRIDE { return welt->is_game_speed_fixed(); }

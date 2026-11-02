@@ -61,7 +61,7 @@ public:
 	void rdwr(loadsave_t *file) OVERRIDE;
 
 	// finalizes direction
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	// we allow to remove all cars etc.
 	const char *is_deletable(const player_t *) OVERRIDE { return NULL; }

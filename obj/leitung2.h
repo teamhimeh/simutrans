@@ -109,7 +109,7 @@ public:
 	void calc_neighbourhood();
 
 	void rdwr(loadsave_t *file) OVERRIDE;
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	/**
 	 * @return NULL if OK, otherwise an error message
@@ -170,7 +170,7 @@ public:
 	void info(cbuffer_t & buf) const OVERRIDE;
 
 	void rdwr(loadsave_t *file) OVERRIDE;
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	void calc_image() OVERRIDE {} // empty; otherwise it will change to leitung
 
@@ -261,7 +261,7 @@ public:
 	void info(cbuffer_t & buf) const OVERRIDE;
 
 	void rdwr(loadsave_t *file) OVERRIDE;
-	void finish_rd() OVERRIDE;
+	void finish_rd(const uint8 loaded_OTRP_version) OVERRIDE;
 
 	void calc_image() OVERRIDE {} // empty; otherwise it will change to leitung
 
