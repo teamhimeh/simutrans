@@ -235,13 +235,14 @@ public:
 	 */
 	struct tile_t
 	{
-		tile_t(grund_t* grund_) : grund(grund_) {}
+		tile_t(grund_t* grund_) : grund(grund_), coverage(0) {}
 
 		bool operator ==(const tile_t& o) { return grund == o.grund; }
 		bool operator !=(const tile_t& o) { return grund != o.grund; }
 
 		grund_t*       grund;
 		convoihandle_t reservation[2];
+		uint16         coverage; ///< station coverage of this tile, set by add_grund()
 	};
 
 	const slist_tpl<tile_t> &get_tiles() const { return tiles; }
@@ -363,6 +364,12 @@ private:
 
 	// private helper function for recalc_station_type()
 	void add_to_station_type( grund_t *gr );
+
+	/// largest distance this station tile can cover (its own coverage or station_coverage_water)
+	static uint16 get_tile_reach(const tile_t &tile);
+
+	/// adds this halt to the haltlists of all tiles covered by this station tile
+	void add_tile_coverage(const tile_t &tile, bool insert_unsorted);
 
 	/**
 	 * Reconnect and reroute if counter different from welt->get_schedule_counter()
@@ -756,6 +763,31 @@ public:
 	bool add_grund(grund_t *gb, bool relink_factories = true);
 	bool rem_grund(grund_t *gb);
 
+	/**
+	 * Station coverage of a station tile. It depends on the waytype of the building on it.
+	 * Buildings without waytype (e.g. extensions) use invalid_wt, i.e. settings_t::get_station_coverage().
+	 */
+	static uint16 get_tile_coverage(const grund_t *gr);
+
+	/// true, if pos is covered by this station tile (sea tiles may use station_coverage_water)
+	static bool is_tile_covering(const tile_t &tile, koord pos);
+
+	/// true, if pos is covered by any tile of this station
+	bool is_covering(koord pos) const;
+
+	/// true, if any tile of other is covered by this station
+	/// (walking transfer needs this in both directions)
+	bool covers_any_tile_of(halthandle_t other) const;
+
+	/// re-adds this halt to the haltlists of all covered tiles
+	void refresh_coverage();
+
+	/**
+	 * Recalculates the coverage of all station tiles and rebuilds all haltlists and factory links.
+	 * Needed after the station coverage settings were changed.
+	 */
+	static void recalc_all_coverages();
+
 	uint32 get_capacity(uint8 typ) const { return capacity[typ]; }
 
 	bool existiert_in_welt() const;
@@ -843,6 +875,13 @@ public:
 	};
 
 	void fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to, const uint16 goods_category_index, const vector_tpl<halthandle_t>& destination_halts);
+
+	/**
+	 * Returns true if any cargo of the given category waiting here has one of the given
+	 * halts as its next hop. Unlike fetch_loadable_fresh_goods(), this looks at all waiting
+	 * cargo (not only fresh cargo) and does not modify anything.
+	 */
+	bool has_goods_for_zwischenziel(const uint16 goods_category_index, const vector_tpl<halthandle_t>& zwischenziele) const;
 
 	// Book revenue for passengers that just boarded a vehicle at this halt.
 	void book_pax_boarding_revenue(uint16 boarded_pax);
@@ -1014,10 +1053,19 @@ public:
 	 * @returns true when the departure slot was successfully booked. false when denied.
 	 */
 	bool book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp_tick, convoihandle_t cnv);
+
+	/*
+	 * true when the departure slots of both convoys compete with each other,
+	 * i.e. both convoys have lines and their departure_slot_group_id are the same.
+	 */
+	static bool is_same_departure_slot_group(convoihandle_t a, convoihandle_t b);
 	
 	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
 	
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
+
+	// true when the slot is booked by cnv or by another convoy coupled with it (compared by the most parent convoy).
+	bool is_departure_booked_by(uint32 dep_tick, convoihandle_t cnv) const;
 
 	void extinguish_all_waiting_goods();
 

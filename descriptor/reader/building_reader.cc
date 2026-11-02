@@ -252,8 +252,8 @@ obj_desc_t * building_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 	old_btyp::typ btyp;
 	building_desc_t *desc = new building_desc_t();
 
-	if(version == 12) {
-		// height_clearance added, no more btyp
+	if (version == 12) {
+		// height_clearance
 		btyp = (old_btyp::typ)0;
 		desc->type = (building_desc_t::btype)decode_uint8(p);
 		desc->level = decode_uint16(p);
@@ -528,6 +528,10 @@ obj_desc_t * building_reader_t::read_node(FILE *fp, obj_node_info_t &node)
 		desc->capacity = desc->level * 32;
 		desc->maintenance = PRICE_MAGIC;
 		desc->price = PRICE_MAGIC;
+	}
+
+	if (version < 12) {
+		desc->height_clearance = 255; // default for not set
 	}
 
 	if (desc->level == 65535) {

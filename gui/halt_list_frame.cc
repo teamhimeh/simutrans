@@ -529,8 +529,8 @@ void halt_list_frame_t::rdwr(loadsave_t* file)
 	file->rdwr_short(sort_mode);
 	file->rdwr_bool(sortreverse);
 	file->rdwr_byte(filter_flags);
-	// The filters hold one entry per good, which no longer fits into a byte since OTRP version 63.
-	const bool short_good_nr = file->get_OTRP_version() >= 63;
+	// The filters hold one entry per good, which no longer fits into a byte since OTRP version 64.
+	const bool short_good_nr = file->get_OTRP_version() >= 64;
 	if (file->is_saving()) {
 		auto save_filter = [&](const slist_tpl<const goods_desc_t*> &filter) {
 			uint32 good_nr = filter.get_count();

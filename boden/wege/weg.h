@@ -342,4 +342,7 @@ public:
 	virtual bool is_clipping_below_needed() const OVERRIDE;
 } GCC_PACKED;
 
+// calculate the platform length, and append the string of the platform length to buf.
+void append_platform_length_string_if_needed(cbuffer_t & buf, const weg_t* weg);
+
 #endif

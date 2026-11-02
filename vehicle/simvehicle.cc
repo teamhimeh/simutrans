@@ -1397,13 +1397,9 @@ void vehicle_t::hop(grund_t* gr)
 			}
 			const koord3d ziel = cnv->get_schedule()->get_current_entry().pos;
 			cnv->set_schedule_target( cnv->is_waypoint(cnv->get_schedule()->get_current_entry()) ? ziel : koord3d::invalid );
-			c = cnv->self;
-			bool stop_next=true;
-			while(  c.is_bound()  ) {
-				stop_next&=c->is_users_at_next_stop();
-				c=c->get_coupling_convoi();
-			}
-			if(  !stop_next  ) {
+			// Skip the next entry only if every coupled convoy has a skip section without
+			// demand there (see convoi_t::chain_wants_stop_at_offset()).
+			if(  !cnv->chain_wants_stop_at_offset(0)  ) {
 				// skip next stop!
 				cnv->self->next_stop_button_pressed();
 			}
@@ -1434,7 +1430,10 @@ void vehicle_t::hop(grund_t* gr)
 	enter_tile(gr);
 
 	waytype_t waytype = get_waytype();
-	const weg_t *weg = gr->get_weg(waytype);
+	// direction-aware: when two same-waytype disjoint diagonal legs coexist on gr, take the
+	// speed limit of the leg entered from pos_prev - e.g. only one of them may be electrified
+	const ribi_t::ribi entry_bit = (pos_prev!=get_pos()) ? ribi_t::backward(ribi_type(pos_prev, get_pos())) : ribi_t::none;
+	const weg_t *weg = gr->get_weg(waytype, entry_bit);
 	if(  weg  ) {
 		if( (waytype != water_wt && waytype != air_wt) && cnv->get_use_electric() && weg->get_max_speed() > weg->get_max_wayobj_speed()){
 			speed_limit = kmh_to_speed( weg->get_max_wayobj_speed() );
@@ -2615,7 +2614,7 @@ int road_vehicle_t::get_cost(const grund_t *gr, const weg_t *w, const sint32 max
 
 
 // this routine is called by find_route, to determined if we reached a destination
-bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
+bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr, const bool, const bool allow_multi_convoys, const uint8, const bool ) const
 {
 	//  just check, if we reached a free stop position of this halt
 	if(gr->is_halt()  &&  gr->get_halt()==target_halt  &&  target_halt->get_empty_lane(gr,cnv->self)!=0) {
@@ -2642,7 +2641,7 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 						// there are another car here!
 						const strasse_t *str = (const strasse_t*)to->get_weg(road_wt);
 						const overtaking_mode_t overtaking_mode = str ? str->get_overtaking_mode() : prohibited_mode;
-						if(  overtaking_mode==prohibited_mode || overtaking_mode==halt_mode ) {
+						if(  (overtaking_mode==prohibited_mode || overtaking_mode==halt_mode)&&!allow_multi_convoys ) {
 							// we do not have empty lane, also we cannot enter because we cannot overtake it!(avoid stack)
 							return false;
 						}
@@ -2733,7 +2732,7 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 
 
 // chooses a route at a choose sign; returns true on success
-bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based )
+bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based, const bool allow_multi_convoys )
 {
 	if(  cnv->get_schedule_target()!=koord3d::invalid  ) {
 		// destination is a waypoint!
@@ -2814,7 +2813,7 @@ bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_dire
 			// now it make sense to search a route
 			route_t target_rt;
 			koord3d next3d = rt->at(index);
-			if(  !target_rt.find_route( welt, next3d, this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), length_based )  ) {
+			if(  !target_rt.find_route( welt, next3d, this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), allow_multi_convoys, length_based )  ) {
 				// nothing empty or not route with less than 33 tiles
 				target_halt = halthandle_t();
 				restart_speed = 0;
@@ -2932,7 +2931,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 								return false;
 							}
 						}
-						else if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based() )  ) {
+						else if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based(), rs->is_allow_multi_convoys() )  ) {
 							return false;
 						}
 					}
@@ -3178,7 +3177,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 								return false;
 							}
 						}
-						else if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based() )  ) {
+						else if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based(), rs->is_allow_multi_convoys() )  ) {
 							return false;
 						}
 					}
@@ -3962,7 +3961,7 @@ bool road_vehicle_t::guide_route(sint32 &restart_speed, ribi_t::ribi start_direc
 	// Look for a convoy that is already waiting for us in the target halt. check_next_tile() bounds
 	// the search by the end-of-guide flag, is_coupling_target() decides what a valid partner is.
 	route_t target_rt;
-	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0 );
+	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, false, true, 0 );
 	target_halt = halthandle_t();
 	if(  !route_found  ||  target_rt.get_count()<2  ) {
 		// the convoy to couple with has not arrived yet: wait at this guide signal.
@@ -4653,10 +4652,14 @@ int rail_vehicle_t::get_cost(const grund_t *gr, const weg_t *w, const sint32 max
 
 
 // this routine is called by find_route, to determined if we reached a destination
-bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const bool need_electric, const uint8 choose_margin, const bool ignore_length) const
+bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const bool need_electric, const bool allow_multi_convoys, const uint8 choose_margin, const bool ignore_length) const
 {
+	// now we must check the predecessor ...
+	if(  !prev_gr  ) {
+		return false;
+	}
 	// direction-aware: the leg entered from prev_gr (two same-waytype disjoint diagonal legs)
-	const ribi_t::ribi entry_bit = prev_gr ? ribi_t::backward(ribi_type(prev_gr->get_pos(), gr->get_pos())) : ribi_t::none;
+	const ribi_t::ribi entry_bit = ribi_t::backward(ribi_type(prev_gr->get_pos(), gr->get_pos()));
 	const schiene_t * sch1 = (const schiene_t *) gr->get_weg(get_waytype(), entry_bit);
 	// first check blocks, if we can go there
 	if(  !sch1->can_reserve(cnv->self)  ) {
@@ -4666,13 +4669,14 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	if(  !gr->is_halt()  ||  gr->get_halt()!=target_halt  ) {
 		return false;
 	}
-	// now we must check the predecessor ...
-	if(  !prev_gr  ) {
-		return false;
-	}
 	const koord dir=gr->get_pos().get_2d()-prev_gr->get_pos().get_2d();
 	const ribi_t::ribi ribi = ribi_type(dir);
-	const weg_t* way = gr->get_weg(get_waytype());
+	// direction-aware: on a same-waytype disjoint-diagonal-leg tile, use the leg entered from
+	// prev_gr (and on `to`, the leg entered from gr) - e.g. only one of them may be electrified
+	const weg_t* way = gr->get_weg(get_waytype(), ribi_t::backward(ribi));
+	if(  !way  ) {
+		return false;
+	}
 	if(  way->get_ribi_maske() & ribi  ) {
 		// signal/one way sign wrong direction
 		return false;
@@ -4682,13 +4686,15 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	if(  ribi_t::is_single(next_gr_ribi)  &&
 		gr->get_neighbour(to, get_waytype(), next_gr_ribi)  &&
 		(to->get_halt()==target_halt)  &&
-		(to->get_weg(get_waytype())->get_ribi_maske() & ribi_type(dir))==0 
+		(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi))->get_ribi_maske() & ribi_type(dir))==0
 	) {
 		// check electrification
-		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype()));
-		if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
-			// We can still go forward.
-			return false;
+		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi)));
+		if(  sch->can_reserve(cnv->self)||!allow_multi_convoys  ) {
+			if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
+				// We can still go forward.
+				return false;
+			}
 		}
 	}
 	// end of stop: Is it long enough?
@@ -5011,10 +5017,10 @@ skip_choose:
 		const int richtung = start_block<cnv->get_route()->get_count()-1?ribi_type(cnv->get_route()->at(start_block),cnv->get_route()->at(start_block+1)):ribi_t::all;	// to avoid confusion at diagonals
 		if(  try_coupling  ) {
 			// search for coupling point.
-			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), false, true, 0, sig->is_ignore_length() );
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), false, false, true, 0, sig->is_ignore_length() );
 			cnv->set_use_electric(cnv->is_electrification());
 			if (  !route_found  ) {
-				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0, sig->is_ignore_length() );
+				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, false, true, 0, sig->is_ignore_length() );
 				if(  route_found  ) {
 					cnv->set_use_electric(false);
 				}
@@ -5022,10 +5028,10 @@ skip_choose:
 		}
 		if(  !route_found  &&  (!sig->is_guide_signal()  ||  !try_coupling)  ) {
 			const uint8 margin_length=sig->get_margin_length();
-			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), sig->is_allow_multi_convoys(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
 			cnv->set_use_electric(cnv->is_electrification());
 			if(  !route_found  ) {
-				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
+				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), sig->is_allow_multi_convoys(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
 				if(  route_found  ) {
 					cnv->set_use_electric(false);
 				}
@@ -6150,8 +6156,9 @@ void rail_vehicle_t::leave_tile()
 				ribi_t::ribi other_convoy_travel_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
-					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
-						// no vehicle or same convoy, ok
+					convoi_t* const vc = v ? v->get_convoi() : NULL;
+					if(  !v  ||  !vc  ||  vc==(convoi_t*)1  ||  vc==get_convoi()  ) {
+						// no vehicle, same convoy, or not yet finished loading (cnv placeholder)
 						continue;
 					}
 					if(  gr->has_two_same_waytype_ways()  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
@@ -6578,7 +6585,18 @@ bool air_vehicle_t::check_next_tile(const grund_t *bd, const bool, bool, bool, c
 			// direction-aware: the leg entered from `prev` (two same-waytype disjoint diagonal legs)
 			const ribi_t::ribi entry_bit = (prev!=koord3d::invalid) ? ribi_t::backward(ribi_type(prev, bd->get_pos())) : ribi_t::none;
 			const weg_t *w = bd->get_weg(air_wt, entry_bit);
-			return (w  &&  w->get_max_speed()>0);
+			if(w==NULL) { return false; }
+			const schiene_t *sch = obj_cast<schiene_t>(w);
+			if(sch && sch->has_sign()) {
+				const roadsign_t* rs = bd->find<roadsign_t>();
+				if(  rs->get_desc()->get_wtyp()==get_waytype()  ) {
+					if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
+						// private road
+						return false;
+					}
+				}
+			}
+			return (w->get_max_speed()>0);
 		}
 
 		case landing:

@@ -34,6 +34,7 @@ include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
+include("tests/test_no_go_section")
 include("tests/test_transit_by_foot")
 include("tests/test_trees")
 include("tests/test_way_bridge")
@@ -44,6 +45,7 @@ include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_wayobj")
 include("tests/test_schedule")
+include("tests/test_loading_departure_slot")
 include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
@@ -104,6 +106,9 @@ all_tests <- [
 	test_dir_to_slope,
 	test_dir_to_coord,
 	test_factory_build_pp,
+	test_factory_high_production,
+	test_factory_high_production_multi_output,
+	test_factory_high_production_fields,
 	test_factory_build_with_fields,
 	test_factory_build_climate,
 	test_factory_link,
@@ -239,6 +244,24 @@ all_tests <- [
 	test_transport_mail_valid_route,
 	test_transport_freight_valid_route,
 	test_transport_pax_no_load,
+	test_no_go_section_baseline,
+	test_no_go_section_single_stop,
+	test_no_go_section_single_stop_without_time_based_routing,
+	test_no_go_section_two_stops,
+	test_no_go_section_middle_entry,
+	test_no_go_section_waypoint_before_section,
+	test_no_go_section_two_sections,
+	test_no_go_section_freight_single_stop,
+	test_no_go_section_freight_single_stop_without_time_based_routing,
+	test_no_go_section_freight_committed,
+	test_no_go_section_abcd_no_goods,
+	test_no_go_section_abcd_b_to_d,
+	test_no_go_section_abcd_d_to_b,
+	test_no_go_section_abcd_freight_no_goods,
+	test_no_go_section_abcd_freight_b_to_d,
+	test_no_go_section_abcd_freight_d_to_b,
+	test_single_freight_destination_off,
+	test_single_freight_destination_on,
 	test_transport_pax_no_unload,
 	test_transport_pax_unload_all,
 	test_transport_pax_temp_load,
@@ -303,6 +326,13 @@ all_tests <- [
 	test_schedule_next_line_non_null,
 	test_schedule_current,
 	test_schedule_entry_time_statistics,
+	test_loading_departure_slot_after_long_wait,
+	test_loading_departure_slot_delay_tolerance,
+	test_loading_departure_slot_wait_timeout,
+	test_departure_slot_allowance_timeout,
+	test_departure_slot_coupling_timeout,
+	test_loading_departure_slot_without_loading_limit,
+	test_loading_departure_slot_without_time_wait,
 	test_road_api,
 	test_road_choose_stop_behind_halt_mode,
 	test_road_choose_stop_behind_oneway_mode,

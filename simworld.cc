@@ -99,6 +99,7 @@
 #include "bauer/hausbauer.h"
 #include "bauer/vehikelbauer.h"
 
+#include "descriptor/building_desc.h"
 #include "descriptor/ground_desc.h"
 #include "descriptor/intro_dates.h"
 
@@ -2075,21 +2076,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	set_schedule_counter();
 
 	// Refresh the haltlist for the affected tiles / stations.
-	// It is enough to check the tile just at the border ...
-	uint16 const cov = settings.get_station_coverage();
+	// It is enough to check the stations with tiles just at the border ...
+	uint16 const cov = settings.get_max_station_coverage();
+	vector_tpl<halthandle_t> border_halts;
 	if(  old_y < new_size_y  ) {
 		for(  sint16 y=0;  y<old_y;  y++  ) {
 			for(  sint16 x=max(0,old_x-cov);  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=max(0,x-cov);  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=y;  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
@@ -2100,18 +2097,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 			for(  sint16 x=0;  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=x;  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=max(0,y-cov);  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
 		}
+	}
+	// re-adding the whole coverage also covers the new tiles
+	FOR(vector_tpl<halthandle_t>, const h, border_halts) {
+		h->refresh_coverage();
 	}
 	clear_random_mode( MAP_CREATE_RANDOM );
 
@@ -4843,7 +4839,7 @@ grund_t *karte_t::lookup_no_dummy(const koord3d &pos) const
 }
 
 
-bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const
+bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl, const building_desc_t *desc) const
 {
 	if(k.x < 0  ||  k.y < 0  ||  k.x+w > get_size().x || k.y+h > get_size().y) {
 		return false;
@@ -4873,9 +4869,17 @@ bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_b
 					test_climate = water_climate;
 				}
 			}
+			// is there an elevated way/bridge above that this building would be too tall to fit under?
+			bool blocked_above = false;
+			if(  desc  &&  desc->get_height_clearance() > 0  ) {
+				for(  uint8 z = 1;  z <= desc->get_height_clearance()  &&  !blocked_above;  z++  ) {
+					blocked_above = lookup_no_dummy( gr->get_pos() + koord3d(0,0,z) ) != NULL;
+				}
+			}
+
 			if( (platz_max_h != max_height  &&  platz_base_h != gr->get_hoehe())  ||  !gr->ist_natur()  ||  gr->kann_alle_obj_entfernen(NULL) != NULL  ||
 			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup_no_dummy( gr->get_pos()+koord3d(0,0,1) ) ||
-			     (slope_t::max_diff(slope)==2 && lookup_no_dummy( gr->get_pos()+koord3d(0,0,2) )) ))  ) {
+			     (slope_t::max_diff(slope)==2 && lookup_no_dummy( gr->get_pos()+koord3d(0,0,2) )) ))  ||  blocked_above  ) {
 				if(  last_y  ) {
 					*last_y = k_check.y;
 				}
@@ -5816,7 +5820,10 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 
 	if(  file->is_version_atleast(102, 4)  ) {
-		if(  env_t::restore_UI  ) {
+		// standard 124.3+ dialogs save their state differently (e.g. halt_info without sort mode,
+		// new window ids), so their windows cannot be restored; skipping is safe at the end of file
+		const bool std_dialogs_unreadable = file->get_OTRP_version() == 0  &&  file->is_version_atleast(124, 3);
+		if(  env_t::restore_UI  &&  !std_dialogs_unreadable  ) {
 			file->rdwr_byte( active_player_nr );
 			active_player = players[active_player_nr];
 			/* restore all open windows

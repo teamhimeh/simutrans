@@ -220,6 +220,9 @@ public:
 	/// Load/save support
 	void rdwr(loadsave_t *file);
 
+	/// reads the per-player forbidden tool lists of standard savegames >= 124.3
+	void rdwr_standard_forbidden_tools(loadsave_t *file);
+
 	/// @returns true if loading succeed, false if script failed during loading
 	bool rdwr_ok() const { return !rdwr_error; }
 

@@ -3921,6 +3921,30 @@ void stadt_t::generate_private_cars(koord pos, koord target)
 
 
 /**
+ * false when adding @p ribi to the road on @p gr would merge two road legs on disjoint
+ * diagonals into one city road junction (see grund_t::weg_erweitern()) that the city must
+ * not build: the merge rebuilds BOTH legs, so both must be allowed to become (or branch
+ * into) a cityroad, and a halt cannot sit on the resulting junction.
+ */
+static bool can_city_merge_road_legs(const grund_t *gr, ribi_t::ribi ribi)
+{
+	if(  !gr->would_merge_same_waytype_legs(road_wt, ribi)  ) {
+		return true;
+	}
+	if(  gr->is_halt()  ) {
+		return false;
+	}
+	for(  uint8 i=0;  i<2;  i++  ) {
+		const strasse_t* str = (const strasse_t*)gr->get_weg_nr(i);
+		if(  str->get_avoid_cityroad()  &&  !str->get_allow_branch_cityroad()  ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+
+/**
  * baut ein Stueck Strasse
  * @param k Bauposition
  */
@@ -4038,6 +4062,9 @@ bool stadt_t::build_road(const koord k, player_t* player_, bool forced)
 					if(  str  &&  str->get_avoid_cityroad() && !str->get_allow_branch_cityroad()  ) {
 						// do not connect to road that is not alllowed to become cityroad
 					}
+					else if(  !can_city_merge_road_legs(bd2, ribi_t::backward(ribi_t::nesw[r]))  ) {
+						// connecting would merge two road legs there that must not become a cityroad
+					}
 					else if(gb) {
 						uint8 layouts = gb->get_tile()->get_desc()->get_all_layouts();
 						// nothing to connect
@@ -4076,14 +4103,17 @@ bool stadt_t::build_road(const koord k, player_t* player_, bool forced)
 		}
 	}
 
+	// the check above only saw weg_nr(0) of this tile
+	if(  !can_city_merge_road_legs(bd, connection_roads)  ) {
+		return false;
+	}
+
 	// now add the ribis to the other ways (if there)
+	// weg_erweitern() picks the right one of two road legs there (merging them if needed)
 	for (int r = 0; r < 4; r++) {
 		if (ribi_t::nesw[r] & connection_roads) {
 			grund_t* bd2 = welt->lookup_kartenboden(k + koord::nesw[r]);
-			weg_t* w2 = bd2->get_weg(road_wt);
-			w2->ribi_add(ribi_t::backward(ribi_t::nesw[r]));
-			bd2->calc_image();
-			bd2->set_flag( grund_t::dirty );
+			bd2->weg_erweitern(road_wt, ribi_t::backward(ribi_t::nesw[r]));
 		}
 	}
 
