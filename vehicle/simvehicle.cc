@@ -5277,21 +5277,27 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	uint8 next_c_steps;
 	grund_t* gr_current = welt->lookup(get_pos());
 	// reset driving without reservation
+	// set_next_stop_index(n) makes n the next block (it stores n+1), so the signal tile itself must
+	// be passed: the signal is then checked by is_signal_clear() below like any other signal.
+	// Pointing behind it would be taken as "signal disappeared" and only reserve a plain block,
+	// skipping choose, pre, longblock and priority signal logic.
 	if(  cnv->is_drive_without_reservation()  ) {
 		if(  gr_current  ) {
 			// direction-aware: the leg we are standing on / about to enter
 			if(weg_t* w = gr_current->get_weg(get_waytype(), get_current_corner_set())) {
 				if(w->has_signal()) {
+					// we stand on the signal (route_index-1)
 					cnv->set_drive_without_reservation(false);
-					cnv->set_next_stop_index(route_index-2);
+					cnv->set_next_stop_index(max(route_index,1)-1);
 				}
 			}
 		}
-		if(  gr  ) {
+		if(  gr  &&  cnv->is_drive_without_reservation()  ) {
 			if(weg_t* w = gr->get_weg(get_waytype(), ribi_t::backward(ribi_type(get_pos(), gr->get_pos())))) {
 				if(w->has_signal()) {
+					// the signal is on the tile we are entering (route_index)
 					cnv->set_drive_without_reservation(false);
-					cnv->set_next_stop_index(route_index-1);
+					cnv->set_next_stop_index(route_index);
 				}
 			}
 		}
