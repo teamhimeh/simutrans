@@ -5301,6 +5301,17 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				}
 			}
 		}
+		// While driving without reservation the convoy holds the tiles it stands on (enter_tile()
+		// reserves them) and reserve_route() takes the front vehicle as the end of its reservation,
+		// but next_reservation_index is left wherever the last real reservation ended - typically
+		// the departure tile. Once we fall back to normal reservation that stale index is what
+		// counts again, and after loading a game reserve_route() and rail_vehicle_t::set_convoi()
+		// rebuild the reservation and the next stop from it: the tiles we stand on were left
+		// unreserved, and with an index of 0 set_convoi() even moved next_stop_index back behind
+		// the signal, so it was passed unchecked. So hand our current extent over.
+		if(  !cnv->is_drive_without_reservation()  &&  cnv->get_next_reservation_index()<route_index  ) {
+			cnv->set_next_reservation_index(route_index);
+		}
 	}
 
 	if(  cnv->get_state()==convoi_t::CAN_START  ||  cnv->get_state()==convoi_t::CAN_START_ONE_MONTH  ||  cnv->get_state()==convoi_t::CAN_START_TWO_MONTHS  ) {
@@ -6075,6 +6086,22 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				} else {
 					// other convoy exists.
 					continue;
+				}
+			}
+		}
+		if(  find_coupling_target  ) {
+			// The target chain itself is no obstacle. It normally makes no difference - its other
+			// cars stand beyond the end we couple to - but a chain just put ashore by a carrier
+			// has every car stacked on the landing tile at the same step (see disembark_convoy()),
+			// and then any car longer than its tail would block the coupling with that very tail.
+			other_step = VEHICLE_STEPS_PER_TILE;
+			for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
+					if(  v->get_convoi()->get_most_parent_convoi()==coupling_target->get_most_parent_convoi()  ) {
+						continue;
+					}
+					sint16 const temp_car_step=((v->get_direction()&dir)==0)? tile_length - (sint16)v->get_steps() - 1 : (sint16)v->get_steps()-(sint16)v->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT;
+					other_step = min(other_step,temp_car_step);
 				}
 			}
 		}

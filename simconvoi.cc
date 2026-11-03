@@ -501,6 +501,15 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 			sint16 step_pos = 0;
 			koord3d drive_pos;
 			uint8 const diagonal_vehicle_steps_per_tile = (uint8)(130560U / welt->get_settings().get_pak_diagonal_multiplier());
+			// A convoy just put ashore by a carrier has all its vehicles stacked on the landing
+			// tile at the same step, the way a convoy in a depot stands (see disembark_convoy()).
+			// That is intended, not broken: realigning it would drive it off its stop along the
+			// two-tile dummy route and leave it WAITING_FOR_CLEARANCE instead of LOADING, so it
+			// would neither wait for coupling nor be found by a convoy coming to couple with it.
+			bool landed_layout = anz_vehikel>1;
+			for(  uint8 i=1;  landed_layout  &&  i<anz_vehikel;  i++  ) {
+				landed_layout = fahr[i]->get_pos()==fahr[0]->get_pos()  &&  fahr[i]->get_steps()==fahr[0]->get_steps();
+			}
 			for( uint8 i=0;  i<anz_vehikel;  i++ ) {
 				vehicle_t* v = fahr[i];
 				v->set_leading( i==0 );
@@ -509,6 +518,9 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 				// this sets the convoi and will renew the block reservation, if needed!
 				v->set_convoi(this);
 
+				if(  landed_layout  ) {
+					continue;
+				}
 				// wrong alignment here => must relocate
 				if(v->need_realignment()  &&  state!=SHIPPED) {
 					// diagonal => convoi must restart
@@ -8643,6 +8655,13 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	// convoy loads and unloads here, and WAIT_FOR_COUPLING at this entry works, because
 	// can_depart() then holds the convoy until a child couples.
 	c->ziel_erreicht();
+	// hold the landing tile like any convoy standing at a stop does. enter_tile() above did not
+	// reserve it (no vehicle was leading yet), while finish_rd() would after a reload - so without
+	// this the landed convoy behaved differently before and after saving, and another train could
+	// reserve straight through it.
+	if(  c->is_loading()  ) {
+		c->reserve_route();
+	}
 
 	recalc_shipping_images();
 	freight_info_resort = true;
