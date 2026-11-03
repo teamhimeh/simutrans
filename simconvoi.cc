@@ -8655,13 +8655,6 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 	// convoy loads and unloads here, and WAIT_FOR_COUPLING at this entry works, because
 	// can_depart() then holds the convoy until a child couples.
 	c->ziel_erreicht();
-	// hold the landing tile like any convoy standing at a stop does. enter_tile() above did not
-	// reserve it (no vehicle was leading yet), while finish_rd() would after a reload - so without
-	// this the landed convoy behaved differently before and after saving, and another train could
-	// reserve straight through it.
-	if(  c->is_loading()  ) {
-		c->reserve_route();
-	}
 
 	recalc_shipping_images();
 	freight_info_resort = true;
