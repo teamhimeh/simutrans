@@ -2345,12 +2345,14 @@ void convoi_t::ziel_erreicht()
 					// another convoy on this tile may well be standing on the other lane.
 					continue;
 				}
-				if(  v->get_convoi()->self != get_convoi_coupling_in_progress()  ) {
+				if(  !get_convoi_coupling_in_progress().is_bound()  ) {
 					// we can skip this checklist if it already knows the coupling target convoy.
 					// if there are many convoys in the same tile, the coupled convoy is the front or end convoy!
 					if(  (   (v->get_direction()&front()->get_direction())==0  &&  v->get_convoi()->is_coupled()  )  ||  (  (v->get_direction()&self->front()->get_direction())!=0  &&  v->get_convoi()->get_coupling_convoi().is_bound()  )  ) {
 						continue;
 					}
+				} else if (v->get_convoi()->self != get_convoi_coupling_in_progress()) {
+					continue;
 				}
 				// there is a suitable waiting convoy for coupling -> this is coupling point.
 				akt_speed = 0;
