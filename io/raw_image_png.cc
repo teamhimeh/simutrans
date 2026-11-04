@@ -143,19 +143,21 @@ raw_image_png_writer_t::~raw_image_png_writer_t()
 }
 
 
-void raw_image_png_writer_t::close(bool keep_file)
+bool raw_image_png_writer_t::close(bool keep_file)
 {
+	bool success = true;
 	if (impl->png_ptr != NULL) {
 		png_destroy_write_struct(&impl->png_ptr, impl->info_ptr != NULL ? &impl->info_ptr : (png_infopp)NULL);
 	}
 	if (impl->file != NULL) {
-		fclose(impl->file);
+		success = fclose(impl->file) == 0;
 		impl->file = NULL;
 	}
 	impl->valid = false;
-	if (!keep_file && !impl->filename.empty()) {
+	if ((!keep_file || !success) && !impl->filename.empty()) {
 		remove(impl->filename.c_str());
 	}
+	return success;
 }
 
 
@@ -204,9 +206,9 @@ bool raw_image_png_writer_t::finish()
 #endif
 
 	png_write_end(impl->png_ptr, impl->info_ptr);
-	impl->finished = true;
-	close(true);
-	return true;
+	// Buffered writes can fail only when fclose flushes the final PNG bytes.
+	impl->finished = close(true);
+	return impl->finished;
 }
 
 
