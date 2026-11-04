@@ -142,9 +142,15 @@ public:
 	void read(settings_t*);
 };
 
-class settings_routing_stats_t : protected settings_stats_t, public gui_aligned_container_t
+class settings_routing_stats_t : protected settings_stats_t, public gui_aligned_container_t, public action_listener_t
 {
+	// for "change all" button of station_coverage
+	button_t *bt_coverage_change_all;
+	gui_numberinput_t *ni_coverage;
+	slist_tpl<gui_numberinput_t *> ni_coverage_targets;
 public:
+	settings_routing_stats_t() : bt_coverage_change_all(NULL), ni_coverage(NULL) {}
+	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 	void init(settings_t const*);
 	void read(settings_t*);
 };

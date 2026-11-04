@@ -225,6 +225,17 @@ void settings_display_stats_t::read(settings_t* const)
 	READ_BOOL_VALUE( env_t::player_finance_display_account );
 }
 
+bool settings_routing_stats_t::action_triggered(gui_action_creator_t *comp, value_t)
+{
+	if(  comp==bt_coverage_change_all  &&  ni_coverage  ) {
+		const sint32 coverage = ni_coverage->get_value();
+		FOR( slist_tpl<gui_numberinput_t*>, const ni, ni_coverage_targets ) {
+			ni->set_value( coverage );
+		}
+	}
+	return true;
+}
+
 void settings_routing_stats_t::init(settings_t const* const sets)
 {
 	INIT_INIT
@@ -235,16 +246,30 @@ void settings_routing_stats_t::init(settings_t const* const sets)
 	INIT_BOOL( "overloading revenue reduced", sets->is_overloading_revenue_reduced() );
 	INIT_BOOL( "overloading runningcost increase", sets->is_overloading_runningcost_increase() );
 	INIT_BOOL( "overloaded acceleration", sets->is_overloaded_acceleration() );
-	INIT_NUM( "station_coverage", sets->get_station_coverage(), 1, 127, gui_numberinput_t::AUTOLINEAR, false );
+	INIT_NUM( "station_coverage", sets->get_station_coverage(), 1, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage = numinp.back();
+	bt_coverage_change_all = new_component_span<button_t>(2);
+	bt_coverage_change_all->init( button_t::roundbox, "change all" );
+	bt_coverage_change_all->add_listener( this );
+	ni_coverage_targets.clear();
 	INIT_NUM( "station_coverage[road]", sets->station_coverage_size_wt[road_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[track]", sets->station_coverage_size_wt[track_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[water]", sets->station_coverage_size_wt[water_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[monorail_track]", sets->station_coverage_size_wt[monorail_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[maglev_track]", sets->station_coverage_size_wt[maglev_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[tram_track]", sets->station_coverage_size_wt[tram_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[narrowgauge_track]", sets->station_coverage_size_wt[narrowgauge_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage[air]", sets->station_coverage_size_wt[air_wt], 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "station_coverage_water", sets->get_station_coverage_water(), 0, 64, gui_numberinput_t::AUTOLINEAR, false );
+	ni_coverage_targets.append( numinp.back() );
 	INIT_NUM( "allow_merge_distant_halt", sets->get_allow_merge_distant_halt(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
 	SEPERATOR
 	INIT_NUM( "max_route_steps", sets->get_max_route_steps(), 0, 0x7FFFFFFFul, gui_numberinput_t::POWER2, false );
