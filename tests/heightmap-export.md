@@ -19,9 +19,6 @@ boundaries. Mid-write failures occur after two real PNG rows have been written;
 both ASCII and Japanese paths must leave no output or temporary file, and terrain
 must be unchanged. It does not exercise world generation or slope correction.
 
-The `PNG heightmap export checks` workflow runs these focused checks on Linux and
-Windows for pull requests, independently of the full game build and scenario suite.
-
 Run relevant existing scenarios following `tests/README.txt`:
 
 ```sh
