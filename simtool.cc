@@ -11090,9 +11090,13 @@ bool tool_change_roadsign_t::init( player_t *player )
 					if(  signal_info_win  ) {
 						signal_info_win->update_data();
 					}
-					onewaysign_info_t* win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
-					if(  win  ) {
-						win->update_data();
+				}
+			} else if( roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+					rs->set_margin_length((sint8)inst);
+					onewaysign_info_t* signal_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
 					}
 				}
 			}
