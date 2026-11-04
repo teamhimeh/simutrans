@@ -993,6 +993,30 @@ public:
 	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
+/* switch to previous player
+ */
+class tool_switch_prev_player_t : public tool_t {
+public:
+	tool_switch_prev_player_t() : tool_t(TOOL_SWITCH_PREV_PLAYER | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Previous player"); }
+	bool init( player_t * ) OVERRIDE {
+		const uint8 current = welt->get_active_player_nr();
+		uint8 prev = current==0?MAX_PLAYER_COUNT-2:current-1;
+		while(  prev!=current  ) {
+			if (welt->get_player(prev)!=NULL) {
+				break;
+			}
+			prev = prev==0? MAX_PLAYER_COUNT-2: prev-1;
+		}
+		welt->switch_active_player( prev, true );
+		return false;
+	}
+	// since it is handled internally
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
+
 // step one year forward
 class tool_step_year_t : public tool_t {
 public:

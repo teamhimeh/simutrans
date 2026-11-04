@@ -56,6 +56,7 @@ static pthread_mutex_t add_to_city_mutex = PTHREAD_MUTEX_INITIALIZER;
 void gebaeude_t::init()
 {
 	tile = NULL;
+	tile2 = NULL;
 	anim_time = 0;
 	sync = false;
 	zeige_baugrube = false;
@@ -134,8 +135,58 @@ gebaeude_t::~gebaeude_t()
 	}
 
 	if(tile) {
-		player_t::add_maintenance(get_owner(), -tile->get_desc()->get_maintenance(welt), tile->get_desc()->get_finance_waytype());
+		player_t::add_maintenance(get_owner(), -tile->get_desc()->get_maintenance(welt) * get_platform_count(), tile->get_desc()->get_finance_waytype());
 	}
+}
+
+
+/**
+ * rotates a layout of @p desc by 90 degrees (map rotation)
+ */
+static uint8 rotate_layout(const building_desc_t *desc, uint8 layout)
+{
+	if(desc->get_type() == building_desc_t::unknown  ||  desc->get_all_layouts()<=4) {
+		layout = ((layout+3) % desc->get_all_layouts() & 3);
+	}
+	else if(  desc->get_all_layouts()==8  &&  desc->get_type() >= building_desc_t::city_res  ) {
+		// eight layout city building
+		layout = (layout & 4) + ((layout+3) & 3);
+	}
+	else if(  layout>=48  &&  desc->get_all_layouts()>48  ) {
+		// slope stop layout: rotate90 cycles N->E->S->W->N
+		// Layout = slope_group (upper nibble, one of 48/64/80/96) + flat_part (lower nibble).
+		// When way is NS (bit0=0) the slope group shifts by ±16 following the rotate90 cycle.
+		// When way is EW (bit0=1) the slope group is unchanged (rotating EW->NS keeps the slope).
+		// The flat part rotates via the same table used for straight stations.
+		static const uint8 layout_rotate[16] = { 1, 8, 5, 10, 3, 12, 7, 14, 9, 0, 13, 2, 11, 4, 15, 6 };
+		const uint8 slope_group = layout & 0xF0;
+		const uint8 flat_part   = layout & 0x0F;
+		const int   flat_count  = min( 48, (int)desc->get_all_layouts() );
+		const uint8 new_flat    = layout_rotate[flat_part] % flat_count;
+		// for NS-way (bit0=0): swap between N/W group and S/E group (add or subtract 16)
+		// for EW-way (bit0=1): slope group is unchanged
+		const uint8 new_group = (flat_part & 1)
+			? slope_group
+			: (uint8)(slope_group + ((slope_group & 0x10) ? 16 : -16));
+		layout = new_group + new_flat;
+	}
+	else if(  layout>=16  ) {
+		// diagonal tile layout for stations
+		// construct the rotated layout
+		const bool is_vertical = (layout & 0x30) == 0x10;
+		uint8 bits_to_invert = 0x30; // invert vertical / horizontal
+		bits_to_invert |= is_vertical ? 8 : 1; // front/back or way connected direction
+		if(  ((layout&6) == 2  ||  (layout&6) == 4)  &&  is_vertical  ) {
+			bits_to_invert |= 6; // connection of halt
+		}
+		layout ^= bits_to_invert;
+	}
+	else {
+		// 8 & 16 tile lyoutout for stations
+		static uint8 layout_rotate[16] = { 1, 8, 5, 10, 3, 12, 7, 14, 9, 0, 13, 2, 11, 4, 15, 6 };
+		layout = layout_rotate[layout] % desc->get_all_layouts();
+	}
+	return layout;
 }
 
 
@@ -149,47 +200,7 @@ void gebaeude_t::rotate90()
 		uint8 layout = tile->get_layout();
 		koord new_offset = tile->get_offset();
 
-		if(building_desc->get_type() == building_desc_t::unknown  ||  building_desc->get_all_layouts()<=4) {
-			layout = ((layout+3) % building_desc->get_all_layouts() & 3);
-		}
-		else if(  building_desc->get_all_layouts()==8  &&  building_desc->get_type() >= building_desc_t::city_res  ) {
-			// eight layout city building
-			layout = (layout & 4) + ((layout+3) & 3);
-		}
-		else if(  layout>=48  &&  building_desc->get_all_layouts()>48  ) {
-			// slope stop layout: rotate90 cycles N->E->S->W->N
-			// Layout = slope_group (upper nibble, one of 48/64/80/96) + flat_part (lower nibble).
-			// When way is NS (bit0=0) the slope group shifts by ±16 following the rotate90 cycle.
-			// When way is EW (bit0=1) the slope group is unchanged (rotating EW->NS keeps the slope).
-			// The flat part rotates via the same table used for straight stations.
-			static const uint8 layout_rotate[16] = { 1, 8, 5, 10, 3, 12, 7, 14, 9, 0, 13, 2, 11, 4, 15, 6 };
-			const uint8 slope_group = layout & 0xF0;
-			const uint8 flat_part   = layout & 0x0F;
-			const int   flat_count  = min( 48, (int)building_desc->get_all_layouts() );
-			const uint8 new_flat    = layout_rotate[flat_part] % flat_count;
-			// for NS-way (bit0=0): swap between N/W group and S/E group (add or subtract 16)
-			// for EW-way (bit0=1): slope group is unchanged
-			const uint8 new_group = (flat_part & 1)
-				? slope_group
-				: (uint8)(slope_group + ((slope_group & 0x10) ? 16 : -16));
-			layout = new_group + new_flat;
-		}
-		else if(  layout>=16  ) {
-			// diagonal tile layout for stations
-			// construct the rotated layout
-			const bool is_vertical = (layout & 0x30) == 0x10;
-			uint8 bits_to_invert = 0x30; // invert vertical / horizontal
-			bits_to_invert |= is_vertical ? 8 : 1; // front/back or way connected direction
-			if(  ((layout&6) == 2  ||  (layout&6) == 4)  &&  is_vertical  ) {
-				bits_to_invert |= 6; // connection of halt
-			}
-			layout ^= bits_to_invert;
-		}
-		else {
-			// 8 & 16 tile lyoutout for stations
-			static uint8 layout_rotate[16] = { 1, 8, 5, 10, 3, 12, 7, 14, 9, 0, 13, 2, 11, 4, 15, 6 };
-			layout = layout_rotate[layout] % building_desc->get_all_layouts();
-		}
+		layout = rotate_layout(building_desc, layout);
 		// have to rotate the tiles :(
 		if(  !building_desc->can_rotate()  &&  building_desc->get_all_layouts() == 1  ) {
 			if ((welt->get_settings().get_rotation() & 1) == 0) {
@@ -224,6 +235,11 @@ void gebaeude_t::rotate90()
 		}
 		else {
 			welt->set_nosave();
+		}
+
+		if(  tile2  ) {
+			// second platform of a closed diagonal stop: always 1x1, its leg rotates like tile's
+			tile2 = building_desc->get_tile( rotate_layout(building_desc, tile2->get_layout()), 0, 0 );
 		}
 	}
 }
@@ -310,6 +326,99 @@ void gebaeude_t::set_tile( const building_tile_desc_t *new_tile, bool start_with
 }
 
 
+void gebaeude_t::set_tile2( const building_tile_desc_t *t )
+{
+	if(  (tile2==NULL) != (t==NULL)  ) {
+		// the second platform has its own maintenance
+		const building_desc_t *desc = tile->get_desc();
+		const sint64 maint = desc->get_maintenance(welt);
+		player_t::add_maintenance(get_owner(), t ? maint : -maint, desc->get_finance_waytype());
+	}
+	if(  tile2  ) {
+		// mark old images dirty
+		mark_images_dirty();
+	}
+	tile2 = t;
+	set_flag(obj_t::dirty);
+}
+
+
+ribi_t::ribi gebaeude_t::get_diagonal_layout_ribi( uint8 layout )
+{
+	if(  layout<16  ||  layout>=48  ) {
+		return ribi_t::none;
+	}
+	// see hausbauer_t::build_station_on_diagonal_way() for the bits
+	if(  (layout & 0x30)==0x10  ) {
+		// vertical
+		return (layout & 1) ? ribi_t::southwest : ribi_t::northeast;
+	}
+	// horizontal
+	return (layout & 1) ? ribi_t::northwest : ribi_t::southeast;
+}
+
+
+const building_tile_desc_t *gebaeude_t::get_tile_toward( ribi_t::ribi dir ) const
+{
+	if(  tile2  &&  (get_diagonal_layout_ribi( tile2->get_layout() ) & dir)  ) {
+		return tile2;
+	}
+	return tile;
+}
+
+
+void gebaeude_t::set_tile_toward( ribi_t::ribi dir, const building_tile_desc_t *t )
+{
+	if(  tile2  &&  (get_diagonal_layout_ribi( tile2->get_layout() ) & dir)  ) {
+		mark_images_dirty();
+		tile2 = t;
+		set_flag(obj_t::dirty);
+	}
+	else {
+		set_tile( t, false );
+	}
+}
+
+
+bool gebaeude_t::is_valid_platform_pair(const grund_t *gr) const
+{
+	const ribi_t::ribi leg1 = get_diagonal_layout_ribi( tile->get_layout() );
+	const ribi_t::ribi leg2 = get_diagonal_layout_ribi( tile2->get_layout() );
+	if(  leg1==ribi_t::none  ||  leg2==ribi_t::none  ||  tile->get_desc()!=tile2->get_desc()  ||  !gr->has_two_same_waytype_ways()  ) {
+		return false;
+	}
+	// both legs must be ways of this stop (trams stop on tracks)
+	const waytype_t wt = get_waytype();
+	if(  gr->get_weg_nr(0)->get_waytype() != (wt==tram_wt ? track_wt : wt)  ) {
+		return false;
+	}
+	const ribi_t::ribi r0 = gr->get_weg_nr(0)->get_ribi_unmasked();
+	const ribi_t::ribi r1 = gr->get_weg_nr(1)->get_ribi_unmasked();
+	if(  !ribi_t::are_disjoint_bends( r0, r1 )  ) {
+		return false;
+	}
+	return (leg1==r0  &&  leg2==r1)  ||  (leg1==r1  &&  leg2==r0);
+}
+
+
+// a diagonal platform not connected to any other stop tile along its leg (both end bits set)
+static bool is_single_platform(const building_tile_desc_t *t)
+{
+	return (t->get_layout() & 6) == 6;
+}
+
+
+bool gebaeude_t::is_platform_shown(const building_tile_desc_t *t) const
+{
+	if(  !tile2  ) {
+		return true;
+	}
+	// a single platform is hidden next to a connected one; two single platforms are both shown
+	const building_tile_desc_t *other = (t==tile) ? tile2 : tile;
+	return !is_single_platform(t)  ||  is_single_platform(other);
+}
+
+
 sync_result gebaeude_t::sync_step(uint32 delta_t)
 {
 	if(  zeige_baugrube  ) {
@@ -340,6 +449,9 @@ sync_result gebaeude_t::sync_step(uint32 delta_t)
 					// try foreground
 					image_id image = tile->get_foreground( anim_frame, season );
 					mark_image_dirty( image, 0 );
+					if(  tile2  ) {
+						mark_image_dirty( tile2->get_foreground( anim_frame, season ), 0 );
+					}
 				}
 
 				anim_frame++;
@@ -351,6 +463,9 @@ sync_result gebaeude_t::sync_step(uint32 delta_t)
 					// next phase must be marked dirty too ...
 					image_id image = tile->get_foreground( anim_frame, season );
 					mark_image_dirty( image, 0 );
+					if(  tile2  ) {
+						mark_image_dirty( tile2->get_foreground( anim_frame, season ), 0 );
+					}
 				}
 			}
 		}
@@ -427,6 +542,9 @@ image_id gebaeude_t::get_image() const
 	if(  zeige_baugrube  )  {
 		return skinverwaltung_t::construction_site->get_image_id(0);
 	}
+	else if(  !is_platform_shown(tile)  ) {
+		return IMG_EMPTY;
+	}
 	else {
 		return tile->get_background( anim_frame, 0, season );
 	}
@@ -441,7 +559,7 @@ image_id gebaeude_t::get_outline_image() const
 	if (((env_t::hide_buildings != 0 && env_t::hide_with_transparency) || (is_in_highlighted_city && is_city_info_opened)) && !zeige_baugrube)
 	{
 		// opaque houses
-		return tile->get_background( anim_frame, 0, season );
+		return is_platform_shown(tile) ? tile->get_background( anim_frame, 0, season ) : IMG_EMPTY;
 	}
 	return IMG_EMPTY;
 }
@@ -482,7 +600,7 @@ image_id gebaeude_t::get_image(int nr) const
 		return IMG_EMPTY;
 	}
 	else {
-		return tile->get_background( anim_frame, nr, season );
+		return is_platform_shown(tile) ? tile->get_background( anim_frame, nr, season ) : IMG_EMPTY;
 	}
 }
 
@@ -503,9 +621,112 @@ image_id gebaeude_t::get_front_image() const
 	}
 	else {
 		// Show depots, station buildings etc.
-		return tile->get_foreground( anim_frame, season );
+		return is_platform_shown(tile) ? tile->get_foreground( anim_frame, season ) : IMG_EMPTY;
 	}
 }
+
+
+// on a closed diagonal tile the platform on the north-west leg is behind the south-east one
+static bool is_back_leg_tile(const building_tile_desc_t *t)
+{
+	return gebaeude_t::get_diagonal_layout_ribi( t->get_layout() ) == ribi_t::northwest;
+}
+
+
+// draws one image of the second platform like obj_t::display() / display_after() would
+static void display_tile2_image(image_id image, int xpos, int ypos, sint8 owner_nr, bool highlight, bool is_dirty  CLIP_NUM_DEF)
+{
+	if(  owner_nr != PLAYER_UNOWNED  ) {
+		if(  obj_t::show_owner  ) {
+			display_blend( image, xpos, ypos, owner_nr, color_idx_to_rgb(world()->get_player(owner_nr)->get_player_color1()+2) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+		}
+		else if(  highlight  ) {
+			display_blend( image, xpos, ypos, owner_nr, color_idx_to_rgb(COL_RED) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+		}
+		else {
+			display_color( image, xpos, ypos, owner_nr, true, is_dirty  CLIP_NUM_PAR);
+		}
+	}
+	else if(  highlight  ) {
+		display_blend( image, xpos, ypos, owner_nr, color_idx_to_rgb(COL_RED) | OUTLINE_FLAG | TRANSPARENT75_FLAG, 0, is_dirty  CLIP_NUM_PAR);
+	}
+	else {
+		display_normal( image, xpos, ypos, 0, true, is_dirty  CLIP_NUM_PAR);
+	}
+}
+
+
+void gebaeude_t::display_tile2(int xpos, int ypos  CLIP_NUM_DEF) const
+{
+	if(  zeige_baugrube  ||  !is_platform_shown(tile2)  ) {
+		// the construction site is drawn once (by tile)
+		return;
+	}
+	const int raster_width = get_current_tile_raster_width();
+	const bool is_dirty = get_flag(obj_t::dirty);
+	xpos += tile_raster_scale_x( get_xoff(), raster_width );
+	ypos += tile_raster_scale_y( get_yoff(), raster_width );
+	// like get_image(nr): the upper images are not shown with hidden buildings
+	for(  int j=0;  j==0  ||  !env_t::hide_buildings;  j++  ) {
+		const image_id image = tile2->get_background( anim_frame, j, season );
+		if(  image==IMG_EMPTY  ) {
+			break;
+		}
+		display_tile2_image( image, xpos, ypos - j*raster_width, get_owner_nr(), get_flag(obj_t::highlight)  &&  j==0, is_dirty  CLIP_NUM_PAR );
+	}
+}
+
+
+void gebaeude_t::display_tile2_after(int xpos, int ypos  CLIP_NUM_DEF) const
+{
+	if(  zeige_baugrube  ||  !is_platform_shown(tile2)  ) {
+		return;
+	}
+	const image_id image = tile2->get_foreground( anim_frame, season );
+	if(  image != IMG_EMPTY  ) {
+		const int raster_width = get_current_tile_raster_width();
+		xpos += tile_raster_scale_x( get_xoff(), raster_width );
+		ypos += tile_raster_scale_y( get_yoff(), raster_width );
+		display_tile2_image( image, xpos, ypos, get_owner_nr(), get_flag(obj_t::highlight), get_flag(obj_t::dirty)  CLIP_NUM_PAR );
+	}
+}
+
+
+void gebaeude_t::display(int xpos, int ypos  CLIP_NUM_DEF) const
+{
+	if(  tile2  &&  is_back_leg_tile(tile2)  ) {
+		display_tile2( xpos, ypos  CLIP_NUM_PAR );
+		obj_t::display( xpos, ypos  CLIP_NUM_PAR );
+	}
+	else {
+		obj_t::display( xpos, ypos  CLIP_NUM_PAR );
+		if(  tile2  ) {
+			display_tile2( xpos, ypos  CLIP_NUM_PAR );
+		}
+	}
+}
+
+
+#ifdef MULTI_THREAD
+void gebaeude_t::display_after(int xpos, int ypos, const sint8 clip_num) const
+#define DISPLAY_AFTER_PAR clip_num
+#else
+void gebaeude_t::display_after(int xpos, int ypos, bool is_global) const
+#define DISPLAY_AFTER_PAR is_global
+#endif
+{
+	if(  tile2  &&  is_back_leg_tile(tile2)  ) {
+		display_tile2_after( xpos, ypos  CLIP_NUM_PAR );
+		obj_t::display_after( xpos, ypos, DISPLAY_AFTER_PAR );
+	}
+	else {
+		obj_t::display_after( xpos, ypos, DISPLAY_AFTER_PAR );
+		if(  tile2  ) {
+			display_tile2_after( xpos, ypos  CLIP_NUM_PAR );
+		}
+	}
+}
+#undef DISPLAY_AFTER_PAR
 
 
 /**
@@ -1066,6 +1287,27 @@ void gebaeude_t::rdwr(loadsave_t *file)
 		}
 	}
 
+	// second platform of a stop on a closed diagonal tile (same desc as tile, -1 = none)
+	if(  file->get_OTRP_version() >= 63  ) {
+		sint16 idx2 = -1;
+		if(  file->is_saving()  &&  tile2  ) {
+			idx2 = tile2->get_index();
+		}
+		file->rdwr_short(idx2);
+		if(  file->is_loading()  ) {
+			tile2 = NULL;
+			// the desc may have been replaced while loading, so take it from tile and check the index
+			const building_desc_t *desc = tile ? tile->get_desc() : NULL;
+			if(  idx2 >= 0  &&  desc  &&  desc->get_all_layouts() >= 48
+			     &&  idx2 < (sint32)desc->get_all_layouts() * desc->get_x() * desc->get_y()  ) {
+				tile2 = desc->get_tile(idx2);
+				if(  get_diagonal_layout_ribi( tile2->get_layout() )==ribi_t::none  ) {
+					tile2 = NULL;
+				}
+			}
+		}
+	}
+
 	if(file->is_loading()) {
 		anim_frame = 0;
 		anim_time = 0;
@@ -1081,7 +1323,15 @@ void gebaeude_t::rdwr(loadsave_t *file)
 
 void gebaeude_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 {
-	player_t::add_maintenance(get_owner(), tile->get_desc()->get_maintenance(welt), tile->get_desc()->get_finance_waytype());
+	if(  tile2  ) {
+		// only this tile can be checked here (finish_rd() runs in parallel for the map)
+		const grund_t *gr = welt->lookup( get_pos() );
+		if(  !gr  ||  !is_valid_platform_pair(gr)  ) {
+			dbg->warning( "gebaeude_t::finish_rd()", "second platform at (%s) does not match the ways, removed", get_pos().get_str() );
+			tile2 = NULL;
+		}
+	}
+	player_t::add_maintenance(get_owner(), tile->get_desc()->get_maintenance(welt) * get_platform_count(), tile->get_desc()->get_finance_waytype());
 
 	// citybuilding, but no town?
 	if(  tile->get_offset()==koord(0,0)  ) {
@@ -1163,14 +1413,17 @@ void gebaeude_t::cleanup(player_t *player)
 			if(  !gb  ||  gb->get_tile()->get_desc()->get_all_layouts() <= 4u  ) {
 				continue;
 			}
-			const koord xy = gb->get_tile()->get_offset();
-			uint8 layoutbase = gb->get_tile()->get_layout();
+			// on a closed diagonal neighbour: the platform on the leg facing us
+			const ribi_t::ribi back = ribi_t::backward( dir );
+			const building_tile_desc_t *nb_tile = gb->get_tile_toward( back );
+			const koord xy = nb_tile->get_offset();
+			uint8 layoutbase = nb_tile->get_layout();
 			// Slope stop neighbours use the straight-way rule (index 0) for bit selection.
-			const uint32 nb_idx = (layoutbase >= 48 && gb->get_tile()->get_desc()->get_all_layouts() > 48)
+			const uint32 nb_idx = (layoutbase >= 48 && nb_tile->get_desc()->get_all_layouts() > 48)
 			                    ? 0u : (layoutbase & 0x30u) >> 4;
 			const bool bit_4_turn_on = (dir & bit_4_turn_on_dir[nb_idx]) > 0;
 			layoutbase |= bit_4_turn_on ? 4u : 2u; // restore end-cap bit on neighbour
-			gb->set_tile( gb->get_tile()->get_desc()->get_tile(layoutbase, xy.x, xy.y), false );
+			gb->set_tile_toward( back, nb_tile->get_desc()->get_tile(layoutbase, xy.x, xy.y) );
 		}
 	}
 	mark_images_dirty();
@@ -1191,5 +1444,18 @@ void gebaeude_t::mark_images_dirty() const
 	}
 	for(  int i=0;  img!=IMG_EMPTY;  img=get_image(++i)  ) {
 		mark_image_dirty( img, -(i*get_tile_raster_width()) );
+	}
+	if(  tile2  ) {
+		// a hidden platform (see is_platform_shown()) may just have been shown
+		for(  int i=1;  (img=tile->get_background( anim_frame, i, season ))!=IMG_EMPTY;  i++  ) {
+			mark_image_dirty( img, -(i*get_tile_raster_width()) );
+		}
+		mark_image_dirty( tile->get_foreground( anim_frame, season ), 0 );
+	}
+	if(  tile2  ) {
+		for(  int i=0;  (img=tile2->get_background( anim_frame, i, season ))!=IMG_EMPTY;  i++  ) {
+			mark_image_dirty( img, -(i*get_tile_raster_width()) );
+		}
+		mark_image_dirty( tile2->get_foreground( anim_frame, season ), 0 );
 	}
 }

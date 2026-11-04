@@ -95,7 +95,7 @@ public:
 		while(true) {
 			gr->get_neighbour(gr, weg->get_waytype(), dir);
 			if(  !gr  ) { break; }
-			const weg_t* w = gr->get_weg(weg->get_waytype());
+			const weg_t* w = gr->get_weg(weg->get_waytype(), ribi_t::backward(dir));
 			if(  cnv->get_use_electric() && !w->is_electrified()  ) {
 				// non-electric! this car can not enter any more!
 				break;

@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "../simworld.h"
+#include "../simfab.h"
 #include "../simtool.h"
 
 #include "../bauer/fabrikbauer.h"
@@ -163,7 +164,11 @@ factory_edit_frame_t::factory_edit_frame_t(player_t* player_) :
 
 	tbl->new_component<gui_label_t>("Produktion");
 
-	inp_production.set_limits(0,welt->scale_with_month_length(65536));
+	sint64 minimum_production = welt->scale_with_month_length(1);
+	if (welt->inverse_scale_with_month_length(minimum_production) < 1) {
+		++minimum_production;
+	}
+	inp_production.set_limits((sint32)minimum_production, (sint32)welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION));
 	inp_production.add_listener( this );
 	tbl->add_component(&inp_production);
 	cont_options.end_table();
@@ -329,10 +334,10 @@ void factory_edit_frame_t::change_item_info(sint32 entry)
 				sint32 min_fields = field_group_desc->get_min_fields();
 				while(  min_fields-- > 0  ) {
 					const uint16 field_class_index = field_class_indices.at_weight( sim_async_rand( field_class_indices.get_sum_weight() ) );
-					production += field_group_desc->get_field_class(field_class_index)->get_field_production();
+					production = min(fabrik_t::MAX_BASE_PRODUCTION, production + field_group_desc->get_field_class(field_class_index)->get_field_production());
 				}
 			}
-			production = welt->scale_with_month_length(production);
+			production = welt->scale_with_month_length(min(production, fabrik_t::MAX_BASE_PRODUCTION));
 			inp_production.set_value( production);
 			// show produced goods
 			buf.clear();

@@ -1045,7 +1045,7 @@ public:
 	 */
 	uint32 ticks_per_world_month;
 
-	void set_ticks_per_world_month_shift(uint32 bits) {ticks_per_world_month_shift = bits; ticks_per_world_month = (1 << ticks_per_world_month_shift); }
+	void set_ticks_per_world_month_shift(uint32 bits) {ticks_per_world_month_shift = bits; ticks_per_world_month = (1u << ticks_per_world_month_shift); }
 
 	/**
 	 * Converts speed (yards per tick) into tiles per month

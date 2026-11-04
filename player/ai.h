@@ -67,7 +67,8 @@ public:
 
 	// find space for stations
 	bool suche_platz(koord pos, koord &size, koord *dirs);
-	bool suche_platz(koord &start, koord &size, koord target, koord off);
+	// wt: waytype of the station to build, decides its coverage
+	bool suche_platz(koord &start, koord &size, koord target, koord off, waytype_t wt);
 
 	// removes building markers
 	void clean_marker( koord place, koord size );

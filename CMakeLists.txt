@@ -3,6 +3,9 @@
 # (see LICENSE.txt)
 #
 
+# OTRP: The CMake build configuration is not maintained.
+# Use the root Makefile with config.default, as in .github/build*.sh.
+
 cmake_minimum_required(VERSION 3.16)
 
 # Disable in-source builds
