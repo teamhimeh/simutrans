@@ -467,6 +467,8 @@ Reverse coupling
 %sは到達可能な駅や車庫が見つからなかったため%sに下船しました。
 %s was sent to a depot: %s can no longer reach its transfer stop.
 %sは車庫に転送されました: %sは駅に到達できませんでした
+%s was sent to a depot: its scheduled tile at %s cannot be used.
+%sは車庫に転送されました: %sの指定された停車位置を使用できません
 Aboard:
 航送中
 Convoys aboard:

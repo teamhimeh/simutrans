@@ -1532,8 +1532,9 @@ public:
 	bool board_carrier(convoihandle_t c, halthandle_t dest);
 
 	/**
-	 * Put `c` ashore at `halt`, on a tile of its own waytype. Returns false when there is
-	 * no usable tile, in which case `c` simply stays aboard and we retry at a later stop.
+	 * Put `c` ashore at `halt` on the tile of its current schedule entry, regardless of other
+	 * vehicles there. Returns false when that tile is no stop of `halt` it may use (or its
+	 * object list is full); handle_shipping_at_halt() then sends `c` to a depot.
 	 */
 	bool disembark_convoy(convoihandle_t c, halthandle_t halt);
 
