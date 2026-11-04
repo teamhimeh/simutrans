@@ -11085,8 +11085,16 @@ bool tool_change_roadsign_t::init( player_t *player )
 		if(  grund_t *gr = welt->lookup(pos)  ) {
 			if( roadsign_t *rs = gr->find<signal_t>()  ) {
 				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
-					rs->set_margin_length((uint8)inst);
-					end_of_choose_info_t* signal_info_win = (end_of_choose_info_t*)win_get_magic((ptrdiff_t)rs);
+					rs->set_margin_length((sint8)inst);
+					signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+					if(  signal_info_win  ) {
+						signal_info_win->update_data();
+					}
+				}
+			} else if( roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				if(  rs->get_waytype()!=road_wt && rs->get_waytype()!=water_wt && rs->get_waytype()!=air_wt  ) {
+					rs->set_margin_length((sint8)inst);
+					onewaysign_info_t* signal_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
 					if(  signal_info_win  ) {
 						signal_info_win->update_data();
 					}

@@ -58,7 +58,7 @@ protected:
 		allow_multi_convoys	= 1U<<11	// can enter more than one convoys in one platform.
 	};
 
-	uint8 choose_signal_margin_length;
+	sint8 choose_signal_margin_length;
 
 	sint8 after_yoffset, after_xoffset;
 
@@ -261,8 +261,8 @@ public:
 	weg_t *get_weg_here() const;
 
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
-	uint8 const get_margin_length() {return choose_signal_margin_length;}
-	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
+	sint8 const get_margin_length() {return choose_signal_margin_length;}
+	void set_margin_length(sint8 i) {choose_signal_margin_length=i;}
 	/**
 	* draw the part overlapping the vehicles
 	* (needed to get the right offset even on hills)
