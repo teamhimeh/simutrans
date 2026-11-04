@@ -39,6 +39,13 @@ signal(s)
 	if(  signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end() ) {
 		add_component(&bt_advance_to_end);
 	}
+
+	bt_stop_at_middle.init( button_t::square_state, translator::translate("Stop at middle") );
+	bt_stop_at_middle.add_listener(this);
+	bt_stop_at_middle.pressed = signal->get_margin_length()<0;
+	if(  signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end()  ) {
+		add_component(&bt_stop_at_middle);
+	}
 	
 	bt_choose_signal.init( button_t::square_state, translator::translate("Choose signal") );
 	bt_choose_signal.add_listener(this);
@@ -65,7 +72,7 @@ signal(s)
 	lb_tiles_margin.set_tooltip(translator::translate("tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)"));
 	numinp_tiles_margin.set_width(50);
 	numinp_tiles_margin.set_height(5);
-	numinp_tiles_margin.set_limits(0,200);
+	numinp_tiles_margin.set_limits(0,50);
 	numinp_tiles_margin.set_increment_mode(1);
 	numinp_tiles_margin.disable();
 	numinp_tiles_margin.add_listener(this);
@@ -156,6 +163,13 @@ bool signal_info_t::action_triggered( gui_action_creator_t* comp, value_t p)
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+	if(  comp==&bt_stop_at_middle  ) {
+		char param[256];
+		sprintf( param, "%s,%i,m,", signal->get_pos().get_str(), bt_stop_at_middle.pressed?0:-1 );
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param( param );
+		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
+		return true;		
+	}
 	if(  comp==&numinp_tiles_margin  ) {
 		char param[256];
 		sprintf( param, "%s,%i,m,", signal->get_pos().get_str(), (uint8)p.i );
@@ -234,18 +248,21 @@ void signal_info_t::update_data()
 	bt_length_based.pressed = signal->is_length_based();
 	bt_ignore_length.pressed = signal->is_ignore_length();
 	bt_allow_multi_convoys.pressed = signal->is_allow_multi_convoys();
+	bt_stop_at_middle.pressed = (signal->get_margin_length()<0);
 	if(  signal->is_choose_signal()  ) {
-		bt_advance_to_end.enable();
-		numinp_tiles_margin.enable();
+		bt_advance_to_end.enable(!bt_stop_at_middle.pressed);
+		!bt_stop_at_middle.pressed?numinp_tiles_margin.enable():numinp_tiles_margin.disable();
 		numinp_tiles_margin.set_value(signal->get_margin_length());
 		bt_length_based.enable();
 		bt_allow_multi_convoys.enable();
+		bt_stop_at_middle.enable();
 	} else {
 		bt_advance_to_end.disable();
 		numinp_tiles_margin.disable();
 		bt_stop_before_check.enable(signal->get_desc()->is_longblock_signal());
 		bt_length_based.disable();
 		bt_allow_multi_convoys.disable();
+		bt_stop_at_middle.disable();
 	}
 	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->get_desc()->is_choose_sign()  ) {
 		bt_stop_before_check.enable();
