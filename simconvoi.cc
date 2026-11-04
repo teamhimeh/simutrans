@@ -501,14 +501,13 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 			sint16 step_pos = 0;
 			koord3d drive_pos;
 			uint8 const diagonal_vehicle_steps_per_tile = (uint8)(130560U / welt->get_settings().get_pak_diagonal_multiplier());
-			// A convoy just put ashore by a carrier has all its vehicles stacked on the landing
-			// tile at the same step, the way a convoy in a depot stands (see disembark_convoy()).
-			// That is intended, not broken: realigning it would drive it off its stop along the
-			// two-tile dummy route and leave it WAITING_FOR_CLEARANCE instead of LOADING, so it
-			// would neither wait for coupling nor be found by a convoy coming to couple with it.
-			bool landed_layout = anz_vehikel>1;
-			for(  uint8 i=1;  landed_layout  &&  i<anz_vehikel;  i++  ) {
-				landed_layout = fahr[i]->get_pos()==fahr[0]->get_pos()  &&  fahr[i]->get_steps()==fahr[0]->get_steps();
+			// A convoy put ashore by a carrier loads with all its vehicles stacked on the landing
+			// tile at the same step (see disembark_convoy()) until vorfahren() lays them out on
+			// departure. That is no broken convoy: realigning it would push it off its stop and
+			// leave it WAITING_FOR_CLEARANCE, so it would no longer wait for coupling.
+			bool landed = state==LOADING;
+			for(  uint8 i=1;  landed  &&  i<anz_vehikel;  i++  ) {
+				landed = fahr[i]->get_pos()==fahr[0]->get_pos()  &&  fahr[i]->get_steps()==fahr[0]->get_steps();
 			}
 			for( uint8 i=0;  i<anz_vehikel;  i++ ) {
 				vehicle_t* v = fahr[i];
@@ -518,9 +517,6 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 				// this sets the convoi and will renew the block reservation, if needed!
 				v->set_convoi(this);
 
-				if(  landed_layout  ) {
-					continue;
-				}
 				// wrong alignment here => must relocate
 				if(v->need_realignment()  &&  state!=SHIPPED) {
 					// diagonal => convoi must restart
@@ -529,7 +525,7 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 				// if version is 99.17 or lower, some convois are broken, i.e. had too large gaps between vehicles
 				// SHIPPED convoys hold no tile, so their saved positions are stale by design and
 				// must never trigger realignment - move_to() would put them back on the map.
-				if(  !realign_position  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  &&  state != COUPLED  &&  state != COUPLED_LOADING  &&  state != SHIPPED  ) {
+				if(  !realign_position  &&  !landed  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  &&  state != COUPLED  &&  state != COUPLED_LOADING  &&  state != SHIPPED  ) {
 					if(  i==0  ) {
 						step_pos = v->get_steps();
 					}
@@ -5211,6 +5207,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if(  state==SUSPENSION_LOADING  ) {
 		departure_cond = false;
 	}
+	if(  !is_coupled()  &&  is_waiting_for_disembark( halt )  ) {
+		// a convoy aboard still has to get off here and waits for room on its tile
+		departure_cond = false;
+	}
 
 	// loading is finished => maybe drive on
 	if(  is_coupled()  ||  departure_cond  ) {
@@ -8457,78 +8457,51 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 }
 
 
-bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
+convoi_t::disembark_result_t convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 {
-	if(  !c.is_bound()  ||  !halt.is_bound()  ||  c->get_vehicle_count() == 0  ) {
-		return false;
+	if(  !c.is_bound()  ||  !halt.is_bound()  ||  c->get_vehicle_count() == 0  ||  c->get_schedule() == NULL  ||  c->get_schedule()->empty()  ) {
+		return DISEMBARK_INVALID;
 	}
 	const waytype_t wt = c->front()->get_waytype();
+
+	// The convoy lands on the tile its schedule names and nowhere else, whatever else stands
+	// there. get_stoppable_halt() checks the way of our waytype and the owner's access.
+	grund_t *target = welt->lookup( c->get_schedule()->get_current_entry().pos );
+	if(  target == NULL  ||  haltestelle_t::get_stoppable_halt( target->get_pos(), c->get_owner(), wt ) != halt  ) {
+		return DISEMBARK_INVALID;
+	}
 
 	// The whole chain has to be placed at once: objlist_t is a uint8-indexed list capped at
 	// 254 entries and obj_add() simply returns false when it is full - a caller that ignores
 	// that (as convoi_t::start() does) leaves a vehicle belonging to no tile at all. A partial
 	// placement cannot be undone, so count first and place only if everything fits.
+	// A chain longer than MAX_DISEMBARK_VEHICLES could never fit, not even on an empty tile
+	// (the way, the halt building and signals take a few slots), so cut it while it is still
+	// aboard: the part behind the cut stays aboard as a convoy of its own and gets off once
+	// there is room again.
 	uint32 vehicle_count = 0;
 	convoihandle_t k = c;
 	while(  k.is_bound()  ) {
+		if(  vehicle_count + k->get_vehicle_count() > MAX_DISEMBARK_VEHICLES  ) {
+			if(  k == c  ) {
+				// a single convoy too long for any tile: it can never be put ashore
+				return DISEMBARK_INVALID;
+			}
+			convoihandle_t rest = k->get_parent_convoi()->uncouple_convoi( false );
+			for(  convoihandle_t r = rest;  r.is_bound();  r = r->get_coupling_convoi()  ) {
+				r->state = SHIPPED;
+			}
+			rest->carrier_convoi = self;
+			rest->shipping_wait_since = 0;
+			shipped_convois.append( rest );
+			break;
+		}
 		vehicle_count += k->get_vehicle_count();
 		k = k->get_coupling_convoi();
 	}
-
-	// The convoy's own current schedule entry is the tile it actually wants to stand on, so
-	// try that first; landing anywhere else in the halt only costs it a short shuffle, but
-	// landing exactly right means it can carry on without moving at all.
-	koord3d preferred = koord3d::invalid;
-	if(  c->get_schedule() != NULL  &&  !c->get_schedule()->empty()  ) {
-		preferred = c->get_schedule()->get_current_entry().pos;
-	}
-
-	grund_t *target = NULL;
-	for(  uint8 pass = 0;  pass < 2  &&  target == NULL;  pass++  ) {
-	FOR(slist_tpl<haltestelle_t::tile_t>, const &t, halt->get_tiles()) {
-		grund_t *gr = t.grund;
-		if(  gr == NULL  ) {
-			continue;
-		}
-		if(  pass == 0  &&  gr->get_pos() != preferred  ) {
-			// first pass: only the convoy's own scheduled tile
-			continue;
-		}
-		weg_t *w = gr->get_weg( wt );
-		if(  w == NULL  ) {
-			// Ships travel on open water, which carries no way object at all - so for water
-			// convoys a plain water tile of the halt is a perfectly good place to be set down.
-			// Every other waytype needs a real way here.
-			if(  !(wt == water_wt  &&  gr->is_water())  ) {
-				continue;
-			}
-		}
-		// the halt must really be usable by this convoy's owner - the carrier's owner is
-		// irrelevant, and access may have been revoked while the convoy was aboard
-		if(  !haltestelle_t::get_stoppable_halt( gr->get_pos(), c->get_owner(), wt ).is_bound()  ) {
-			continue;
-		}
-		if(  (uint32)gr->get_top() + vehicle_count > 254u  ) {
-			// tile object list would overflow
-			continue;
-		}
-		if(  schiene_t *sch = (w ? obj_cast<schiene_t>(w) : NULL)  ) {
-			// Rail-like ways are block reserved and schiene_t::reserve() grants its second
-			// slot only on a four-way tile with non-crossing directions - which a platform
-			// never is. So unlike road and water, only one convoy fits on a rail tile.
-			if(  sch->is_reserved()  ) {
-				continue;
-			}
-		}
-		target = gr;
-		break;
-	}
-	}
-
-	if(  target == NULL  ) {
-		// Nothing free right now. Keeping the convoy aboard and retrying at a later stop is
-		// far better than materialising it on top of another train.
-		return false;
+	if(  (uint32)target->get_top() + vehicle_count > 254u  ) {
+		// not enough room on the tile right now: stay aboard, the carrier waits for it
+		return DISEMBARK_WAIT;
 	}
 
 	// Put every vehicle of the chain on the target tile, off-map for now. start() adds the
@@ -8665,7 +8638,7 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 
 	dbg->message("convoi_t::disembark_convoy()","%s put %s ashore at %s (%s)",
 		get_name(), c->get_name(), halt->get_name(), target->get_pos().get_str());
-	return true;
+	return DISEMBARK_DONE;
 }
 
 
@@ -8693,12 +8666,17 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 		const halthandle_t dest = c->get_shipping_dest_halt();
 
 		// ---- arrived: this is the stop it wanted, and we may put things ashore here ----
+		bool no_landing_tile = false;
 		if(  can_unload_here  &&  dest.is_bound()  &&  dest == halt  ) {
-			// disembark_convoy() removes it from shipped_convois on success; on failure (no
-			// free tile of its waytype right now) it simply stays aboard and we try again at
-			// the next stop
-			disembark_convoy( c, halt );
-			continue;
+			// disembark_convoy() removes it from shipped_convois on success
+			const disembark_result_t result = disembark_convoy( c, halt );
+			if(  result != DISEMBARK_INVALID  ) {
+				// done, or waiting for room on its tile - is_waiting_for_disembark() then
+				// keeps us here until it is off
+				continue;
+			}
+			// its scheduled tile cannot take it: put it in a depot below
+			no_landing_tile = true;
 		}
 
 		// ---- still on its way? ----
@@ -8706,7 +8684,7 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 		// notices everything that can go wrong mid-voyage: an UNLOAD_ALL inserted here or
 		// anywhere before the destination, the carrier's schedule (or its line's) edited so it
 		// no longer calls there, or the stop itself rebuilt or demolished.
-		if(  !unload_all_here  &&  dest.is_bound()  &&  can_deliver_shipped_to( dest )  ) {
+		if(  !no_landing_tile  &&  !unload_all_here  &&  dest.is_bound()  &&  can_deliver_shipped_to( dest )  ) {
 			continue;
 		}
 
@@ -8722,17 +8700,28 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 			dbg->warning("convoi_t::handle_shipping_at_halt()",
 				"%s can no longer deliver %s to its stop - sent it to a depot", get_name(), c->get_name());
 			cbuffer_t buf;
-			buf.printf( translator::translate("%s was sent to a depot: %s can no longer reach its transfer stop."), c->get_name(), get_name() );
+			if(  no_landing_tile  ) {
+				buf.printf( translator::translate("%s was sent to a depot: its scheduled tile at %s cannot be used."), c->get_name(), halt->get_name() );
+			}
+			else {
+				buf.printf( translator::translate("%s was sent to a depot: %s can no longer reach its transfer stop."), c->get_name(), get_name() );
+			}
 			welt->get_message()->add_message( buf, halt->get_basis_pos(), message_t::warnings, PLAYER_FLAG|c->get_owner()->get_player_nr(), IMG_EMPTY );
 			continue;
 		}
 
-		// No depot of its waytype exists at all. Setting it down here is a poor outcome, but
-		// it beats destroying it - so try that before giving up.
-		if(  can_unload_here  &&  disembark_convoy( c, halt )  ) {
+		// No depot of its waytype exists at all. Setting it down is a poor outcome, but it beats
+		// destroying it - so try that before giving up. Still only on its scheduled tile, which
+		// works when that tile belongs to this halt.
+		const disembark_result_t result = can_unload_here ? disembark_convoy( c, halt ) : DISEMBARK_INVALID;
+		if(  result == DISEMBARK_DONE  ) {
 			cbuffer_t buf;
 			buf.printf( translator::translate("%s was put ashore at %s: it can no longer reach its transfer stop and there is no depot for it."), c->get_name(), halt->get_name() );
 			welt->get_message()->add_message( buf, halt->get_basis_pos(), message_t::warnings, PLAYER_FLAG|c->get_owner()->get_player_nr(), IMG_EMPTY );
+			continue;
+		}
+		if(  result == DISEMBARK_WAIT  ) {
+			// its tile has no room right now: keep it aboard and try again
 			continue;
 		}
 
@@ -8843,6 +8832,25 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 			"%s: no convoy at '%s' is waiting to be shipped (%u convoys loading here). If a convoy is waiting nearby, check that the dock and its station are ONE joined halt.",
 			get_name(), halt->get_name(), (unsigned)candidates.get_count());
 	}
+}
+
+
+bool convoi_t::is_waiting_for_disembark(halthandle_t halt) const
+{
+	// handle_shipping_at_halt() puts ashore or sends to a depot everything that has to leave
+	// at this stop, so whatever is still aboard with this stop as destination is waiting for
+	// room on its tile. Carriers can be anywhere in the chain.
+	for(  convoihandle_t k = self;  k.is_bound();  k = k->get_coupling_convoi()  ) {
+		if(  k->get_schedule() == NULL  ||  k->get_schedule()->get_current_entry().is_no_unload()  ) {
+			continue;
+		}
+		FOR(vector_tpl<convoihandle_t>, const c, k->shipped_convois) {
+			if(  c.is_bound()  &&  c->get_shipping_dest_halt() == halt  ) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 

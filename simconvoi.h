@@ -1531,11 +1531,22 @@ public:
 	 */
 	bool board_carrier(convoihandle_t c, halthandle_t dest);
 
+	enum disembark_result_t {
+		DISEMBARK_DONE,    ///< put ashore
+		DISEMBARK_WAIT,    ///< its tile has no room right now: stays aboard, the carrier waits
+		DISEMBARK_INVALID  ///< its scheduled tile is no stop of this halt it may use
+	};
+	/// a chain longer than this is cut aboard and put ashore in parts (tile object list holds 254)
+	enum { MAX_DISEMBARK_VEHICLES = 250 };
+
 	/**
-	 * Put `c` ashore at `halt`, on a tile of its own waytype. Returns false when there is
-	 * no usable tile, in which case `c` simply stays aboard and we retry at a later stop.
+	 * Put `c` ashore at `halt` on the tile of its current schedule entry, regardless of other
+	 * vehicles there. On DISEMBARK_INVALID handle_shipping_at_halt() sends `c` to a depot.
 	 */
-	bool disembark_convoy(convoihandle_t c, halthandle_t halt);
+	disembark_result_t disembark_convoy(convoihandle_t c, halthandle_t halt);
+
+	/// true while a convoy aboard (any carrier of this chain) still has to get off at `halt`
+	bool is_waiting_for_disembark(halthandle_t halt) const;
 
 	/// called on the carrier when it has stopped at `halt`: drop off and pick up convoys
 	void handle_shipping_at_halt(halthandle_t halt);
