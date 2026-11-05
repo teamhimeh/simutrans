@@ -971,7 +971,8 @@ void vehicle_t::initialise_journey(uint16 start_route_index, bool recalc)
 
 void vehicle_t::clamp_route_index()
 {
-	if(  cnv == NULL  ) {
+	if(  cnv == NULL  ||  cnv == (convoi_t*)1  ) {
+		// no convoy, or still being loaded (see reanchor_route_index())
 		return;
 	}
 	const uint32 count = cnv->get_route()->get_count();
@@ -987,7 +988,11 @@ void vehicle_t::clamp_route_index()
 
 bool vehicle_t::reanchor_route_index()
 {
-	if(  cnv == NULL  ) {
+	// While a vehicle is read, cnv holds the saved "target halt reserved" flag, i.e. NULL or
+	// (convoi_t*)1, until convoi_t::finish_rd() sets the real convoy. karte_t::rdwr_gamestate()
+	// files convoys stored in a depot away with betrete_depot() before that, and betrete_depot()
+	// uncouples a stored chain - so this runs on such vehicles.
+	if(  cnv == NULL  ||  cnv == (convoi_t*)1  ) {
 		return false;
 	}
 	const route_t* r = cnv->get_route();
@@ -1279,7 +1284,7 @@ ribi_t::ribi vehicle_t::get_current_corner_set() const
 	// and the bit pointing back to where we came from: route_index indexes pos_next, so our
 	// own tile sits at route_index-1 and the one we came from at route_index-2. Verify that
 	// invariant before using it -- it does not hold e.g. while a convoy leaves a depot.
-	if(  cnv  &&  route_index>=2u  ) {
+	if(  cnv  &&  cnv!=(convoi_t*)1  &&  route_index>=2u  ) {
 		const route_t *route = cnv->get_route();
 		if(  route  &&  (uint32)route_index-1u < route->get_count()  &&  route->at(route_index-1u)==pos  ) {
 			corner_set |= ribi_t::backward(ribi_type(route->at(route_index-2u), pos));
@@ -6151,6 +6156,9 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 void rail_vehicle_t::leave_tile()
 {
 	vehicle_t::leave_tile();
+	// no convoy yet while the game is being loaded: a convoy stored in a depot is filed away by
+	// betrete_depot() before finish_rd() replaces cnv's (convoi_t*)1 placeholder
+	convoi_t *const my_cnv = (cnv == (convoi_t*)1) ? NULL : cnv;
 	// fix counters
 	// direction-aware: resolve the leg this vehicle actually occupies, relevant when two
 	// same-waytype disjoint diagonal legs coexist on the tile we are leaving
@@ -6159,12 +6167,12 @@ void rail_vehicle_t::leave_tile()
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
 			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
-			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  cnv  ) {
+			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  my_cnv  ) {
 				// the leg cannot be told from our route (e.g. leaving a depot) => release the
 				// leg our convoy holds, provided that it holds just one of them
 				schiene_t *leg0 = (schiene_t *)gr->get_weg_nr(0);
 				schiene_t *leg1 = (schiene_t *)gr->get_weg_nr(1);
-				const convoihandle_t c = cnv->get_most_parent_convoi();
+				const convoihandle_t c = my_cnv->get_most_parent_convoi();
 				const bool r0 = leg0->is_reserved_by(c);
 				const bool r1 = leg1->is_reserved_by(c);
 				if(  r0 != r1  ) {
@@ -6215,7 +6223,7 @@ void rail_vehicle_t::leave_tile()
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
 				// unreserve(vehicle_t*) always cleared the primary slot regardless of which
 				// convoy this vehicle belongs to — causing spurious promotion/clearing bugs.
-				const convoihandle_t self_cnv = cnv ? cnv->get_most_parent_convoi() : convoihandle_t();
+				const convoihandle_t self_cnv = my_cnv ? my_cnv->get_most_parent_convoi() : convoihandle_t();
 				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
@@ -6229,9 +6237,9 @@ void rail_vehicle_t::leave_tile()
 						sig->set_state(  roadsign_t::STATE_RED );
 					}
 				}
-				if(  cnv  ) {
+				if(  my_cnv  ) {
 					// for treat reservation safely
-					cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
+					my_cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 				}
 				if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) {
 					// we may need to unreserve the other way as well (not for two independent same-waytype
@@ -6258,9 +6266,9 @@ void rail_vehicle_t::leave_tile()
 					}
 				}
 			}
-			if(  cnv  ) {
+			if(  my_cnv  ) {
 				// If reservation is controlled by next_reservation_index, this does nothing.
-				cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
+				my_cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 			}
 		}
 	}
