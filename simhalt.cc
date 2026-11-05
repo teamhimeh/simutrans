@@ -59,6 +59,8 @@
 #include "vehicle/simvehicle.h"
 #include "vehicle/pedestrian.h"
 
+#include "utils/route_tree_routing.h"
+
 karte_ptr_t haltestelle_t::welt;
 
 vector_tpl<halthandle_t> haltestelle_t::alle_haltestellen;
@@ -492,8 +494,16 @@ struct haltestelle_t::cargo_queue_t {
 		const_iterator cend() const { return const_iterator(cargos.cend()); }
 };
 
+void haltestelle_t::invalidate_route_tree_cache()
+{
+	route_tree_routing::clear();
+	last_search_origin = halthandle_t();
+}
+
+
 void haltestelle_t::reset_routing()
 {
+	invalidate_route_tree_cache();
 	reconnect_counter = welt->get_schedule_counter()-1;
 }
 
@@ -871,6 +881,7 @@ void haltestelle_t::destroy_all()
 
 haltestelle_t::haltestelle_t(loadsave_t* file)
 {
+	invalidate_route_tree_cache();
 	last_loading_step = welt->get_steps();
 
 	cargo = new cargo_queue_t*[goods_manager_t::get_max_catg_index()];
@@ -906,6 +917,7 @@ haltestelle_t::haltestelle_t(loadsave_t* file)
 
 haltestelle_t::haltestelle_t(koord k, player_t* player)
 {
+	invalidate_route_tree_cache();
 	self = halthandle_t(this);
 	assert( !alle_haltestellen.is_contained(self) );
 	alle_haltestellen.append(self);
@@ -947,6 +959,7 @@ haltestelle_t::haltestelle_t(koord k, player_t* player)
 
 haltestelle_t::~haltestelle_t()
 {
+	invalidate_route_tree_cache();
 	assert(self.is_bound());
 
 	// first: remove halt from all lists
@@ -2253,6 +2266,7 @@ void haltestelle_t::fill_connected_component(uint8 catg_idx, uint16 comp)
 
 void haltestelle_t::rebuild_connected_components()
 {
+	invalidate_route_tree_cache();
 	// commit staged_all_links of all halts
 	FOR(vector_tpl<halthandle_t>, halt, alle_haltestellen) {
 		if(  halt->staged_all_links  ) {
@@ -2325,7 +2339,7 @@ public:
 	void insert(const T item)
 	{
 		node_count++;
-		uint16 weight = *item;
+		const uint32 weight = *item;
 
 		if (weight < WEIGHT_HEAP) {
 			if (weight < min_weight) {
@@ -2542,6 +2556,18 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 		}
 		return NO_ROUTE;
 	}
+	// The cache is destination independent only for this routing mode. Walking
+	// and overcrowding searches retain their existing destination-specific rules.
+	if (ware_catg_idx == goods_manager_t::INDEX_PAS && return_ware && ware.menge > 0 &&
+		!no_routing_over_overcrowding && !welt->get_settings().is_transit_by_foot() &&
+		welt->get_settings().get_time_based_routing_enabled(ware_catg_idx)) {
+		int result;
+		if (route_tree_routing::search(start_halts, start_halt_count, end_halts,
+			welt->get_settings().get_max_transfers(), welt->get_settings().get_max_hops(), ware, *return_ware, result)) {
+			return result;
+		}
+	}
+
 	// invalidate search history
 	last_search_origin = halthandle_t();
 
@@ -2726,8 +2752,9 @@ int haltestelle_t::search_route( const halthandle_t *const start_halts, const ui
 						open_list.insert( route_node_t(current_conn.halt, total_weight + WEIGHT_MIN) );
 					}
 					else {
-						// Case: non-optimal transfer halt -> put in closed list
-						halt_data[ reachable_halt_id ].best_weight = 0;
+						// Only this incoming path is too expensive. A later path may
+						// improve it, so do not close the halt before it is explored.
+						markers[ reachable_halt_id ] = current_marker - 1u;
 					}
 				}
 				else {
