@@ -168,13 +168,20 @@ public:
 
 	/// Read and write the given vector object.
 	/// @tparam T The type of the vector.
+	/// @tparam F The type of the element reader/writer. Deduced rather than erased into a
+	///           std::function, so that a lambda passed here can be inlined - this runs once
+	///           per element of every vector in the savegame.
 	/// @param vector The vector to read and write.
-	/// @param rdwr The lambda function to read and write the elements of the vector.
-	template<class T> void rdwr_vector(vector_tpl<T> &vector, std::function<void(loadsave_t*, T&)> rdwr_elem) {
+	/// @param rdwr_elem Called for each element to read and write it.
+	template<class T, class F> void rdwr_vector(vector_tpl<T> &vector, F &&rdwr_elem) {
 		uint32 count = vector.get_count();
 		rdwr_long(count);
 		if(  is_loading()  ) {
 			vector.clear();
+			// Reserve in one go instead of letting append() grow the vector step by step.
+			// The count comes straight from the file, so it is capped: a broken savegame
+			// must not be able to ask for an arbitrarily large allocation up front.
+			vector.resize( min( count, (uint32)4096 ) );
 			for(  uint32 i = 0;  i < count;  i++  ) {
 				T item;
 				rdwr_elem(this, item);
@@ -185,7 +192,7 @@ public:
 				rdwr_elem(this, vector[i]);
 			}
 		}
-	};
+	}
 
 	void wr_obj_id(short id);
 	short rd_obj_id();

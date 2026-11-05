@@ -3985,7 +3985,7 @@ void convoi_t::rdwr(loadsave_t *file)
 	}
 
 	if(  file->get_OTRP_version()>=40  ) {
-		std::function<void(loadsave_t*, fetched_fresh_goods_t&)> rdwr_goods = [](loadsave_t *file, fetched_fresh_goods_t &v) {
+		auto rdwr_goods = [](loadsave_t *file, fetched_fresh_goods_t &v) {
 			file->rdwr_long(v.amount);
 			file->rdwr_long(v.arrived_time);
 		};
@@ -4082,7 +4082,7 @@ void convoi_t::rdwr(loadsave_t *file)
 		// current schedule entry, which the schedule already saves as a position. Saving a
 		// halt id instead would go stale across a halt merge or rebuild, even though the
 		// position itself is still fine. See get_shipping_dest_halt().
-		std::function<void(loadsave_t*, convoihandle_t&)> rdwr_cnv = [](loadsave_t *f, convoihandle_t &c) {
+		auto rdwr_cnv = [](loadsave_t *f, convoihandle_t &c) {
 			rdwr_convoihandle_t( f, c );
 		};
 		file->rdwr_vector( shipped_convois, rdwr_cnv );
@@ -4191,7 +4191,7 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 		vector_tpl<ware_t> total_fracht;
 
 		size_t const n = goods_manager_t::get_count();
-		ALLOCA(uint32, max_loaded_waren, n);
+		ALLOCA(sint32, max_loaded_waren, n);
 		MEMZERON(max_loaded_waren, n);
 
 		for(  uint32 i = 0;  i != anz_vehikel;  ++i  ) {
@@ -4215,9 +4215,11 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 					// for pax: join according next stop
 					// for all others we *must* use target coordinates
 					if( ware.same_destination(tmp) ) {
-						tmp.menge += ware.menge;
-						ware.menge = 0;
-						break;
+						// menge is limited, so what does not fit stays in ware for another entry
+						ware.menge = tmp.add_goods(ware.menge);
+						if(  ware.menge == 0  ) {
+							break;
+						}
 					}
 				}
 
@@ -4232,20 +4234,22 @@ void convoi_t::get_freight_info(cbuffer_t & buf)
 		buf.clear();
 
 		// apend info on total capacity
-		slist_tpl <ware_t>capacity;
+		// the totals are sint32: ware_t::menge is too narrow for a whole convoy
+		slist_tpl<freight_list_sorter_t::capacity_t> capacity;
 		for (uint16 i = 0; i != n; ++i) {
 			if(max_loaded_waren[i]>0  &&  i!=goods_manager_t::INDEX_NONE) {
-				ware_t ware(goods_manager_t::get_info(i));
-				ware.menge = max_loaded_waren[i];
+				freight_list_sorter_t::capacity_t cap;
+				cap.desc = goods_manager_t::get_info(i);
+				cap.amount = max_loaded_waren[i];
 				// append to category?
-				slist_tpl<ware_t>::iterator j   = capacity.begin();
-				slist_tpl<ware_t>::iterator end = capacity.end();
-				while (j != end && j->get_desc()->get_catg_index() < ware.get_desc()->get_catg_index()) ++j;
-				if (j != end && j->get_desc()->get_catg_index() == ware.get_desc()->get_catg_index()) {
-					j->menge += max_loaded_waren[i];
+				slist_tpl<freight_list_sorter_t::capacity_t>::iterator j   = capacity.begin();
+				slist_tpl<freight_list_sorter_t::capacity_t>::iterator end = capacity.end();
+				while (j != end && j->desc->get_catg_index() < cap.desc->get_catg_index()) ++j;
+				if (j != end && j->desc->get_catg_index() == cap.desc->get_catg_index()) {
+					j->amount += max_loaded_waren[i];
 				} else {
 					// not yet there
-					capacity.insert(j, ware);
+					capacity.insert(j, cap);
 				}
 			}
 		}
@@ -4764,14 +4768,14 @@ void calc_reachable_halts(vector_tpl<haltestelle_t::reachable_halt_t>& reachable
 // it too, so a section is entered only for cargo that would really be loaded.
 // The reachable halts are calculated from the schedule entry from_index (the current
 // stop if negative), which must be the entry of the given halt.
-void convoi_t::calc_loading_destination_halts(halthandle_t halt, inthashtable_tpl<uint8, vector_tpl<halthandle_t>>& destination_halts, sint16 from_index) const
+void convoi_t::calc_loading_destination_halts(halthandle_t halt, inthashtable_tpl<uint16, vector_tpl<halthandle_t>>& destination_halts, sint16 from_index) const
 {
 	vector_tpl<haltestelle_t::reachable_halt_t> reachable_halts;
 	vector_tpl<haltestelle_t::reachable_halt_t> temp_stop_halts;
 	calc_reachable_halts(reachable_halts, temp_stop_halts, self, from_index);
 	halt->calc_destination_halt(destination_halts, reachable_halts, temp_stop_halts, goods_catg_index, self);
 	// Cargo is never loaded for the halt it is loaded at.
-	FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+	FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 		if(  vector_tpl<halthandle_t>* dest_list = destination_halts.access(category_idx)  ) {
 			dest_list->remove(halt);
 		}
@@ -4793,7 +4797,7 @@ void convoi_t::calc_loading_destination_halts(halthandle_t halt, inthashtable_tp
 		if(  !loading_target.is_bound()  ) {
 			halthandle_t nearest;
 			vector_tpl<halthandle_t> candidate;
-			FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+			FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 				if(  category_idx==goods_manager_t::INDEX_PAS  ||  category_idx==goods_manager_t::INDEX_MAIL  ) {
 					continue;
 				}
@@ -4817,7 +4821,7 @@ void convoi_t::calc_loading_destination_halts(halthandle_t halt, inthashtable_tp
 			}
 		}
 		if(  loading_target.is_bound()  ) {
-			FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+			FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 				if(  category_idx==goods_manager_t::INDEX_PAS  ||  category_idx==goods_manager_t::INDEX_MAIL  ) {
 					continue;
 				}
@@ -4936,12 +4940,12 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 		loading_needed &= (schedule->get_current_entry().waiting_time_shift > 0  &&  welt->get_ticks() - arrived_time >= welt->ticks_per_world_month / schedule->get_current_entry().waiting_time_shift);
 	}
 
-	inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
+	inthashtable_tpl<uint16, vector_tpl<halthandle_t>> destination_halts;
 	calc_loading_destination_halts(halt, destination_halts);
 
 	// fetch fresh cargos.
 	if(  loading_needed  ) {
-		FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+		FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 			vector_tpl<haltestelle_t::loadable_fresh_goods_t> loadable_fresh_goods;
 			halt->fetch_loadable_fresh_goods(loadable_fresh_goods, category_idx, destination_halts.get(category_idx));
 			FOR(vector_tpl<haltestelle_t::loadable_fresh_goods_t>, &goods, loadable_fresh_goods) {
@@ -6925,9 +6929,9 @@ bool convoi_t::has_own_demand_at_entry(uint8 index) const {
 		// fresh flag, which would hide the cargo from later checks and from the
 		// waiting time statistics taken when a convoy actually loads it.
 		// Calculated from this entry, as the convoy would when loading there.
-		inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
+		inthashtable_tpl<uint16, vector_tpl<halthandle_t>> destination_halts;
 		calc_loading_destination_halts(halt, destination_halts, index);
-		FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+		FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 			if(  halt->has_goods_for_zwischenziel(category_idx, destination_halts.get(category_idx))  ) {
 				// this goods will use this convoy!
 				return true;
@@ -6992,9 +6996,9 @@ bool convoi_t::has_demand_at_halt_before_section(uint8 start, uint8 end) const {
 	// Called while this section is being evaluated, so calc_reachable_halts() treats
 	// the section's entries as stops (see would_stop_at_entry()): the result is what
 	// the convoy would load here if it stops in the section.
-	inthashtable_tpl<uint8, vector_tpl<halthandle_t>> destination_halts;
+	inthashtable_tpl<uint16, vector_tpl<halthandle_t>> destination_halts;
 	calc_loading_destination_halts(prev_halt, destination_halts);
-	FOR(minivec_tpl<uint8>, category_idx, goods_catg_index) {
+	FOR(vector_tpl<uint16>, category_idx, goods_catg_index) {
 		vector_tpl<halthandle_t> loadable_section_halts;
 		FOR(vector_tpl<halthandle_t>, const& h, destination_halts.get(category_idx)) {
 			if(  section_halts.is_contained(h)  ) {
