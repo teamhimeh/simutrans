@@ -5016,7 +5016,7 @@ skip_choose:
 			}
 		}
 		if(  !route_found  &&  (!sig->is_guide_signal()  ||  !try_coupling)  ) {
-			const uint8 margin_length=sig->get_margin_length()>0?sig->get_margin_length():0;
+			const uint8 margin_length=sig->get_margin_length();
 			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), sig->is_allow_multi_convoys(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
 			cnv->set_use_electric(cnv->is_electrification());
 			if(  !route_found  ) {
@@ -5036,14 +5036,21 @@ skip_choose:
 		}
 		else {
 			// if do not advance to end in this signal, we remove some advance tiles from target_rt
-			if(  !try_coupling  &&  !welt->get_settings().get_advance_to_end()  &&  target_rt.get_count()>2  &&  sig->get_margin_length()<0  ) {
-				const uint32 stop_length = convoi_t::calc_available_halt_length_in_vehicle_steps(target_rt.at(target_rt.get_count()-1),ribi_type(target_rt.at(target_rt.get_count()-1)-target_rt.at(target_rt.get_count()-2)),get_waytype());
-				const uint32 convoy_length = cnv->get_entire_convoy_length()*VEHICLE_STEPS_PER_CARUNIT;
-				sint32 margin_length = stop_length>convoy_length?(stop_length-convoy_length)/2:0;
-				margin_length -= ribi_t::is_bend(welt->lookup(target_rt.at(target_rt.get_count()-1))->get_weg(get_waytype())->get_ribi_unmasked())? diagonal_vehicle_steps_per_tile/2: VEHICLE_STEPS_PER_TILE;
-				while(  margin_length>0  ) {
-					target_rt.remove_koord_from(max(0,target_rt.get_count()-2));
-					margin_length -= ribi_t::is_bend(welt->lookup(target_rt.at(target_rt.get_count()-1))->get_weg(get_waytype())->get_ribi_unmasked())? diagonal_vehicle_steps_per_tile: VEHICLE_STEPS_PER_TILE;
+			if(  !try_coupling  &&  !welt->get_settings().get_advance_to_end()  &&  target_rt.get_count()>2  &&  sig->is_stop_at_middle()  ) {
+				// stop at the middle of the usable region of the platform.
+				// The margin tiles are excluded from the usable region: at the front (exit side) with advance_to_end, otherwise at the back (entry side).
+				const sint32 stop_length = (sint32)convoi_t::calc_available_halt_length_in_vehicle_steps(target_rt.at(target_rt.get_count()-1),ribi_type(target_rt.at(target_rt.get_count()-1)-target_rt.at(target_rt.get_count()-2)),get_waytype());
+				const sint32 convoy_length = (sint32)cnv->get_entire_convoy_length()*VEHICLE_STEPS_PER_CARUNIT;
+				const sint32 margin_steps = (sint32)sig->get_margin_length()*VEHICLE_STEPS_PER_TILE;
+				// half of the free length in the usable region
+				const sint32 half_slack = stop_length>margin_steps+convoy_length ? (stop_length-margin_steps-convoy_length)/2 : 0;
+				// length to move back the stop position from the end of the platform
+				sint32 back_length = sig->is_advance_to_end() ? margin_steps+half_slack : half_slack;
+				// remove the end tiles which fit into back_length
+				back_length -= ribi_t::is_bend(welt->lookup(target_rt.at(target_rt.get_count()-1))->get_weg(get_waytype())->get_ribi_unmasked())? diagonal_vehicle_steps_per_tile/2: VEHICLE_STEPS_PER_TILE;
+				while(  back_length>=0  &&  target_rt.get_count()>2  ) {
+					target_rt.remove_koord_from(target_rt.get_count()-2);
+					back_length -= ribi_t::is_bend(welt->lookup(target_rt.at(target_rt.get_count()-1))->get_weg(get_waytype())->get_ribi_unmasked())? diagonal_vehicle_steps_per_tile: VEHICLE_STEPS_PER_TILE;
 				}
 			} else if(  !try_coupling  &&  !welt->get_settings().get_advance_to_end()  &&  target_rt.get_count()>2  &&  !sig->is_advance_to_end()  ) {
 				uint32 stop_length = convoi_t::calc_available_halt_length_in_vehicle_steps(target_rt.at(target_rt.get_count()-1),ribi_type(target_rt.at(target_rt.get_count()-1)-target_rt.at(target_rt.get_count()-2)),get_waytype());

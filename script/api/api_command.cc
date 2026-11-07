@@ -554,6 +554,13 @@ call_tool_init set_signal_margin_length(player_t* pl, koord3d pos, int val)
 	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
 }
 
+call_tool_init set_signal_stop_at_middle(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,M", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
 call_tool_init set_signal_two_ways(player_t* pl, koord3d pos, int val)
 {
 	cbuffer_t buf;
@@ -816,6 +823,17 @@ void export_commands(HSQUIRRELVM vm)
 	 * @typemask string(player_x, coord3d, int)
 	 */
 	STATIC register_method(vm, set_signal_margin_length, "set_margin_length", false, true);
+	/**
+	 * Set or clear the "stop at middle" flag of a choose signal.
+	 * When set, trains stop at the middle of the platform, excluding the margin tiles.
+	 * The margin is taken at the front of the platform when "advance to end" is set, otherwise at the back.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_stop_at_middle, "set_stop_at_middle", false, true);
 	/**
 	 * Set or clear the "allow reverse passage" (two ways) flag of a signal.
 	 * When set (true), trains coming from the reverse direction are allowed to pass the signal.

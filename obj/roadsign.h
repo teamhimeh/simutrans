@@ -55,10 +55,11 @@ protected:
 		length_based		= 1U<<8, // in choose signal, length based find_route(do not enter the first found tile, the shortest halt which can enter the convoys).
 		detailed_oneway	= 1U<<9, // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
 		ignore_length = 1U<<10,	 // ignore length (for track)
-		allow_multi_convoys	= 1U<<11	// can enter more than one convoys in one platform.
+		allow_multi_convoys	= 1U<<11,	// can enter more than one convoys in one platform.
+		stop_at_middle		= 1U<<12	// in choose signal, stop at the middle of the platform (except for the margin tiles; front or back margin is selected by advance_to_end).
 	};
 
-	sint8 choose_signal_margin_length;
+	uint8 choose_signal_margin_length;
 
 	sint8 after_yoffset, after_xoffset;
 
@@ -216,6 +217,8 @@ public:
 	void set_ignore_length(bool tf) { tf? choose_sign_flag|=ignore_length: choose_sign_flag&=~ignore_length; }
 	bool is_allow_multi_convoys() const {return(choose_sign_flag&allow_multi_convoys)>0;}
 	void set_allow_multi_convoys(bool tf) { tf? choose_sign_flag|=allow_multi_convoys: choose_sign_flag&=~allow_multi_convoys; }
+	bool is_stop_at_middle() const {return(choose_sign_flag&stop_at_middle)>0;}
+	void set_stop_at_middle(bool tf) { tf? choose_sign_flag|=stop_at_middle: choose_sign_flag&=~stop_at_middle; }
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
 	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
@@ -261,8 +264,8 @@ public:
 	weg_t *get_weg_here() const;
 
 	uint16 const get_choose_sign_flag() {return choose_sign_flag;}
-	sint8 const get_margin_length() {return choose_signal_margin_length;}
-	void set_margin_length(sint8 i) {choose_signal_margin_length=i;}
+	uint8 get_margin_length() const {return choose_signal_margin_length;}
+	void set_margin_length(uint8 i) {choose_signal_margin_length=i;}
 	/**
 	* draw the part overlapping the vehicles
 	* (needed to get the right offset even on hills)

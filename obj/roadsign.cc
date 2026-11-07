@@ -782,6 +782,11 @@ void roadsign_t::rdwr(loadsave_t *file)
 	}
 	if(file->get_OTRP_version()>=51) {
 		file->rdwr_byte(choose_signal_margin_length);
+		if(  file->is_loading()  &&  choose_signal_margin_length==0xFF  ) {
+			// "stop at middle" was stored as margin length -1 before the stop_at_middle flag was introduced.
+			choose_signal_margin_length = 0;
+			set_stop_at_middle(true);
+		}
 	} else {
 		choose_signal_margin_length = 0;
 	}
