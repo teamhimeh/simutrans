@@ -733,6 +733,149 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 }
 
 
+void convoi_t::repair_coupling_links_after_load( const vector_tpl<convoi_t*> &loaded )
+{
+	// parent_convoi is not saved, finish_rd() rebuilds it. Until then it is free to be used as
+	// the "already pulled by" marker of this pass; it is cleared again at the end.
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		cnv->parent_convoi = convoihandle_t();
+	}
+
+	// 1) validate every link parent -> child
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		const convoihandle_t child = cnv->coupling_convoi;
+		if(  !child.is_bound()  ) {
+			if(  child.get_id()!=0  ) {
+				dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s is coupled with the non-existing convoy %u => uncoupled", cnv->get_name(), child.get_id() );
+			}
+			cnv->coupling_convoi = convoihandle_t();
+			continue;
+		}
+		convoi_t *const c = child.get_rep();
+		const char *reason = NULL;
+		if(  c == cnv  ) {
+			reason = "coupled with itself";
+		}
+		else if(  cnv->state == INITIAL  ) {
+			// coupled in a depot: both have to stand in the same depot
+			if(  c->state != INITIAL  ) {
+				reason = "a convoy in a depot pulls a convoy on the map";
+			}
+			else if(  c->home_depot != cnv->home_depot  ) {
+				reason = "the coupled convoys are in different depots";
+			}
+		}
+		else if(  cnv->state == SHIPPED  ) {
+			if(  c->state != SHIPPED  ) {
+				reason = "a shipped convoy pulls a convoy that is not shipped";
+			}
+		}
+		else {
+			// the parent is on the map
+			if(  c->state == INITIAL  ) {
+				// the child was filed into a depot without being uncoupled. Its cars would be
+				// dragged along by the parent while it is listed in the depot at the same time.
+				reason = "a convoy on the map pulls a convoy in a depot";
+			}
+			else if(  c->state == SHIPPED  ) {
+				reason = "a convoy on the map pulls a shipped convoy";
+			}
+			else if(  c->state != COUPLED  &&  c->state != COUPLED_LOADING  ) {
+				// Both are on the map and the cars stand behind the parent, so the link is real;
+				// only the child's state is wrong (e.g. EDIT_SCHEDULE while coupled).
+				dbg->error( "convoi_t::repair_coupling_links_after_load()", "coupled child %s of %s has state %s => set to coupled", c->get_name(), cnv->get_name(), state_names[c->state] );
+				if(  c->state == EDIT_SCHEDULE  &&  c->schedule  ) {
+					c->schedule->finish_editing();
+				}
+				c->state = cnv->is_loading() ? COUPLED_LOADING : COUPLED;
+			}
+		}
+		if(  !reason  &&  c->parent_convoi.is_bound()  ) {
+			// the same convoy must not be pulled twice (e.g. in a depot and on the map at once);
+			// the first valid parent keeps it
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s is already pulled by %s", c->get_name(), c->parent_convoi->get_name() );
+			reason = "the child is already pulled by another convoy";
+		}
+		if(  reason  ) {
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s (state %s) and child %s (state %s): %s => uncoupled",
+				cnv->get_name(), state_names[cnv->state], c->get_name(), state_names[c->state], reason );
+			cnv->coupling_convoi = convoihandle_t();
+			continue;
+		}
+		c->parent_convoi = cnv->self;
+	}
+
+	// 2) loops: in a closed ring every convoy has a parent, so walking up never ends
+	const uint32 max_steps = loaded.get_count();
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		convoihandle_t p = cnv->parent_convoi;
+		uint32 steps = 0;
+		while(  p.is_bound()  &&  p.get_rep() != cnv  &&  steps++ < max_steps  ) {
+			p = p->parent_convoi;
+		}
+		if(  p.is_bound()  ) {
+			// back at ourselves (or no end found): open the ring in front of us
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "coupling chain of %s is a loop => uncoupled from %s", cnv->get_name(), cnv->parent_convoi->get_name() );
+			cnv->parent_convoi->coupling_convoi = convoihandle_t();
+			cnv->parent_convoi = convoihandle_t();
+		}
+	}
+
+	// 3) orphans: a COUPLED convoy that nobody pulls would stand on the map forever
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		if(  !cnv->parent_convoi.is_bound()  &&  (cnv->state == COUPLED  ||  cnv->state == COUPLED_LOADING)  ) {
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s is coupled, but no convoy pulls it => drives alone", cnv->get_name() );
+			// the same states uncouple_convoi() gives to a released child
+			cnv->state = cnv->state == COUPLED_LOADING ? LOADING : ROUTING_1;
+		}
+	}
+
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		cnv->parent_convoi = convoihandle_t();
+	}
+}
+
+
+void convoi_t::cut_from_parent_convoi()
+{
+	if(  !parent_convoi.is_bound()  ) {
+		return;
+	}
+	const convoihandle_t p = parent_convoi;
+	const convoihandle_t head = get_most_parent_convoi();
+
+	// The chain reserves the tiles of all its cars for the head (see reserve_route()).
+	// Release the part our cars (and our children's) stand on, as uncouple_convoi() hands over.
+	route_t const *r = p->get_route();
+	if(  r  &&  r->get_count() > 0  &&  anz_vehikel > 0  &&  p->anz_vehikel > 0  ) {
+		const uint32 from = max( find_most_child_convoi()->back()->get_route_index(), 1u ) - 1;
+		const uint32 to   = min( (uint32)max( p->back()->get_route_index(), 1u ) - 1, r->get_count() );
+		for(  uint32 i = from;  i < to;  i++  ) {
+			const koord3d pos = r->at(i);
+			if(  grund_t *gr = welt->lookup( pos )  ) {
+				if(  schiene_t *sch = obj_cast<schiene_t>( gr->get_weg( p->front()->get_waytype(), r->get_corner_set(i) ) )  ) {
+					if(  sch->is_reserved_by( head )  ) {
+						sch->unreserve( head );
+					}
+				}
+			}
+			head->unreserve_pos( pos );
+		}
+	}
+
+	p->coupling_convoi = convoihandle_t();
+	if(  p->anz_vehikel > 0  ) {
+		p->back()->set_last( true );
+	}
+	parent_convoi = convoihandle_t();
+	if(  anz_vehikel > 0  ) {
+		front()->set_leading( true );
+	}
+	head->must_recalc_min_top_speed();
+	head->must_recalc_friction_weight();
+}
+
+
 // since now convoi states go via tool_t
 void convoi_t::call_convoi_tool( const char function, const char *extra ) const
 {
@@ -2124,6 +2267,14 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 	// liquidation, save/load repair) and a single missed one would leak or crash a convoy.
 	if(  is_carrying_convoys()  ) {
 		disembark_all_forced();
+	}
+
+	// A coupled child must never be filed away alone: the parent would keep pulling our cars
+	// while we are listed in the depot, i.e. the same convoy would exist twice. Callers are
+	// expected to send the head of the chain; if one does not, release us from the parent first.
+	if(  parent_convoi.is_bound()  ) {
+		dbg->error( "convoi_t::betrete_depot()", "%s is pulled by %s => uncoupled before entering the depot", get_name(), parent_convoi->get_name() );
+		parent_convoi->uncouple_convoi();
 	}
 
 	// first remove reservation, if train is still on track
@@ -4270,6 +4421,14 @@ void convoi_t::open_schedule_window( bool show )
 		}
 		return;
 	}
+	// - coupled to a parent: EDIT_SCHEDULE would make is_coupled() false while the parent still
+	//   pulls us, so depot commands would treat us as an independent convoy
+	if(  is_coupled()  ||  parent_convoi.is_bound()  ) {
+		if (show) {
+			create_win( new news_img("Not allowed!\nThe convoi's schedule can\nnot be changed currently.\nTry again later!"), w_time_delete, magic_none );
+		}
+		return;
+	}
 	if(  (state==EDIT_SCHEDULE  ||  line_update_pending.is_bound())  &&  get_owner()==welt->get_active_player()  ) {
 		if (show) {
 			create_win( new news_img("Not allowed!\nThe convoi's schedule can\nnot be changed currently.\nTry again later!"), w_time_delete, magic_none );
@@ -5610,6 +5769,12 @@ void convoi_t::self_destruct()
 	line_update_pending = linehandle_t(); // does not bother to add it to a new line anyway ...
 	// convois in depot are not contained in the map array!
 	if(state==INITIAL) {
+		// a depot convoy has no parent on the map, unless a coupling was broken; then the
+		// parent must not keep a link to a convoy that is gone
+		if(  parent_convoi.is_bound()  ) {
+			dbg->error( "convoi_t::self_destruct()", "%s is in a depot, but pulled by %s => uncoupled", get_name(), parent_convoi->get_name() );
+			cut_from_parent_convoi();
+		}
 		destroy();
 		return;
 	}
@@ -5660,7 +5825,17 @@ void convoi_t::destroy()
 	if(  state == INITIAL  ) {
 		// in depot => not on map
 		for(  uint8 i = anz_vehikel;  i-- != 0;  ) {
-			fahr[i]->set_flag( obj_t::not_on_map );
+			// ... unless a broken coupling put the car on a tile anyway (a parent on the map
+			// pulled this depot convoy). Deleting such a car without leave_tile() leaves a
+			// dangling object on the tile => crash (pure virtual call) on the next step/redraw.
+			grund_t *gr = welt->lookup( fahr[i]->get_pos() );
+			if(  gr  &&  gr->obj_ist_da( fahr[i] )  ) {
+				dbg->error( "convoi_t::destroy()", "car %i of %s is in a depot, but on the tile %s => removed from there", i, get_name(), fahr[i]->get_pos().get_str() );
+				fahr[i]->clear_flag( obj_t::not_on_map );
+			}
+			else {
+				fahr[i]->set_flag( obj_t::not_on_map );
+			}
 		}
 	}
 	state = SELF_DESTRUCT;
@@ -6514,8 +6689,12 @@ const char* convoi_t::send_to_depot(bool local)
 	if(  is_shipped()  ) {
 		return "Not allowed while the convoy is aboard another convoy.";
 	}
+	// a coupled child cannot go to a depot alone (its parent pulls it)
+	if(  is_coupled()  ||  parent_convoi.is_bound()  ) {
+		return "Convoi is not front convoy.\n";
+	}
 	vehicle_t *v = front();
-	// if we are already at depot (e.g. start but wait for clearance), we go back there. 
+	// if we are already at depot (e.g. start but wait for clearance), we go back there.
 	if(  grund_t *gr=welt->lookup(front()->get_pos())  ) {
 		depot_t *dep=gr->get_depot();
 		// check the owner
@@ -6606,7 +6785,8 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 		return txt;
 	}
 	// If this convoy is not leading, false.
-	if(  is_coupled()  ) {
+	// (parent_convoi too: a child in EDIT_SCHEDULE etc. is not is_coupled(), but still pulled)
+	if(  is_coupled()  ||  parent_convoi.is_bound()  ) {
 		dbg->message("convoi_t::send_to_depot_immediately()","%s is not front convoy.", get_name());
 		txt = "%s is not front convoy.\n", get_name();
 		return txt;
@@ -6715,6 +6895,13 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 {
 	if(  is_shipped()  ) {
 		return "Not allowed while the convoy is aboard another convoy.";
+	}
+	// A coupled child cannot go to a depot alone. Checking is_coupled() alone is not enough:
+	// a child that was put into EDIT_SCHEDULE while coupled was teleported into the depot by
+	// itself, while its parent kept pulling its cars on the map.
+	// (depot_picker sends 'Y' to every convoy of a line, children included.)
+	if(  state != INITIAL  &&  (is_coupled()  ||  parent_convoi.is_bound())  ) {
+		return "Convoi is not front convoy.\n";
 	}
 	// Validate the target depot
 	grund_t *gr = welt->lookup(depot_pos);

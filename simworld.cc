@@ -6325,6 +6325,12 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				ls->set_progress( get_size().y+(get_size().y*convoi_array.get_count())/(2*max_convoi)+128 );
 			}
 		}
+		// All convoys are read, but none is filed into its depot yet: the states are still the
+		// saved ones. Cut coupling links that would make one convoy exist in two places, e.g. a
+		// child listed in a depot while a parent on the map pulls its cars. betrete_depot()
+		// below follows the coupling chain, so this must come first.
+		convoi_t::repair_coupling_links_after_load( loading_convoi_array );
+
 		FOR( vector_tpl<convoi_t*>, cnv, loading_convoi_array ) {
 			if(cnv->in_depot()) {
 				grund_t * gr = lookup(cnv->get_pos());
