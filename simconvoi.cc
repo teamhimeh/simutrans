@@ -2277,6 +2277,55 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 		parent_convoi->uncouple_convoi();
 	}
 
+	// A depot only takes convoys of its own player and of a waytype it accepts. A chain of
+	// several companies has to be split, otherwise another player's convoy would be filed
+	// away in our depot (and sold, edited or started from there by us). Callers are not
+	// reliable about this: send_to_specific_depot() and arriving by schedule never checked,
+	// and a convoy coming off a ship is teleported here with its whole chain.
+	// Not while loading a game: the saved depot lists are taken as they are.
+	if(  !is_loading  ) {
+		convoihandle_t prev = self;
+		for(  convoihandle_t k = coupling_convoi;  k.is_bound();  prev = k, k = k->get_coupling_convoi()  ) {
+			if(  k->get_owner() == dep->get_owner()  &&  k->anz_vehikel > 0  &&  dep->can_accept_waytype( k->front()->get_desc()->get_waytype() )  ) {
+				continue;
+			}
+			// aboard a carrier, or teleported: its cars stand on no tile
+			const bool on_map = k->anz_vehikel > 0  &&  !k->front()->get_flag( obj_t::not_on_map );
+			const convoihandle_t rest = prev->uncouple_convoi( on_map );
+			dbg->message( "convoi_t::betrete_depot()", "%s cannot enter the depot at %s of %s => uncoupled from %s",
+				rest->get_name(), dep->get_pos().get_str(), get_name(), prev->get_name() );
+			if(  on_map  ) {
+				// It stays on the map and runs on by itself. Another company's depot is no stop
+				// for it, so drop the entry send_to_depot*() put into the whole chain's schedules.
+				for(  convoihandle_t r = rest;  r.is_bound();  r = r->get_coupling_convoi()  ) {
+					schedule_t *s = r->get_schedule();
+					bool removed = false;
+					for(  int i = s ? s->get_count()-1 : -1;  i >= 0  &&  s->get_count() > 1;  i--  ) {
+						if(  s->at(i).pos == dep->get_pos()  ) {
+							s->set_current_stop( i );
+							s->remove();
+							removed = true;
+						}
+					}
+					if(  removed  ) {
+						r->set_schedule( s );
+					}
+				}
+				cbuffer_t buf;
+				buf.printf( translator::translate("%s was uncoupled from %s: it cannot enter that depot."), rest->get_name(), prev->get_name() );
+				welt->get_message()->add_message( buf, rest->get_pos().get_2d(), message_t::warnings, PLAYER_FLAG|rest->get_owner()->get_player_nr(), IMG_EMPTY );
+			}
+			else {
+				// No tile to stay on: it goes to a depot of its own owner. Only a safety net -
+				// teleport_to_nearest_depot() unchains such chains before it calls us.
+				dbg->warning( "convoi_t::betrete_depot()", "off-map %s reached the depot still coupled", rest->get_name() );
+				send_offmap_chain_to_depots( rest );
+			}
+			// rest and everything behind it is gone from our chain now
+			break;
+		}
+	}
+
 	// first remove reservation, if train is still on track
 	unreserve_route();
 	clear_reserved_tiles();
@@ -9101,14 +9150,27 @@ bool convoi_t::teleport_to_nearest_depot(bool announce)
 		return false;
 	}
 	const waytype_t wt = front()->get_desc()->get_waytype();
+	convoihandle_t c;
 
-	// the whole chain has to belong to the same player and waytype, as betrete_depot() assumes
-	convoihandle_t c = get_coupling_convoi();
-	while(  c.is_bound()  ) {
-		if(  c->get_owner() != get_owner()  ||  c->front()->get_waytype() != front()->get_waytype()  ) {
-			return false;
+	// A depot takes only convoys of its own player and waytype, so a mixed chain is unchained
+	// here, before any depot is chosen: everything from the first convoy of another player or
+	// waytype on goes its own way to a depot of its own owner (send_offmap_chain_to_depots()
+	// comes back here for it, so it is unchained again where needed). Refusing such a chain,
+	// as was done before, got the whole chain destroyed by disembark_all_forced() or stranded
+	// aboard. It is done even if no depot is found for us below: the others must not share
+	// our fate.
+	// The chain is off the map (aboard, or being teleported), so no reservation is handed over.
+	{
+		convoihandle_t prev = self;
+		for(  convoihandle_t k = coupling_convoi;  k.is_bound();  prev = k, k = k->get_coupling_convoi()  ) {
+			if(  k->get_owner() != get_owner()  ||  k->anz_vehikel == 0  ||  k->front()->get_desc()->get_waytype() != wt  ) {
+				const convoihandle_t rest = prev->uncouple_convoi( false );
+				dbg->message( "convoi_t::teleport_to_nearest_depot()", "%s uncoupled from %s: it goes to a depot of its own owner",
+					rest->get_name(), prev->get_name() );
+				send_offmap_chain_to_depots( rest );
+				break;
+			}
 		}
-		c = c->get_coupling_convoi();
 	}
 
 	depot_t *best = NULL;
@@ -9167,15 +9229,27 @@ void convoi_t::disembark_all_forced()
 		c->carrier_convoi      = convoihandle_t();
 		c->shipping_wait_since = 0;
 
+		send_offmap_chain_to_depots( c );
+	}
+}
+
+
+void convoi_t::send_offmap_chain_to_depots(convoihandle_t c)
+{
+	while(  c.is_bound()  ) {
+		// teleport_to_nearest_depot() unchains (and sends here again) whatever its depot cannot take
 		if(  c->teleport_to_nearest_depot()  ) {
-			continue;
+			return;
 		}
-		// A convoy that is on no tile and in no depot cannot exist, so this is the one place
-		// where destroying someone else's convoy is the only remaining option.
+		// Its owner has no depot for it. A convoy that is on no tile and in no depot cannot
+		// exist, so this is the one place where destroying a convoy is the only option left -
+		// but only this one: its children may belong to someone who does have a depot.
+		const convoihandle_t next = c->uncouple_convoi( false );
 		cbuffer_t buf;
-		buf.printf( translator::translate("%s was lost with its carrier: no depot could be found for it."), c->get_name() );
+		buf.printf( translator::translate("%s was lost: no depot could be found for it."), c->get_name() );
 		welt->get_message()->add_message( buf, koord::invalid, message_t::warnings, PLAYER_FLAG|c->get_owner()->get_player_nr(), IMG_EMPTY );
 		c->destroy();
+		c = next;
 	}
 }
 

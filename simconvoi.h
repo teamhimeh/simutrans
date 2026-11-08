@@ -1589,6 +1589,13 @@ public:
 	 */
 	bool teleport_to_nearest_depot(bool announce = true);
 
+	/**
+	 * Put an off-map chain (aboard a carrier, or split off while being teleported) into
+	 * depots. Every part goes to a depot of its own owner and waytype - teleport_to_nearest_depot()
+	 * splits the chain where needed. Only a convoy whose owner has no such depot is lost.
+	 */
+	static void send_offmap_chain_to_depots(convoihandle_t c);
+
 	/// release every way reservation held by this convoy and take it off the map
 	void withdraw_from_map_for_shipping();
 
