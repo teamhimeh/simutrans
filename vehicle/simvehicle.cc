@@ -4686,8 +4686,12 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi)));
 		if(  sch->can_reserve(cnv->self)||!allow_multi_convoys  ) {
 			if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
-				// We can still go forward.
-				return false;
+				roadsign_t * rs = to->find<roadsign_t>(1);
+				if(  !rs  ||  !rs->is_stop_position()  )
+				{
+					// We can still go forward.
+					return false;
+				}
 			}
 		}
 	}

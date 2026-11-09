@@ -25,6 +25,12 @@ signal(s)
 	if(  signal->get_waytype()!=water_wt && signal->get_waytype()!=air_wt  ) {
 		add_component(&bt_end_of_guide);
 	}
+
+	bt_stop_position.init(button_t::square_state, translator::translate("stop position"));
+	bt_stop_position.set_tooltip(translator::translate("This signal is used as stop position of the platform for choose sign. Convoys stop just before this tile."));
+	bt_stop_position.add_listener(this);
+	bt_stop_position.pressed=signal->is_stop_position();
+	add_component(&bt_stop_position);
 	
 	
 	reset_min_windowsize();
@@ -49,6 +55,15 @@ bool end_of_choose_info_t::action_triggered( gui_action_creator_t* comp, value_t
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+
+	// stop position: this end of choose signal is set as stop position for choose signal
+	else if(  comp == &bt_stop_position  ) {
+		char param[256];
+		sprintf(param, "%s,%i,b", signal->get_pos().get_str(), (int)!signal->is_stop_position());
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param(param);
+		welt->set_tool(tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player());
+		return true;
+	}
 	return false;
 }
 
@@ -58,4 +73,5 @@ void end_of_choose_info_t::update_data()
 {
 	bt_end_of_choose.pressed = signal->is_flag_end_of_choose();
 	bt_end_of_guide.pressed = signal->is_flag_end_of_guide();
+	bt_stop_position.pressed = signal->is_stop_position();
 }
