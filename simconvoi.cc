@@ -9150,28 +9150,29 @@ bool convoi_t::teleport_to_nearest_depot(bool announce)
 		return false;
 	}
 	const waytype_t wt = front()->get_desc()->get_waytype();
-	convoihandle_t c;
 
-	// A depot takes only convoys of its own player and waytype, so a mixed chain is unchained
-	// here, before any depot is chosen: everything from the first convoy of another player or
-	// waytype on goes its own way to a depot of its own owner (send_offmap_chain_to_depots()
-	// comes back here for it, so it is unchained again where needed). Refusing such a chain,
-	// as was done before, got the whole chain destroyed by disembark_all_forced() or stranded
-	// aboard. It is done even if no depot is found for us below: the others must not share
-	// our fate.
-	// The chain is off the map (aboard, or being teleported), so no reservation is handed over.
-	{
-		convoihandle_t prev = self;
-		for(  convoihandle_t k = coupling_convoi;  k.is_bound();  prev = k, k = k->get_coupling_convoi()  ) {
-			if(  k->get_owner() != get_owner()  ||  k->anz_vehikel == 0  ||  k->front()->get_desc()->get_waytype() != wt  ) {
-				const convoihandle_t rest = prev->uncouple_convoi( false );
-				dbg->message( "convoi_t::teleport_to_nearest_depot()", "%s uncoupled from %s: it goes to a depot of its own owner",
-					rest->get_name(), prev->get_name() );
+	// Split the chain where the owner or the waytype changes: every part goes to a depot of
+	// its own owner, instead of the whole chain being refused (and then destroyed).
+	// Done before a depot is chosen for us, and even if none is found below: the others must
+	// not share our fate. The chain is off the map, so no reservation is handed over.
+	for(  convoihandle_t k = self;  k.is_bound()  &&  k->get_coupling_convoi().is_bound();  k = k->get_coupling_convoi()  ) {
+		convoihandle_t next = k->get_coupling_convoi();
+		if(  next->anz_vehikel == 0  ||  next->get_owner() != k->get_owner()  ||  next->front()->get_waytype() != k->front()->get_waytype()  ) {
+			// uncouple_convoi() resets k->coupling_convoi and rest->parent_convoi
+			convoihandle_t rest = k->uncouple_convoi( false );
+			dbg->message( "convoi_t::teleport_to_nearest_depot()", "%s uncoupled from %s: it goes to a depot of its own owner",
+				rest->get_name(), k->get_name() );
+			// its own owner's nearest depot; this comes back here for it, so it is split again
+			// where needed. Must not be left alone when that fails: it would be on no tile and
+			// in no depot - send_offmap_chain_to_depots() handles that case.
+			if(  !rest->teleport_to_nearest_depot( announce )  ) {
 				send_offmap_chain_to_depots( rest );
-				break;
 			}
+			break;
 		}
 	}
+
+	convoihandle_t c;
 
 	depot_t *best = NULL;
 	uint32 best_dist = 0xFFFFFFFFu;
