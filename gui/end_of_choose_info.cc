@@ -31,7 +31,7 @@ signal(s)
 	bt_stop_position.add_listener(this);
 	bt_stop_position.pressed=signal->is_stop_position();
 	add_component(&bt_stop_position);
-	
+	bt_stop_position.set_visible(signal->get_waytype()!=road_wt&&signal->get_waytype()!=water_wt&&signal->get_waytype()!=air_wt);
 	
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize() );
