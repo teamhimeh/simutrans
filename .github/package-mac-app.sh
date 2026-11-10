@@ -80,6 +80,19 @@ install_name_tool -id "@executable_path/../Frameworks/libpng16.16.dylib" "$FRAME
 install_name_tool -id "@executable_path/../Frameworks/libzstd.1.dylib" "$FRAMEWORKS/libzstd.1.dylib"
 install_name_tool -id "@loader_path/libSDL3.0.dylib" "$FRAMEWORKS/libSDL3.0.dylib"
 
+# Homebrew's linker flags can leave an absolute build-machine LC_RPATH even
+# when every bundled dependency has been rewritten above.  Remove those
+# paths before signing; they are not available on the recipient's Mac.
+for binary in "$APP_EXE" "$FRAMEWORKS"/*.dylib; do
+	while IFS= read -r rpath; do
+		case "$rpath" in
+			/opt/homebrew/*|/usr/local/*)
+				install_name_tool -delete_rpath "$rpath" "$binary"
+				;;
+		esac
+	done < <(otool -l "$binary" | awk '$1 == "cmd" && $2 == "LC_RPATH" { rpath = 1; next } rpath && $1 == "path" { print $2; rpath = 0 }')
+done
+
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 

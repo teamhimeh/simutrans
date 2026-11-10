@@ -8,27 +8,28 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
-
     runs-on: macos-15
-    
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        persist-credentials: false
+        # Tag ancestry must be checked against the complete branch history.
+        fetch-depth: ${{ startsWith(github.ref, 'refs/tags/v') && '0' || '1' }}
 
-    - name: install_dependencies
-      run: | 
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-        brew install sdl3 freetype libpng zstd miniupnpc pkg-config
-#        brew install freetype
-# freetype library is in the system, but not the header
-#        curl -L "https://downloads.sourceforge.net/project/freetype/freetype2/2.10.1/ft2101.zip?&use_mirror=autoselect" > ft2101.zip
-#        unzip -oa ft2101.zip '*.h'
-# could obtain them, but the dylib is not where it should be after installing xcode?!?
-# Thus no freetype :(
-# not easy to install miniupnpc for others, so no UPnP support for macOS
-#        brew install p7zip
-#        brew install miniupnpc
+    - name: Check whether this tag will be notarized
+      id: tag
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      run: |
+        set -euo pipefail
+        .github/macos/check-tag.sh "$GITHUB_REF_NAME" "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Install dependencies
+      run: brew install sdl3 freetype libpng zstd miniupnpc pkg-config
 
     - name: CI-Build
       run: sh ./.github/build-mac.sh
@@ -36,21 +37,137 @@ jobs:
     - name: Set suffix for file naming
       run: |
         if [[ $GITHUB_REF == refs/tags/* ]]; then
-          echo "SUFFIX=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "SUFFIX=${GITHUB_REF#refs/tags/}" >> "$GITHUB_ENV"
         else
           REF_NAME="${GITHUB_REF#refs/heads/}"
-          echo "SUFFIX=_${REF_NAME//\//_}" >> $GITHUB_ENV
+          echo "SUFFIX=_${REF_NAME//\//_}" >> "$GITHUB_ENV"
         fi
 
     - name: Package app
       run: |
-        APP_NAME=sim-mac-OTRP${{ env.SUFFIX }}.app
+        APP_NAME="sim-mac-OTRP${SUFFIX}.app"
         bash ./.github/package-mac-app.sh --binary build/default/sim --app "$APP_NAME"
         mkdir -p macos-artifact
         mv "$APP_NAME" macos-artifact/
 
+    # Eligible tags get their artifact from the trusted notarization workflow.
+    # Other tags, PRs and other manual runs keep the existing ad-hoc artifact.
     - name: Upload the app package
-      uses: actions/upload-artifact@v4
+      if: steps.tag.outputs.eligible != 'true' && (github.ref != 'refs/heads/OTRP-KUTAv6' || github.event_name == 'pull_request')
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: sim-mac-OTRP${{ env.SUFFIX }}.app
         path: ./macos-artifact
+
+    # The signing job receives only an archive, not the build environment.
+    - name: Prepare signing payload
+      if: github.ref == 'refs/heads/OTRP-KUTAv6' && github.event_name == 'workflow_dispatch'
+      run: |
+        set -euo pipefail
+        .github/macos/inspect-bundle.sh macos-artifact/sim-mac-OTRP_OTRP-KUTAv6.app arm64
+        ditto -c -k --keepParent macos-artifact/sim-mac-OTRP_OTRP-KUTAv6.app "$RUNNER_TEMP/unsigned.zip"
+
+    - name: Upload signing payload
+      if: github.ref == 'refs/heads/OTRP-KUTAv6' && github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: macos-unsigned-payload
+        path: ${{ runner.temp }}/unsigned.zip
+        if-no-files-found: error
+        retention-days: 7
+
+  sign:
+    needs: build
+    if: github.ref == 'refs/heads/OTRP-KUTAv6' && github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    environment: macos-signing
+    timeout-minutes: 60
+    concurrency:
+      group: otrp-macos-signing
+      cancel-in-progress: false
+    steps:
+    # This checkout is the trusted workflow ref, never a pull request head.
+    - name: Checkout signing scripts
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        sparse-checkout: .github/macos
+        sparse-checkout-cone-mode: false
+        persist-credentials: false
+
+    - name: Download build payload
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: macos-unsigned-payload
+        path: incoming
+
+    - name: Check payload before loading the identity
+      run: |
+        set -euo pipefail
+        mkdir work
+        ditto -x -k incoming/unsigned.zip work
+        .github/macos/check-payload.sh work sim-mac-OTRP_OTRP-KUTAv6.app
+
+    - name: Check signing configuration
+      env:
+        MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        MACOS_CERTIFICATE_P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_P12_PASSWORD }}
+        MACOS_NOTARY_API_KEY_P8: ${{ secrets.MACOS_NOTARY_API_KEY_P8 }}
+        MACOS_NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+        MACOS_NOTARY_API_ISSUER_ID: ${{ secrets.MACOS_NOTARY_API_ISSUER_ID }}
+        MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+        MACOS_TEAM_ID: ${{ vars.MACOS_TEAM_ID }}
+      run: |
+        set -euo pipefail
+        for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_P12_PASSWORD \
+          MACOS_NOTARY_API_KEY_P8 MACOS_NOTARY_API_KEY_ID MACOS_NOTARY_API_ISSUER_ID \
+          MACOS_SIGNING_IDENTITY MACOS_TEAM_ID; do
+          if [ -z "${!name:-}" ]; then
+            echo "::error::Required signing setting $name is missing from the macos-signing environment."
+            exit 1
+          fi
+        done
+
+    - name: Create temporary keychain
+      env:
+        MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        MACOS_CERTIFICATE_P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_P12_PASSWORD }}
+        MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+      run: .github/macos/keychain.sh setup
+
+    - name: Sign
+      env:
+        MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+        MACOS_TEAM_ID: ${{ vars.MACOS_TEAM_ID }}
+      run: .github/macos/sign.sh work/sim-mac-OTRP_OTRP-KUTAv6.app
+
+    - name: Create submission archive
+      run: ditto -c -k --keepParent work/sim-mac-OTRP_OTRP-KUTAv6.app "$RUNNER_TEMP/notarize.zip"
+
+    - name: Notarize and staple
+      env:
+        MACOS_NOTARY_API_KEY_P8: ${{ secrets.MACOS_NOTARY_API_KEY_P8 }}
+        MACOS_NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+        MACOS_NOTARY_API_ISSUER_ID: ${{ secrets.MACOS_NOTARY_API_ISSUER_ID }}
+      run: .github/macos/notarize.sh "$RUNNER_TEMP/notarize.zip" work/sim-mac-OTRP_OTRP-KUTAv6.app
+
+    - name: Create and verify distribution archive
+      run: |
+        set -euo pipefail
+        symlinks=$(find work/sim-mac-OTRP_OTRP-KUTAv6.app -type l | wc -l | tr -d ' ')
+        mkdir dist
+        ditto -c -k --keepParent work/sim-mac-OTRP_OTRP-KUTAv6.app dist/sim-mac-OTRP_OTRP-KUTAv6.zip
+        .github/macos/verify.sh dist/sim-mac-OTRP_OTRP-KUTAv6.zip arm64 "$symlinks"
+
+    - name: Upload notarized app
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: sim-mac-OTRP_OTRP-KUTAv6.app
+        path: dist/*.zip
+        if-no-files-found: error
+
+    - name: Destroy temporary keychain
+      if: always()
+      run: |
+        if [ -x .github/macos/keychain.sh ]; then
+          .github/macos/keychain.sh teardown
+        fi
