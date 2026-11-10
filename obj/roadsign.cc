@@ -829,6 +829,11 @@ void roadsign_t::rdwr(loadsave_t *file)
 		if(  file->is_version_less(110, 7)  ) {
 			private_way_mask = ~(uint64)0;
 		}
+		else if(  file->get_OTRP_version() == 0  &&  file->is_version_atleast(124, 2)  ) {
+			// standard 124.2+ stores the low byte of the player mask in ticks_offset
+			private_way_mask = ((uint64)ticks_ow << 8) | ticks_offset;
+			ticks_offset = 0;
+		}
 		else {
 			private_way_mask = ((uint64)ticks_ow << 8) | ticks_ns;
 		}

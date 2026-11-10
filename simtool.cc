@@ -4,6 +4,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 #include "simversion.h"
 #include <string.h>
 #include <math.h>
@@ -5451,10 +5453,35 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	const bool disjoint_diagonal_halt = bd->has_two_ways()
 		&&  ribi_t::are_disjoint_legs( bd->get_weg_nr(0)->get_ribi_unmasked(), bd->get_weg_nr(1)->get_ribi_unmasked() );
 
+	// On such a tile the stop goes on a bend of its own waytype. When both legs are such bends
+	// (a closed diagonal), each leg gets its own platform image (see gebaeude_t::get_tile2()).
+	ribi_t::ribi disjoint_leg_ribi = ribi_t::none;
+	ribi_t::ribi second_leg_ribi = ribi_t::none;
+	if(  disjoint_diagonal_halt  ) {
+		const waytype_t leg_wt = (wegtype==tram_wt) ? track_wt : wegtype;
+		const weg_t *w0 = bd->get_weg_nr(0);
+		const weg_t *w1 = bd->get_weg_nr(1);
+		const bool leg0_ok = w0->get_waytype()==leg_wt  &&  ribi_t::is_bend( w0->get_ribi_unmasked() );
+		const bool leg1_ok = w1->get_waytype()==leg_wt  &&  ribi_t::is_bend( w1->get_ribi_unmasked() );
+		// unless only the second leg is suitable, keep using the first one (refused below if unsuitable)
+		const weg_t *first = (!leg0_ok  &&  leg1_ok) ? w1 : w0;
+		disjoint_leg_ribi = first->get_ribi_unmasked();
+		if(  leg0_ok  &&  leg1_ok  &&  desc->get_all_layouts()>=48  ) {
+			second_leg_ribi = w1->get_ribi_unmasked();
+		}
+		// both platforms belong to the halt owner: the builder must be allowed to use both legs
+		for(  uint8 i=0;  i<2;  i++  ) {
+			weg_t *w = bd->get_weg_nr(i);
+			if(  (w==first  ||  second_leg_ribi!=ribi_t::none)  &&  w->is_deletable(player)!=NULL  ) {
+				return "Das Feld gehoert\neinem anderen Spieler\n";
+			}
+		}
+	}
+
 	if(  desc->get_all_layouts()==112  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			ribi = disjoint_leg_ribi;
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5476,7 +5503,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	else if(  desc->get_all_layouts()==80  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			ribi = disjoint_leg_ribi;
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5498,7 +5525,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	else if(  desc->get_all_layouts()==48  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+			ribi = disjoint_leg_ribi;
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
@@ -5591,7 +5618,8 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 				const gebaeude_t* gb = gr->find<gebaeude_t>();
 				if(gb  &&  gb->get_tile()->get_desc()->get_all_layouts()>4  &&  (gb->get_tile()->get_desc()->get_type()>building_desc_t::dock  ||  gb->get_tile()->get_desc()->get_type()>building_desc_t::flat_dock)  ) {
 					next_own |= ribi_t::nesw[i];
-					neighbour_layout[ribi_t::nesw[i]] = gb->get_tile()->get_layout();
+					// on a closed diagonal neighbour: the platform on the leg facing us
+					neighbour_layout[ribi_t::nesw[i]] = gb->get_tile_toward( ribi_t::backward(ribi_t::nesw[i]) )->get_layout();
 				}
 			}
 		}
@@ -5640,6 +5668,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	halthandle_t old_halt = bd->get_halt();
 	sint64 old_cost = 0;
 	bool recalc_schedule = false;
+	// the same stop is already here, only the platform on the second leg is added
+	bool add_second_platform = false;
+	const uint8 platforms = (second_leg_ribi!=ribi_t::none) ? 2 : 1;
 
 	halthandle_t halt;
 
@@ -5650,13 +5681,17 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		halt_player = gb->get_owner();
 		const building_desc_t *old_desc = gb->get_tile()->get_desc();
 		if(  old_desc == desc  ) {
-			// already has the same station
-			return NULL;
+			if(  platforms <= gb->get_platform_count()  ) {
+				// already has the same station
+				return NULL;
+			}
+			// closed diagonal, which got its second leg after the stop was built
+			add_second_platform = true;
 		}
-		if(  old_desc->get_capacity() >= desc->get_capacity()  &&  !is_ctrl_pressed()  ) {
+		else if(  old_desc->get_capacity() >= desc->get_capacity()  &&  !is_ctrl_pressed()  ) {
 			return "Upgrade must have\na higher level";
 		}
-		old_cost = old_desc->get_price(welt)*old_desc->get_x()*old_desc->get_y();
+		old_cost = old_desc->get_price(welt)*old_desc->get_x()*old_desc->get_y()*gb->get_platform_count();
 		gb->cleanup( NULL );
 		delete gb;
 		halt = old_halt;
@@ -5686,6 +5721,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	if(  bd->get_weg_hang() != slope_t::flat  ) {
 		hausbauer_t::build_station_on_slope_way(halt_player, bd->get_pos(), layout, desc, halt);
 	}
+	else if(  second_leg_ribi!=ribi_t::none  ) {
+		hausbauer_t::build_station_on_closed_diagonal(halt_player, bd->get_pos(), desc, ribi, second_leg_ribi, halt);
+	}
 	else if(  desc->get_all_layouts()>=48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
 	}
@@ -5704,13 +5742,17 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	}
 
 	// cost to build new station
-	sint64 cost = -desc->get_price(welt)*desc->get_x()*desc->get_y();
+	sint64 cost = -desc->get_price(welt)*desc->get_x()*desc->get_y()*platforms;
 	// discount for existing station
 	cost += old_cost/2;
+	if(  add_second_platform  ) {
+		// only the new platform is paid
+		cost = -desc->get_price(welt);
+	}
 	if(  player!=halt->get_owner() && player != welt->get_public_player()  ) {
 		// public stops are expensive!
 		// (Except for the public player itself)
-		cost -= (desc->get_maintenance(welt) * desc->get_x() * desc->get_y() * 60);
+		cost -= (desc->get_maintenance(welt) * desc->get_x() * desc->get_y() * (add_second_platform ? 1 : platforms) * 60);
 	}
 	player_t::book_construction_costs(player,  cost, k, wegtype);
 
@@ -5788,7 +5830,8 @@ bool tool_build_station_t::init( player_t * player )
 	}
 	else {
 set_area_cov:
-		uint16 const cov = welt->get_settings().get_station_coverage() * 2 + 1;
+		waytype_t wt = bdsc->get_finance_waytype();
+		uint16 const cov = welt->get_settings().get_station_coverage( wt==ignore_wt ? invalid_wt : wt ) * 2 + 1;
 		cursor_area = koord(cov, cov);
 		cursor_centered = true;
 		cursor_offset = koord(0,0);
@@ -6225,6 +6268,11 @@ const char *tool_rotate_building_t::rotate_building_at( player_t *player, koord3
 			}
 			int layout = gb->get_tile()->get_layout();
 			gb->set_tile( gb->get_tile()->get_desc()->get_tile( layout^8, 0, 0 ), false );
+			if(  gb->get_tile2()  &&  (layout & 8)  ) {
+				// closed diagonal stop: count through all four front/back combinations of the
+				// two platforms, flipping the second one whenever the first one returns to front
+				gb->set_tile2( desc->get_tile( gb->get_tile2()->get_layout()^8, 0, 0 ) );
+			}
 		}
 		else {
 			// single and multitile buildings from here, include factories with holes etc.
@@ -7320,7 +7368,7 @@ const char *tool_build_land_chain_t::work( player_t *player, koord3d pos )
 		// eventually adjust production
 		sint32 initial_prod = -1;
 		if (!strempty(default_param)) {
-			initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+			initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 		}
 
 		koord3d build_pos = gr->get_pos();
@@ -7388,7 +7436,7 @@ const char *tool_city_chain_t::work( player_t *player, koord3d pos )
 	// eventually adjust production
 	sint32 initial_prod = -1;
 	if (!strempty(default_param)) {
-		initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+		initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 	}
 
 	// process ignore climates switch
@@ -7502,7 +7550,7 @@ const char *tool_build_factory_t::work( player_t *player, koord3d pos )
 		// eventually adjust production
 		sint32 initial_prod = -1;
 		if (!strempty(default_param)) {
-			initial_prod = welt->inverse_scale_with_month_length( atol(default_param+2) );
+			initial_prod = (sint32)min((sint64)fabrik_t::MAX_BASE_PRODUCTION, welt->inverse_scale_with_month_length( atol(default_param+2) ));
 		}
 
 		fabrik_t *f = factory_builder_t::build_factory(NULL, fab, initial_prod, rotation, gr->get_pos(), welt->get_public_player());
@@ -10935,6 +10983,7 @@ bool tool_change_traffic_light_t::init( player_t *player )
  * e:set packed from-E/from-W allowed exit ribis on detailed_oneway sign (ticks_ow)
  * w:set two_ways flag on signal (allow convoys to pass from reverse direction)
  * i:set ignore lentgh
+ * q:allow more than one convoys in same platform
  */
 bool tool_change_roadsign_t::init( player_t *player )
 {
@@ -11188,6 +11237,26 @@ bool tool_change_roadsign_t::init( player_t *player )
 					if(  signal_info_win  ) {
 						signal_info_win->update_data();
 					}
+				}
+			}
+		}
+		break;
+
+		case 'q':
+		// allow more than one convoys in same platform
+		if(  grund_t *gr = welt->lookup(pos)  ) {
+			if(  roadsign_t *rs = gr->find<signal_t>()  ) {
+				rs->set_allow_multi_convoys(inst);
+				signal_info_t* signal_info_win = (signal_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  signal_info_win  ) {
+					signal_info_win->update_data();
+				}
+			}
+			else if(  roadsign_t *rs = gr->find<roadsign_t>()  ) {
+				rs->set_allow_multi_convoys(inst);
+				onewaysign_info_t* sign_info_win = (onewaysign_info_t*)win_get_magic((ptrdiff_t)rs);
+				if(  sign_info_win  ) {
+					sign_info_win->update_data();
 				}
 			}
 		}
@@ -11547,8 +11616,9 @@ bool tool_merge_player_t::init( player_t *player )
 		if(  cnv->get_owner()!=merged_player  ) {
 			continue;
 		}
-		
+		merged_player->book_convoi_number(-1);
 		cnv->set_owner(merger_player);
+		merger_player->book_convoi_number(1);
 		for( uint8 h=0; h<cnv->get_vehicle_count(); h++ ) {
 			cnv->get_vehikel(h)->set_owner(merger_player);
 		}
@@ -11618,6 +11688,9 @@ bool tool_merge_player_t::init( player_t *player )
 }
 bool tool_change_factory_t::init( player_t* player )
 {
+	if (!default_param || !player) {
+		return false;
+	}
 	char tool=0;
 	koord pos2d;
 	// skip the rest of the command
@@ -11625,7 +11698,11 @@ bool tool_change_factory_t::init( player_t* player )
 	while(  *p  &&  *p<=' '  ) {
 		p++;
 	}
-	sscanf( p, "%c,%hi,%hi", &tool, &pos2d.x, &pos2d.y );
+	int header_length = 0;
+	if (sscanf( p, "%c,%hi,%hi%n", &tool, &pos2d.x, &pos2d.y, &header_length ) != 3 ||
+		((tool == 'p' || tool == 'e') && p[header_length] != ',')) {
+		return false;
+	}
 
 	// skip to the commands ...
 	uint8 z = 3;
@@ -11646,6 +11723,34 @@ bool tool_change_factory_t::init( player_t* player )
 		return false;
 	}	
 	switch (tool) {
+		case 'e': // prohibit automatic expansion
+		{
+			if (z != 0 || (strcmp(p, "0") != 0 && strcmp(p, "1") != 0) ||
+				factory->get_owner() != player || !factory->can_auto_expand()) {
+				return false;
+			}
+			factory->set_no_expand_factory(*p == '1');
+		}
+		break;
+		case 'p': // set monthly base production
+		{
+			if (z != 0 || *p < '0' || *p > '9') {
+				return false;
+			}
+			const sint64 limit = welt->scale_with_month_length(fabrik_t::MAX_BASE_PRODUCTION);
+			char *end;
+			errno = 0;
+			const sint64 value = strtoll(p, &end, 10);
+			if (errno == ERANGE || *end != '\0' || value > limit || value < factory->get_min_editable_monthly_base_production()) {
+				return false;
+			}
+			const sint64 base_production = welt->inverse_scale_with_month_length(value);
+			if (base_production > fabrik_t::MAX_BASE_PRODUCTION) {
+				return false;
+			}
+			factory->set_edited_base_production((sint32)base_production);
+		}
+		break;
 		case 'd': // avoid destroy, avoid close after retire
 		{
 			factory->set_no_close_factory(!factory->is_no_close_factory());			

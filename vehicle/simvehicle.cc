@@ -971,7 +971,8 @@ void vehicle_t::initialise_journey(uint16 start_route_index, bool recalc)
 
 void vehicle_t::clamp_route_index()
 {
-	if(  cnv == NULL  ) {
+	if(  cnv == NULL  ||  cnv == (convoi_t*)1  ) {
+		// no convoy, or still being loaded (see reanchor_route_index())
 		return;
 	}
 	const uint32 count = cnv->get_route()->get_count();
@@ -987,7 +988,11 @@ void vehicle_t::clamp_route_index()
 
 bool vehicle_t::reanchor_route_index()
 {
-	if(  cnv == NULL  ) {
+	// While a vehicle is read, cnv holds the saved "target halt reserved" flag, i.e. NULL or
+	// (convoi_t*)1, until convoi_t::finish_rd() sets the real convoy. karte_t::rdwr_gamestate()
+	// files convoys stored in a depot away with betrete_depot() before that, and betrete_depot()
+	// uncouples a stored chain - so this runs on such vehicles.
+	if(  cnv == NULL  ||  cnv == (convoi_t*)1  ) {
 		return false;
 	}
 	const route_t* r = cnv->get_route();
@@ -1279,7 +1284,7 @@ ribi_t::ribi vehicle_t::get_current_corner_set() const
 	// and the bit pointing back to where we came from: route_index indexes pos_next, so our
 	// own tile sits at route_index-1 and the one we came from at route_index-2. Verify that
 	// invariant before using it -- it does not hold e.g. while a convoy leaves a depot.
-	if(  cnv  &&  route_index>=2u  ) {
+	if(  cnv  &&  cnv!=(convoi_t*)1  &&  route_index>=2u  ) {
 		const route_t *route = cnv->get_route();
 		if(  route  &&  (uint32)route_index-1u < route->get_count()  &&  route->at(route_index-1u)==pos  ) {
 			corner_set |= ribi_t::backward(ribi_type(route->at(route_index-2u), pos));
@@ -1397,13 +1402,9 @@ void vehicle_t::hop(grund_t* gr)
 			}
 			const koord3d ziel = cnv->get_schedule()->get_current_entry().pos;
 			cnv->set_schedule_target( cnv->is_waypoint(cnv->get_schedule()->get_current_entry()) ? ziel : koord3d::invalid );
-			c = cnv->self;
-			bool stop_next=true;
-			while(  c.is_bound()  ) {
-				stop_next&=c->is_users_at_next_stop();
-				c=c->get_coupling_convoi();
-			}
-			if(  !stop_next  ) {
+			// Skip the next entry only if every coupled convoy has a skip section without
+			// demand there (see convoi_t::chain_wants_stop_at_offset()).
+			if(  !cnv->chain_wants_stop_at_offset(0)  ) {
 				// skip next stop!
 				cnv->self->next_stop_button_pressed();
 			}
@@ -2607,7 +2608,7 @@ int road_vehicle_t::get_cost(const grund_t *gr, const weg_t *w, const sint32 max
 
 
 // this routine is called by find_route, to determined if we reached a destination
-bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
+bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr, const bool, const bool allow_multi_convoys, const uint8, const bool ) const
 {
 	//  just check, if we reached a free stop position of this halt
 	if(gr->is_halt()  &&  gr->get_halt()==target_halt  &&  target_halt->get_empty_lane(gr,cnv->self)!=0) {
@@ -2634,7 +2635,7 @@ bool road_vehicle_t::is_target(const grund_t *gr, const grund_t *prev_gr) const
 						// there are another car here!
 						const strasse_t *str = (const strasse_t*)to->get_weg(road_wt);
 						const overtaking_mode_t overtaking_mode = str ? str->get_overtaking_mode() : prohibited_mode;
-						if(  overtaking_mode==prohibited_mode || overtaking_mode==halt_mode ) {
+						if(  (overtaking_mode==prohibited_mode || overtaking_mode==halt_mode)&&!allow_multi_convoys ) {
 							// we do not have empty lane, also we cannot enter because we cannot overtake it!(avoid stack)
 							return false;
 						}
@@ -2725,7 +2726,7 @@ void road_vehicle_t::get_screen_offset( int &xoff, int &yoff, const sint16 raste
 
 
 // chooses a route at a choose sign; returns true on success
-bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based )
+bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based, const bool allow_multi_convoys )
 {
 	if(  cnv->get_schedule_target()!=koord3d::invalid  ) {
 		// destination is a waypoint!
@@ -2806,7 +2807,7 @@ bool road_vehicle_t::choose_route(sint32 &restart_speed, ribi_t::ribi start_dire
 			// now it make sense to search a route
 			route_t target_rt;
 			koord3d next3d = rt->at(index);
-			if(  !target_rt.find_route( welt, next3d, this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), length_based )  ) {
+			if(  !target_rt.find_route( welt, next3d, this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), allow_multi_convoys, length_based )  ) {
 				// nothing empty or not route with less than 33 tiles
 				target_halt = halthandle_t();
 				restart_speed = 0;
@@ -2924,7 +2925,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 								return false;
 							}
 						}
-						else if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based() )  ) {
+						else if(  !choose_route( restart_speed, direction90, route_index, rs->is_length_based(), rs->is_allow_multi_convoys() )  ) {
 							return false;
 						}
 					}
@@ -3170,7 +3171,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 								return false;
 							}
 						}
-						else if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based() )  ) {
+						else if(  !choose_route( restart_speed, curr_90direction, test_index, rs->is_length_based(), rs->is_allow_multi_convoys() )  ) {
 							return false;
 						}
 					}
@@ -3954,7 +3955,7 @@ bool road_vehicle_t::guide_route(sint32 &restart_speed, ribi_t::ribi start_direc
 	// Look for a convoy that is already waiting for us in the target halt. check_next_tile() bounds
 	// the search by the end-of-guide flag, is_coupling_target() decides what a valid partner is.
 	route_t target_rt;
-	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0 );
+	const bool route_found = target_rt.find_route( welt, rt->at(index), this, speed_to_kmh(cnv->get_min_top_speed()), start_direction, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, false, true, 0 );
 	target_halt = halthandle_t();
 	if(  !route_found  ||  target_rt.get_count()<2  ) {
 		// the convoy to couple with has not arrived yet: wait at this guide signal.
@@ -4645,10 +4646,14 @@ int rail_vehicle_t::get_cost(const grund_t *gr, const weg_t *w, const sint32 max
 
 
 // this routine is called by find_route, to determined if we reached a destination
-bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const bool need_electric, const uint8 choose_margin, const bool ignore_length) const
+bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const bool need_electric, const bool allow_multi_convoys, const uint8 choose_margin, const bool ignore_length) const
 {
+	// now we must check the predecessor ...
+	if(  !prev_gr  ) {
+		return false;
+	}
 	// direction-aware: the leg entered from prev_gr (two same-waytype disjoint diagonal legs)
-	const ribi_t::ribi entry_bit = prev_gr ? ribi_t::backward(ribi_type(prev_gr->get_pos(), gr->get_pos())) : ribi_t::none;
+	const ribi_t::ribi entry_bit = ribi_t::backward(ribi_type(prev_gr->get_pos(), gr->get_pos()));
 	const schiene_t * sch1 = (const schiene_t *) gr->get_weg(get_waytype(), entry_bit);
 	// first check blocks, if we can go there
 	if(  !sch1->can_reserve(cnv->self)  ) {
@@ -4656,10 +4661,6 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	}
 	//  just check, if we reached a free stop position of this halt
 	if(  !gr->is_halt()  ||  gr->get_halt()!=target_halt  ) {
-		return false;
-	}
-	// now we must check the predecessor ...
-	if(  !prev_gr  ) {
 		return false;
 	}
 	const koord dir=gr->get_pos().get_2d()-prev_gr->get_pos().get_2d();
@@ -4683,9 +4684,11 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	) {
 		// check electrification
 		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi)));
-		if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
-			// We can still go forward.
-			return false;
+		if(  sch->can_reserve(cnv->self)||!allow_multi_convoys  ) {
+			if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
+				// We can still go forward.
+				return false;
+			}
 		}
 	}
 	// end of stop: Is it long enough?
@@ -5008,10 +5011,10 @@ skip_choose:
 		const int richtung = start_block<cnv->get_route()->get_count()-1?ribi_type(cnv->get_route()->at(start_block),cnv->get_route()->at(start_block+1)):ribi_t::all;	// to avoid confusion at diagonals
 		if(  try_coupling  ) {
 			// search for coupling point.
-			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), false, true, 0, sig->is_ignore_length() );
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), false, false, true, 0, sig->is_ignore_length() );
 			cnv->set_use_electric(cnv->is_electrification());
 			if (  !route_found  ) {
-				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, true, 0, sig->is_ignore_length() );
+				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), false, false, true, 0, sig->is_ignore_length() );
 				if(  route_found  ) {
 					cnv->set_use_electric(false);
 				}
@@ -5019,10 +5022,10 @@ skip_choose:
 		}
 		if(  !route_found  &&  (!sig->is_guide_signal()  ||  !try_coupling)  ) {
 			const uint8 margin_length=sig->get_margin_length();
-			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
+			route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->is_electrification(), sig->is_allow_multi_convoys(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
 			cnv->set_use_electric(cnv->is_electrification());
 			if(  !route_found  ) {
-				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
+				route_found = target_rt.find_route( welt, cnv->get_route()->at(start_block), this, speed_to_kmh(cnv->get_min_top_speed()), richtung, welt->get_settings().get_max_choose_route_steps(), cnv->needs_electrification(), sig->is_allow_multi_convoys(), sig->is_length_based(), false, margin_length, sig->is_ignore_length() );
 				if(  route_found  ) {
 					cnv->set_use_electric(false);
 				}
@@ -5279,23 +5282,40 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	uint8 next_c_steps;
 	grund_t* gr_current = welt->lookup(get_pos());
 	// reset driving without reservation
+	// set_next_stop_index(n) makes n the next block (it stores n+1), so the signal tile itself must
+	// be passed: the signal is then checked by is_signal_clear() below like any other signal.
+	// Pointing behind it would be taken as "signal disappeared" and only reserve a plain block,
+	// skipping choose, pre, longblock and priority signal logic.
 	if(  cnv->is_drive_without_reservation()  ) {
 		if(  gr_current  ) {
 			// direction-aware: the leg we are standing on / about to enter
 			if(weg_t* w = gr_current->get_weg(get_waytype(), get_current_corner_set())) {
 				if(w->has_signal()) {
+					// we stand on the signal (route_index-1)
 					cnv->set_drive_without_reservation(false);
-					cnv->set_next_stop_index(route_index-2);
+					cnv->set_next_stop_index(max(route_index,1)-1);
 				}
 			}
 		}
-		if(  gr  ) {
+		if(  gr  &&  cnv->is_drive_without_reservation()  ) {
 			if(weg_t* w = gr->get_weg(get_waytype(), ribi_t::backward(ribi_type(get_pos(), gr->get_pos())))) {
 				if(w->has_signal()) {
+					// the signal is on the tile we are entering (route_index)
 					cnv->set_drive_without_reservation(false);
-					cnv->set_next_stop_index(route_index-1);
+					cnv->set_next_stop_index(route_index);
 				}
 			}
+		}
+		// While driving without reservation the convoy holds the tiles it stands on (enter_tile()
+		// reserves them) and reserve_route() takes the front vehicle as the end of its reservation,
+		// but next_reservation_index is left wherever the last real reservation ended - typically
+		// the departure tile. Once we fall back to normal reservation that stale index is what
+		// counts again, and after loading a game reserve_route() and rail_vehicle_t::set_convoi()
+		// rebuild the reservation and the next stop from it: the tiles we stand on were left
+		// unreserved, and with an index of 0 set_convoi() even moved next_stop_index back behind
+		// the signal, so it was passed unchecked. So hand our current extent over.
+		if(  !cnv->is_drive_without_reservation()  &&  cnv->get_next_reservation_index()<route_index  ) {
+			cnv->set_next_reservation_index(route_index);
 		}
 	}
 
@@ -6074,6 +6094,22 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				}
 			}
 		}
+		if(  find_coupling_target  ) {
+			// The target chain itself is no obstacle. It normally makes no difference - its other
+			// cars stand beyond the end we couple to - but a chain just put ashore by a carrier
+			// has every car stacked on the landing tile at the same step (see disembark_convoy()),
+			// and then any car longer than its tail would block the coupling with that very tail.
+			other_step = VEHICLE_STEPS_PER_TILE;
+			for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
+					if(  v->get_convoi()->get_most_parent_convoi()==coupling_target->get_most_parent_convoi()  ) {
+						continue;
+					}
+					sint16 const temp_car_step=((v->get_direction()&dir)==0)? tile_length - (sint16)v->get_steps() - 1 : (sint16)v->get_steps()-(sint16)v->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT;
+					other_step = min(other_step,temp_car_step);
+				}
+			}
+		}
 		if(  other_step<c_step  ) {
 			// there are another vehicles front of the target-> wait for clearance (return false);
 			find_coupling_target = false;
@@ -6120,6 +6156,9 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 void rail_vehicle_t::leave_tile()
 {
 	vehicle_t::leave_tile();
+	// no convoy yet while the game is being loaded: a convoy stored in a depot is filed away by
+	// betrete_depot() before finish_rd() replaces cnv's (convoi_t*)1 placeholder
+	convoi_t *const my_cnv = (cnv == (convoi_t*)1) ? NULL : cnv;
 	// fix counters
 	// direction-aware: resolve the leg this vehicle actually occupies, relevant when two
 	// same-waytype disjoint diagonal legs coexist on the tile we are leaving
@@ -6128,12 +6167,12 @@ void rail_vehicle_t::leave_tile()
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
 			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
-			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  cnv  ) {
+			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  my_cnv  ) {
 				// the leg cannot be told from our route (e.g. leaving a depot) => release the
 				// leg our convoy holds, provided that it holds just one of them
 				schiene_t *leg0 = (schiene_t *)gr->get_weg_nr(0);
 				schiene_t *leg1 = (schiene_t *)gr->get_weg_nr(1);
-				const convoihandle_t c = cnv->get_most_parent_convoi();
+				const convoihandle_t c = my_cnv->get_most_parent_convoi();
 				const bool r0 = leg0->is_reserved_by(c);
 				const bool r1 = leg1->is_reserved_by(c);
 				if(  r0 != r1  ) {
@@ -6147,8 +6186,9 @@ void rail_vehicle_t::leave_tile()
 				ribi_t::ribi other_convoy_travel_dir=ribi_t::none;
 				for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
 					rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos));
-					if(  !v || !v->get_convoi() || v->get_convoi()==get_convoi()  ) {
-						// no vehicle or same convoy, ok
+					convoi_t* const vc = v ? v->get_convoi() : NULL;
+					if(  !v  ||  !vc  ||  vc==(convoi_t*)1  ||  vc==get_convoi()  ) {
+						// no vehicle, same convoy, or not yet finished loading (cnv placeholder)
 						continue;
 					}
 					if(  gr->has_two_same_waytype_ways()  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
@@ -6183,7 +6223,7 @@ void rail_vehicle_t::leave_tile()
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
 				// unreserve(vehicle_t*) always cleared the primary slot regardless of which
 				// convoy this vehicle belongs to — causing spurious promotion/clearing bugs.
-				const convoihandle_t self_cnv = cnv ? cnv->get_most_parent_convoi() : convoihandle_t();
+				const convoihandle_t self_cnv = my_cnv ? my_cnv->get_most_parent_convoi() : convoihandle_t();
 				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
@@ -6197,9 +6237,9 @@ void rail_vehicle_t::leave_tile()
 						sig->set_state(  roadsign_t::STATE_RED );
 					}
 				}
-				if(  cnv  ) {
+				if(  my_cnv  ) {
 					// for treat reservation safely
-					cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
+					my_cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 				}
 				if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) {
 					// we may need to unreserve the other way as well (not for two independent same-waytype
@@ -6226,9 +6266,9 @@ void rail_vehicle_t::leave_tile()
 					}
 				}
 			}
-			if(  cnv  ) {
+			if(  my_cnv  ) {
 				// If reservation is controlled by next_reservation_index, this does nothing.
-				cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
+				my_cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 			}
 		}
 	}
@@ -6575,7 +6615,18 @@ bool air_vehicle_t::check_next_tile(const grund_t *bd, const bool, bool, bool, c
 			// direction-aware: the leg entered from `prev` (two same-waytype disjoint diagonal legs)
 			const ribi_t::ribi entry_bit = (prev!=koord3d::invalid) ? ribi_t::backward(ribi_type(prev, bd->get_pos())) : ribi_t::none;
 			const weg_t *w = bd->get_weg(air_wt, entry_bit);
-			return (w  &&  w->get_max_speed()>0);
+			if(w==NULL) { return false; }
+			const schiene_t *sch = obj_cast<schiene_t>(w);
+			if(sch && sch->has_sign()) {
+				const roadsign_t* rs = bd->find<roadsign_t>();
+				if(  rs->get_desc()->get_wtyp()==get_waytype()  ) {
+					if(  rs->get_desc()->is_private_way()  &&  (rs->get_player_mask() & ((uint64)1 << get_owner_nr())) == 0  ) {
+						// private road
+						return false;
+					}
+				}
+			}
+			return (w->get_max_speed()>0);
 		}
 
 		case landing:

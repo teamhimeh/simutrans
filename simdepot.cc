@@ -371,7 +371,11 @@ bool depot_t::check_obsolete_inventory(convoihandle_t cnv)
 convoihandle_t depot_t::copy_convoi(convoihandle_t old_cnv, bool local_execution, bool is_copy_schedule)
 {
 	if(  old_cnv.is_bound()  &&  !convoihandle_t::is_exhausted()  &&
-		old_cnv->get_vehicle_count() > 0  &&  get_waytype() == old_cnv->front()->get_desc()->get_waytype() ) {
+		old_cnv->get_vehicle_count() > 0  ) {
+		if(  !can_accept_waytype(old_cnv->front()->get_waytype())  ) {
+			// invalid waytype!
+			return convoihandle_t();
+		}
 
 		convoihandle_t new_cnv = add_convoi( false );
 		new_cnv->set_name(old_cnv->get_internal_name());

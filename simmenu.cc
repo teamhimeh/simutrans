@@ -368,6 +368,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_SHOW_ONLY_OWN_VEHICLE_STATES:		tool = new tool_only_own_vehicle_states_t(); break;
 		case TOOL_FOLLOW_CONVOI_UNDERGROUND:		tool = new tool_follow_convoi_underground_t(); break;
 		case TOOL_EXPORT_MINIMAP:      tool = new tool_export_minimap_t(); break;
+		case TOOL_SWITCH_PREV_PLAYER:	tool = new tool_switch_prev_player_t(); break;
 		default:                    dbg->error("create_simple_tool()","cannot satisfy request for simple_tool[%i]!",toolnr);
 		                            return NULL;
 	}

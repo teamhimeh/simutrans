@@ -143,6 +143,10 @@ try coupling convoy not enter here
 連結試行時の進入禁止
 remove signal
 この信号を撤去する
+Stop more than one convoys.
+縦列停車を許可
+Allow more than one convoys at same spot(platform).
+一つのホームに複数編成の縦列停車を許可します.
 allow reverse passage
 信号の逆向き通行を許可
 Allow reverse passage for convoys
@@ -389,6 +393,18 @@ Waiting until make another convoy depart
 他の編成に発車許可を出すまで待機します(通過駅には付与できません)
 Select Line Allow Departure
 発車許可を出す路線を指定
+Single freight destination
+同じ行先のみ乗車可
+Each convoy loads freight for only one destination at a time. Passengers and mail are not affected.
+同じ行先の貨物のみ乗車できます.(旅客と郵便は対象外です)
+no-go-no-users section start
+乗降客がいない場合に経由しない(ここから)
+no-go-no-users section end
+乗降客がいない場合に経由しない(ここまで)
+Starts a demand-based skip section: if none of the entries up to the matching section end have demand, this convoy skips all of them. Set start and end on the same entry for a single-stop section.
+ここから先、乗降客がいない場合は経由しません.必ず終了する地点を決めてください!
+Ends a demand-based skip section started at an earlier entry.
+ここまでの区間で乗降客が居ない場合は経由しません.
 #------円表記------
 $
  円
@@ -451,6 +467,8 @@ Reverse coupling
 %sは到達可能な駅や車庫が見つからなかったため%sに下船しました。
 %s was sent to a depot: %s can no longer reach its transfer stop.
 %sは車庫に転送されました: %sは駅に到達できませんでした
+%s was sent to a depot: its scheduled tile at %s cannot be used.
+%sは車庫に転送されました: %sの指定された停車位置を使用できません
 Aboard:
 航送中
 Convoys aboard:
@@ -481,6 +499,14 @@ SHIPPING_NARROWGAUGE
 ナローゲージ車両を航送
 SHIPPING_WATER
 船を航送
+Carried by:
+この編成に乗船中:
+Carrying:
+乗車中の編成一覧:
+Open the information window of this convoy.
+この編成の編成ウィンドウを表示
+Not allowed while the convoy is aboard another convoy.
+乗船中は使用できません.
 #------無閉塞運行------
 Without Reservation
 無閉塞運行
@@ -646,6 +672,8 @@ Show city citizens as circles
 都市人口を円の大きさで表示します
 Show city growth as circles (red=growth, green=decline)
 都市の成長率を円の大きさで表示します(赤:成長、緑:衰退)
+Export map image
+マップの画像を出力
 #------高度な設定------
 allow overloading
 旅客の過積載を許可(allow_overloading)
@@ -770,6 +798,91 @@ Convoi has been sent\nto the selected depot\nof appropriate type.\n
 編成は指定された\n車庫に向かいました.\n
 Distance (m)
 走行距離 (m)
+#------地形データ出力------
+Export heightmap
+地形データ出力
+Heightmap PNG
+地形データ出力
+Save as PNG
+PNG形式で保存
+Load mode:
+ロードモード:
+linear
+線形
+Export the terrain as a PNG heightmap for a new game.
+地形データを新規ゲーム用のPNG画像として出力します。
+Heightmap size:
+画像サイズ:
+Height limits:
+高さの下限・上限:
+Lake levels, buildings and ways are not stored.
+湖面水位・建物・道路や線路は保存されません。
+Please enter a heightmap filename.
+地形データのファイル名を入力してください。
+This file already exists or cannot be accessed. Choose another filename.
+ファイルが既に存在するかアクセスできません。別の名前を指定してください。
+Heightmap saved to:\n%s
+地形データを保存しました:\n%s
+Heightmap export failed. Check the filename and write permissions.
+地形データを出力できません。ファイル名と書込権限を確認してください。
+#------キーボードショートカット設定------
+Keybindings
+キーボードショートカット
+Key binding conflict
+設定が重複しています!
+Toolbar
+ツールバー
+Change keybind
+設定/変更
+Clear key
+削除
+Restore default keys
+元の状態に復元
+Key changes are saved automatically to menuconf.tab
+menuconf.tabに自動で保存 
+Shortcut action
+動作
+Current key
+現在の割り当て
+Could not read keybindings or prepare their backup.
+読み込みに失敗しました.
+Key settings saved.
+設定を保存.
+Could not save key settings.
+保存できません!
+Press a key. Esc cancels.
+キーを押してください.Escでキャンセル
+This key is reserved by the game.
+このキーは予約済みです.
+Conflicting key:
+重複したキー割り当て:
+Key already assigned:
+割り当て済み:
+The binding was not changed. Choose another key, or clear the existing binding first.
+割り当ては変更されていません.ほかのキーを選ぶか,先に割り当てを削除してください.
+Unassigned
+未割り当て
+#------駅の有効範囲------
+station_coverage
+駅の有効範囲(station_coverage)
+station_coverage_water
+海上の有効範囲(station_coverage_water)
+station_coverage[road]
+道路属性の駅の有効範囲(station_coverage[road])
+station_coverage[track]
+鉄道属性の駅の有効範囲(station_coverage[track])
+station_coverage[water]
+運河・港属性の駅の地上での有効範囲(station_coverage[water])
+station_coverage[monorail_track]
+モノレール属性の駅の有効範囲(staiton_coverage[monorail_track])
+station_coverage[maglev_track]
+リニア属性の駅の有効範囲(station_coverage[maglev_track])
+station_coverage[tram_track]
+路面軌道属性の駅の有効範囲(station_coverage[tram_track])
+station_coverage[narrowguage_track]
+ナローゲージ属性の駅の有効範囲(station_coverage[narrowguage_track])
+station_coverage[air]
+空港の有効範囲(station_coverage[air])
 #------その他の翻訳------
 v%d (current version)
 v%d (現在のバージョン)
@@ -817,6 +930,10 @@ Factory Type
 産業の種類
 no close this factory
 この産業を閉鎖しない
+Do not automatically expand this factory
+この産業を自動拡張しない
+Prevents new fields and automatic production increases. Existing fields and production are retained.
+畑の追加と生産量の自動増加を停止します。既存の畑と生産量は維持されます。
 close_old_factory
 古い産業を閉鎖する
 Factory %s is retired! Close soon!
@@ -979,3 +1096,21 @@ Thumbnails
 サムネイル表示
 Large thumbnails
 大きく表示
+Base production:
+基本生産量:
+Set shipment size
+出荷単位を設定
+Set base production
+基本生産量を設定
+Monthly base production before boosts. For consumers, sets consumption capacity.
+ブースト前の月あたりの基本生産量です。消費専用産業では消費能力を設定します。
+Previous player
+前のプレイヤーへ
+Reset game speed
+ゲーム速度をリセット
+Fix game speed.
+ゲーム速度を修正
+deactivated in offline mode
+オフラインモードでは無効
+Bridge blocked by building below.
+下にある建物があるので橋が架けられません.

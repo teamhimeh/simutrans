@@ -792,7 +792,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 	}
 
 	// how much do we need?
-	sint32 consumption = our_fab->get_base_production()*supplier->get_consumption();
+	sint64 consumption = (sint64)our_fab->get_base_production()*supplier->get_consumption();
 
 	slist_tpl<factories_to_crossconnect_t> factories_to_correct;
 	slist_tpl<fabrik_t *> new_factories;           // since the cross-correction must be done later
@@ -801,7 +801,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 	int lcount = supplier->get_supplier_count();
 	int lfound = 0; // number of found producers
 
-	DBG_MESSAGE("factory_builder_t::build_chain_link","supplier_count %i, lcount %i (need %i of %s)",info->get_supplier_count(),lcount,consumption,ware->get_name());
+	DBG_MESSAGE("factory_builder_t::build_chain_link","supplier_count %i, lcount %i (need %lld of %s)",info->get_supplier_count(),lcount,consumption,ware->get_name());
 
 	// search if there already is one or two (cross-connect everything if possible)
 	FOR(slist_tpl<fabrik_t*>, const fab, welt->get_fab_list()) {
@@ -821,7 +821,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 				const factory_desc_t* const fd = fab->get_desc();
 				for (uint gg = 0; gg < fd->get_product_count(); gg++) {
 					if (fd->get_product(gg)->get_output_type() == ware && fab->get_lieferziele().get_count() < 10) { // does not make sense to split into more ...
-						sint32 production_left = fab->get_base_production() * fd->get_product(gg)->get_factor();
+						sint64 production_left = (sint64)fab->get_base_production() * fd->get_product(gg)->get_factor();
 						const vector_tpl <koord> & lieferziele = fab->get_lieferziele();
 
 						// decrease remaining production by supplier demand
@@ -830,7 +830,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 							fabrik_t* const zfab = fabrik_t::get_fab(i);
 							for(int zz=0;  zz<zfab->get_desc()->get_supplier_count();  zz++) {
 								if(zfab->get_desc()->get_supplier(zz)->get_input_type()==ware) {
-									production_left -= zfab->get_base_production()*zfab->get_desc()->get_supplier(zz)->get_consumption();
+									production_left -= (sint64)zfab->get_base_production()*zfab->get_desc()->get_supplier(zz)->get_consumption();
 									break;
 								}
 							}
@@ -841,7 +841,7 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 							if(production_left>0) {
 								consumption -= production_left;
 								fab->add_lieferziel(our_fab->get_pos().get_2d());
-								DBG_MESSAGE("factory_builder_t::build_chain_link","supplier %s can supply approx %i of %s to us", fd->get_name(), production_left, ware->get_name());
+								DBG_MESSAGE("factory_builder_t::build_chain_link","supplier %s can supply approx %lld of %s to us", fd->get_name(), production_left, ware->get_name());
 							}
 							else {
 								/* we steal something; however the total capacity
@@ -943,10 +943,10 @@ int factory_builder_t::build_chain_link(const fabrik_t* our_fab, const factory_d
 		const factory_desc_t* const fd = fab->get_desc();
 		for (uint gg = 0; gg < fab->get_desc()->get_product_count(); gg++) {
 			if (fd->get_product(gg)->get_output_type() == ware) {
-				sint32 production = fab->get_base_production() * fd->get_product(gg)->get_factor();
+				sint64 production = (sint64)fab->get_base_production() * fd->get_product(gg)->get_factor();
 				// the take care of how much this factory could supply
 				consumption -= production;
-				DBG_MESSAGE("factory_builder_t::build_chain_link", "new supplier %s can supply approx %i of %s to us", fd->get_name(), production, ware->get_name());
+				DBG_MESSAGE("factory_builder_t::build_chain_link", "new supplier %s can supply approx %lld of %s to us", fd->get_name(), production, ware->get_name());
 				break;
 			}
 		}
