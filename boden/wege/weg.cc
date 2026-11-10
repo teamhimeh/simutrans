@@ -633,6 +633,7 @@ void weg_t::calc_image()
 	grund_t *from = welt->lookup(get_pos());
 	grund_t *to;
 	image_id old_image = image;
+	image_id old_foreground_image = foreground_image;
 
 	close_diagonal_state = 0;
 
@@ -733,9 +734,11 @@ void weg_t::calc_image()
 
 		}
 	}
-	if(  image!=old_image  ) {
+	if(  image!=old_image  ||  foreground_image!=old_foreground_image  ) {
 		mark_image_dirty(old_image, from->get_weg_yoff());
 		mark_image_dirty(image, from->get_weg_yoff());
+		mark_image_dirty(old_foreground_image, from->get_weg_yoff());
+		mark_image_dirty(foreground_image, from->get_weg_yoff());
 	}
 #ifdef MULTI_THREAD
 	pthread_mutex_unlock( &weg_calc_image_mutex );
