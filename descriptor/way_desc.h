@@ -219,6 +219,13 @@ public:
 		return get_child<image_list_t>(n)->get_image_id(ribi / 3 - 1);
 	}
 
+	// the back diagonal image, or the front one when only that exists (for single image previews)
+	image_id get_back_or_front_diagonal_image_id(ribi_t::ribi ribi, uint8 season) const
+	{
+		const image_id back = get_diagonal_image_id(ribi, season);
+		return back != IMG_EMPTY ? back : get_diagonal_image_id(ribi, season, true);
+	}
+
 	bool has_double_slopes() const {
 		// return get_child<image_list_t>(3)->get_count() > 4
 		// ||     get_child<image_list_t>(image_list_base_index(false, true) + 1)->get_count() > 4;
