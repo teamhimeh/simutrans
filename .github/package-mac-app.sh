@@ -39,16 +39,19 @@ RESOURCES="$CONTENTS/Resources"
 APP_EXE="$MACOS/sim"
 
 FREETYPE_PREFIX="$(brew --prefix freetype)"
+BROTLI_PREFIX="$(brew --prefix brotli)"
 PNG_PREFIX="$(brew --prefix libpng)"
 ZSTD_PREFIX="$(brew --prefix zstd)"
 SDL3_PREFIX="$(brew --prefix sdl3)"
 
 FREETYPE_DYLIB="$FREETYPE_PREFIX/lib/libfreetype.6.dylib"
+BROTLI_DEC_DYLIB="$BROTLI_PREFIX/lib/libbrotlidec.1.dylib"
+BROTLI_COMMON_DYLIB="$BROTLI_PREFIX/lib/libbrotlicommon.1.dylib"
 PNG_DYLIB="$PNG_PREFIX/lib/libpng16.16.dylib"
 ZSTD_DYLIB="$ZSTD_PREFIX/lib/libzstd.1.dylib"
 SDL3_DYLIB="$SDL3_PREFIX/lib/libSDL3.0.dylib"
 
-for dylib in "$FREETYPE_DYLIB" "$PNG_DYLIB" "$ZSTD_DYLIB" "$SDL3_DYLIB"; do
+for dylib in "$FREETYPE_DYLIB" "$BROTLI_DEC_DYLIB" "$BROTLI_COMMON_DYLIB" "$PNG_DYLIB" "$ZSTD_DYLIB" "$SDL3_DYLIB"; do
 	[ -f "$dylib" ] || { echo "missing dylib: $dylib" >&2; exit 1; }
 done
 
@@ -60,6 +63,8 @@ cp -p "$ROOT_DIR/OSX/simutrans.icns" "$RESOURCES/simutrans.icns"
 printf 'APPL????\n' > "$CONTENTS/PkgInfo"
 
 cp -p "$FREETYPE_DYLIB" "$FRAMEWORKS/libfreetype.6.dylib"
+cp -p "$BROTLI_DEC_DYLIB" "$FRAMEWORKS/libbrotlidec.1.dylib"
+cp -p "$BROTLI_COMMON_DYLIB" "$FRAMEWORKS/libbrotlicommon.1.dylib"
 cp -p "$PNG_DYLIB" "$FRAMEWORKS/libpng16.16.dylib"
 cp -p "$ZSTD_DYLIB" "$FRAMEWORKS/libzstd.1.dylib"
 cp -p "$SDL3_DYLIB" "$FRAMEWORKS/libSDL3.0.dylib"
@@ -73,9 +78,18 @@ install_name_tool \
 
 install_name_tool \
 	-change "$PNG_DYLIB" "@executable_path/../Frameworks/libpng16.16.dylib" \
+	-change "$BROTLI_DEC_DYLIB" "@loader_path/libbrotlidec.1.dylib" \
+	-change "@rpath/libbrotlidec.1.dylib" "@loader_path/libbrotlidec.1.dylib" \
 	"$FRAMEWORKS/libfreetype.6.dylib"
 
+install_name_tool \
+	-change "$BROTLI_COMMON_DYLIB" "@loader_path/libbrotlicommon.1.dylib" \
+	-change "@rpath/libbrotlicommon.1.dylib" "@loader_path/libbrotlicommon.1.dylib" \
+	"$FRAMEWORKS/libbrotlidec.1.dylib"
+
 install_name_tool -id "@executable_path/../Frameworks/libfreetype.6.dylib" "$FRAMEWORKS/libfreetype.6.dylib"
+install_name_tool -id "@loader_path/libbrotlidec.1.dylib" "$FRAMEWORKS/libbrotlidec.1.dylib"
+install_name_tool -id "@loader_path/libbrotlicommon.1.dylib" "$FRAMEWORKS/libbrotlicommon.1.dylib"
 install_name_tool -id "@executable_path/../Frameworks/libpng16.16.dylib" "$FRAMEWORKS/libpng16.16.dylib"
 install_name_tool -id "@executable_path/../Frameworks/libzstd.1.dylib" "$FRAMEWORKS/libzstd.1.dylib"
 install_name_tool -id "@loader_path/libSDL3.0.dylib" "$FRAMEWORKS/libSDL3.0.dylib"

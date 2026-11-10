@@ -65,7 +65,7 @@ jobs:
         persist-credentials: false
 
     - name: Install dependencies
-      run: brew install sdl3 freetype libpng zstd miniupnpc pkg-config
+      run: brew install sdl3 freetype brotli libpng zstd miniupnpc pkg-config
 
     - name: Build tagged source without signing credentials
       working-directory: source
