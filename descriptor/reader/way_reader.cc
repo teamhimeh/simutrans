@@ -40,7 +40,11 @@ void way_reader_t::register_obj(obj_desc_t *&data)
 
 	// just calculate those once
 	const uint16 front_base = desc->image_list_base_index(false, true);
-	desc->diagonals = desc->get_child<image_list_t>(4)->get_image_id(0) != IMG_EMPTY  ||  desc->get_child<image_list_t>(front_base + 2)->get_image_id(0) != IMG_EMPTY;
+	// diagonals in any direction; a pak may provide only front diagonals
+	desc->diagonals = false;
+	for(  ribi_t::ribi ribi = ribi_t::northeast;  ribi <= ribi_t::southwest  &&  !desc->diagonals;  ribi += 3  ) {
+		desc->diagonals = desc->get_back_or_front_diagonal_image_id(ribi, 0) != IMG_EMPTY;
+	}
 	desc->close_diagonals = desc->get_close_diagonal_image_id(0, 0, false) != IMG_EMPTY  ||  desc->get_close_diagonal_image_id(0, 0, true) != IMG_EMPTY;
 	desc->switches = desc->get_child<image_list_t>(2)->get_count() > 16  ||  desc->get_child<image_list_t>(front_base)->get_count() > 16;
 	desc->switches_ex = desc->get_child<image_list_t>(2)->get_count() > 26  ||  desc->get_child<image_list_t>(front_base)->get_count() > 26;

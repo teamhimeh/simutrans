@@ -219,7 +219,7 @@ public:
 		return get_child<image_list_t>(n)->get_image_id(ribi / 3 - 1);
 	}
 
-	// the back diagonal image, or the front one when only that exists (for single image previews)
+	// the back diagonal image, or the front one when only that exists
 	image_id get_back_or_front_diagonal_image_id(ribi_t::ribi ribi, uint8 season) const
 	{
 		const image_id back = get_diagonal_image_id(ribi, season);
