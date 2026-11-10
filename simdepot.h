@@ -51,13 +51,14 @@ protected:
 	void rdwr_vehikel(slist_tpl<vehicle_t*> &list, loadsave_t *file);
 
 	static slist_tpl<depot_t *> all_depots;
+
+public:
 	/**
 	 *  Search the parent convoy in this depot
 	 */
 	convoihandle_t find_parent_convoy_in_depot(convoihandle_t cnv);
 	convoihandle_t find_most_parent_convoy_in_depot(convoihandle_t cnv);
 
-public:
 	// Last selected vehicle filter
 	int selected_filter;
 
