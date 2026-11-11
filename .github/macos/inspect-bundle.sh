@@ -13,6 +13,7 @@
 #   * whether anything still points at a path that only exists on the build
 #     machine (Homebrew prefixes, the runner home directory), which would work
 #     on the runner and fail on a user's Mac.
+#   * whether bundle-relative dynamic library references can be resolved.
 #
 # Usage: inspect-bundle.sh <path-to-.app> <expected-arch> [inventory-out] [summary-out]
 #
@@ -202,6 +203,35 @@ echo
 # 4. Dynamic dependencies and rpaths must not escape the bundle.
 # ---------------------------------------------------------------------------
 echo "== dynamic dependencies ===================================="
+
+# Expand an LC_RPATH or load-command path in the context of the Mach-O that
+# owns it. System paths may be in the dyld shared cache, so only use this to
+# check bundle-relative references and candidates for @rpath.
+expand_dependency_path() {
+	local path=$1 owner=$2
+	case "$path" in
+		@loader_path) printf '%s\n' "$(dirname "$owner")" ;;
+		@loader_path/*) printf '%s/%s\n' "$(dirname "$owner")" "${path#@loader_path/}" ;;
+		@executable_path) printf '%s\n' "$(dirname "$main_binary")" ;;
+		@executable_path/*) printf '%s/%s\n' "$(dirname "$main_binary")" "${path#@executable_path/}" ;;
+		/*) printf '%s\n' "$path" ;;
+		*) return 1 ;;
+	esac
+}
+
+rpath_dependency_exists() {
+	local dependency=$1 owner=$2 rpath base context
+	# All OTRP libraries are loaded directly by the executable or another
+	# bundled library. Check both the library's and executable's run paths.
+	for context in "$owner" "$main_binary"; do
+		while IFS= read -r rpath; do
+			base=$(expand_dependency_path "$rpath" "$context") || continue
+			[ -e "$base/${dependency#@rpath/}" ] && return 0
+		done < <(otool -l "$context" | awk '/LC_RPATH/ { getline; getline; print $2 }')
+	done
+	return 1
+}
+
 while IFS= read -r f; do
 	echo "--- ${f#"$APP"/}"
 	# otool -L repeats the file name on the first line; drop it.
@@ -219,6 +249,25 @@ while IFS= read -r f; do
 			esac
 		done
 	done
+
+	# Examine load commands, not LC_ID_DYLIB: a library's install name is
+	# not itself a dependency. A missing @rpath target otherwise passes the
+	# absolute-path check above and can fail only on the recipient's machine.
+	while IFS= read -r d; do
+		case "$d" in
+			@loader_path/*|@executable_path/*)
+				resolved=$(expand_dependency_path "$d" "$f")
+				[ -e "$resolved" ] || note_failure "missing bundled dependency in ${f#"$APP"/}: $d"
+				;;
+			@rpath/*)
+				if ! rpath_dependency_exists "$d" "$f"; then
+					note_failure "unresolved @rpath dependency in ${f#"$APP"/}: $d"
+				fi
+				;;
+		esac
+	done < <(otool -l "$f" | awk '
+		$1 == "cmd" && $2 ~ /^LC_(LOAD_DYLIB|LOAD_WEAK_DYLIB|REEXPORT_DYLIB|LOAD_UPWARD_DYLIB|LAZY_LOAD_DYLIB)$/ { load = 1; next }
+		load && $1 == "name" { sub(/^[[:space:]]*name[[:space:]]+/, ""); sub(/[[:space:]]+\(offset [0-9]+\)$/, ""); print; load = 0 }')
 done < "$macho_list.sorted"
 echo
 
