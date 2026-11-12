@@ -83,7 +83,7 @@ void signal_t::calc_image()
 			// and a single direction is not a bend. The diagonal rows are twice as long
 			if(  desc->has_diagonal_image()  ) {
 				const weg_t *w = get_weg_here();
-				if(  w != NULL  &&  w->is_diagonal()  &&  ribi_t::is_bend(w->get_ribi_unmasked())  ) {
+				if(  w != NULL  &&  w->calc_diagonal()  ) {
 					calc_diagonal_index( diag, w->get_ribi_unmasked(), state*8 + offset*2 );
 				}
 			}

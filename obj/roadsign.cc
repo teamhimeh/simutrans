@@ -357,7 +357,7 @@ void roadsign_t::calc_image()
 	uint16 diag[4] = { roadsign_desc_t::NO_DIAGONAL, roadsign_desc_t::NO_DIAGONAL, roadsign_desc_t::NO_DIAGONAL, roadsign_desc_t::NO_DIAGONAL };
 	if(  desc->has_diagonal_image()  ) {
 		const weg_t *w = get_weg_here();
-		if(  w != NULL  &&  w->is_diagonal()  &&  ribi_t::is_bend(w->get_ribi_unmasked())  ) {
+		if(  w != NULL  &&  w->calc_diagonal()  ) {
 			calc_diagonal_index( diag, w->get_ribi_unmasked(), 0 );
 		}
 	}
