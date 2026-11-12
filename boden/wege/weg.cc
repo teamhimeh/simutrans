@@ -692,6 +692,14 @@ void weg_t::calc_image()
 							if(  w->get_desc()->has_diagonal_image()  ) {
 								w->calc_image();
 							}
+							// signs and signals there use diagonal images by the shape of
+							// the way alone, which may just have changed with ours
+							for(  uint8 i = 0;  i < to->get_top();  i++  ) {
+								obj_t *obj = to->obj_bei(i);
+								if(  obj_cast<roadsign_t>(obj)  ||  obj_cast<signal_t>(obj)  ) {
+									obj->calc_image();
+								}
+							}
 						}
 					}
 				}
@@ -1159,13 +1167,23 @@ void weg_t::select_switch_road_image(bool snow){
 // checks, if this way qualifies as diagonal
 void weg_t::check_diagonal()
 {
-	bool diagonal = false;
 	flags &= ~IS_DIAGONAL;
+	if(  calc_diagonal()  ) {
+		flags |= IS_DIAGONAL;
+	}
+}
+
+
+// true, if this way lies on a diagonal (by its shape and its neighbours only,
+// whether or not the way has diagonal images; does not change any flag)
+bool weg_t::calc_diagonal() const
+{
+	bool diagonal = false;
 
 	const ribi_t::ribi ribi = get_ribi_unmasked();
 	if(  !ribi_t::is_bend(ribi)  ) {
 		// This is not a curve, it can't be a diagonal
-		return;
+		return false;
 	}
 
 	grund_t *from = welt->lookup(get_pos());
@@ -1177,8 +1195,7 @@ void weg_t::check_diagonal()
 	if(  from->has_two_ways()  ) {
 		weg_t *other = from->get_weg_nr(0)==this ? from->get_weg_nr(1) : from->get_weg_nr(0);
 		if(  other  &&  ribi_t::are_disjoint_legs(ribi, other->get_ribi_unmasked())  ) {
-			flags |= IS_DIAGONAL;
-			return;
+			return true;
 		}
 	}
 
@@ -1208,9 +1225,7 @@ void weg_t::check_diagonal()
 		diagonal = (r1 == rback || ribi_t::is_threeway(r1)) && (r2 == rback || ribi_t::is_threeway(r2));
 	}
 
-	if(  diagonal  ) {
-		flags |= IS_DIAGONAL;
-	}
+	return diagonal;
 }
 
 

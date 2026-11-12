@@ -37,6 +37,13 @@ protected:
 
 	uint8 automatic:1;
 	uint8 preview:1;
+
+	// diagonal image of each direction, ordered as the image list has them: north, south,
+	// west, east. base is where the row of this state and electrification starts
+	static void calc_diagonal_index(uint16 idx[4], ribi_t::ribi way_ribi, uint16 base);
+
+	// image index (0..3, ordered north, south, west, east) of a single direction
+	static uint8 single_dir_index(ribi_t::ribi d) { return d==ribi_t::north ? 0 : d==ribi_t::south ? 1 : d==ribi_t::west ? 2 : 3; }
 	uint8 ticks_ns;
 	uint8 ticks_ow;
         uint8 ticks_yellow_ns, ticks_yellow_ow;
