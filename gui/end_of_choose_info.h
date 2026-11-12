@@ -17,6 +17,9 @@ class end_of_choose_info_t : public obj_infowin_t, public action_listener_t
 		roadsign_t* signal;
 		button_t bt_end_of_choose, bt_end_of_guide;
 
+		// set this roadsign as stop position for choose signal
+		button_t bt_stop_position;
+
 	public:
 		end_of_choose_info_t(roadsign_t*);
 
