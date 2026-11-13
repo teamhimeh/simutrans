@@ -117,6 +117,8 @@ private:
 	uint8 close_diagonal_state;
 
 	uint16 max_wayobj_speed;
+	// -1 selects the automatic junction image; otherwise stores the switch_nw variant.
+	sint8 switch_image_override;
 
 
 	/**
@@ -337,6 +339,9 @@ public:
 
 	void select_switch_image(bool snow);
 	void select_switch_road_image(bool snow);
+	bool has_switch_image_override() const { return switch_image_override >= 0; }
+	sint8 get_switch_image_override() const { return switch_image_override; }
+	void set_switch_image_override(sint8 value) { switch_image_override = value; }
 
 
 	void set_max_wayobj_speed(uint16 s) { max_wayobj_speed = s; }

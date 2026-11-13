@@ -11,10 +11,12 @@
 #include "components/gui_location_view_t.h"
 #include "../utils/cbuffer_t.h"
 #include "components/gui_textarea.h"
+#include "components/gui_combobox.h"
+#include "components/action_listener.h"
 
 class grund_t;
 
-class grund_info_t : public gui_frame_t
+class grund_info_t : public gui_frame_t, private action_listener_t
 {
 protected:
 	/**
@@ -27,8 +29,11 @@ protected:
 
 	location_view_t view;
 	gui_textarea_t textarea, textarea2;
+	gui_combobox_t switch_image_choice;
+	bool has_switch_image_choice;
 
 	void recalc_size();
+	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 
 public:
 	grund_info_t(const grund_t* gr);

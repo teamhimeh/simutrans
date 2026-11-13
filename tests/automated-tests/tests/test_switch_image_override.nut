@@ -1,0 +1,43 @@
+//
+// Scripted integration test for fixed railway junction images.
+//
+
+function test_switch_image_override_scripted()
+{
+	local pl = player_x(0)
+	local rail = null
+	foreach (desc in way_desc_x.get_available_ways(wt_rail, st_flat)) {
+		if (desc.has_switch_image() || desc.has_switch_ex_image()) {
+			rail = desc
+			break
+		}
+	}
+	ASSERT_TRUE(rail != null)
+
+	local junction = coord3d(7, 4, 0)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(3, 4, 0), coord3d(11, 4, 0), rail, true), null)
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(7, 1, 0), junction, rail, true), null)
+	ASSERT_TRUE(dir.is_threeway(way_x(junction.x, junction.y, junction.z).get_dirs()))
+
+	local set_image = command_x(tool_set_switch_image)
+	local way = way_x(junction.x, junction.y, junction.z)
+	ASSERT_EQUAL(way.get_switch_image_override(), -1)
+	if (rail.has_switch_image()) {
+		ASSERT_EQUAL(set_image.work(pl, junction, "0"), null)
+		ASSERT_EQUAL(way.get_switch_image_override(), 0)
+		ASSERT_EQUAL(set_image.work(pl, junction, "1"), null)
+		ASSERT_EQUAL(way.get_switch_image_override(), 1)
+	}
+	if (rail.has_switch_ex_image()) {
+		ASSERT_EQUAL(set_image.work(pl, junction, "2"), null)
+		ASSERT_EQUAL(way.get_switch_image_override(), 2)
+		ASSERT_EQUAL(set_image.work(pl, junction, "3"), null)
+		ASSERT_EQUAL(way.get_switch_image_override(), 3)
+	}
+	ASSERT_EQUAL(set_image.work(pl, junction, "-1"), null)
+	ASSERT_EQUAL(way.get_switch_image_override(), -1)
+
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(3, 4, 0), coord3d(11, 4, 0), "" + wt_rail), null)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(7, 1, 0), junction, "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}

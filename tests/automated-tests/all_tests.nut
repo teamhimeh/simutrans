@@ -57,8 +57,10 @@ include("tests/test_pillar")
 include("tests/test_crossing_reservation")
 include("tests/test_diagonal_two_waytypes")
 include("tests/test_diagonal_two_waytypes_same_desc")
+include("tests/test_switch_image_override")
 
 all_tests <- [
+	test_switch_image_override_scripted,
 	test_building_build_house_invalid_param,
 	test_building_build_house_random,
 	test_building_build_house_valid_desc,

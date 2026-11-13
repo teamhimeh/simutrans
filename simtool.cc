@@ -102,6 +102,22 @@
 #include "utils/plainstring.h"
 
 #include "simtool.h"
+
+char const* tool_set_switch_image_t::work(player_t *player, koord3d pos)
+{
+	grund_t *gr = welt->lookup(pos);
+	if(  !gr  ) return "";
+	weg_t *way = gr->get_weg(track_wt);
+	if(  !way || !way->get_desc() || (!way->get_desc()->has_switch_image() && !way->get_desc()->has_switch_ex_image()) || !ribi_t::is_threeway(way->get_ribi_unmasked())  ) return "";
+	if(  way->is_deletable(player)  ) return "";
+	char *end = NULL;
+	long value = strtol(get_default_param(), &end, 10);
+	if(  end == get_default_param() || value < -1 || value > 3  ) return "";
+	if(  value >= 2 && !way->get_desc()->has_switch_ex_image()  ) return "";
+	way->set_switch_image_override((sint8)value);
+	gr->calc_image();
+	return NULL;
+}
 #include "player/finance.h"
 
 #define is_scenario()  welt->get_scenario()->is_scripted()

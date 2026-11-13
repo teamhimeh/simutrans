@@ -705,6 +705,10 @@ void export_map_objects(HSQUIRRELVM vm)
 	 */
 	register_method(vm, &weg_t::get_desc, "get_desc");
 	/**
+	 * Returns the fixed railway switch image override, or -1 for automatic selection.
+	 */
+	register_method(vm, &weg_t::get_switch_image_override, "get_switch_image_override");
+	/**
 	 * Returns maximal allowed speed on this way.
 	 * Takes limits from crossings, overhead-wires, bridges, etc, into account.
 	 * @returns max speed in kmh.

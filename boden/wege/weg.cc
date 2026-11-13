@@ -164,6 +164,7 @@ void weg_t::init()
 	foreground_image = IMG_EMPTY;
 	max_wayobj_speed = 0;
 	vehicle_offset = 0;
+	switch_image_override = -1;
 }
 
 
@@ -262,6 +263,13 @@ void weg_t::rdwr(loadsave_t *file)
 
 	if(  file->get_OTRP_version()>=52  ) {
 		file->rdwr_byte(vehicle_offset);
+	}
+	if(  file->get_OTRP_version()>=64  ) {
+		uint8 override_value = (uint8)switch_image_override;
+		file->rdwr_byte(override_value);
+		if(  file->is_loading()  ) {
+			switch_image_override = override_value == 0xFF ? -1 : (sint8)(override_value & 3);
+		}
 	}
 }
 
@@ -591,12 +599,22 @@ bool weg_t::check_season(const bool calc_only_season_change)
 	else if(  is_diagonal()  ) {
 		set_images( image_diagonal, ribi, snow );
 	}
-	else if(  ribi_t::is_threeway( ribi )  &&  desc->has_switch_image()  ) {
+	else if(  ribi_t::is_threeway( ribi )  &&  (desc->has_switch_image() || desc->has_switch_ex_image())  ) {
+		if(  switch_image_override >= 0  ) {
+			set_images((switch_image_override & 2) ? image_ex : image_switch, ribi, snow, (switch_image_override & 1) != 0);
+			return true;
+		}
 		// there might be two states of the switch; remember it when changing seasons
-		if(  image == desc->get_switch_image_id( ribi, old_snow, false )  ) {
+		if(  desc->has_switch_ex_image() && image == desc->get_switch_ex_image_id( ribi, old_snow, false )  ) {
+			set_images( image_ex, ribi, snow, false );
+		}
+		else if(  desc->has_switch_ex_image() && image == desc->get_switch_ex_image_id( ribi, old_snow, true )  ) {
+			set_images( image_ex, ribi, snow, true );
+		}
+		else if(  desc->has_switch_image() && image == desc->get_switch_image_id( ribi, old_snow, false )  ) {
 			set_images( image_switch, ribi, snow, false );
 		}
-		else if(  image == desc->get_switch_image_id( ribi, old_snow, true )  ) {
+		else if(  desc->has_switch_image() && image == desc->get_switch_image_id( ribi, old_snow, true )  ) {
 			set_images( image_switch, ribi, snow, true );
 		}
 		else {
@@ -729,7 +747,7 @@ void weg_t::calc_image()
 
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
 			// close diagonals have their own images
-			if(!is_diagonal() && !is_close_diagonal() && desc->has_switch_image()){
+			if(!is_diagonal() && !is_close_diagonal() && (desc->has_switch_image() || desc->has_switch_ex_image())){
 				waytype_t type_name = get_waytype();
 				if(type_name == track_wt){
 					select_switch_image(snow);
@@ -739,6 +757,11 @@ void weg_t::calc_image()
 				}
 			}
 #endif
+			// Other image-selection passes above may replace the flat switch image.
+			// Reapply the explicit choice last so it wins after every recalculation.
+			if(  switch_image_override >= 0 && ribi_t::is_threeway(ribi) && !is_diagonal() && !is_close_diagonal()  ) {
+				set_images((switch_image_override & 2) ? image_ex : image_switch, ribi, snow, (switch_image_override & 1) != 0);
+			}
 
 		}
 	}
@@ -754,6 +777,10 @@ void weg_t::calc_image()
 }
 
 void weg_t::select_switch_image(bool snow){
+	if(  switch_image_override >= 0  ) {
+		set_images((switch_image_override & 2) ? image_ex : image_switch, ribi, snow, (switch_image_override & 1) != 0);
+		return;
+	}
 	if(ribi == ribi_t::northsoutheast){
 		grund_t *from = welt->lookup(get_pos());
 		grund_t *east;
