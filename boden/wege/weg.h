@@ -120,6 +120,9 @@ private:
 	// -1 selects the automatic junction image; otherwise stores the switch_nw variant.
 	sint8 switch_image_override;
 
+	/// Changing the connections invalidates a fixed switch image.
+	void update_ribi(uint8 new_ribi) { new_ribi &= 15; if(  ribi != new_ribi  ) { ribi = new_ribi; switch_image_override = -1; } }
+
 
 	/**
 	* Initializes all member variables
@@ -226,7 +229,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_add(ribi_t::ribi ribi) { const uint8 old_ribi = this->ribi; this->ribi |= (uint8)ribi; if (this->ribi != old_ribi) switch_image_override = -1; }
+	void ribi_add(ribi_t::ribi ribi) { update_ribi(this->ribi | (uint8)ribi); }
 
 	/**
 	* Remove direction bits (ribi) for a way.
@@ -234,7 +237,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_rem(ribi_t::ribi ribi) { const uint8 old_ribi = this->ribi; this->ribi &= (uint8)~ribi; if (this->ribi != old_ribi) switch_image_override = -1; }
+	void ribi_rem(ribi_t::ribi ribi) { update_ribi(this->ribi & (uint8)~ribi); }
 
 	/**
 	* Set direction bits (ribi) for the way.
@@ -242,7 +245,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void set_ribi(ribi_t::ribi ribi) { const uint8 new_ribi = (uint8)ribi; if (this->ribi != new_ribi) switch_image_override = -1; this->ribi = new_ribi; }
+	void set_ribi(ribi_t::ribi ribi) { update_ribi((uint8)ribi); }
 
 	/**
 	* Get the unmasked direction bits (ribi) for the way (without signals or other ribi changer).

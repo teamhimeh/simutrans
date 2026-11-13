@@ -644,7 +644,7 @@ void weg_t::calc_image()
 #endif
 	grund_t *from = welt->lookup(get_pos());
 	grund_t *to;
-	if(  !ribi_t::is_threeway(ribi) || is_diagonal() || is_close_diagonal()  ) {
+	if(  !is_switch_junction()  ) {
 		switch_image_override = -1;
 	}
 	image_id old_image = image;
