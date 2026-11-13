@@ -88,7 +88,9 @@ bool world_create_player(karte_t *welt, sint32 player_nr, sint32 player_type)
 
 uint32 world_generate_goods(karte_t *welt, koord from, koord to, const goods_desc_t *desc, uint32 count)
 {
-	if (count == 0 || count >= 1<<23) {
+	// menge holds at most GOODS_AMOUNT_LIMIT units, so a larger request cannot be
+	// represented by the single packet this creates.
+	if (count == 0 || count > ware_t::GOODS_AMOUNT_LIMIT) {
 		return 0;
 	}
 
