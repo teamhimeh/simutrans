@@ -1118,22 +1118,22 @@ Auto
 自動
 Standard
 標準
-Branch north
-北へ分岐
-Branch east
-東へ分岐
-Branch south
-南へ分岐
-Branch west
-西へ分岐
-Y-junction (north)
-Y字分岐（北寄り）
-Y-junction (east)
-Y字分岐（東寄り）
-Y-junction (south)
-Y字分岐（南寄り）
-Y-junction (west)
-Y字分岐（西寄り）
+Branch north (up-right)
+北（右上）へ分岐
+Branch east (down-right)
+東（右下）へ分岐
+Branch south (down-left)
+南（左下）へ分岐
+Branch west (up-left)
+西（左上）へ分岐
+Y-junction (north, up-right)
+Y字分岐（北寄り・右上）
+Y-junction (east, down-right)
+Y字分岐（東寄り・右下）
+Y-junction (south, down-left)
+Y字分岐（南寄り・左下）
+Y-junction (west, up-left)
+Y字分岐（西寄り・左上）
 Crossover A
 渡り線 A
 Crossover B

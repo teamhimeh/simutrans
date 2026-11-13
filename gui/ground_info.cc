@@ -59,8 +59,9 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 }
 
 /// directions the branch of a T junction turns to (index: N, E, S, W)
-static const char *const switch_branch_labels[4] = { "Branch north", "Branch east", "Branch south", "Branch west" };
-static const char *const switch_y_labels[4] = { "Y-junction (north)", "Y-junction (east)", "Y-junction (south)", "Y-junction (west)" };
+// the view is rotated together with the map, so north is always up-right on the screen
+static const char *const switch_branch_labels[4] = { "Branch north (up-right)", "Branch east (down-right)", "Branch south (down-left)", "Branch west (up-left)" };
+static const char *const switch_y_labels[4] = { "Y-junction (north, up-right)", "Y-junction (east, down-right)", "Y-junction (south, down-left)", "Y-junction (west, up-left)" };
 
 
 /// Label of the fixed choice @p value for a junction with the connections @p ribi.
