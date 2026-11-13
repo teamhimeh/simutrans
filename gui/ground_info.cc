@@ -25,7 +25,8 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	switch_standard_index(-1),
 	switch_nse1_index(-1),
 	switch_nse2_index(-1),
-	switch_choice_desc(NULL)
+	switch_choice_desc(NULL),
+	switch_choice_ribi(0)
 {
 	const obj_t *const d = gr->obj_bei(0);
 	if (  d!=NULL  ) {
@@ -59,16 +60,34 @@ void grund_info_t::update_switch_image_choice(weg_t *track)
 		switch_image_choice.set_visible(false);
 		return;
 	}
-	if(  switch_choice_desc != track->get_desc()  ) {
+	const uint8 junction_ribi = track->get_ribi_unmasked();
+	if(  switch_choice_desc != track->get_desc()  ||  switch_choice_ribi != junction_ribi  ) {
+		// label the choices with the actual junction directions (e.g. NSE, NSEW)
+		char dirs[8];
+		int n = 0;
+		if(  junction_ribi & ribi_t::north  ) dirs[n++] = 'N';
+		if(  junction_ribi & ribi_t::south  ) dirs[n++] = 'S';
+		if(  junction_ribi & ribi_t::east  ) dirs[n++] = 'E';
+		if(  junction_ribi & ribi_t::west  ) dirs[n++] = 'W';
+		dirs[n] = 0;
 		switch_image_choice.clear_elements();
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Automatic"), SYSCOL_TEXT);
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Auto"), SYSCOL_TEXT);
 		switch_standard_index = switch_image_choice.count_elements();
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Standard"), SYSCOL_TEXT);
+		switch_labels[0].clear();
+		switch_labels[0].append(dirs);
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[0].get_str(), SYSCOL_TEXT);
 		switch_nse1_index = switch_image_choice.count_elements();
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE1 switch image"), SYSCOL_TEXT);
+		switch_labels[1].clear();
+		switch_labels[1].append(dirs);
+		switch_labels[1].append("1");
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[1].get_str(), SYSCOL_TEXT);
 		switch_nse2_index = switch_image_choice.count_elements();
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE2 switch image"), SYSCOL_TEXT);
+		switch_labels[2].clear();
+		switch_labels[2].append(dirs);
+		switch_labels[2].append("2");
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[2].get_str(), SYSCOL_TEXT);
 		switch_choice_desc = track->get_desc();
+		switch_choice_ribi = junction_ribi;
 	}
 	const sint8 value = track->get_switch_image_override();
 	const int selection = value < 0 ? 0 : (value == 0 ? switch_standard_index : value == 1 ? switch_nse1_index : switch_nse2_index);

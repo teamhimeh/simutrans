@@ -37,6 +37,8 @@ protected:
 	int switch_nse1_index;
 	int switch_nse2_index;
 	const way_desc_t *switch_choice_desc;
+	uint8 switch_choice_ribi;
+	cbuffer_t switch_labels[3]; // item labels must outlive the list items
 
 	void recalc_size();
 	void update_switch_image_choice(weg_t *track);
