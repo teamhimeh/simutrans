@@ -113,8 +113,6 @@ char const* tool_set_switch_image_t::work(player_t *player, koord3d pos)
 	char *end = NULL;
 	long value = strtol(get_default_param(), &end, 10);
 	if(  end == get_default_param() || value < -1 || value > 2  ) return "";
-	if(  value == 1 && !way->get_desc()->has_switch_image()  ) return "";
-	if(  value == 2 && !way->get_desc()->has_switch_ex_image()  ) return "";
 	way->set_switch_image_override((sint8)value);
 	gr->calc_image();
 	return NULL;

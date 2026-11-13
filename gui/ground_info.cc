@@ -64,16 +64,10 @@ void grund_info_t::update_switch_image_choice(weg_t *track)
 		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Automatic"), SYSCOL_TEXT);
 		switch_standard_index = switch_image_choice.count_elements();
 		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Standard"), SYSCOL_TEXT);
-		switch_nse1_index = -1;
-		switch_nse2_index = -1;
-		if(  track->get_desc()->has_switch_image()  ) {
-			switch_nse1_index = switch_image_choice.count_elements();
-			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE1 switch image"), SYSCOL_TEXT);
-		}
-		if(  track->get_desc()->has_switch_ex_image()  ) {
-			switch_nse2_index = switch_image_choice.count_elements();
-			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE2 switch image"), SYSCOL_TEXT);
-		}
+		switch_nse1_index = switch_image_choice.count_elements();
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE1 switch image"), SYSCOL_TEXT);
+		switch_nse2_index = switch_image_choice.count_elements();
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE2 switch image"), SYSCOL_TEXT);
 		switch_choice_desc = track->get_desc();
 	}
 	const sint8 value = track->get_switch_image_override();

@@ -609,19 +609,7 @@ bool weg_t::check_season(const bool calc_only_season_change)
 		set_images( image_diagonal, ribi, snow );
 	}
 	else if(  ribi_t::is_threeway( ribi )  &&  (desc->has_switch_image() || desc->has_switch_ex_image())  ) {
-		if(  switch_image_override >= 0  ) {
-			if(  switch_image_override == 0  ) {
-				set_images(image_flat, ribi, snow);
-			}
-			else if(  switch_image_override == 1 && desc->has_switch_image()  ) {
-				set_images(image_switch, ribi, snow, true);
-			}
-			else if(  switch_image_override == 2 && desc->has_switch_ex_image()  ) {
-				set_images(image_ex, ribi, snow, true);
-			}
-			else {
-				set_images(image_flat, ribi, snow);
-			}
+		if(  apply_switch_image_override(snow)  ) {
 			return true;
 		}
 		// there might be two states of the switch; remember it when changing seasons
@@ -783,18 +771,7 @@ void weg_t::calc_image()
 			// Other image-selection passes above may replace the flat switch image.
 			// Reapply the explicit choice last so it wins after every recalculation.
 			if(  switch_image_override >= 0 && ribi_t::is_threeway(ribi) && !is_diagonal() && !is_close_diagonal()  ) {
-				if(  switch_image_override == 0  ) {
-					set_images(image_flat, ribi, snow);
-				}
-				else if(  switch_image_override == 1 && desc->has_switch_image()  ) {
-					set_images(image_switch, ribi, snow, true);
-				}
-				else if(  switch_image_override == 2 && desc->has_switch_ex_image()  ) {
-					set_images(image_ex, ribi, snow, true);
-				}
-				else {
-					set_images(image_flat, ribi, snow);
-				}
+				apply_switch_image_override(snow);
 			}
 
 		}
@@ -810,20 +787,23 @@ void weg_t::calc_image()
 #endif
 }
 
+bool weg_t::apply_switch_image_override(bool snow)
+{
+	if(  switch_image_override < 0  ) {
+		return false;
+	}
+	switch(  switch_image_override  ) {
+		case 0: set_images(image_flat, ribi, snow); break; // Standard (NSE)
+		case 1: set_images(image_switch, ribi, snow, true); break; // NSE1
+		case 2: set_images(image_ex, ribi, snow, true); break; // NSE2
+		default: set_images(image_flat, ribi, snow); break;
+	}
+	return true;
+}
+
+
 void weg_t::select_switch_image(bool snow){
-	if(  switch_image_override >= 0  ) {
-		if(  switch_image_override == 0  ) {
-			set_images(image_flat, ribi, snow);
-		}
-		else if(  switch_image_override == 1 && desc->has_switch_image()  ) {
-			set_images(image_switch, ribi, snow, true);
-		}
-		else if(  switch_image_override == 2 && desc->has_switch_ex_image()  ) {
-			set_images(image_ex, ribi, snow, true);
-		}
-		else {
-			set_images(image_flat, ribi, snow);
-		}
+	if(  apply_switch_image_override(snow)  ) {
 		return;
 	}
 	if(ribi == ribi_t::northsoutheast){
