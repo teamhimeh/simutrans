@@ -12094,12 +12094,13 @@ char const* tool_set_switch_image_t::work(player_t *player, koord3d pos)
 {
 	grund_t *gr = welt->lookup(pos);
 	if(  !gr  ) return "";
-	weg_t *way = gr->get_weg(track_wt);
-	if(  !way || !way->get_desc() || !way->get_desc()->has_switch_image() || !way->is_switch_junction()  ) return "";
+	// parameter: "<waytype>,<choice>"
+	int waytype, value;
+	if(  !get_default_param()  ||  sscanf(get_default_param(), "%d,%d", &waytype, &value) != 2  ||  value < -1  ||  value > 4  ) return "";
+	weg_t *way = gr->get_weg((waytype_t)waytype);
+	if(  !way  ||  !way->can_fix_switch_image()  ) return "";
 	if(  way->is_deletable(player)  ) return "";
-	char *end = NULL;
-	long value = strtol(get_default_param(), &end, 10);
-	if(  end == get_default_param() || value < -1 || value > 2  ) return "";
+	if(  !way->is_switch_image_choice_available((sint8)value)  ) return "";
 	way->set_switch_image_override((sint8)value);
 	gr->calc_image();
 	return NULL;

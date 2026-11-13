@@ -117,7 +117,8 @@ private:
 	uint8 close_diagonal_state;
 
 	uint16 max_wayobj_speed;
-	// -1 selects the automatic junction image; otherwise stores the switch_nw variant.
+	// -1 selects the automatic junction image. Fixed choices:
+	// 0 = standard, 1/2 = switch image (nw true/false), 3/4 = extended (ex) switch image (nw true/false)
 	sint8 switch_image_override;
 
 	/// Changing the connections invalidates a fixed switch image.
@@ -343,6 +344,10 @@ public:
 	void select_switch_image(bool snow);
 	void select_switch_road_image(bool snow);
 	bool apply_switch_image_override(bool snow);
+	/// true if the way is a junction whose add-on provides switch images, so the image can be fixed
+	bool can_fix_switch_image() const;
+	/// true if the images for the fixed choice @p value (-1..4) exist for this junction
+	bool is_switch_image_choice_available(sint8 value) const;
 	bool has_switch_image_override() const { return switch_image_override >= 0; }
 	bool is_switch_junction() const { return ribi_t::is_threeway(get_ribi_unmasked()) && !(is_diagonal() || is_close_diagonal()); }
 	sint8 get_switch_image_override() const { return switch_image_override; }

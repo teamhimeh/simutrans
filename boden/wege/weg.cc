@@ -269,7 +269,7 @@ void weg_t::rdwr(loadsave_t *file)
 		uint8 override_value = (uint8)switch_image_override;
 		file->rdwr_byte(override_value);
 		if(  file->is_loading()  ) {
-			switch_image_override = override_value <= 2 ? (sint8)override_value : -1;
+			switch_image_override = override_value <= 4 ? (sint8)override_value : -1;
 		}
 	}
 }
@@ -756,7 +756,7 @@ void weg_t::calc_image()
 #endif
 			// Other image-selection passes above may replace the flat switch image.
 			// Reapply the explicit choice last so it wins after every recalculation.
-			if(  switch_image_override >= 0 && ribi_t::is_threeway(ribi) && !is_diagonal() && !is_close_diagonal()  ) {
+			if(  switch_image_override >= 0  &&  is_switch_junction()  ) {
 				apply_switch_image_override(snow);
 			}
 
@@ -775,16 +775,45 @@ void weg_t::calc_image()
 
 bool weg_t::apply_switch_image_override(bool snow)
 {
-	if(  switch_image_override < 0  ) {
+	if(  switch_image_override < 0  ||  !is_switch_image_choice_available(switch_image_override)  ) {
+		// automatic, or the add-on has no image for the saved choice
 		return false;
 	}
 	switch(  switch_image_override  ) {
-		case 0: set_images(image_flat, ribi, snow); break; // Standard (NSE)
-		case 1: set_images(image_switch, ribi, snow, true); break; // switch state 1
-		case 2: set_images(image_switch, ribi, snow, false); break; // switch state 2
-		default: set_images(image_flat, ribi, snow); break;
+		case 1: set_images(image_switch, ribi, snow, true); break;
+		case 2: set_images(image_switch, ribi, snow, false); break;
+		case 3: set_images(image_ex, ribi, snow, true); break;
+		case 4: set_images(image_ex, ribi, snow, false); break;
+		default: set_images(image_flat, ribi, snow); break; // standard
 	}
 	return true;
+}
+
+
+bool weg_t::can_fix_switch_image() const
+{
+	return desc  &&  desc->has_switch_image()  &&  is_switch_junction();
+}
+
+
+bool weg_t::is_switch_image_choice_available(sint8 value) const
+{
+	if(  !desc  ||  !is_switch_junction()  ) {
+		return false;
+	}
+	switch(  value  ) {
+		case -1:
+		case 0:
+			return true;
+		case 1:
+		case 2:
+			return desc->has_switch_image()  &&  desc->get_switch_image_id( ribi, 0, value == 1 ) != IMG_EMPTY;
+		case 3:
+		case 4:
+			return desc->has_switch_ex_image()  &&  desc->get_switch_ex_image_id( ribi, 0, value == 3 ) != IMG_EMPTY;
+		default:
+			return false;
+	}
 }
 
 

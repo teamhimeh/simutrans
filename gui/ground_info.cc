@@ -21,13 +21,7 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	view(gr_->get_pos(), scr_size( max(64, get_base_tile_raster_width()), max(56, (get_base_tile_raster_width()*7)/8) )),
 	textarea(&buf),
 	textarea2(&buf),
-	has_switch_image_choice(false),
-	switch_standard_index(-1),
-	switch_nse1_index(-1),
-	switch_nse2_index(-1),
-	switch_choice_desc(NULL),
-	switch_choice_ribi(0),
-	switch_choice_value(-2)
+	switch_choice_count(0)
 {
 	const obj_t *const d = gr->obj_bei(0);
 	if (  d!=NULL  ) {
@@ -44,81 +38,117 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	}
 	end_table();
 	add_component(&textarea2);
-	weg_t *track = gr->get_weg(track_wt);
-	if(  track && track->get_desc() && track->get_desc()->has_switch_image() && track->is_switch_junction() && track->is_deletable(welt->get_active_player()) == NULL  ) {
-		has_switch_image_choice = true;
-		switch_image_choice.set_unsorted();
-		update_switch_image_choice(track);
-		switch_image_choice.add_listener(this);
-		add_component(&switch_image_choice);
+	// every way of a switch junction can have its image fixed
+	for(  uint8 i = 0;  i < 2;  i++  ) {
+		weg_t *way = gr->get_weg_nr(i);
+		if(  way  &&  way->can_fix_switch_image()  &&  way->is_deletable(welt->get_active_player()) == NULL  ) {
+			switch_choice_t &choice = switch_choice[switch_choice_count++];
+			choice.waytype = way->get_waytype();
+			choice.list.set_unsorted();
+			choice.list.add_listener(this);
+			update_switch_image_choice(choice);
+			if(  gr->get_weg_nr(1)  ) {
+				// two ways on the tile: tell them apart
+				choice.label.set_text_pointer(translator::translate(way->get_desc()->get_name()));
+				add_component(&choice.label);
+			}
+			add_component(&choice.list);
+		}
 	}
 	recalc_size();
 }
 
-void grund_info_t::update_switch_image_choice(weg_t *track)
+/// directions the branch of a T junction turns to (index: N, E, S, W)
+static const char *const switch_branch_labels[4] = { "Branch north", "Branch east", "Branch south", "Branch west" };
+static const char *const switch_y_labels[4] = { "Y-junction (north)", "Y-junction (east)", "Y-junction (south)", "Y-junction (west)" };
+
+
+/// Label of the fixed choice @p value for a junction with the connections @p ribi.
+static const char *switch_choice_label(uint8 ribi, sint8 value)
 {
-	if(  !track || !track->get_desc()  ) {
-		switch_image_choice.set_visible(false);
-		return;
+	if(  value < 0  ) {
+		return translator::translate("Auto");
 	}
-	if(  !track->get_desc()->has_switch_image()  ||  !track->is_switch_junction()  ) {
+	if(  value == 0  ) {
+		return translator::translate("Standard");
+	}
+	if(  ribi == ribi_t::all  ) {
+		static const char *const labels[4] = { "Crossover A", "Crossover B", "Double crossover A", "Double crossover B" };
+		return translator::translate(labels[value-1]);
+	}
+	// the first state (nw) turns towards the side of the T junction given here, the second one to the opposite side
+	int dir; // index N, E, S, W
+	switch(  ribi  ) {
+		case ribi_t::northsoutheast: dir = 0; break;
+		case ribi_t::northeastwest:  dir = 1; break;
+		case ribi_t::northsouthwest: dir = 2; break;
+		default:                     dir = 3; break; // south-east-west
+	}
+	if(  value == 2  ||  value == 4  ) {
+		dir = (dir+2) & 3;
+	}
+	return translator::translate( value <= 2 ? switch_branch_labels[dir] : switch_y_labels[dir] );
+}
+
+
+void grund_info_t::update_switch_image_choice(switch_choice_t &choice)
+{
+	weg_t *way = gr->get_weg(choice.waytype);
+	if(  !way  ||  !way->can_fix_switch_image()  ) {
 		// the junction was resolved while the dialog is open
-		switch_image_choice.set_visible(false);
+		choice.label.set_visible(false);
+		choice.list.set_visible(false);
 		return;
 	}
-	const uint8 junction_ribi = track->get_ribi_unmasked();
-	if(  switch_choice_desc != track->get_desc()  ||  switch_choice_ribi != junction_ribi  ) {
-		// label the choices with the actual junction directions (e.g. NSE, NSEW)
-		char dirs[8];
-		int n = 0;
-		if(  junction_ribi & ribi_t::north  ) dirs[n++] = 'N';
-		if(  junction_ribi & ribi_t::south  ) dirs[n++] = 'S';
-		if(  junction_ribi & ribi_t::east  ) dirs[n++] = 'E';
-		if(  junction_ribi & ribi_t::west  ) dirs[n++] = 'W';
-		dirs[n] = 0;
-		switch_image_choice.clear_elements();
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Auto"), SYSCOL_TEXT);
-		switch_standard_index = switch_image_choice.count_elements();
-		switch_labels[0].clear();
-		switch_labels[0].append(dirs);
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[0].get_str(), SYSCOL_TEXT);
-		switch_nse1_index = switch_image_choice.count_elements();
-		switch_labels[1].clear();
-		switch_labels[1].append(dirs);
-		switch_labels[1].append("1");
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[1].get_str(), SYSCOL_TEXT);
-		switch_nse2_index = switch_image_choice.count_elements();
-		switch_labels[2].clear();
-		switch_labels[2].append(dirs);
-		switch_labels[2].append("2");
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[2].get_str(), SYSCOL_TEXT);
-		switch_choice_desc = track->get_desc();
-		switch_choice_ribi = junction_ribi;
-		switch_choice_value = -2; // force selection sync below
+	const uint8 junction_ribi = way->get_ribi_unmasked();
+	if(  choice.desc != way->get_desc()  ||  choice.ribi != junction_ribi  ) {
+		// offer only the choices the add-on has images for
+		choice.list.clear_elements();
+		choice.count = 0;
+		for(  sint8 value = -1;  value <= 4;  value++  ) {
+			if(  way->is_switch_image_choice_available(value)  ) {
+				choice.list.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_choice_label(junction_ribi, value), SYSCOL_TEXT);
+				choice.values[choice.count++] = value;
+			}
+		}
+		choice.desc = way->get_desc();
+		choice.ribi = junction_ribi;
+		choice.shown_value = -2; // force selection sync below
 	}
 	// Follow the way only when its value changed. Setting the selection every frame
 	// would revert the user's pick until a networked command has been executed.
-	const sint8 value = track->get_switch_image_override();
-	if(  value != switch_choice_value  ) {
-		const int selection = value < 0 ? 0 : (value == 0 ? switch_standard_index : value == 1 ? switch_nse1_index : switch_nse2_index);
-		switch_image_choice.set_selection(selection);
-		switch_choice_value = value;
+	const sint8 value = way->get_switch_image_override();
+	if(  value != choice.shown_value  ) {
+		int selection = 0; // Auto
+		for(  uint8 i = 0;  i < choice.count;  i++  ) {
+			if(  choice.values[i] == value  ) {
+				selection = i;
+			}
+		}
+		choice.list.set_selection(selection);
+		choice.shown_value = value;
 	}
-	switch_image_choice.set_visible(true);
+	choice.label.set_visible(true);
+	choice.list.set_visible(true);
 }
 
 bool grund_info_t::action_triggered(gui_action_creator_t* comp, value_t)
 {
-	if(  comp == &switch_image_choice  ) {
-		char param[8];
-		const int selection = switch_image_choice.get_selection();
-		const int value = selection == 0 ? -1 : selection == switch_standard_index ? 0 : selection == switch_nse1_index ? 1 : 2;
-		sprintf(param, "%d", value);
-		tool_t *tool = tool_t::general_tool[TOOL_SET_SWITCH_IMAGE];
-		tool->set_default_param(param);
-		bool suspended = false;
-		world()->call_work(tool, welt->get_active_player(), gr->get_pos(), suspended);
-		return true;
+	for(  uint8 i = 0;  i < switch_choice_count;  i++  ) {
+		switch_choice_t &choice = switch_choice[i];
+		if(  comp == &choice.list  ) {
+			const int selection = choice.list.get_selection();
+			if(  selection < 0  ||  selection >= choice.count  ) {
+				return true;
+			}
+			char param[16];
+			sprintf(param, "%d,%d", (int)choice.waytype, (int)choice.values[selection]);
+			tool_t *tool = tool_t::general_tool[TOOL_SET_SWITCH_IMAGE];
+			tool->set_default_param(param);
+			bool suspended = false;
+			world()->call_work(tool, welt->get_active_player(), gr->get_pos(), suspended);
+			return true;
+		}
 	}
 	return false;
 }
@@ -161,12 +191,8 @@ void grund_info_t::draw(scr_coord pos, scr_size size)
 		set_owner( d->get_owner() );
 	}
 	gui_frame_t::set_name( translator::translate(gr->get_name()) );
-	if(  has_switch_image_choice  ) {
-		weg_t *track = gr->get_weg(track_wt);
-		if(  track  ) {
-			update_switch_image_choice(track);
-		}
-		else switch_image_choice.set_visible(false);
+	for(  uint8 i = 0;  i < switch_choice_count;  i++  ) {
+		update_switch_image_choice(switch_choice[i]);
 	}
 
 	const cbuffer_t old_buf(buf);

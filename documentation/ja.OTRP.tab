@@ -1116,3 +1116,29 @@ Bridge blocked by building below.
 下にある建物があるので橋が架けられません.
 Auto
 自動
+Standard
+標準
+Branch north
+北へ分岐
+Branch east
+東へ分岐
+Branch south
+南へ分岐
+Branch west
+西へ分岐
+Y-junction (north)
+Y字分岐（北寄り）
+Y-junction (east)
+Y字分岐（東寄り）
+Y-junction (south)
+Y字分岐（南寄り）
+Y-junction (west)
+Y字分岐（西寄り）
+Crossover A
+渡り線 A
+Crossover B
+渡り線 B
+Double crossover A
+複線渡り線 A
+Double crossover B
+複線渡り線 B

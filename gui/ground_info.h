@@ -12,6 +12,7 @@
 #include "../utils/cbuffer_t.h"
 #include "components/gui_textarea.h"
 #include "components/gui_combobox.h"
+#include "components/gui_label.h"
 #include "components/action_listener.h"
 
 class grund_t;
@@ -31,18 +32,24 @@ protected:
 
 	location_view_t view;
 	gui_textarea_t textarea, textarea2;
-	gui_combobox_t switch_image_choice;
-	bool has_switch_image_choice;
-	int switch_standard_index;
-	int switch_nse1_index;
-	int switch_nse2_index;
-	const way_desc_t *switch_choice_desc;
-	uint8 switch_choice_ribi;
-	sint8 switch_choice_value; // last override value shown in the list (-2: not synced)
-	cbuffer_t switch_labels[3]; // item labels must outlive the list items
+	/// one choice list per way on the tile that has a fixable switch junction
+	enum { MAX_SWITCH_CHOICES = 2 };
+	struct switch_choice_t {
+		gui_label_t label;
+		gui_combobox_t list;
+		waytype_t waytype;
+		const way_desc_t *desc;   // add-on the list was built for
+		uint8 ribi;               // junction shape the list was built for
+		sint8 shown_value;        // last override value shown in the list (-2: not synced)
+		sint8 values[6];          // override value of each list entry
+		uint8 count;
+		switch_choice_t() : waytype(invalid_wt), desc(NULL), ribi(0), shown_value(-2), count(0) {}
+	};
+	switch_choice_t switch_choice[MAX_SWITCH_CHOICES];
+	uint8 switch_choice_count;
 
 	void recalc_size();
-	void update_switch_image_choice(weg_t *track);
+	void update_switch_image_choice(switch_choice_t &choice);
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 
 public:
