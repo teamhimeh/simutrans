@@ -600,7 +600,7 @@ bool weg_t::check_season(const bool calc_only_season_change)
 		set_images( image_diagonal, ribi, snow );
 	}
 	else if(  ribi_t::is_threeway( ribi )  &&  (desc->has_switch_image() || desc->has_switch_ex_image())  ) {
-		if(  switch_image_override >= 0  ) {
+		if(  switch_image_override >= 0 && ribi != ribi_t::all  ) {
 			set_images((switch_image_override & 2) ? image_ex : image_switch, ribi, snow, (switch_image_override & 1) != 0);
 			return true;
 		}
@@ -650,6 +650,9 @@ void weg_t::calc_image()
 #endif
 	grund_t *from = welt->lookup(get_pos());
 	grund_t *to;
+	if(  !ribi_t::is_threeway(ribi) || ribi == ribi_t::all  ) {
+		switch_image_override = -1;
+	}
 	image_id old_image = image;
 	image_id old_foreground_image = foreground_image;
 
@@ -759,7 +762,7 @@ void weg_t::calc_image()
 #endif
 			// Other image-selection passes above may replace the flat switch image.
 			// Reapply the explicit choice last so it wins after every recalculation.
-			if(  switch_image_override >= 0 && ribi_t::is_threeway(ribi) && !is_diagonal() && !is_close_diagonal()  ) {
+			if(  switch_image_override >= 0 && ribi_t::is_threeway(ribi) && ribi != ribi_t::all && !is_diagonal() && !is_close_diagonal()  ) {
 				set_images((switch_image_override & 2) ? image_ex : image_switch, ribi, snow, (switch_image_override & 1) != 0);
 			}
 
@@ -777,7 +780,7 @@ void weg_t::calc_image()
 }
 
 void weg_t::select_switch_image(bool snow){
-	if(  switch_image_override >= 0  ) {
+	if(  switch_image_override >= 0 && ribi != ribi_t::all  ) {
 		set_images((switch_image_override & 2) ? image_ex : image_switch, ribi, snow, (switch_image_override & 1) != 0);
 		return;
 	}

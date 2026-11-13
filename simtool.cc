@@ -108,7 +108,7 @@ char const* tool_set_switch_image_t::work(player_t *player, koord3d pos)
 	grund_t *gr = welt->lookup(pos);
 	if(  !gr  ) return "";
 	weg_t *way = gr->get_weg(track_wt);
-	if(  !way || !way->get_desc() || (!way->get_desc()->has_switch_image() && !way->get_desc()->has_switch_ex_image()) || !ribi_t::is_threeway(way->get_ribi_unmasked())  ) return "";
+	if(  !way || !way->get_desc() || (!way->get_desc()->has_switch_image() && !way->get_desc()->has_switch_ex_image()) || !way->is_switch_junction()  ) return "";
 	if(  way->is_deletable(player)  ) return "";
 	char *end = NULL;
 	long value = strtol(get_default_param(), &end, 10);

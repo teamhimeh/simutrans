@@ -39,7 +39,7 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	end_table();
 	add_component(&textarea2);
 	weg_t *track = gr->get_weg(track_wt);
-	if(  track && track->get_desc() && (track->get_desc()->has_switch_image() || track->get_desc()->has_switch_ex_image()) && ribi_t::is_threeway(track->get_ribi_unmasked()) && track->is_deletable(welt->get_active_player()) == NULL  ) {
+	if(  track && track->get_desc() && (track->get_desc()->has_switch_image() || track->get_desc()->has_switch_ex_image()) && track->is_switch_junction() && track->is_deletable(welt->get_active_player()) == NULL  ) {
 		has_switch_image_choice = true;
 		switch_image_choice.set_unsorted();
 		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Automatic"), SYSCOL_TEXT);
@@ -123,7 +123,7 @@ void grund_info_t::draw(scr_coord pos, scr_size size)
 			const int normal_count = track->get_desc() && track->get_desc()->has_switch_image() ? 2 : 0;
 			const int selection = value < 0 ? 0 : ((value & 2) ? 1 + normal_count + (value & 1) : 1 + (value & 1));
 			if(  switch_image_choice.get_selection() != selection  ) switch_image_choice.set_selection(selection);
-			switch_image_choice.set_visible(ribi_t::is_threeway(track->get_ribi_unmasked()));
+			switch_image_choice.set_visible(track->is_switch_junction());
 		}
 		else switch_image_choice.set_visible(false);
 	}

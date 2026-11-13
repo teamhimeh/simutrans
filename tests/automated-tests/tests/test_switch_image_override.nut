@@ -36,8 +36,28 @@ function test_switch_image_override_scripted()
 	}
 	ASSERT_EQUAL(set_image.work(pl, junction, "-1"), null)
 	ASSERT_EQUAL(way.get_switch_image_override(), -1)
+	if (rail.has_switch_image()) {
+		ASSERT_EQUAL(set_image.work(pl, junction, "0"), null)
+	}
+	else {
+		ASSERT_EQUAL(set_image.work(pl, junction, "2"), null)
+	}
+	ASSERT_TRUE(way.get_switch_image_override() >= 0)
+
+	// Growing the T junction to a four-way must discard the fixed choice.
+	ASSERT_EQUAL(command_x.build_way(pl, junction, coord3d(7, 7, 0), rail, true), null)
+	ASSERT_EQUAL(way.get_dirs(), dir.all)
+	ASSERT_EQUAL(way.get_switch_image_override(), -1)
+
+	// Removing an arm resolves the junction; a new override must be discarded too.
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, junction, coord3d(7, 7, 0), "" + wt_rail), null)
+	ASSERT_TRUE(dir.is_threeway(way.get_dirs()))
+	ASSERT_EQUAL(set_image.work(pl, junction, rail.has_switch_image() ? "1" : "3"), null)
+	ASSERT_TRUE(way.get_switch_image_override() >= 0)
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(7, 1, 0), junction, "" + wt_rail), null)
+	ASSERT_FALSE(dir.is_threeway(way.get_dirs()))
+	ASSERT_EQUAL(way.get_switch_image_override(), -1)
 
 	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(3, 4, 0), coord3d(11, 4, 0), "" + wt_rail), null)
-	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(7, 1, 0), junction, "" + wt_rail), null)
 	RESET_ALL_PLAYER_FUNDS()
 }

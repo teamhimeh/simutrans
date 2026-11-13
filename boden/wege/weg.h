@@ -226,7 +226,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_add(ribi_t::ribi ribi) { this->ribi |= (uint8)ribi;}
+	void ribi_add(ribi_t::ribi ribi) { const uint8 old_ribi = this->ribi; this->ribi |= (uint8)ribi; if (this->ribi != old_ribi) switch_image_override = -1; }
 
 	/**
 	* Remove direction bits (ribi) for a way.
@@ -234,7 +234,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_rem(ribi_t::ribi ribi) { this->ribi &= (uint8)~ribi;}
+	void ribi_rem(ribi_t::ribi ribi) { const uint8 old_ribi = this->ribi; this->ribi &= (uint8)~ribi; if (this->ribi != old_ribi) switch_image_override = -1; }
 
 	/**
 	* Set direction bits (ribi) for the way.
@@ -242,7 +242,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void set_ribi(ribi_t::ribi ribi) { this->ribi = (uint8)ribi;}
+	void set_ribi(ribi_t::ribi ribi) { const uint8 new_ribi = (uint8)ribi; if (this->ribi != new_ribi) switch_image_override = -1; this->ribi = new_ribi; }
 
 	/**
 	* Get the unmasked direction bits (ribi) for the way (without signals or other ribi changer).
@@ -340,6 +340,7 @@ public:
 	void select_switch_image(bool snow);
 	void select_switch_road_image(bool snow);
 	bool has_switch_image_override() const { return switch_image_override >= 0; }
+	bool is_switch_junction() const { return ribi_t::is_threeway(get_ribi_unmasked()) && get_ribi_unmasked() != ribi_t::all; }
 	sint8 get_switch_image_override() const { return switch_image_override; }
 	void set_switch_image_override(sint8 value) { switch_image_override = value; }
 
