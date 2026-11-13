@@ -7,7 +7,7 @@ function test_switch_image_override_scripted()
 	local pl = player_x(0)
 	local rail = null
 	foreach (desc in way_desc_x.get_available_ways(wt_rail, st_flat)) {
-		if (desc.has_switch_image() || desc.has_switch_ex_image()) {
+		if (desc.has_switch_image()) {
 			rail = desc
 			break
 		}
@@ -26,9 +26,9 @@ function test_switch_image_override_scripted()
 	ASSERT_EQUAL(way.get_switch_image_override(), 0) // standard
 	ASSERT_EQUAL(set_image.work(pl, junction, "3"), "") // removed legacy encoding
 	ASSERT_EQUAL(set_image.work(pl, junction, "1"), null)
-	ASSERT_EQUAL(way.get_switch_image_override(), 1) // NSE1
+	ASSERT_EQUAL(way.get_switch_image_override(), 1) // switch state 1
 	ASSERT_EQUAL(set_image.work(pl, junction, "2"), null)
-	ASSERT_EQUAL(way.get_switch_image_override(), 2) // NSE2
+	ASSERT_EQUAL(way.get_switch_image_override(), 2) // switch state 2
 	ASSERT_EQUAL(set_image.work(pl, junction, "-1"), null)
 	ASSERT_EQUAL(way.get_switch_image_override(), -1)
 	ASSERT_EQUAL(set_image.work(pl, junction, "2"), null)

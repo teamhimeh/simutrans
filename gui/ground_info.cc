@@ -44,7 +44,7 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	end_table();
 	add_component(&textarea2);
 	weg_t *track = gr->get_weg(track_wt);
-	if(  track && track->get_desc() && (track->get_desc()->has_switch_image() || track->get_desc()->has_switch_ex_image()) && track->is_switch_junction() && track->is_deletable(welt->get_active_player()) == NULL  ) {
+	if(  track && track->get_desc() && track->get_desc()->has_switch_image() && track->is_switch_junction() && track->is_deletable(welt->get_active_player()) == NULL  ) {
 		has_switch_image_choice = true;
 		switch_image_choice.set_unsorted();
 		update_switch_image_choice(track);
@@ -94,7 +94,7 @@ void grund_info_t::update_switch_image_choice(weg_t *track)
 	if(  selection >= 0  ) {
 		switch_image_choice.set_selection(selection);
 	}
-	switch_image_choice.set_visible(track->get_desc()->has_switch_image() || track->get_desc()->has_switch_ex_image());
+	switch_image_choice.set_visible(track->get_desc()->has_switch_image());
 }
 
 bool grund_info_t::action_triggered(gui_action_creator_t* comp, value_t)

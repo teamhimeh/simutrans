@@ -269,8 +269,8 @@ void weg_t::rdwr(loadsave_t *file)
 		if(  !file->is_loading()  ) {
 			switch(  switch_image_override  ) {
 				case 0: override_value = 0x10; break; // Standard (NSE)
-				case 1: override_value = 0x11; break; // NSE1
-				case 2: override_value = 0x12; break; // NSE2
+				case 1: override_value = 0x11; break; // switch state 1
+				case 2: override_value = 0x12; break; // switch state 2
 				default: override_value = 0xFF; break; // Auto
 			}
 		}
@@ -805,8 +805,8 @@ bool weg_t::apply_switch_image_override(bool snow)
 	}
 	switch(  switch_image_override  ) {
 		case 0: set_images(image_flat, ribi, snow); break; // Standard (NSE)
-		case 1: set_images(image_switch, ribi, snow, true); break; // NSE1
-		case 2: set_images(image_ex, ribi, snow, true); break; // NSE2
+		case 1: set_images(image_switch, ribi, snow, true); break; // switch state 1
+		case 2: set_images(image_switch, ribi, snow, false); break; // switch state 2
 		default: set_images(image_flat, ribi, snow); break;
 	}
 	return true;
