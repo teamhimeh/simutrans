@@ -21,7 +21,11 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	view(gr_->get_pos(), scr_size( max(64, get_base_tile_raster_width()), max(56, (get_base_tile_raster_width()*7)/8) )),
 	textarea(&buf),
 	textarea2(&buf),
-	has_switch_image_choice(false)
+	has_switch_image_choice(false),
+	switch_standard_index(-1),
+	switch_nse1_index(-1),
+	switch_nse2_index(-1),
+	switch_choice_desc(NULL)
 {
 	const obj_t *const d = gr->obj_bei(0);
 	if (  d!=NULL  ) {
@@ -42,22 +46,42 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	if(  track && track->get_desc() && (track->get_desc()->has_switch_image() || track->get_desc()->has_switch_ex_image()) && track->is_switch_junction() && track->is_deletable(welt->get_active_player()) == NULL  ) {
 		has_switch_image_choice = true;
 		switch_image_choice.set_unsorted();
-		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Automatic"), SYSCOL_TEXT);
-		if(  track->get_desc()->has_switch_image()  ) {
-			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Switch image: NW"), SYSCOL_TEXT);
-			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Switch image: SE"), SYSCOL_TEXT);
-		}
-		if(  track->get_desc()->has_switch_ex_image()  ) {
-			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Extended switch image: NW"), SYSCOL_TEXT);
-			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Extended switch image: SE"), SYSCOL_TEXT);
-		}
-		const sint8 override_value = track->get_switch_image_override();
-		const int normal_count = track->get_desc()->has_switch_image() ? 2 : 0;
-		switch_image_choice.set_selection(override_value < 0 ? 0 : ((override_value & 2) ? 1 + normal_count + (override_value & 1) : 1 + (override_value & 1)));
+		update_switch_image_choice(track);
 		switch_image_choice.add_listener(this);
 		add_component(&switch_image_choice);
 	}
 	recalc_size();
+}
+
+void grund_info_t::update_switch_image_choice(weg_t *track)
+{
+	if(  !track || !track->get_desc()  ) {
+		switch_image_choice.set_visible(false);
+		return;
+	}
+	if(  switch_choice_desc != track->get_desc()  ) {
+		switch_image_choice.clear_elements();
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Automatic"), SYSCOL_TEXT);
+		switch_standard_index = switch_image_choice.count_elements();
+		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Standard"), SYSCOL_TEXT);
+		switch_nse1_index = -1;
+		switch_nse2_index = -1;
+		if(  track->get_desc()->has_switch_image()  ) {
+			switch_nse1_index = switch_image_choice.count_elements();
+			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE1 switch image"), SYSCOL_TEXT);
+		}
+		if(  track->get_desc()->has_switch_ex_image()  ) {
+			switch_nse2_index = switch_image_choice.count_elements();
+			switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("NSE2 switch image"), SYSCOL_TEXT);
+		}
+		switch_choice_desc = track->get_desc();
+	}
+	const sint8 value = track->get_switch_image_override();
+	const int selection = value < 0 ? 0 : (value == 0 ? switch_standard_index : value == 1 ? switch_nse1_index : switch_nse2_index);
+	if(  selection >= 0  ) {
+		switch_image_choice.set_selection(selection);
+	}
+	switch_image_choice.set_visible(track->get_desc()->has_switch_image() || track->get_desc()->has_switch_ex_image());
 }
 
 bool grund_info_t::action_triggered(gui_action_creator_t* comp, value_t)
@@ -65,9 +89,7 @@ bool grund_info_t::action_triggered(gui_action_creator_t* comp, value_t)
 	if(  comp == &switch_image_choice  ) {
 		char param[8];
 		const int selection = switch_image_choice.get_selection();
-		weg_t *track = gr->get_weg(track_wt);
-		const int normal_count = track && track->get_desc() && track->get_desc()->has_switch_image() ? 2 : 0;
-		const int value = selection == 0 ? -1 : (selection <= normal_count ? selection - 1 : (selection - normal_count - 1) | 2);
+		const int value = selection == 0 ? -1 : selection == switch_standard_index ? 0 : selection == switch_nse1_index ? 1 : 2;
 		sprintf(param, "%d", value);
 		tool_t *tool = tool_t::general_tool[TOOL_SET_SWITCH_IMAGE];
 		tool->set_default_param(param);
@@ -119,11 +141,7 @@ void grund_info_t::draw(scr_coord pos, scr_size size)
 	if(  has_switch_image_choice  ) {
 		weg_t *track = gr->get_weg(track_wt);
 		if(  track  ) {
-			const sint8 value = track->get_switch_image_override();
-			const int normal_count = track->get_desc() && track->get_desc()->has_switch_image() ? 2 : 0;
-			const int selection = value < 0 ? 0 : ((value & 2) ? 1 + normal_count + (value & 1) : 1 + (value & 1));
-			if(  switch_image_choice.get_selection() != selection  ) switch_image_choice.set_selection(selection);
-			switch_image_choice.set_visible(track->is_switch_junction());
+			update_switch_image_choice(track);
 		}
 		else switch_image_choice.set_visible(false);
 	}

@@ -1116,11 +1116,9 @@ Bridge blocked by building below.
 下にある建物があるので橋が架けられません.
 Automatic
 自動
-Switch image: NW
-分岐画像: 北西
-Switch image: SE
-分岐画像: 南東
-Extended switch image: NW
-拡張分岐画像: 北西
-Extended switch image: SE
-拡張分岐画像: 南東
+Standard
+標準
+NSE1 switch image
+分岐画像 NSE1
+NSE2 switch image
+分岐画像 NSE2

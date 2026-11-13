@@ -340,7 +340,7 @@ public:
 	void select_switch_image(bool snow);
 	void select_switch_road_image(bool snow);
 	bool has_switch_image_override() const { return switch_image_override >= 0; }
-	bool is_switch_junction() const { return ribi_t::is_threeway(get_ribi_unmasked()) && get_ribi_unmasked() != ribi_t::all; }
+	bool is_switch_junction() const { return ribi_t::is_threeway(get_ribi_unmasked()) && !(is_diagonal() || is_close_diagonal()); }
 	sint8 get_switch_image_override() const { return switch_image_override; }
 	void set_switch_image_override(sint8 value) { switch_image_override = value; }
 

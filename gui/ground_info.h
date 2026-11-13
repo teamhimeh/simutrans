@@ -15,6 +15,8 @@
 #include "components/action_listener.h"
 
 class grund_t;
+class weg_t;
+class way_desc_t;
 
 class grund_info_t : public gui_frame_t, private action_listener_t
 {
@@ -31,8 +33,13 @@ protected:
 	gui_textarea_t textarea, textarea2;
 	gui_combobox_t switch_image_choice;
 	bool has_switch_image_choice;
+	int switch_standard_index;
+	int switch_nse1_index;
+	int switch_nse2_index;
+	const way_desc_t *switch_choice_desc;
 
 	void recalc_size();
+	void update_switch_image_choice(weg_t *track);
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 
 public:
