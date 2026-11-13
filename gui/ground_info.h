@@ -38,6 +38,7 @@ protected:
 	int switch_nse2_index;
 	const way_desc_t *switch_choice_desc;
 	uint8 switch_choice_ribi;
+	sint8 switch_choice_value; // last override value shown in the list (-2: not synced)
 	cbuffer_t switch_labels[3]; // item labels must outlive the list items
 
 	void recalc_size();

@@ -270,6 +270,7 @@ BEGIN {
 	export_types_scenario["way_x::get_dirs_masked"] = "dir()"
 	export_types_scenario["way_x::get_desc"] = "way_desc_x()"
 	export_types_scenario["way_x::get_switch_image_override"] = "integer()"
+	export_types_scenario["way_x::get_image_id"] = "integer()"
 	export_types_scenario["way_x::get_max_speed"] = "integer()"
 	export_types_scenario["way_x::get_transported_goods"] = "array<integer>()"
 	export_types_scenario["way_x::get_convoys_passed"] = "array<integer>()"

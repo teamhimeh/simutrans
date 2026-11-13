@@ -265,30 +265,11 @@ void weg_t::rdwr(loadsave_t *file)
 		file->rdwr_byte(vehicle_offset);
 	}
 	if(  file->get_OTRP_version()>=64  ) {
-		uint8 override_value = 0xFF;
-		if(  !file->is_loading()  ) {
-			switch(  switch_image_override  ) {
-				case 0: override_value = 0x10; break; // Standard (NSE)
-				case 1: override_value = 0x11; break; // switch state 1
-				case 2: override_value = 0x12; break; // switch state 2
-				default: override_value = 0xFF; break; // Auto
-			}
-		}
+		// 0xFF (-1) is automatic selection, 0..2 are the fixed choices
+		uint8 override_value = (uint8)switch_image_override;
 		file->rdwr_byte(override_value);
 		if(  file->is_loading()  ) {
-			// The first feature build stored NSE1 orientations as 0/1 and NSE2 as 2/3.
-			// Current values have dedicated codes so Standard=0 cannot be confused with old NSE1=0.
-			switch(override_value) {
-				case 0xFF: switch_image_override = -1; break;
-				case 0: switch_image_override = 1; break;
-				case 1: switch_image_override = 1; break;
-				case 2: switch_image_override = 2; break;
-				case 3: switch_image_override = 2; break;
-				case 0x10: switch_image_override = 0; break;
-				case 0x11: switch_image_override = 1; break;
-				case 0x12: switch_image_override = 2; break;
-				default: switch_image_override = -1; break;
-			}
+			switch_image_override = override_value <= 2 ? (sint8)override_value : -1;
 		}
 	}
 }
@@ -619,21 +600,15 @@ bool weg_t::check_season(const bool calc_only_season_change)
 	else if(  is_diagonal()  ) {
 		set_images( image_diagonal, ribi, snow );
 	}
-	else if(  ribi_t::is_threeway( ribi )  &&  (desc->has_switch_image() || desc->has_switch_ex_image())  ) {
+	else if(  ribi_t::is_threeway( ribi )  &&  desc->has_switch_image()  ) {
 		if(  apply_switch_image_override(snow)  ) {
 			return true;
 		}
 		// there might be two states of the switch; remember it when changing seasons
-		if(  desc->has_switch_ex_image() && image == desc->get_switch_ex_image_id( ribi, old_snow, false )  ) {
-			set_images( image_ex, ribi, snow, false );
-		}
-		else if(  desc->has_switch_ex_image() && image == desc->get_switch_ex_image_id( ribi, old_snow, true )  ) {
-			set_images( image_ex, ribi, snow, true );
-		}
-		else if(  desc->has_switch_image() && image == desc->get_switch_image_id( ribi, old_snow, false )  ) {
+		if(  image == desc->get_switch_image_id( ribi, old_snow, false )  ) {
 			set_images( image_switch, ribi, snow, false );
 		}
-		else if(  desc->has_switch_image() && image == desc->get_switch_image_id( ribi, old_snow, true )  ) {
+		else if(  image == desc->get_switch_image_id( ribi, old_snow, true )  ) {
 			set_images( image_switch, ribi, snow, true );
 		}
 		else {
@@ -769,7 +744,7 @@ void weg_t::calc_image()
 
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
 			// close diagonals have their own images
-			if(!is_diagonal() && !is_close_diagonal() && (desc->has_switch_image() || desc->has_switch_ex_image())){
+			if(!is_diagonal() && !is_close_diagonal() && desc->has_switch_image()){
 				waytype_t type_name = get_waytype();
 				if(type_name == track_wt){
 					select_switch_image(snow);

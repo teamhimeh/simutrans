@@ -26,7 +26,8 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	switch_nse1_index(-1),
 	switch_nse2_index(-1),
 	switch_choice_desc(NULL),
-	switch_choice_ribi(0)
+	switch_choice_ribi(0),
+	switch_choice_value(-2)
 {
 	const obj_t *const d = gr->obj_bei(0);
 	if (  d!=NULL  ) {
@@ -60,6 +61,11 @@ void grund_info_t::update_switch_image_choice(weg_t *track)
 		switch_image_choice.set_visible(false);
 		return;
 	}
+	if(  !track->get_desc()->has_switch_image()  ||  !track->is_switch_junction()  ) {
+		// the junction was resolved while the dialog is open
+		switch_image_choice.set_visible(false);
+		return;
+	}
 	const uint8 junction_ribi = track->get_ribi_unmasked();
 	if(  switch_choice_desc != track->get_desc()  ||  switch_choice_ribi != junction_ribi  ) {
 		// label the choices with the actual junction directions (e.g. NSE, NSEW)
@@ -88,13 +94,17 @@ void grund_info_t::update_switch_image_choice(weg_t *track)
 		switch_image_choice.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(switch_labels[2].get_str(), SYSCOL_TEXT);
 		switch_choice_desc = track->get_desc();
 		switch_choice_ribi = junction_ribi;
+		switch_choice_value = -2; // force selection sync below
 	}
+	// Follow the way only when its value changed. Setting the selection every frame
+	// would revert the user's pick until a networked command has been executed.
 	const sint8 value = track->get_switch_image_override();
-	const int selection = value < 0 ? 0 : (value == 0 ? switch_standard_index : value == 1 ? switch_nse1_index : switch_nse2_index);
-	if(  selection >= 0  ) {
+	if(  value != switch_choice_value  ) {
+		const int selection = value < 0 ? 0 : (value == 0 ? switch_standard_index : value == 1 ? switch_nse1_index : switch_nse2_index);
 		switch_image_choice.set_selection(selection);
+		switch_choice_value = value;
 	}
-	switch_image_choice.set_visible(track->get_desc()->has_switch_image());
+	switch_image_choice.set_visible(true);
 }
 
 bool grund_info_t::action_triggered(gui_action_creator_t* comp, value_t)

@@ -29,10 +29,29 @@ function test_switch_image_override_scripted()
 	ASSERT_EQUAL(way.get_switch_image_override(), 1) // switch state 1
 	ASSERT_EQUAL(set_image.work(pl, junction, "2"), null)
 	ASSERT_EQUAL(way.get_switch_image_override(), 2) // switch state 2
+
+	// Each fixed choice must draw its own image: standard, switch state 1 and switch state 2.
+	local images = []
+	foreach (v in ["0", "1", "2"]) {
+		ASSERT_EQUAL(set_image.work(pl, junction, v), null)
+		images.append(way.get_image_id())
+	}
+	ASSERT_TRUE(images[0] != images[1])
+	ASSERT_TRUE(images[0] != images[2])
+	ASSERT_TRUE(images[1] != images[2])
+
 	ASSERT_EQUAL(set_image.work(pl, junction, "-1"), null)
 	ASSERT_EQUAL(way.get_switch_image_override(), -1)
 	ASSERT_EQUAL(set_image.work(pl, junction, "2"), null)
 	ASSERT_EQUAL(way.get_switch_image_override(), 2)
+	ASSERT_EQUAL(way.get_image_id(), images[2])
+
+	// Rebuilding the neighbouring image must keep the chosen image.
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(8, 4, 0), coord3d(8, 5, 0), rail, true), null)
+	ASSERT_EQUAL(way.get_switch_image_override(), 2)
+	ASSERT_EQUAL(way.get_image_id(), images[2])
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(8, 4, 0), coord3d(8, 5, 0), "" + wt_rail), null)
+	ASSERT_EQUAL(way.get_image_id(), images[2])
 
 	// Growing the T junction to a four-way must discard the fixed choice.
 	ASSERT_EQUAL(command_x.build_way(pl, junction, coord3d(7, 7, 0), rail, true), null)
