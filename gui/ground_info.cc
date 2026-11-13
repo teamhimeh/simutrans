@@ -76,13 +76,16 @@ static const char *switch_choice_label(uint8 ribi, sint8 value)
 		static const char *const labels[4] = { "Crossover A", "Crossover B", "Double crossover A", "Double crossover B" };
 		return translator::translate(labels[value-1]);
 	}
-	// the first state (nw) turns towards the side of the T junction given here, the second one to the opposite side
+	// Side of the main line the branch of the junction curves to, as drawn inside this tile.
+	// The first state (nw) is the one the automatic selection picks when the neighbour of the
+	// branch curves away; its curve inside the tile joins the branch with the opposite end of
+	// the main line (e.g. nse2 is a south-east curve). The second state uses the other end.
 	int dir; // index N, E, S, W
 	switch(  ribi  ) {
-		case ribi_t::northsoutheast: dir = 0; break;
-		case ribi_t::northeastwest:  dir = 1; break;
-		case ribi_t::northsouthwest: dir = 2; break;
-		default:                     dir = 3; break; // south-east-west
+		case ribi_t::northsoutheast: dir = 2; break; // south
+		case ribi_t::northeastwest:  dir = 3; break; // west
+		case ribi_t::northsouthwest: dir = 0; break; // north
+		default:                     dir = 1; break; // south-east-west: east
 	}
 	if(  value == 2  ||  value == 4  ) {
 		dir = (dir+2) & 3;
