@@ -104,7 +104,7 @@ welt_gui_t::welt_gui_t(settings_t* const sets_par) :
 		add_table(2,3);
 		{
 			new_component<gui_label_t>("2WORLD_CHOOSE");
-			inp_map_number.init( abs(sets->get_map_number()), 0, 0x7FFFFFFF, 1, true );
+			inp_map_number.init( abs(sets->get_map_number()), 0, 0x7FFFFFFF, 1, true ,12);
 			inp_map_number.add_listener( this );
 			add_component( &inp_map_number );
 
@@ -454,7 +454,7 @@ bool welt_gui_t::action_triggered( gui_action_creator_t *comp,value_t v)
 		sets->set_starting_year( (sint16)(v.i) );
 	}
 	else if(comp==&random_map) {
-		knr = simrand(9999);
+		knr = simrand(0x7FFFFFFF);
 		inp_map_number.set_value(knr);
 		sets->heightfield = "";
 		loaded_heightfield = false;
