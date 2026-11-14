@@ -1365,6 +1365,11 @@ void weg_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 	if(  player  &&  desc  ) {
 		player_t::add_maintenance( player,  desc->get_maintenance(), desc->get_finance_waytype() );
 	}
+	// The pak may have changed since the game was saved: drop a fixed switch image
+	// whose images do not exist any more and go back to the automatic selection.
+	if(  switch_image_override >= 0  &&  !is_switch_image_choice_available(switch_image_override)  ) {
+		switch_image_override = -1;
+	}
 }
 
 
