@@ -1114,3 +1114,31 @@ deactivated in offline mode
 オフラインモードでは無効
 Bridge blocked by building below.
 下にある建物があるので橋が架けられません.
+Auto
+自動
+Standard
+標準
+Branch north (up-right)
+北（右上）へ分岐
+Branch east (down-right)
+東（右下）へ分岐
+Branch south (down-left)
+南（左下）へ分岐
+Branch west (up-left)
+西（左上）へ分岐
+Y-junction (north, up-right)
+Y字分岐（北寄り・右上）
+Y-junction (east, down-right)
+Y字分岐（東寄り・右下）
+Y-junction (south, down-left)
+Y字分岐（南寄り・左下）
+Y-junction (west, up-left)
+Y字分岐（西寄り・左上）
+Crossing (straight left-right)
+十字（左右が直進）
+Crossing (straight up-down)
+十字（上下が直進）
+Double crossover A
+複線渡り線 A
+Double crossover B
+複線渡り線 B

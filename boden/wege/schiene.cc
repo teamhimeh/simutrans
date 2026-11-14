@@ -158,7 +158,7 @@ bool schiene_t::reserve(convoihandle_t const cnv, ribi_t::ribi dir, ribi_t::ribi
 		 * direction is a diagonal (i.e. on the switching part)
 		 * and there are switching graphics
 		 */
-		if(  get_desc()!=NULL  &&  ribi_t::is_threeway(get_ribi_unmasked())  &&  ribi_t::is_bend(dir)  &&  get_desc()->has_switch_image()  &&  get_desc()->get_finance_waytype() != tram_wt  &&  !get_is_ex_image()  ) {
+		if(  get_desc()!=NULL  &&  ribi_t::is_threeway(get_ribi_unmasked())  &&  ribi_t::is_bend(dir)  &&  get_desc()->has_switch_image()  &&  get_desc()->get_finance_waytype() != tram_wt  &&  !get_is_ex_image()  &&  !has_switch_image_override()  ) {
 			mark_image_dirty( get_image(), 0 );
 			mark_image_dirty( get_front_image(), 0 );
 			// dir is now corner_set (entry_border|exit_border); SE/NW corners match the

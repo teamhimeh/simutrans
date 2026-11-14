@@ -12088,3 +12088,20 @@ char const* tool_change_way_offset_t::do_work(player_t *player, const koord3d &s
 	}
 	return NULL;
 }
+
+
+char const* tool_set_switch_image_t::work(player_t *player, koord3d pos)
+{
+	grund_t *gr = welt->lookup(pos);
+	if(  !gr  ) return "";
+	// parameter: "<waytype>,<choice>"
+	int waytype, value;
+	if(  !get_default_param()  ||  sscanf(get_default_param(), "%d,%d", &waytype, &value) != 2  ||  value < -1  ||  value > 4  ) return "";
+	weg_t *way = gr->get_weg((waytype_t)waytype);
+	if(  !way  ||  !way->can_fix_switch_image()  ) return "";
+	if(  way->is_deletable(player)  ) return "";
+	if(  !way->is_switch_image_choice_available((sint8)value)  ) return "";
+	way->set_switch_image_override((sint8)value);
+	gr->calc_image();
+	return NULL;
+}

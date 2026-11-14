@@ -1662,4 +1662,12 @@ public:
 	bool get_vehicle_offset_mode() const { return vehicle_offset & 1; }
 };
 
+class tool_set_switch_image_t : public tool_t {
+public:
+	tool_set_switch_image_t() : tool_t(TOOL_SET_SWITCH_IMAGE | GENERAL_TOOL) {}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return false; }
+	char const* work(player_t*, koord3d) OVERRIDE;
+};
+
 #endif

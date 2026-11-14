@@ -629,6 +629,10 @@ void export_goods_desc(HSQUIRRELVM vm)
 	 * @returns true if this way can be build on the steeper (double) slopes.
 	 */
 	register_method(vm, &way_desc_t::has_double_slopes, "has_double_slopes");
+	/** @returns true if this way descriptor provides standard switch images. */
+	register_method(vm, &way_desc_t::has_switch_image, "has_switch_image");
+	/** @returns true if this way descriptor provides extended switch images. */
+	register_method(vm, &way_desc_t::has_switch_ex_image, "has_switch_ex_image");
 	/**
 	 * @returns system type of the way, see @ref way_system_types.
 	 */
