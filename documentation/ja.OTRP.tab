@@ -1134,10 +1134,10 @@ Y-junction (south, down-left)
 Y字分岐（南寄り・左下）
 Y-junction (west, up-left)
 Y字分岐（西寄り・左上）
-Crossover A
-渡り線 A
-Crossover B
-渡り線 B
+Crossing (straight left-right)
+十字（左右が直進）
+Crossing (straight up-down)
+十字（上下が直進）
 Double crossover A
 複線渡り線 A
 Double crossover B

@@ -74,7 +74,7 @@ static const char *switch_choice_label(uint8 ribi, sint8 value)
 		return translator::translate("Standard");
 	}
 	if(  ribi == ribi_t::all  ) {
-		static const char *const labels[4] = { "Crossover A", "Crossover B", "Double crossover A", "Double crossover B" };
+		static const char *const labels[4] = { "Crossing (straight left-right)", "Crossing (straight up-down)", "Double crossover A", "Double crossover B" };
 		return translator::translate(labels[value-1]);
 	}
 	// Side of the main line the branch of the junction curves to, as drawn inside this tile.
