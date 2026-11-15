@@ -4936,9 +4936,10 @@ bool karte_t::play_sound_area_clipped(koord const k, uint16 const idx, sound_typ
 }
 
 
-void karte_t::save(const char *filename, bool autosave, const char *version_str, bool silent )
+bool karte_t::save(const char *filename, bool autosave, const char *version_str, bool silent )
 {
 DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
+	bool saved = false;
 	loadsave_t  file;
 	std::string savename = filename;
 	savename[savename.length()-1] = '_';
@@ -4960,7 +4961,7 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 			create_win( new news_img(err_str), w_time_delete, magic_none);
 		}
 		else {
-			dr_rename( savename.c_str(), filename );
+			saved = ( dr_rename( savename.c_str(), filename ) == 0 );
 			if(!silent) {
 				create_win( new news_img("Spielstand wurde\ngespeichert!\n"), w_time_delete, magic_none);
 				// update the filename, if no autosave
@@ -4970,6 +4971,7 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 		reset_interaction();
 	}
 	display_show_load_pointer( false );
+	return saved;
 }
 
 

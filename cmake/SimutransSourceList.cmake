@@ -323,6 +323,7 @@ target_sources(simutrans PRIVATE
 		utils/checklist.cc
 		utils/csv.cc
 		utils/log.cc
+		utils/save_filename.cc
 		utils/searchfolder.cc
 		utils/sha1.cc
 		utils/sha1_hash.cc
