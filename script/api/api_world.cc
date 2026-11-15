@@ -91,9 +91,6 @@ SQInteger world_save_game(HSQUIRRELVM vm)
 	if (!is_valid_script_save_name(name, error)) {
 		return param<const char*>::push(vm, ("Invalid save name: " + error).c_str());
 	}
-	if (env_t::networkmode) {
-		return param<const char*>::push(vm, "Saving from scripts is not possible in network games");
-	}
 
 	dr_mkdir(SAVE_PATH);
 	const std::string path = std::string(SAVE_PATH_X) + name + ".sve";
@@ -370,23 +367,23 @@ void export_world(HSQUIRRELVM vm, bool scenario)
 		 * @ingroup scen_only
 		 */
 		STATIC register_method(vm, &world_generate_goods, "generate_goods", true);
-
-		/**
-		 * Saves the game as "save/<name>.sve" (silent, like an autosave).
-		 *
-		 * @p name is the file name without folder and without extension. It is checked, never
-		 * rewritten, and nothing is written if it is rejected. Rejected are: empty or longer than
-		 * 128 bytes, invalid UTF-8, control or invisible characters, / \ : * ? " < > |,
-		 * a leading dot, leading or trailing space, a trailing dot, and Windows device names
-		 * (CON, NUL, COM1, ...). Other Unicode letters are accepted. An existing save of the
-		 * same name is replaced. Not available in network games.
-		 *
-		 * @param name name of the savegame
-		 * @ingroup scen_only
-		 * @returns null on success, otherwise a string describing why nothing was saved
-		 */
-		STATIC register_function(vm, world_save_game, "save_game", 2, ".s");
 	}
+
+	/**
+	 * Saves the game as "save/<name>.sve" (silent, like an autosave).
+	 *
+	 * @p name is the file name without folder and without extension. It is checked, never
+	 * rewritten, and nothing is written if it is rejected. Rejected are: empty or longer than
+	 * 128 bytes, invalid UTF-8, control or invisible characters, / \ : * ? " < > |,
+	 * a leading dot, leading or trailing space, a trailing dot, and Windows device names
+	 * (CON, NUL, COM1, ...). Other Unicode letters are accepted. An existing save of the
+	 * same name is replaced, unless that file is read-only (then nothing is written and an error is returned).
+	 *
+	 * @param name name of the savegame
+	 * @returns null on success, otherwise a string describing why nothing was saved
+	 */
+	STATIC register_function(vm, world_save_game, "save_game", 2, ".s");
+
 	/**
 	 * Returns player number @p pl. If player does not exist, returns null.
 	 * @param pl player number

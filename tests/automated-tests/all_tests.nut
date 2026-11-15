@@ -188,6 +188,7 @@ all_tests <- [
 	test_save_game_rejects_control_and_invisible_characters,
 	test_save_game_rejects_empty_and_long_names,
 	test_save_game_rejects_non_string,
+	test_save_game_rejects_read_only_target,
 	test_sign_build_oneway,
 	test_sign_remove_trafficlight,
 	test_sign_build_private_way,

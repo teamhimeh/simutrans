@@ -91,3 +91,13 @@ function test_save_game_rejects_non_string()
 	}
 	ASSERT_TRUE(failed)
 }
+
+
+// run-automated-tests.sh creates save/script_save_readonly.sve as a read-only file
+// and afterwards checks that its content is unchanged and that no temporary file is left.
+function test_save_game_rejects_read_only_target()
+{
+	local result = world.save_game("script_save_readonly")
+	ASSERT_TRUE(result != null)
+	ASSERT_TRUE(result.len() > 0)
+}

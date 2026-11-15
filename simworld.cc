@@ -4944,6 +4944,22 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 	std::string savename = filename;
 	savename[savename.length()-1] = '_';
 
+	// An existing read-only file must stay untouched: refuse before anything is written.
+	// (Windows cannot replace it by renaming; elsewhere the rename would silently replace it.)
+	if(  FILE *existing = dr_fopen( filename, "rb" )  ) {
+		fclose( existing );
+		if(  FILE *writable = dr_fopen( filename, "ab" )  ) {
+			fclose( writable );
+		}
+		else {
+			dbg->error( "karte_t::save()", "'%s' exists and cannot be overwritten (read-only?)", filename );
+			if(  !silent  ) {
+				create_win( new news_img("Kann Spielstand\nnicht speichern.\n"), w_info, magic_none );
+			}
+			return false;
+		}
+	}
+
 	display_show_load_pointer( true );
 	const loadsave_t::mode_t mode = autosave ? loadsave_t::autosave_mode : loadsave_t::save_mode;
 	const int save_level = autosave ? loadsave_t::autosave_level : loadsave_t::save_level;
@@ -4959,10 +4975,19 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 			static char err_str[512];
 			sprintf( err_str, translator::translate("Error during saving:\n%s"), success );
 			create_win( new news_img(err_str), w_time_delete, magic_none);
+			dr_remove( savename.c_str() );
 		}
 		else {
 			saved = ( dr_rename( savename.c_str(), filename ) == 0 );
-			if(!silent) {
+			if(  !saved  ) {
+				// do not report success, and do not leave the temporary file behind
+				dbg->error( "karte_t::save()", "cannot replace '%s'", filename );
+				dr_remove( savename.c_str() );
+				if(  !silent  ) {
+					create_win( new news_img("Kann Spielstand\nnicht speichern.\n"), w_info, magic_none );
+				}
+			}
+			else if(!silent) {
 				create_win( new news_img("Spielstand wurde\ngespeichert!\n"), w_time_delete, magic_none);
 				// update the filename, if no autosave
 				settings.set_filename(filename);
