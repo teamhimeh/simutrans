@@ -11,6 +11,7 @@
 #include "get_next.h"
 #include "../api_class.h"
 #include "../api_function.h"
+#include "../script.h"
 #include "../../simworld.h"
 #include "../../dataobj/environment.h"
 #include "../../pathes.h"
@@ -90,6 +91,17 @@ SQInteger world_save_game(HSQUIRRELVM vm)
 	std::string error;
 	if (!is_valid_script_save_name(name, error)) {
 		return param<const char*>::push(vm, ("Invalid save name: " + error).c_str());
+	}
+
+	// In network games only scripts that run on the server may save, and not the free-form MCP ones.
+	if (env_t::networkmode) {
+		const script_vm_t *script = (const script_vm_t*)sq_getforeignptr(vm);
+		if (!env_t::server) {
+			return param<const char*>::push(vm, "Saving from scripts is only possible on the server in network games");
+		}
+		if (script  &&  script->from_mcp) {
+			return param<const char*>::push(vm, "Saving from MCP scripts is not possible in network games");
+		}
 	}
 
 	dr_mkdir(SAVE_PATH);
@@ -377,7 +389,7 @@ void export_world(HSQUIRRELVM vm, bool scenario)
 	 * 128 bytes, invalid UTF-8, control or invisible characters, / \ : * ? " < > |,
 	 * a leading dot, leading or trailing space, a trailing dot, and Windows device names
 	 * (CON, NUL, COM1, ...). Other Unicode letters are accepted. An existing save of the
-	 * same name is replaced, unless that file is read-only (then nothing is written and an error is returned).
+	 * same name is replaced, unless that file is read-only (then nothing is written and an error is returned). In network games it works only on the server, and not from MCP scripts.
 	 *
 	 * @param name name of the savegame
 	 * @returns null on success, otherwise a string describing why nothing was saved

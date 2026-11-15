@@ -238,6 +238,9 @@ private:
 public:
 	bool pause_on_error;
 
+	/// true for the VM of an MCP run_squirrel call (arbitrary code from outside the game)
+	bool from_mcp;
+
 private:
 	/// @{
 	/// @name Helper functions to call, suspend, queue calls to scripted functions

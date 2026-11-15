@@ -96,6 +96,7 @@ static std::string tool_run_squirrel(const std::string &code, int player_nr,
 	}
 	vm->set_my_player((uint8)player_nr);
 	vm->pause_on_error = false;
+	vm->from_mcp = true;
 
 	// Wrap the user code in a named function so we can call it with
 	// call_function<plainstring>(QUEUE, ...) and capture the return value.
