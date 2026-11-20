@@ -166,6 +166,20 @@ private:
 	 */
 	bool tunnel_dual_leg_allowed;
 
+	/**
+	 * true if the existing elevated ground @p gr can carry our way: it has our waytype, or
+	 * (closed diagonal) a single way of another waytype on a diagonal bend that does not use
+	 * @p entry (ribi_t::none: no direction known yet)
+	 */
+	bool is_elevated_ground_usable(const grund_t *gr, ribi_t::ribi entry) const;
+
+	/**
+	 * false: never create a closed diagonal, i.e. neither a second same-waytype leg nor
+	 * a different waytype on the opposite diagonal bend of a tile (even with ctrl).
+	 * Tiles which already carry both ways can still be continued.
+	 */
+	bool allow_closed_diagonal;
+
 	bool build_sidewalk;
 
 	uint32 maximum;    // hoechste Suchtiefe
@@ -256,6 +270,9 @@ public:
 	void set_keep_city_roads(bool yesno) { keep_existing_city_roads = yesno; }
 
 	void set_build_sidewalk(bool yesno) { build_sidewalk = yesno; }
+
+	/// false: do not create closed diagonals (two ways on disjoint diagonal bends)
+	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
 
 	/// allow building a second, independent diagonal leg in tunnels (ctrl pressed)
 	void set_tunnel_dual_leg_allowed(bool yesno) { tunnel_dual_leg_allowed = yesno; }

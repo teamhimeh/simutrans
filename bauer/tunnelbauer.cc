@@ -669,12 +669,7 @@ void tunnel_builder_t::build_tunnel_portal(player_t *player, koord3d end, koord 
 }
 
 
-/**
- * A way inside a tunnel that does not belong to the tunnel of @p wegtyp and must survive its
- * removal: a different waytype on the opposite diagonal bend of the tile (closed diagonal).
- * Tram tracks have no tunnels of their own, so they are removed with the tunnel they run in.
- */
-static weg_t *get_way_kept_on_tunnel_removal(const grund_t *gr, waytype_t wegtyp)
+weg_t *tunnel_builder_t::get_way_kept_on_removal(const grund_t *gr, waytype_t wegtyp)
 {
 	if(  wegtyp==powerline_wt  ||  gr->ist_karten_boden()  ) {
 		return NULL;
@@ -707,53 +702,72 @@ static bool can_remove_tunnel_way(const grund_t *gr, const player_t *player, way
 }
 
 
-/**
- * Removes the way of @p wegtyp from a tunnel tile shared with @p kept_wt (closed diagonal),
- * keeping the tile and the other way. If the tunnel_t of the tile belongs to @p wegtyp, it is
- * replaced by a tunnel of the remaining waytype, which then takes over its maintenance.
- */
-static void remove_tunnel_way_keep_tile(player_t *player, grund_t *gr, waytype_t wegtyp, waytype_t kept_wt)
+/// a tunnel matching the way @p kept on @p gr: preferably the one the way comes from
+static const tunnel_desc_t *find_tunnel_desc_for_way(const grund_t *gr, const weg_t *kept)
 {
-	tunnel_t *tunnel = gr->find<tunnel_t>();
+	const waytype_t kept_wt = kept->get_waytype();
+	const ribi_t::ribi kept_ribi = kept->get_ribi_unmasked();
+	for(  uint8 r=0;  r<4;  r++  ) {
+		grund_t *to;
+		if(  (kept_ribi & ribi_t::nesw[r])  &&  gr->get_neighbour(to, kept_wt, ribi_t::nesw[r])  ) {
+			if(  const tunnel_t *t = to->find<tunnel_t>()  ) {
+				if(  t->get_desc()->get_waytype()==kept_wt  ) {
+					return t->get_desc();
+				}
+			}
+		}
+	}
+	const tunnel_desc_t *desc = tunnel_builder_t::get_tunnel_desc(kept_wt, kept->get_max_speed(), world()->get_timeline_year_month());
+	if(  desc==NULL  ) {
+		desc = tunnel_builder_t::get_tunnel_desc(kept_wt, 1, 0);
+	}
+	return desc;
+}
+
+
+bool tunnel_builder_t::remove_way_keep_tile(player_t *player, grund_t *gr, waytype_t wegtyp, waytype_t kept_wt, ribi_t::ribi rem)
+{
+	weg_t *weg = gr->get_weg(wegtyp);
+	if(  weg==NULL  ) {
+		return true;
+	}
+	const bool full_removal = (weg->get_ribi_unmasked() & rem)==ribi_t::none;
+
+	// the tunnel_t of a tunnel tile belongs to one waytype; if it is ours and our way goes,
+	// the remaining way gets a tunnel of its own
+	tunnel_t *tunnel = gr->get_typ()==grund_t::tunnelboden ? gr->find<tunnel_t>() : NULL;
 	const tunnel_desc_t *old_desc = tunnel ? tunnel->get_desc() : NULL;
-	const bool replace_tunnel = tunnel==NULL  ||  old_desc->get_waytype()==wegtyp;
+	const bool replace_tunnel = full_removal  &&  gr->get_typ()==grund_t::tunnelboden  &&  (tunnel==NULL  ||  old_desc->get_waytype()==wegtyp);
+	player_t *tunnel_owner = tunnel ? tunnel->get_owner() : NULL;
 	if(  tunnel  &&  replace_tunnel  ) {
 		// before removing the way, so it pays its own maintenance again (see tunnel_t::cleanup())
 		tunnel->cleanup(player);
 		delete tunnel;
 	}
 
-	gr->remove_everything_from_way(player, wegtyp, ribi_t::none);
+	const bool ok = gr->remove_everything_from_way(player, wegtyp, rem);
 
-	weg_t *kept = gr->get_weg(kept_wt);
-	if(  replace_tunnel  &&  kept  ) {
-		// prefer the tunnel the remaining way comes from
+	if(  replace_tunnel  ) {
+		weg_t *rest = gr->get_weg(wegtyp);
 		const tunnel_desc_t *desc = NULL;
-		const ribi_t::ribi kept_ribi = kept->get_ribi_unmasked();
-		for(  uint8 r=0;  r<4  &&  desc==NULL;  r++  ) {
-			grund_t *to;
-			if(  (kept_ribi & ribi_t::nesw[r])  &&  gr->get_neighbour(to, kept_wt, ribi_t::nesw[r])  ) {
-				if(  const tunnel_t *t = to->find<tunnel_t>()  ) {
-					if(  t->get_desc()->get_waytype()==kept_wt  ) {
-						desc = t->get_desc();
-					}
-				}
+		player_t *owner = NULL;
+		if(  rest  &&  old_desc  ) {
+			// our way could not be removed (e.g. a stop): restore its tunnel
+			desc = old_desc;
+			owner = tunnel_owner;
+		}
+		else if(  weg_t *kept = gr->get_weg(kept_wt)  ) {
+			desc = find_tunnel_desc_for_way(gr, kept);
+			owner = kept->get_owner();
+			if(  desc==NULL  ) {
+				dbg->error( "tunnel_builder_t::remove_way_keep_tile()", "no tunnel for waytype %d at %s", kept_wt, gr->get_pos().get_str() );
+				desc = old_desc;
 			}
 		}
-		if(  desc==NULL  ) {
-			desc = tunnel_builder_t::get_tunnel_desc(kept_wt, kept->get_max_speed(), world()->get_timeline_year_month());
-		}
-		if(  desc==NULL  ) {
-			desc = tunnel_builder_t::get_tunnel_desc(kept_wt, 1, 0);
-		}
-		if(  desc==NULL  ) {
-			dbg->error( "remove_tunnel_way_keep_tile()", "no tunnel for waytype %d at %s", kept_wt, gr->get_pos().get_str() );
-			desc = old_desc;
-		}
 		if(  desc  ) {
-			tunnel_t *t = new tunnel_t(gr->get_pos(), kept->get_owner(), desc);
+			tunnel_t *t = new tunnel_t(gr->get_pos(), owner, desc);
 			gr->obj_add(t);
-			// takes over the maintenance of the remaining way
+			// takes over the maintenance of its way
 			t->finish_rd( OTRP_VERSION_MAJOR );
 		}
 	}
@@ -761,6 +775,7 @@ static void remove_tunnel_way_keep_tile(player_t *player, grund_t *gr, waytype_t
 	gr->calc_image();
 	gr->set_flag(grund_t::dirty);
 	minimap_t::get_instance()->calc_map_pixel( gr->get_pos().get_2d() );
+	return ok;
 }
 
 
@@ -795,7 +810,7 @@ const char *tunnel_builder_t::remove(player_t *player, koord3d start, waytype_t 
 			part_list.insert(pos);
 		}
 
-		if(  get_way_kept_on_tunnel_removal(from, wegtyp)  ) {
+		if(  get_way_kept_on_removal(from, wegtyp)  ) {
 			// closed diagonal with another waytype: only our way is removed here
 			if(  !can_remove_tunnel_way(from, player, wegtyp)  ) {
 				return "Der Tunnel ist nicht frei!\n";
@@ -835,9 +850,9 @@ const char *tunnel_builder_t::remove(player_t *player, koord3d start, waytype_t 
 	while (!part_list.empty()) {
 		pos = part_list.remove_first();
 		grund_t *gr = welt->lookup(pos);
-		if(  weg_t *kept = get_way_kept_on_tunnel_removal(gr, wegtyp)  ) {
+		if(  weg_t *kept = get_way_kept_on_removal(gr, wegtyp)  ) {
 			// closed diagonal with another waytype: keep the tile for the other way
-			remove_tunnel_way_keep_tile(player, gr, wegtyp, kept->get_waytype());
+			remove_way_keep_tile(player, gr, wegtyp, kept->get_waytype(), ribi_t::none);
 			continue;
 		}
 		// remove the ways of other waytypes (tram tracks) first in the tunnel, so their
