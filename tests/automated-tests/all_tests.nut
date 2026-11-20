@@ -364,6 +364,7 @@ all_tests <- [
 	test_diagonal_two_waytypes_same_waytype,
 	test_diagonal_two_waytypes_split_to_threeway,
 	test_diagonal_two_waytypes_partial_leg,
+	test_diagonal_two_waytypes_not_allowed,
 	test_diagonal_two_waytypes_same_desc,
 	test_diagonal_two_waytypes_same_desc_partial_leg,
 	test_diagonal_elevated_two_waytypes_straight,

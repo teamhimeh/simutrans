@@ -3110,7 +3110,7 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 	uint8 flag = street_flag;
 	sint8 hf = height_offset;
 	sint8 vo = vehicle_offset;
-	bool ncd = no_closed_diagonal;
+	bool acd = allow_closed_diagonal;
 	if (look_toolbar) {
 		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
 		if (toolbar_tool) {
@@ -3118,11 +3118,11 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 			flag = toolbar_tool->get_street_flag();
 			hf = toolbar_tool->get_height_offset();
 			vo = toolbar_tool->vehicle_offset;
-			ncd = toolbar_tool->get_no_closed_diagonal();
+			acd = toolbar_tool->get_allow_closed_diagonal();
 		}
 	}
 	static char buf[300];
-	sprintf(buf, "%s,%d,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo, (int)ncd);
+	sprintf(buf, "%s,%d,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo, (int)acd);
 	return buf;
 }
 
@@ -3154,18 +3154,18 @@ bool tool_build_way_t::init( player_t *player, bool called_from_move )
 		return false;
 	}
 
-	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle[,no_closed_diagonal]")
+	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle[,allow_closed_diagonal]")
 	if (default_param) {
 		const char* comma = strchr(default_param, ',');
 		if (comma) {
-			int mode, flag, hf, vo, ncd = 0;
-			if (sscanf(comma + 1, "%d,%d,%d,%d,%d", &mode, &flag, &hf, &vo, &ncd) >= 4) {
+			int mode, flag, hf, vo, acd = 0;
+			if (sscanf(comma + 1, "%d,%d,%d,%d,%d", &mode, &flag, &hf, &vo, &acd) >= 4) {
 				overtaking_mode = (overtaking_mode_t)mode;
 				street_flag = (uint8)flag;
 				height_offset = (sint8)hf;
 				vehicle_offset = (sint8)vo;
-				// missing (older format) => closed diagonals allowed
-				no_closed_diagonal = ncd!=0;
+				// missing (older format) => no closed diagonals
+				allow_closed_diagonal = acd!=0;
 			}
 		}
 	}
@@ -3314,13 +3314,14 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 
 	bauigel.init_builder(bautyp, desc);
 	{
-		bool ncd = no_closed_diagonal;
+		bool acd = allow_closed_diagonal;
 		tool_build_way_t* toolbar_tool;
 		if(  look_toolbar  &&  (toolbar_tool=get_build_way_tool_from_toolbar(desc))!=NULL  ) {
 			// called from a shortcut key: use the setting of the tool in the toolbar
-			ncd = toolbar_tool->get_no_closed_diagonal();
+			acd = toolbar_tool->get_allow_closed_diagonal();
 		}
-		bauigel.set_allow_closed_diagonal( !ncd );
+		// closed diagonals only when "allow closed diagonal" is selected
+		bauigel.set_allow_closed_diagonal( acd );
 	}
 	if(  is_ctrl_pressed()  &&  !is_shift_pressed()) {
 		bauigel.set_keep_existing_ways( false );
@@ -3985,11 +3986,10 @@ void tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &sta
 
 	bauigel.init_builder(bt | way_builder_t::tunnel_flag, wb, desc);
 	bauigel.set_keep_existing_faster_ways( !is_ctrl_pressed() );
-	// underground ways are always built straight, so a second independent diagonal leg
-	// (closed diagonal) is only allowed with ctrl pressed
+	// closed diagonals only when "allow closed diagonal" is selected; underground ways are
+	// always built straight, so a second same-waytype leg additionally needs ctrl pressed
+	bauigel.set_allow_closed_diagonal( allow_closed_diagonal );
 	bauigel.set_tunnel_dual_leg_allowed( is_ctrl_pressed() );
-	// no closed diagonal at all (neither the same nor another waytype), if requested
-	bauigel.set_allow_closed_diagonal( !no_closed_diagonal );
 	// wegbauer (way builder) tries to find route to 3d coordinate if no ground at end exists or is not kartenboden (map ground)
 	bauigel.calc_straight_route(start,end);
 }
@@ -4053,7 +4053,7 @@ void tool_build_tunnel_t::rdwr_custom_data(memory_rw_t *packet)
 	overtaking_mode = (overtaking_mode_t)i;
 	vehicle_offset = j;
 	packet->rdwr_byte(street_flag);
-	packet->rdwr_bool(no_closed_diagonal);
+	packet->rdwr_bool(allow_closed_diagonal);
 }
 
 

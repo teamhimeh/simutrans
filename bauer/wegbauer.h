@@ -174,9 +174,10 @@ private:
 	bool is_elevated_ground_usable(const grund_t *gr, ribi_t::ribi entry) const;
 
 	/**
-	 * false: never create a closed diagonal, i.e. neither a second same-waytype leg nor
-	 * a different waytype on the opposite diagonal bend of a tile (even with ctrl).
-	 * Tiles which already carry both ways can still be continued.
+	 * true: closed diagonals may be created, i.e. a second same-waytype leg (ctrl) or a
+	 * different waytype on the opposite diagonal bend of a tile. Off by default (AI, cities,
+	 * ...); the way/tunnel tools switch it on only when "allow closed diagonal" is selected.
+	 * Tiles which already carry both ways can always be continued.
 	 */
 	bool allow_closed_diagonal;
 
@@ -271,7 +272,7 @@ public:
 
 	void set_build_sidewalk(bool yesno) { build_sidewalk = yesno; }
 
-	/// false: do not create closed diagonals (two ways on disjoint diagonal bends)
+	/// true: closed diagonals (two ways on disjoint diagonal bends) may be created
 	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
 
 	/// allow building a second, independent diagonal leg in tunnels (ctrl pressed)

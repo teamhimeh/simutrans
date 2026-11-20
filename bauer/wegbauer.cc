@@ -1298,7 +1298,7 @@ way_builder_t::way_builder_t(player_t* player) : next_gr(32)
 	build_sidewalk = false;
 	straight_route_mode = false;
 	tunnel_dual_leg_allowed = false;
-	allow_closed_diagonal = true;
+	allow_closed_diagonal = false;
 
 	vehicle_offset = 0;
 }

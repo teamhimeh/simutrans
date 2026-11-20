@@ -147,12 +147,12 @@ void overtaking_mode_frame_t::init( player_t* player_, overtaking_mode_t overtak
 		end_table();
 	}
 	if(  tool_class==0  ||  tool_class==2  ) {
-		// do not build two ways on disjoint diagonal bends of a tile, even with ctrl
-		no_closed_diagonal_button.init( button_t::square_state, "no closed diagonal");
-		no_closed_diagonal_button.set_tooltip( translator::translate("Do not build closed diagonals (two ways on the opposite diagonals of a tile), even with Ctrl pressed.") );
-		no_closed_diagonal_button.add_listener(this);
-		no_closed_diagonal_button.pressed = tool_class==0 ? tool_w->get_no_closed_diagonal() : tool_tu->get_no_closed_diagonal();
-		add_component(&no_closed_diagonal_button);
+		// two ways on disjoint diagonal bends of a tile are only built when this is pressed
+		allow_closed_diagonal_button.init( button_t::square_state, "allow closed diagonal");
+		allow_closed_diagonal_button.set_tooltip( translator::translate("Allow building closed diagonals (two ways on the opposite diagonals of a tile). The same waytype also needs Ctrl pressed.") );
+		allow_closed_diagonal_button.add_listener(this);
+		allow_closed_diagonal_button.pressed = tool_class==0 ? tool_w->get_allow_closed_diagonal() : tool_tu->get_allow_closed_diagonal();
+		add_component(&allow_closed_diagonal_button);
 	}
 	if(  tool_class != 3  ) {
 	add_table(3,1);
@@ -231,13 +231,13 @@ bool overtaking_mode_frame_t::action_triggered( gui_action_creator_t *komp, valu
 	else if(  komp==&pedestrian_no_entry_button  ) {
 		pedestrian_no_entry_button.pressed = !(pedestrian_no_entry_button.pressed);
 	}
-	else if(  komp==&no_closed_diagonal_button  ) {
-		no_closed_diagonal_button.pressed = !(no_closed_diagonal_button.pressed);
+	else if(  komp==&allow_closed_diagonal_button  ) {
+		allow_closed_diagonal_button.pressed = !(allow_closed_diagonal_button.pressed);
 		if(  tool_class==0  ) {
-			tool_w->set_no_closed_diagonal(no_closed_diagonal_button.pressed);
+			tool_w->set_allow_closed_diagonal(allow_closed_diagonal_button.pressed);
 		}
 		else if(  tool_class==2  ) {
-			tool_tu->set_no_closed_diagonal(no_closed_diagonal_button.pressed);
+			tool_tu->set_allow_closed_diagonal(allow_closed_diagonal_button.pressed);
 		}
 		// not a road flag
 		return true;
