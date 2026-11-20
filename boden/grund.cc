@@ -2516,21 +2516,6 @@ bool grund_t::is_use_ex_image(waytype_t wt, ribi_t::ribi backward_ribi){
 	return false;
 }
 
-bool grund_t::is_use_wayobj_ex_image(ribi_t::ribi backward_ribi){
-	ribi_t::ribi rotate_ribi = ribi_t::rotate90(backward_ribi);
-	ribi_t::ribi rotate_backward_ribi = ribi_t::backward(rotate_ribi);
-	grund_t *first_side;
-	grund_t *second_side;
-	if( get_neighbour(first_side, track_wt, rotate_ribi) && get_neighbour(second_side, track_wt, rotate_backward_ribi) && first_side->get_wayobj(track_wt) && second_side->get_wayobj(track_wt) ){
-		ribi_t::ribi first_side_ribi = first_side->get_wayobj(track_wt)->get_dir();
-		ribi_t::ribi second_side_ribi = second_side->get_wayobj(track_wt)->get_dir();
-		if(first_side_ribi == (rotate_backward_ribi | backward_ribi) && second_side_ribi == (rotate_ribi | backward_ribi)){
-			return true;
-		}
-	}
-	return false;
-}
-
 bool grund_t::is_dummy_ground() const
 {
 	return (get_typ() == grund_t::tunnelboden  ||  get_typ() == grund_t::monorailboden)

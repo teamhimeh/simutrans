@@ -84,7 +84,8 @@ public:
 
 	void rotate90() OVERRIDE;
 
-	image_id is_need_crossing_image(ribi_t::ribi ribi, bool front) const;
+	/// image on a junction: follows the junction image of the way below (see wayobj.cc)
+	image_id get_junction_image(bool front) const;
 
 #if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
 	/**
@@ -93,7 +94,7 @@ public:
 	image_id get_image() const OVERRIDE {
 		return close_diagonal ? get_close_diagonal_image(false) : two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, false) : hang ? desc->get_back_slope_image_id(hang) :
 			(diagonal ? desc->get_back_diagonal_image_id(dir) :
-				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,false) : desc->get_back_image_id(dir))
+				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? get_junction_image(false) : desc->get_back_image_id(dir))
 			);
 	}
 
@@ -103,7 +104,7 @@ public:
 	image_id get_front_image() const OVERRIDE {
 		return close_diagonal ? get_close_diagonal_image(true) : two_legs ? get_leg_image(leg_dir_a, leg_diagonal&1, true) : hang ? desc->get_front_slope_image_id(hang) :
 			(diagonal ? desc->get_front_diagonal_image_id(dir) :
-				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? is_need_crossing_image(dir,true) : desc->get_front_image_id(dir))
+				(ribi_t::is_threeway(dir) && desc->has_switch_image() ? get_junction_image(true) : desc->get_front_image_id(dir))
 			);
 	}
 #else
