@@ -1118,3 +1118,120 @@ allow closed diagonal
 斜めの併設を許可
 Allow building closed diagonals (two ways on the opposite diagonals of a tile). The same waytype also needs Ctrl pressed.
 1マスの向かい合う斜めに2本の道を併設できるようにします. 同じ種類の道ではCtrlも押してください.
+#------インフラ選択ウィンドウ------
+way builder
+道の建設
+wayobj builder
+架線等の建設
+halt builder
+駅の建設
+roadsign builder
+信号・標識の建設
+Filter names:
+名前で絞り込み:
+Waytype
+道の種類
+show ground
+地上
+show elevated
+高架
+show bridge
+橋
+show tunnel
+トンネル
+Min. speed
+最低速度
+Max. cost
+建設費の上限
+Min. cost
+建設費の下限
+Max. maintenance
+維持費の上限
+0 = no limit
+0 = 制限なし
+Image
+画像
+Icon
+アイコン
+Cursor
+カーソル
+Construction cost
+建設費
+Level
+レベル
+Type
+種類
+Size
+サイズ
+Layouts
+レイアウト数
+Road
+道路
+unknown
+不明
+Way
+道
+Elevated way
+高架
+Bridge
+橋
+Tunnel
+トンネル
+Max. axle load
+最大軸重
+Max. length
+最大長
+Max. height
+最大高さ
+overheadlines
+架線
+stop
+停留所
+extension
+付属建物
+harbour
+港
+for end
+終端用
+for many tiles
+複数タイル用
+for diagonal
+斜め用
+for slope
+坂用
+4 layouts
+レイアウト数が4
+more than 15 layouts
+レイアウト数が16以上
+more than 47 layouts
+レイアウト数が48以上
+more than 79 layouts
+レイアウト数が80以上
+Min. level
+最低レベル
+Max. level
+最高レベル
+is_signal
+信号のみ
+is_no_signal
+信号以外
+Pre-signal
+予告信号
+Priority signal
+優先信号
+Longblock signal
+長閉塞信号
+Choose sign
+選択信号
+End of choose area
+選択区間の終端
+One-way sign
+一方通行
+Private road
+私道
+No foreground
+前景なし
+Traffic light
+交通信号
+Plain sign
+通常の標識
