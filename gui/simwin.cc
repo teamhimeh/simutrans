@@ -79,6 +79,10 @@
 #include "groundobj_edit.h"
 #include "curiosity_edit.h"
 #include "factory_edit.h"
+#include "way_edit.h"
+#include "wayobj_edit.h"
+#include "halt_edit.h"
+#include "roadsign_edit.h"
 
 #include "../simversion.h"
 
@@ -658,6 +662,18 @@ void rdwr_all_win(loadsave_t *file)
 						}
 						else if(  id>=magic_line_management_t  &&  id<magic_line_management_t+MAX_PLAYER_COUNT  ) {
 							w = new schedule_list_gui_t( wl->get_player(id-magic_line_management_t) );
+						}
+						else if(  id>=magic_way_edit  &&  id<magic_way_edit+256  ) {
+							w = new way_edit_frame_t( wl->get_active_player(), (waytype_t)(id-magic_way_edit) );
+						}
+						else if(  id>=magic_wayobj_edit  &&  id<magic_wayobj_edit+256  ) {
+							w = new wayobj_edit_frame_t( wl->get_active_player(), (waytype_t)(id-magic_wayobj_edit) );
+						}
+						else if(  id>=magic_halt_edit  &&  id<magic_halt_edit+256  ) {
+							w = new halt_edit_frame_t( wl->get_active_player(), (waytype_t)(id-magic_halt_edit) );
+						}
+						else if(  id>=magic_roadsign_edit  &&  id<magic_roadsign_edit+256  ) {
+							w = new roadsign_edit_frame_t( wl->get_active_player(), (waytype_t)(id-magic_roadsign_edit) );
 						}
 						else if(  id>=magic_toolbar  &&  id<magic_toolbar+256  ) {
 							tool_t::toolbar_tool[id-magic_toolbar]->update(wl->get_active_player());
