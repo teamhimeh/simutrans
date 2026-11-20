@@ -144,6 +144,7 @@ all_tests <- [
 	test_halt_build_near_factories,
 	test_halt_build_on_bridge_end,
 	test_halt_build_on_depot,
+	test_halt_build_on_isolated_way,
 	test_halt_build_station_extension,
 	test_halt_make_public_single,
 	test_halt_make_public_multi_tile,
