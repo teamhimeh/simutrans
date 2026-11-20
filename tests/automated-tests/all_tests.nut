@@ -57,6 +57,7 @@ include("tests/test_pillar")
 include("tests/test_crossing_reservation")
 include("tests/test_diagonal_two_waytypes")
 include("tests/test_diagonal_two_waytypes_same_desc")
+include("tests/test_diagonal_elevated")
 
 all_tests <- [
 	test_building_build_house_invalid_param,
@@ -364,8 +365,11 @@ all_tests <- [
 	test_diagonal_two_waytypes_same_waytype,
 	test_diagonal_two_waytypes_split_to_threeway,
 	test_diagonal_two_waytypes_partial_leg,
+	test_diagonal_two_waytypes_not_allowed,
 	test_diagonal_two_waytypes_same_desc,
 	test_diagonal_two_waytypes_same_desc_partial_leg,
+	test_diagonal_elevated_two_waytypes_straight,
+	test_diagonal_elevated_two_waytypes_route,
 ]
 
 

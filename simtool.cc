@@ -856,9 +856,19 @@ DBG_MESSAGE("tool_remover()", "removing way");
 				return false;
 			}
 		}
-		wt = w->get_desc()->get_finance_waytype();
-		sint64 cost_sum = gr->weg_entfernen(w->get_waytype(), true);
-		player_t::book_construction_costs(player, -cost_sum, k, wt);
+		weg_t *other = gr->get_weg_nr(0)==w ? gr->get_weg_nr(1) : gr->get_weg_nr(0);
+		if(  gr->get_typ()==grund_t::tunnelboden  &&  other  &&  tunnel_builder_t::get_way_kept_on_removal(gr, w->get_waytype())==other  ) {
+			// closed diagonal with another waytype in a tunnel: the tunnel_t may belong to our
+			// way, then it is handed over to the remaining way (books the costs itself)
+			if(  !tunnel_builder_t::remove_way_keep_tile(player, gr, w->get_waytype(), other->get_waytype(), ribi_t::none)  ) {
+				return false;
+			}
+		}
+		else {
+			wt = w->get_desc()->get_finance_waytype();
+			sint64 cost_sum = gr->weg_entfernen(w->get_waytype(), true);
+			player_t::book_construction_costs(player, -cost_sum, k, wt);
+		}
 	}
 	else {
 		// remove ways and tunnel
@@ -3100,6 +3110,7 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 	uint8 flag = street_flag;
 	sint8 hf = height_offset;
 	sint8 vo = vehicle_offset;
+	bool acd = allow_closed_diagonal;
 	if (look_toolbar) {
 		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
 		if (toolbar_tool) {
@@ -3107,10 +3118,11 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 			flag = toolbar_tool->get_street_flag();
 			hf = toolbar_tool->get_height_offset();
 			vo = toolbar_tool->vehicle_offset;
+			acd = toolbar_tool->get_allow_closed_diagonal();
 		}
 	}
 	static char buf[300];
-	sprintf(buf, "%s,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo);
+	sprintf(buf, "%s,%d,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo, (int)acd);
 	return buf;
 }
 
@@ -3142,16 +3154,18 @@ bool tool_build_way_t::init( player_t *player, bool called_from_move )
 		return false;
 	}
 
-	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle")
+	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle[,allow_closed_diagonal]")
 	if (default_param) {
 		const char* comma = strchr(default_param, ',');
 		if (comma) {
-			int mode, flag, hf, vo;
-			if (sscanf(comma + 1, "%d,%d,%d,%d", &mode, &flag, &hf, &vo) == 4) {
+			int mode, flag, hf, vo, acd = 0;
+			if (sscanf(comma + 1, "%d,%d,%d,%d,%d", &mode, &flag, &hf, &vo, &acd) >= 4) {
 				overtaking_mode = (overtaking_mode_t)mode;
 				street_flag = (uint8)flag;
 				height_offset = (sint8)hf;
 				vehicle_offset = (sint8)vo;
+				// missing (older format) => no closed diagonals
+				allow_closed_diagonal = acd!=0;
 			}
 		}
 	}
@@ -3204,7 +3218,8 @@ void tool_build_way_t::start_at( koord3d &new_start )
 {
 	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
 		grund_t *gr=welt->lookup(new_start);
-		if(  gr->get_weg( desc->get_waytype() )  ) {
+		// also on an elevated way of another waytype (to build a closed diagonal there)
+		if(  gr->get_weg( desc->get_waytype() )  ||  (gr->get_typ()==grund_t::monorailboden  &&  gr->hat_wege())  ) {
 			new_start.z -= welt->get_settings().get_way_height_clearance();
 		}
 	}
@@ -3298,6 +3313,16 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	}
 
 	bauigel.init_builder(bautyp, desc);
+	{
+		bool acd = allow_closed_diagonal;
+		tool_build_way_t* toolbar_tool;
+		if(  look_toolbar  &&  (toolbar_tool=get_build_way_tool_from_toolbar(desc))!=NULL  ) {
+			// called from a shortcut key: use the setting of the tool in the toolbar
+			acd = toolbar_tool->get_allow_closed_diagonal();
+		}
+		// closed diagonals only when "allow closed diagonal" is selected
+		bauigel.set_allow_closed_diagonal( acd );
+	}
 	if(  is_ctrl_pressed()  &&  !is_shift_pressed()) {
 		bauigel.set_keep_existing_ways( false );
 	}
@@ -3313,7 +3338,8 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	// ending point is applied that elevated ways with SHIFT selects the current layer, when already on an elevated way
 	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
 		grund_t *gr=welt->lookup(my_end);
-		if(  gr->get_weg( desc->get_waytype() )  ) {
+		// also on an elevated way of another waytype (to build a closed diagonal there)
+		if(  gr->get_weg( desc->get_waytype() )  ||  (gr->get_typ()==grund_t::monorailboden  &&  gr->hat_wege())  ) {
 			// find the base ground this elevated way was built above; this accounts for the
 			// extra height added on bridge ramp connection tiles (see grund_t::get_bridge_slope_extra_height)
 			grund_t *base_gr = bauigel.find_base_for_elevated(my_end);
@@ -3960,6 +3986,10 @@ void tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &sta
 
 	bauigel.init_builder(bt | way_builder_t::tunnel_flag, wb, desc);
 	bauigel.set_keep_existing_faster_ways( !is_ctrl_pressed() );
+	// closed diagonals only when "allow closed diagonal" is selected; underground ways are
+	// always built straight, so a second same-waytype leg additionally needs ctrl pressed
+	bauigel.set_allow_closed_diagonal( allow_closed_diagonal );
+	bauigel.set_tunnel_dual_leg_allowed( is_ctrl_pressed() );
 	// wegbauer (way builder) tries to find route to 3d coordinate if no ground at end exists or is not kartenboden (map ground)
 	bauigel.calc_straight_route(start,end);
 }
@@ -4023,6 +4053,7 @@ void tool_build_tunnel_t::rdwr_custom_data(memory_rw_t *packet)
 	overtaking_mode = (overtaking_mode_t)i;
 	vehicle_offset = j;
 	packet->rdwr_byte(street_flag);
+	packet->rdwr_bool(allow_closed_diagonal);
 }
 
 
@@ -4095,7 +4126,10 @@ void tool_build_tunnel_t::mark_tiles(  player_t *player, const koord3d &start, c
 				gr = new tunnelboden_t(pos, 0);
 				welt->access(pos.get_2d())->boden_hinzufuegen(gr);
 			}
-			ribi_t::ribi zeige = gr->get_weg_ribi_unmasked(wb->get_wtyp()) | bauigel.get_route().get_ribi( j );
+			const ribi_t::ribi route_ribi = bauigel.get_route().get_ribi( j );
+			// a second independent leg (ctrl) does not join the existing way; otherwise show
+			// the leg we are on when two same-waytype legs coexist
+			ribi_t::ribi zeige = bauigel.is_tunnel_dual_leg( gr, route_ribi ) ? route_ribi : gr->get_weg_ribi_unmasked(wb->get_wtyp(), route_ribi) | route_ribi;
 
 			zeiger_t *way = new zeiger_t(pos, player );
 			if(gr->get_weg_hang()) {
@@ -4325,8 +4359,9 @@ bool tool_wayremover_t::calc_route( route_t &verbindung, player_t *player, const
 					can_delete = false;
 					break;
 				}
-				// check all if we want to delete the first on a no-ground tile
-				bool check_all = !gr->ist_karten_boden()  &&  gr->has_two_ways()  &&  gr->get_weg_nr(0)->get_waytype()==wt;
+				// check all if we want to delete the whole no-ground tile (with a tram track on it);
+				// another waytype on the opposite diagonal bend (closed diagonal) is kept with its tile
+				bool check_all = !gr->ist_karten_boden()  &&  gr->has_two_ways()  &&  tunnel_builder_t::get_way_kept_on_removal(gr, wt)==NULL;
 				// we have to do a fine check
 				for( uint i=0;  i<gr->get_top()  &&  can_delete;  i++  ) {
 					obj_t *obj = gr->obj_bei(i);
@@ -4422,10 +4457,19 @@ const char *tool_wayremover_t::do_work( player_t *player, const koord3d &start, 
 			}
 
 			if(  wt!=powerline_wt  ) {
-				if(!gr->get_flag(grund_t::is_kartenboden)  &&  (gr->get_typ()==grund_t::tunnelboden  ||  gr->get_typ()==grund_t::monorailboden)  &&  gr->get_weg_nr(0)->get_waytype()==wt) {
+				const bool underground_or_elevated = !gr->get_flag(grund_t::is_kartenboden)  &&  (gr->get_typ()==grund_t::tunnelboden  ||  gr->get_typ()==grund_t::monorailboden);
+				weg_t *kept = underground_or_elevated ? tunnel_builder_t::get_way_kept_on_removal(gr, wt) : NULL;
+				if(  kept  ) {
+					// closed diagonal with another waytype: only our way goes, the tile stays
+					// (a tunnel of our waytype is handed over to the remaining way)
+					can_delete &= tunnel_builder_t::remove_way_keep_tile(player, gr, wt, kept->get_waytype(), rem);
+				}
+				else if(  underground_or_elevated  &&  gr->get_weg(wt)  ) {
 					can_delete &= gr->remove_everything_from_way(player,wt,rem);
 					if(can_delete  &&  gr->get_weg(wt)==NULL) {
-						if(gr->get_weg_nr(0)!=0) {
+						// remove the remaining ways (tram tracks, which have no tunnel/elevated
+						// ground of their own) with their neighbours' connections
+						for(  uint8 n=0;  n<2  &&  gr->get_weg_nr(0)!=NULL;  n++  ) {
 							gr->remove_everything_from_way(player,gr->get_weg_nr(0)->get_waytype(),ribi_t::none);
 						}
 						gr->obj_loesche_alle(player);
