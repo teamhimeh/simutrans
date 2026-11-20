@@ -1114,3 +1114,7 @@ deactivated in offline mode
 オフラインモードでは無効
 Bridge blocked by building below.
 下にある建物があるので橋が架けられません.
+allow closed diagonal
+斜めの併設を許可
+Allow building closed diagonals (two ways on the opposite diagonals of a tile). The same waytype also needs Ctrl pressed.
+1マスの向かい合う斜めに2本の道を併設できるようにします. 同じ種類の道ではCtrlも押してください.
