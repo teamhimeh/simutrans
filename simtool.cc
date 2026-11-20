@@ -10747,6 +10747,26 @@ bool tool_change_depot_t::init( player_t *player )
 			if( coupled_cnv_id != 0) {
 				child.set_id(coupled_cnv_id);
 			}
+			if(  child.is_bound()  ) {
+				// A convoy may only be coupled once, and only with a convoy in this very depot.
+				// Otherwise the same convoy ends up in two chains (e.g. one in the depot and one
+				// running on the map), which breaks reservations and crashes on selling.
+				bool valid = child != cnv  &&  child->get_state() == convoi_t::INITIAL
+					&&  depot->get_convoy_list().is_contained( child )
+					&&  !child->get_parent_convoi().is_bound();
+				if(  valid  ) {
+					const convoihandle_t other_parent = depot->find_parent_convoy_in_depot( child );
+					valid = !other_parent.is_bound()  ||  other_parent == cnv;
+				}
+				// no loops: the new child (or its children) must not pull cnv already
+				for(  convoihandle_t c = child;  valid  &&  c.is_bound();  c = c->get_coupling_convoi()  ) {
+					valid = c != cnv;
+				}
+				if(  !valid  ) {
+					dbg->warning( "tool_change_depot_t::init()", "cannot couple %s with %s", cnv->get_name(), child->get_name() );
+					break;
+				}
+			}
 			cnv->set_coupling_convoi(child);
 			break;
 		}
