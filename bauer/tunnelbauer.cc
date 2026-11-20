@@ -814,7 +814,7 @@ const char *tunnel_builder_t::remove(player_t *player, koord3d start, waytype_t 
 		else {
 			waytype_ribi = from->get_weg_ribi_unmasked(delete_wegtyp);
 		}
-		if(  !remove_all  &&  ribi_t::is_threeway(waytype_ribi)  ) {
+		if(  !remove_all  &&  (ribi_t::is_threeway(waytype_ribi)  ||  from->has_two_same_waytype_ways())  ) {
 			return "This tunnel branches. You can try Control+Click to remove.";
 		}
 
