@@ -3988,6 +3988,8 @@ void tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &sta
 	// underground ways are always built straight, so a second independent diagonal leg
 	// (closed diagonal) is only allowed with ctrl pressed
 	bauigel.set_tunnel_dual_leg_allowed( is_ctrl_pressed() );
+	// no closed diagonal at all (neither the same nor another waytype), if requested
+	bauigel.set_allow_closed_diagonal( !no_closed_diagonal );
 	// wegbauer (way builder) tries to find route to 3d coordinate if no ground at end exists or is not kartenboden (map ground)
 	bauigel.calc_straight_route(start,end);
 }
@@ -4051,6 +4053,7 @@ void tool_build_tunnel_t::rdwr_custom_data(memory_rw_t *packet)
 	overtaking_mode = (overtaking_mode_t)i;
 	vehicle_offset = j;
 	packet->rdwr_byte(street_flag);
+	packet->rdwr_bool(no_closed_diagonal);
 }
 
 

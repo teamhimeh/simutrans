@@ -146,12 +146,12 @@ void overtaking_mode_frame_t::init( player_t* player_, overtaking_mode_t overtak
 		}
 		end_table();
 	}
-	if(  tool_class==0  ) {
+	if(  tool_class==0  ||  tool_class==2  ) {
 		// do not build two ways on disjoint diagonal bends of a tile, even with ctrl
 		no_closed_diagonal_button.init( button_t::square_state, "no closed diagonal");
 		no_closed_diagonal_button.set_tooltip( translator::translate("Do not build closed diagonals (two ways on the opposite diagonals of a tile), even with Ctrl pressed.") );
 		no_closed_diagonal_button.add_listener(this);
-		no_closed_diagonal_button.pressed = tool_w->get_no_closed_diagonal();
+		no_closed_diagonal_button.pressed = tool_class==0 ? tool_w->get_no_closed_diagonal() : tool_tu->get_no_closed_diagonal();
 		add_component(&no_closed_diagonal_button);
 	}
 	if(  tool_class != 3  ) {
@@ -235,6 +235,9 @@ bool overtaking_mode_frame_t::action_triggered( gui_action_creator_t *komp, valu
 		no_closed_diagonal_button.pressed = !(no_closed_diagonal_button.pressed);
 		if(  tool_class==0  ) {
 			tool_w->set_no_closed_diagonal(no_closed_diagonal_button.pressed);
+		}
+		else if(  tool_class==2  ) {
+			tool_tu->set_no_closed_diagonal(no_closed_diagonal_button.pressed);
 		}
 		// not a road flag
 		return true;

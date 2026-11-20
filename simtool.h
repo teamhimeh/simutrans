@@ -434,6 +434,8 @@ private:
 	overtaking_mode_t overtaking_mode;
 	uint8 street_flag;
 	sint8 vehicle_offset;
+	// true: never build closed diagonals (two ways on disjoint diagonal bends), even with ctrl
+	bool no_closed_diagonal;
 
 	void calc_route( way_builder_t &bauigel, const koord3d &, const koord3d &);
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -445,6 +447,7 @@ public:
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
 		vehicle_offset = 0;
+		no_closed_diagonal = false;
 	}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
@@ -459,7 +462,9 @@ public:
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
-	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
+	sint8 get_vehicle_offset() const { return vehicle_offset>>1; }
+	void set_no_closed_diagonal(bool yesno) { no_closed_diagonal = yesno; }
+	bool get_no_closed_diagonal() const { return no_closed_diagonal; } 
 	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
