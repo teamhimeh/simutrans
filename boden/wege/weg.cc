@@ -165,6 +165,8 @@ void weg_t::init()
 	max_wayobj_speed = 0;
 	vehicle_offset = 0;
 	switch_image_override = -1;
+	is_ex_image = false;
+	switch_image_nr = 0;
 }
 
 
@@ -517,8 +519,20 @@ void weg_t::count_sign()
 }
 
 
+// position of a junction shape among the switch images (nse, new, nsw, sew, nsew), 255 for other ribis
+static uint8 switch_image_shape(ribi_t::ribi ribi)
+{
+	static const uint8 shape[16] = {
+		255, 255, 255, 255, 255, 255, 255, 0,
+		255, 255, 255, 1, 255, 2, 3, 4
+	};
+	return shape[ribi & 15];
+}
+
+
 void weg_t::set_images(image_type typ, uint8 ribi, bool snow, bool switch_nw)
 {
+	switch_image_nr = 0;
 	switch(typ) {
 		case image_flat:
 		default:
@@ -533,11 +547,17 @@ void weg_t::set_images(image_type typ, uint8 ribi, bool snow, bool switch_nw)
 			break;
 		case image_switch:
 			set_is_ex_image(false);
+			if(  desc->has_switch_image()  &&  switch_image_shape(ribi) < 5  ) {
+				switch_image_nr = 16 + switch_image_shape(ribi) + (switch_nw ? 5 : 0);
+			}
 			set_image( desc->get_switch_image_id(ribi, snow, switch_nw) );
 			set_foreground_image( desc->get_switch_image_id(ribi, snow, switch_nw, true) );
 			break;
 		case image_ex:
 			set_is_ex_image(true);
+			if(  desc->has_switch_ex_image()  &&  switch_image_shape(ribi) < 5  ) {
+				switch_image_nr = 26 + switch_image_shape(ribi) + (switch_nw ? 5 : 0);
+			}
 			set_image( desc->get_switch_ex_image_id(ribi, snow, switch_nw) );
 			set_foreground_image( desc->get_switch_ex_image_id(ribi, snow, switch_nw, true) );
 			break;
@@ -553,6 +573,24 @@ void weg_t::set_images(image_type typ, uint8 ribi, bool snow, bool switch_nw)
 			set_foreground_image( desc->get_close_diagonal_image_id(ribi-1, snow, true) );
 			break;
 	}
+}
+
+
+bool weg_t::show_switch_image_nr(uint8 nr, bool snow)
+{
+	static const ribi_t::ribi shape_ribi[5] = {
+		ribi_t::northsoutheast, ribi_t::northeastwest, ribi_t::northsouthwest, ribi_t::southeastwest, ribi_t::all
+	};
+	if(  nr >= 16  &&  nr < 26  ) {
+		set_images( image_switch, shape_ribi[(nr - 16) % 5], snow, nr >= 21 );
+		return true;
+	}
+	if(  nr >= 26  &&  nr < 36  ) {
+		// a three-way switch is drawn with the image of a T junction shape on a four-way tile
+		set_images( image_ex, shape_ribi[(nr - 26) % 5], snow, nr >= 31 );
+		return true;
+	}
+	return false;
 }
 
 
@@ -604,14 +642,8 @@ bool weg_t::check_season(const bool calc_only_season_change)
 		if(  apply_switch_image_override(snow)  ) {
 			return true;
 		}
-		// there might be two states of the switch; remember it when changing seasons
-		if(  image == desc->get_switch_image_id( ribi, old_snow, false )  ) {
-			set_images( image_switch, ribi, snow, false );
-		}
-		else if(  image == desc->get_switch_image_id( ribi, old_snow, true )  ) {
-			set_images( image_switch, ribi, snow, true );
-		}
-		else {
+		// keep the junction image (switch state, Y junction, three-way switch) when changing seasons
+		if(  !show_switch_image_nr( switch_image_nr, snow )  ) {
 			set_images( image_flat, ribi, snow );
 		}
 	}

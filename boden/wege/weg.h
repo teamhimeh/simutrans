@@ -111,6 +111,13 @@ private:
 	bool is_ex_image;
 
 	/**
+	* number of the junction image shown, in the image list of the way: 16..25 switch images,
+	* 26..35 extended (ex) images, 0 for any other image. Not saved; used to redraw the same
+	* junction image when the season changes.
+	*/
+	uint8 switch_image_nr;
+
+	/**
 	* close diagonals (two parallel diagonals, every second tile is a fourway tile)
 	* 0=no, 1=northwest+southeast, 2=northeast+southwest
 	*/
@@ -339,7 +346,10 @@ public:
 
 	inline void set_is_ex_image( bool c ) { is_ex_image = c; }
 	bool get_is_ex_image() const  {return is_ex_image;}
-
+	/// number of the junction image shown (16..35), 0 for any other image
+	uint8 get_switch_image_nr() const { return switch_image_nr; }
+	/// shows junction image @p nr (16..35) again; false (and nothing changed) for other numbers
+	bool show_switch_image_nr(uint8 nr, bool snow);
 
 	void select_switch_image(bool snow);
 	bool apply_switch_image_override(bool snow);
