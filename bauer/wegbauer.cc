@@ -2538,8 +2538,8 @@ sint64 way_builder_t::calc_costs()
 					costs -= wb ? wb->get_price() : 0;
 					continue;
 				}
-				if( tunnel->get_desc() == tunnel_desc ) {
-					continue; // Nothing to pay on this tile.
+				if(  tunnel->get_desc() == tunnel_desc  ||  tunnel->get_desc()->get_waytype() != tunnel_desc->get_waytype()  ) {
+					continue; // Nothing to pay on this tile (a tunnel of another waytype is never replaced).
 				}
 				old_speedlimit = tunnel->get_desc()->get_topspeed();
 			}
@@ -2623,13 +2623,19 @@ static bool is_direction_already_built(const grund_t *gr, waytype_t wt, ribi_t::
 
 bool way_builder_t::is_tunnel_dual_leg(const grund_t *gr, ribi_t::ribi ribi) const
 {
-	// same condition as in grund_t::weg_erweitern()/neuen_weg_bauen()
-	if(  !tunnel_dual_leg_allowed  ||  !(bautyp&tunnel_flag)  ||  !tunnel_desc  ||  tunnel_desc->get_waytype()==powerline_wt
+	if(  !(bautyp&tunnel_flag)  ||  !tunnel_desc  ||  tunnel_desc->get_waytype()==powerline_wt
 	  ||  gr==NULL  ||  gr->get_typ()!=grund_t::tunnelboden  ||  gr->has_two_ways()  ||  ribi==ribi_t::none  ) {
 		return false;
 	}
-	const weg_t *weg = gr->get_weg( tunnel_desc->get_waytype() );
-	return  weg  &&  ribi_t::is_bend( weg->get_ribi_unmasked() )  &&  (ribi & weg->get_ribi_unmasked())==0;
+	const weg_t *weg = gr->get_weg_nr(0);
+	if(  weg==NULL  ||  !ribi_t::is_bend( weg->get_ribi_unmasked() )  ||  (ribi & weg->get_ribi_unmasked())!=0  ) {
+		return false;
+	}
+	// a different waytype on the opposite diagonal bend never meets ours at the tile center
+	// (see check_crossing()), so it is always added as the second way - as on the ground.
+	// The same waytype is joined into a junction unless ctrl is pressed
+	// (same condition as in grund_t::weg_erweitern()/neuen_weg_bauen()).
+	return  weg->get_waytype()!=tunnel_desc->get_waytype()  ||  tunnel_dual_leg_allowed;
 }
 
 
@@ -2680,8 +2686,9 @@ bool way_builder_t::build_tunnel_tile()
 			player_t::add_maintenance( player_builder,  tunnel_desc->get_maintenance(), tunnel_desc->get_finance_waytype() );
 		}
 		else if(  is_tunnel_dual_leg( gr, route.get_ribi(i) )  ) {
-			// ctrl pressed: the way is disjoint from the existing diagonal bend here, so it
-			// becomes an independent second leg (closed diagonal) inside the same tunnel
+			// the way is disjoint from the existing diagonal bend here (a different waytype, or
+			// the same waytype with ctrl pressed), so it becomes an independent second way
+			// (closed diagonal) inside the same tunnel
 			weg_t *weg = weg_t::alloc(tunnel_desc->get_waytype());
 			weg->set_desc( wb );
 			gr->neuen_weg_bauen(weg, route.get_ribi(i), player_builder, true);
@@ -2693,8 +2700,9 @@ bool way_builder_t::build_tunnel_tile()
 				str->set_street_flag(street_flag);
 			}
 			weg->set_vehicle_offset(vehicle_offset);
-			// the maintenance of the second leg is not covered by the tunnel
-			// (tunnel_t only takes over the maintenance of one way, also when loading)
+			// the maintenance of the second way is not covered by the tunnel
+			// (tunnel_t only takes over the maintenance of one way of its own waytype, also
+			// when loading); the tunnel_t of this tile is kept as it is
 			gr->calc_image();
 			cost -= wb->get_price();
 		}
@@ -2710,14 +2718,20 @@ bool way_builder_t::build_tunnel_tile()
 
 				tunnel_t *tunnel = gr->find<tunnel_t>();
 				assert( tunnel );
-				// take the faster way
-				if(  !keep_existing_faster_ways  ||  (tunnel->get_desc()->get_topspeed() < tunnel_desc->get_topspeed())  ) {
+				// pick the leg we are on when two same-waytype legs coexist here
+				weg_t *weg = gr->get_weg(wt, ribi);
+				if(  weg==NULL  ) {
+					// no way of our waytype here (should have been refused by the route search)
+					continue;
+				}
+				// take the faster way; a tunnel_t of another waytype (closed diagonal with a
+				// different waytype) belongs to the other way and is never replaced
+				if(  tunnel->get_desc()->get_waytype()==wt
+				  &&  (!keep_existing_faster_ways  ||  (tunnel->get_desc()->get_topspeed() < tunnel_desc->get_topspeed()))  ) {
 					player_t::add_maintenance(player_builder, -tunnel->get_desc()->get_maintenance(), tunnel->get_desc()->get_finance_waytype());
 					player_t::add_maintenance(player_builder,  tunnel_desc->get_maintenance(), tunnel->get_desc()->get_finance_waytype() );
 
 					tunnel->set_desc(tunnel_desc);
-					// pick the leg we are on when two same-waytype legs coexist here
-					weg_t *weg = gr->get_weg(wt, ribi);
 					weg->set_desc(wb);
 					weg->set_max_speed(tunnel_desc->get_topspeed());
 					if(  tunnel_desc->get_waytype()==road_wt  ) {
@@ -2743,7 +2757,7 @@ bool way_builder_t::build_tunnel_tile()
 					cost -= tunnel_desc->get_price();
 				}
 				if(  tunnel_desc->get_waytype()==road_wt  ) {
-					strasse_t *str = (strasse_t*)gr->get_weg(road_wt, ribi);
+					strasse_t *str = (strasse_t*)weg;
 					update_ribi_mask_oneway(str,i);
 				}
 			}
