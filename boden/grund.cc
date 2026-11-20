@@ -2501,14 +2501,14 @@ wayobj_t *grund_t::get_wayobj( waytype_t wt ) const
 	return NULL;
 }
 
-bool grund_t::is_use_track_wt_ex_image(ribi_t::ribi backward_ribi){
+bool grund_t::is_use_ex_image(waytype_t wt, ribi_t::ribi backward_ribi){
 	ribi_t::ribi rotate_ribi = ribi_t::rotate90(backward_ribi);
 	ribi_t::ribi rotate_backward_ribi = ribi_t::backward(rotate_ribi);
 	grund_t *first_side;
 	grund_t *second_side;
-	if( get_neighbour(first_side, track_wt, rotate_ribi) && get_neighbour(second_side, track_wt, rotate_backward_ribi) ){
-		ribi_t::ribi first_side_ribi = first_side->get_weg(track_wt)->get_ribi_unmasked();
-		ribi_t::ribi second_side_ribi = second_side->get_weg(track_wt)->get_ribi_unmasked();
+	if( get_neighbour(first_side, wt, rotate_ribi) && get_neighbour(second_side, wt, rotate_backward_ribi) ){
+		ribi_t::ribi first_side_ribi = first_side->get_weg_ribi_unmasked(wt, rotate_backward_ribi);
+		ribi_t::ribi second_side_ribi = second_side->get_weg_ribi_unmasked(wt, rotate_ribi);
 		if(first_side_ribi == (rotate_backward_ribi | backward_ribi) && second_side_ribi == (rotate_ribi | backward_ribi)){
 			return true;
 		}

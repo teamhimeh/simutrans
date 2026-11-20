@@ -342,7 +342,6 @@ public:
 
 
 	void select_switch_image(bool snow);
-	void select_switch_road_image(bool snow);
 	bool apply_switch_image_override(bool snow);
 	/// true if the way is a junction whose add-on provides switch images, so the image can be fixed
 	bool can_fix_switch_image() const;

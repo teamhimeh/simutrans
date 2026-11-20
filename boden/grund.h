@@ -949,7 +949,8 @@ public:
 	void* operator new(size_t s);
 	void  operator delete(void* p, size_t s);
 
-	bool is_use_track_wt_ex_image(ribi_t::ribi backward_ribi);
+	/// true if both ends of the main line of a T junction turn away from its branch (Y junction)
+	bool is_use_ex_image(waytype_t wt, ribi_t::ribi backward_ribi);
 	bool is_use_wayobj_ex_image(ribi_t::ribi backward_ribi);
 
 };
