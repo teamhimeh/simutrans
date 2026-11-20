@@ -87,7 +87,7 @@ public:
 	/// image on a junction: follows the junction image of the way below (see wayobj.cc)
 	image_id get_junction_image(bool front) const;
 
-#if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
+#if COLOUR_DEPTH != 0
 	/**
 	* the back image, drawn before vehicles
 	*/

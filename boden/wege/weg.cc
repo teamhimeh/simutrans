@@ -780,7 +780,7 @@ void weg_t::calc_image()
 				}
 			}
 
-#if COLOUR_DEPTH != 0 && MULTI_THREAD != 0
+#if COLOUR_DEPTH != 0
 			// close diagonals have their own images
 			if(!is_diagonal() && !is_close_diagonal() && desc->has_switch_image()){
 				select_switch_image(snow);
