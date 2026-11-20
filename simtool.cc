@@ -5478,7 +5478,24 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 	}
 
-	if(  desc->get_all_layouts()==112  ) {
+	// A flat way tile not connected to anything (all ways have ribi_t::none): a through stop
+	// can be built here in any direction. Default is NS (layout 0, or 6 = isolated NS with
+	// both end images); the rotate tool changes it while the way stays isolated.
+	// Slope tiles are not handled here: their direction always comes from the slope.
+	bool isolated_halt = false;
+	if(  desc->get_all_layouts()!=4  &&  bd->hat_wege()  &&  bd->get_weg_hang()==slope_t::flat  ) {
+		ribi_t::ribi all_ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
+		if(  bd->has_two_ways()  ) {
+			all_ribi |= bd->get_weg_nr(1)->get_ribi_unmasked();
+		}
+		isolated_halt = (all_ribi==ribi_t::none);
+	}
+
+	if(  isolated_halt  ) {
+		ribi = ribi_t::none;
+		layout = 6 % desc->get_all_layouts();
+	}
+	else if(  desc->get_all_layouts()==112  ) {
 		// through station supporting diagonal
 		if(  disjoint_diagonal_halt  ) {
 			ribi = disjoint_leg_ribi;
@@ -5680,6 +5697,13 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		gebaeude_t* gb = bd->find<gebaeude_t>();
 		halt_player = gb->get_owner();
 		const building_desc_t *old_desc = gb->get_tile()->get_desc();
+		if(  isolated_halt  ) {
+			// keep the direction the stop on this isolated way was rotated to
+			const uint8 old_layout = gb->get_tile()->get_layout();
+			if(  old_layout<16  ) {
+				layout = ((old_layout & 9) | 6) % desc->get_all_layouts();
+			}
+		}
 		if(  old_desc == desc  ) {
 			if(  platforms <= gb->get_platform_count()  ) {
 				// already has the same station
@@ -5723,6 +5747,9 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	}
 	else if(  second_leg_ribi!=ribi_t::none  ) {
 		hausbauer_t::build_station_on_closed_diagonal(halt_player, bd->get_pos(), desc, ribi, second_leg_ribi, halt);
+	}
+	else if(  isolated_halt  ) {
+		hausbauer_t::build_station_on_isolated_way(halt_player, bd->get_pos(), layout, desc, halt);
 	}
 	else if(  desc->get_all_layouts()>=48  &&  !ribi_t::is_straight(ribi)  ) {
 		hausbauer_t::build_station_on_diagonal_way(halt_player, bd->get_pos(), desc, ribi, halt);
@@ -6262,6 +6289,18 @@ const char *tool_rotate_building_t::rotate_building_at( player_t *player, koord3
 
 		if(  gr->hat_wege()  ) {
 			// this is almost certainly a station ...
+			ribi_t::ribi all_ribi = gr->get_weg_nr(0)->get_ribi_unmasked();
+			if(  gr->has_two_ways()  ) {
+				all_ribi |= gr->get_weg_nr(1)->get_ribi_unmasked();
+			}
+			if(  gr->get_halt().is_bound()  &&  !gb->get_tile2()  &&  desc->get_all_layouts()!=4
+			     &&  gr->get_weg_hang()==slope_t::flat  &&  all_ribi==ribi_t::none  ) {
+				// stop on an isolated way: it may be turned to any direction
+				// 0 <-> 1, 6 <-> 7, or 6 -> 15 -> 14 -> 7 -> 6
+				const uint8 newlayout = hausbauer_t::get_next_isolated_station_layout( desc, gb->get_tile()->get_layout() );
+				gb->set_tile( desc->get_tile( newlayout, 0, 0 ), false );
+				return NULL;
+			}
 			if(  desc->get_all_layouts()<16  ) {
 				// either symmetrical (==2, ==8) or freight loading station, so do not rotate!
 				return "Cannot rotate this building!";

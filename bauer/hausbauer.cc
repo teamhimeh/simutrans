@@ -1152,6 +1152,26 @@ gebaeude_t* hausbauer_t::build_station_on_diagonal_way(player_t* player, koord3d
 }
 
 
+gebaeude_t* hausbauer_t::build_station_on_isolated_way(player_t* player, koord3d pos, int layout, const building_desc_t* desc, halthandle_t halt) {
+	return build_station_extension_depot_with_complete_layout_bits(player, pos, layout % desc->get_all_layouts(), desc, &halt);
+}
+
+
+uint8 hausbauer_t::get_next_isolated_station_layout(const building_desc_t* desc, uint8 layout) {
+	const uint16 layouts = desc->get_all_layouts();
+	// diagonal/slope layouts cannot stay on an isolated way: restart from the isolated NS image
+	uint8 base = (layout < 16) ? ((layout & 9) | 6) : 6;
+	if(  layouts >= 16  ) {
+		// NS far(6) -> EW near(15) -> NS near(14) -> EW far(7) -> NS far(6)
+		// i.e. toggle NS/EW; toggle the platform face when leaving NS
+		const uint8 next = base ^ 1 ^ ((base & 1) ? 0 : 8);
+		return next & 15;
+	}
+	// 2 or 8 layouts: no platform face, just toggle NS/EW
+	return (base ^ 1) % layouts;
+}
+
+
 gebaeude_t* hausbauer_t::build_station_on_closed_diagonal(player_t* player, koord3d pos, const building_desc_t* desc, const ribi_t::ribi leg1, const ribi_t::ribi leg2, halthandle_t halt) {
 	// each platform gets the image for its own leg; the neighbours along each leg are updated
 	const uint8 layout1 = calc_diagonal_station_layout( pos, leg1 );
