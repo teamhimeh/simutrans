@@ -1270,6 +1270,7 @@ way_builder_t::way_builder_t(player_t* player) : next_gr(32)
 	keep_existing_faster_ways = false;
 	build_sidewalk = false;
 	straight_route_mode = false;
+	tunnel_dual_leg_allowed = false;
 
 	vehicle_offset = 0;
 }
@@ -2528,6 +2529,15 @@ sint64 way_builder_t::calc_costs()
 			if( bautyp&tunnel_flag ) {
 				const tunnel_t *tunnel = gr->find<tunnel_t>();
 				assert( tunnel );
+				if(  is_tunnel_dual_leg( gr, route.get_ribi(i) )  ) {
+					// a new independent leg in the existing tunnel: pay for the way only
+					const way_desc_t *wb = tunnel_desc->get_way_desc();
+					if(  wb==NULL  ) {
+						wb = way_builder_t::weg_search( tunnel_desc->get_waytype(), tunnel_desc->get_topspeed(), 0, type_flat );
+					}
+					costs -= wb ? wb->get_price() : 0;
+					continue;
+				}
 				if( tunnel->get_desc() == tunnel_desc ) {
 					continue; // Nothing to pay on this tile.
 				}
@@ -2608,6 +2618,21 @@ sint64 way_builder_t::calc_costs()
 }
 
 
+static bool is_direction_already_built(const grund_t *gr, waytype_t wt, ribi_t::ribi ribi);
+
+
+bool way_builder_t::is_tunnel_dual_leg(const grund_t *gr, ribi_t::ribi ribi) const
+{
+	// same condition as in grund_t::weg_erweitern()/neuen_weg_bauen()
+	if(  !tunnel_dual_leg_allowed  ||  !(bautyp&tunnel_flag)  ||  !tunnel_desc  ||  tunnel_desc->get_waytype()==powerline_wt
+	  ||  gr==NULL  ||  gr->get_typ()!=grund_t::tunnelboden  ||  gr->has_two_ways()  ||  ribi==ribi_t::none  ) {
+		return false;
+	}
+	const weg_t *weg = gr->get_weg( tunnel_desc->get_waytype() );
+	return  weg  &&  ribi_t::is_bend( weg->get_ribi_unmasked() )  &&  (ribi & weg->get_ribi_unmasked())==0;
+}
+
+
 // adds the ground before underground construction
 bool way_builder_t::build_tunnel_tile()
 {
@@ -2654,10 +2679,34 @@ bool way_builder_t::build_tunnel_tile()
 			cost -= tunnel_desc->get_price();
 			player_t::add_maintenance( player_builder,  tunnel_desc->get_maintenance(), tunnel_desc->get_finance_waytype() );
 		}
+		else if(  is_tunnel_dual_leg( gr, route.get_ribi(i) )  ) {
+			// ctrl pressed: the way is disjoint from the existing diagonal bend here, so it
+			// becomes an independent second leg (closed diagonal) inside the same tunnel
+			weg_t *weg = weg_t::alloc(tunnel_desc->get_waytype());
+			weg->set_desc( wb );
+			gr->neuen_weg_bauen(weg, route.get_ribi(i), player_builder, true);
+			weg->set_max_speed(tunnel_desc->get_topspeed());
+			if(  tunnel_desc->get_waytype()==road_wt  ) {
+				strasse_t* str = (strasse_t*) weg;
+				str->set_overtaking_mode(overtaking_mode);
+				update_ribi_mask_oneway(str,i);
+				str->set_street_flag(street_flag);
+			}
+			weg->set_vehicle_offset(vehicle_offset);
+			// the maintenance of the second leg is not covered by the tunnel
+			// (tunnel_t only takes over the maintenance of one way, also when loading)
+			gr->calc_image();
+			cost -= wb->get_price();
+		}
 		else if(  gr->get_typ() == grund_t::tunnelboden  ) {
 			// check for extension only ...
 			if(  tunnel_desc->get_waytype() != powerline_wt  ) {
-				gr->weg_erweitern( tunnel_desc->get_waytype(), route.get_ribi(i) );
+				const waytype_t wt = tunnel_desc->get_waytype();
+				const ribi_t::ribi ribi = route.get_ribi(i);
+				// a leg already owning this direction counts as extended
+				if(  !is_direction_already_built( gr, wt, ribi )  ) {
+					gr->weg_erweitern( wt, ribi );
+				}
 
 				tunnel_t *tunnel = gr->find<tunnel_t>();
 				assert( tunnel );
@@ -2667,11 +2716,12 @@ bool way_builder_t::build_tunnel_tile()
 					player_t::add_maintenance(player_builder,  tunnel_desc->get_maintenance(), tunnel->get_desc()->get_finance_waytype() );
 
 					tunnel->set_desc(tunnel_desc);
-					weg_t *weg = gr->get_weg(tunnel_desc->get_waytype());
+					// pick the leg we are on when two same-waytype legs coexist here
+					weg_t *weg = gr->get_weg(wt, ribi);
 					weg->set_desc(wb);
 					weg->set_max_speed(tunnel_desc->get_topspeed());
 					if(  tunnel_desc->get_waytype()==road_wt  ) {
-						strasse_t* str = (strasse_t*)gr->get_weg(road_wt);
+						strasse_t* str = (strasse_t*)weg;
 						assert(str);
 						str->set_overtaking_mode(overtaking_mode);
 						str->set_street_flag(street_flag);
@@ -2693,7 +2743,7 @@ bool way_builder_t::build_tunnel_tile()
 					cost -= tunnel_desc->get_price();
 				}
 				if(  tunnel_desc->get_waytype()==road_wt  ) {
-					strasse_t *str = (strasse_t*)gr->get_weg(road_wt);
+					strasse_t *str = (strasse_t*)gr->get_weg(road_wt, ribi);
 					update_ribi_mask_oneway(str,i);
 				}
 			}

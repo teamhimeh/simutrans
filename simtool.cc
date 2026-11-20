@@ -3960,6 +3960,9 @@ void tool_build_tunnel_t::calc_route( way_builder_t &bauigel, const koord3d &sta
 
 	bauigel.init_builder(bt | way_builder_t::tunnel_flag, wb, desc);
 	bauigel.set_keep_existing_faster_ways( !is_ctrl_pressed() );
+	// underground ways are always built straight, so a second independent diagonal leg
+	// (closed diagonal) is only allowed with ctrl pressed
+	bauigel.set_tunnel_dual_leg_allowed( is_ctrl_pressed() );
 	// wegbauer (way builder) tries to find route to 3d coordinate if no ground at end exists or is not kartenboden (map ground)
 	bauigel.calc_straight_route(start,end);
 }
@@ -4095,7 +4098,10 @@ void tool_build_tunnel_t::mark_tiles(  player_t *player, const koord3d &start, c
 				gr = new tunnelboden_t(pos, 0);
 				welt->access(pos.get_2d())->boden_hinzufuegen(gr);
 			}
-			ribi_t::ribi zeige = gr->get_weg_ribi_unmasked(wb->get_wtyp()) | bauigel.get_route().get_ribi( j );
+			const ribi_t::ribi route_ribi = bauigel.get_route().get_ribi( j );
+			// a second independent leg (ctrl) does not join the existing way; otherwise show
+			// the leg we are on when two same-waytype legs coexist
+			ribi_t::ribi zeige = bauigel.is_tunnel_dual_leg( gr, route_ribi ) ? route_ribi : gr->get_weg_ribi_unmasked(wb->get_wtyp(), route_ribi) | route_ribi;
 
 			zeiger_t *way = new zeiger_t(pos, player );
 			if(gr->get_weg_hang()) {
