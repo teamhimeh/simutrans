@@ -62,6 +62,7 @@ include("tests/test_diagonal_elevated")
 
 all_tests <- [
 	test_switch_image_override_scripted,
+	test_switch_image_auto_rail,
 	test_building_build_house_invalid_param,
 	test_building_build_house_random,
 	test_building_build_house_valid_desc,
