@@ -7,6 +7,9 @@
 
 #include "../simworld.h"
 #include "../simmenu.h"
+#include "../simtool.h"
+
+#include "../boden/wege/strasse.h"
 
 #include "../bauer/wegbauer.h"
 #include "../bauer/brueckenbauer.h"
@@ -44,9 +47,24 @@ static const char* const tunnel_portal_types[4] = { "", "l", "r", "m" };
 static const slope_t::type tunnel_slopes[4] = { slope_t::south, slope_t::north, slope_t::west, slope_t::east };
 
 
+/// overtaking modes in the order of the buttons (same as overtaking_mode_frame_t)
+static const overtaking_mode_t overtaking_modes[8] = {
+	halt_mode, oneway_mode, twoway_mode, loading_only_mode, prohibited_mode, inverted_mode, exclusive_area_mode, passing_lane_stop_only_mode
+};
+static const char* const overtaking_mode_names[8] = {
+	"halt mode", "oneway", "twoway", "only loading convoi", "prohibited", "inverted", "exclusive area", "passing lane stop only"
+};
+
+
 way_edit_frame_t::way_edit_frame_t(player_t* player_, waytype_t wt) :
-	infra_edit_frame_t("way builder", player_, wt)
+	infra_edit_frame_t("way builder", player_, wt),
+	opt_way(NULL),
+	opt_bridge(NULL),
+	opt_tunnel(NULL),
+	opt_road(false)
 {
+	init_tool_options();
+
 	add_filter_button( bt_ground,   "show ground",   true );
 	add_filter_button( bt_elevated, "show elevated", true );
 	add_filter_button( bt_bridge,   "show bridge",   true );
@@ -63,6 +81,275 @@ way_edit_frame_t::way_edit_frame_t(player_t* player_, waytype_t wt) :
 
 	fill_list();
 	reset_min_windowsize();
+}
+
+
+void way_edit_frame_t::init_tool_options()
+{
+	cont_options.add_component( &cont_tool_options );
+	cont_tool_options.set_table_layout(1,0);
+	cont_tool_options.new_component<gui_divider_t>();
+
+	// overtaking mode (roads only)
+	cont_tool_options.add_component( &cont_modes );
+	cont_modes.set_table_layout(2,0);
+	for(  int i = 0;  i < 8;  i++  ) {
+		bt_mode[i].init( button_t::square_state, overtaking_mode_names[i] );
+		bt_mode[i].add_listener(this);
+		cont_modes.add_component( &bt_mode[i] );
+	}
+
+	// road flags (roads only)
+	cont_tool_options.add_component( &cont_road_flags );
+	cont_road_flags.set_table_layout(1,0);
+	cont_road_flags.new_component<gui_divider_t>();
+	bt_avoid_cityroad.init( button_t::square_state, "avoid becoming cityroad" );
+	bt_citycar_no_entry.init( button_t::square_state, "citycars do not enter" );
+	bt_no_building.init( button_t::square_state, "no building adjacent" );
+	bt_allow_branching_cityroad.init( button_t::square_state, "can branch cityroad" );
+	bt_pedestrian_no_entry.init( button_t::square_state, "pedestrians do not enter " );
+	button_t *const flags[5] = { &bt_avoid_cityroad, &bt_citycar_no_entry, &bt_no_building, &bt_allow_branching_cityroad, &bt_pedestrian_no_entry };
+	for(  int i = 0;  i < 5;  i++  ) {
+		flags[i]->add_listener(this);
+		cont_road_flags.add_component( flags[i] );
+	}
+	cont_road_flags.new_component<gui_divider_t>();
+
+	// height offset (elevated ways)
+	cont_tool_options.add_component( &cont_height_offset );
+	cont_height_offset.set_table_layout(2,0);
+	cont_height_offset.new_component<gui_label_t>("height offset");
+	ni_height_offset.set_limits( 1-welt->get_settings().get_way_height_clearance(), 32 );
+	ni_height_offset.wrap_mode( false );
+	ni_height_offset.add_listener(this);
+	cont_height_offset.add_component( &ni_height_offset );
+
+	// closed diagonals (ways and tunnels)
+	bt_allow_closed_diagonal.init( button_t::square_state, "allow closed diagonal" );
+	bt_allow_closed_diagonal.set_tooltip( translator::translate("Allow building closed diagonals (two ways on the opposite diagonals of a tile). The same waytype also needs Ctrl pressed.") );
+	bt_allow_closed_diagonal.add_listener(this);
+	cont_tool_options.add_component( &bt_allow_closed_diagonal );
+
+	// vehicle offset (ways, bridges and tunnels)
+	cont_tool_options.add_component( &cont_vehicle_offset );
+	cont_vehicle_offset.set_table_layout(3,0);
+	cont_vehicle_offset.new_component<gui_label_t>("vehicle offset");
+	ni_vehicle_offset.set_limits( -63, 63 );
+	ni_vehicle_offset.wrap_mode( false );
+	ni_vehicle_offset.add_listener(this);
+	cont_vehicle_offset.add_component( &ni_vehicle_offset );
+	bt_vehicle_offset_mode.init( button_t::square_state, "Offset mode: Absolute" );
+	bt_vehicle_offset_mode.set_tooltip( translator::translate("set offset value and mode: On->Absolute(same offset for N&S),OFF->Direction(offset different based on Difference)") );
+	bt_vehicle_offset_mode.add_listener(this);
+	cont_vehicle_offset.add_component( &bt_vehicle_offset_mode );
+
+	cont_tool_options.set_visible(false);
+}
+
+
+void way_edit_frame_t::update_tool_options(const infra_entry_t *e)
+{
+	opt_way = NULL;
+	opt_bridge = NULL;
+	opt_tunnel = NULL;
+	opt_road = false;
+
+	tool_t *tool = e ? get_options_tool(*e) : NULL;
+	waytype_t wt = invalid_wt;
+	bool flat_way = false;
+	if(  tool  ) {
+		switch(  e->kind  ) {
+			case KIND_GROUND:
+			case KIND_ELEVATED: {
+				opt_way = dynamic_cast<tool_build_way_t *>(tool);
+				const way_desc_t *desc = static_cast<const way_desc_t *>(e->desc);
+				wt = desc->is_tram() ? tram_wt : desc->get_wtyp();
+				// same condition as for the dialog of the toolbar
+				flat_way = desc->get_styp() == type_flat  ||  desc->get_styp() == type_tram;
+				break;
+			}
+			case KIND_BRIDGE:
+				opt_bridge = dynamic_cast<tool_build_bridge_t *>(tool);
+				wt = static_cast<const bridge_desc_t *>(e->desc)->get_waytype();
+				break;
+			case KIND_TUNNEL:
+				opt_tunnel = dynamic_cast<tool_build_tunnel_t *>(tool);
+				wt = static_cast<const tunnel_desc_t *>(e->desc)->get_waytype();
+				break;
+		}
+	}
+
+	if(  opt_way == NULL  &&  opt_bridge == NULL  &&  opt_tunnel == NULL  ) {
+		cont_tool_options.set_visible(false);
+		reset_min_windowsize();
+		return;
+	}
+	cont_tool_options.set_visible(true);
+
+	// current settings of the tool
+	overtaking_mode_t mode;
+	uint8 street_flag;
+	sint8 vehicle_offset;
+	bool vehicle_offset_mode;
+	if(  opt_way  ) {
+		mode = opt_way->get_overtaking_mode();
+		street_flag = opt_way->get_street_flag();
+		vehicle_offset = opt_way->get_vehicle_offset();
+		vehicle_offset_mode = opt_way->get_vehicle_offset_mode();
+	}
+	else if(  opt_bridge  ) {
+		mode = opt_bridge->get_overtaking_mode();
+		street_flag = opt_bridge->get_street_flag();
+		vehicle_offset = opt_bridge->get_vehicle_offset();
+		vehicle_offset_mode = opt_bridge->get_vehicle_offset_mode();
+	}
+	else {
+		mode = opt_tunnel->get_overtaking_mode();
+		street_flag = opt_tunnel->get_street_flag();
+		vehicle_offset = opt_tunnel->get_vehicle_offset();
+		vehicle_offset_mode = opt_tunnel->get_vehicle_offset_mode();
+	}
+
+	// road settings
+	opt_road = wt == road_wt;
+	cont_modes.set_visible( opt_road );
+	cont_road_flags.set_visible( opt_road );
+	for(  int i = 0;  i < 8;  i++  ) {
+		bt_mode[i].pressed = overtaking_modes[i] == mode;
+	}
+	bt_avoid_cityroad.set_visible( opt_way != NULL  &&  flat_way );
+	bt_avoid_cityroad.pressed = bt_avoid_cityroad.is_visible()  &&  (street_flag & strasse_t::AVOID_CITYROAD);
+	bt_citycar_no_entry.pressed = street_flag & strasse_t::CITYCAR_NO_ENTRY;
+	bt_no_building.pressed = street_flag & strasse_t::NO_BUILDING;
+	bt_allow_branching_cityroad.pressed = street_flag & strasse_t::ALLOW_BRANCH_CITYROAD;
+	bt_pedestrian_no_entry.pressed = street_flag & strasse_t::PEDESTRIAN_NO_ENTRY;
+	// only meaningful when the road avoids becoming a city road
+	bt_no_building.enable( bt_avoid_cityroad.pressed );
+	bt_allow_branching_cityroad.enable( bt_avoid_cityroad.pressed );
+
+	// height offset only for elevated ways
+	cont_height_offset.set_visible( opt_way != NULL  &&  !flat_way );
+	if(  opt_way  ) {
+		ni_height_offset.set_value( opt_way->get_height_offset() );
+	}
+
+	bt_allow_closed_diagonal.set_visible( opt_way != NULL  ||  opt_tunnel != NULL );
+	bt_allow_closed_diagonal.pressed = opt_way ? opt_way->get_allow_closed_diagonal() : opt_tunnel ? opt_tunnel->get_allow_closed_diagonal() : false;
+
+	ni_vehicle_offset.set_value( vehicle_offset );
+	bt_vehicle_offset_mode.pressed = vehicle_offset_mode;
+
+	reset_min_windowsize();
+}
+
+
+void way_edit_frame_t::apply_road_options()
+{
+	if(  !opt_road  ) {
+		return;
+	}
+	overtaking_mode_t mode = twoway_mode;
+	for(  int i = 0;  i < 8;  i++  ) {
+		if(  bt_mode[i].pressed  ) {
+			mode = overtaking_modes[i];
+		}
+	}
+	uint8 flag = 0;
+	if(  bt_avoid_cityroad.is_visible()  &&  bt_avoid_cityroad.pressed  ) { flag |= strasse_t::AVOID_CITYROAD; }
+	if(  bt_citycar_no_entry.pressed  )         { flag |= strasse_t::CITYCAR_NO_ENTRY; }
+	if(  bt_allow_branching_cityroad.pressed  ) { flag |= strasse_t::ALLOW_BRANCH_CITYROAD; }
+	if(  bt_no_building.pressed  )              { flag |= strasse_t::NO_BUILDING; }
+	if(  bt_pedestrian_no_entry.pressed  )      { flag |= strasse_t::PEDESTRIAN_NO_ENTRY; }
+
+	if(  opt_way  ) {
+		opt_way->set_overtaking_mode( mode );
+		opt_way->set_street_flag( flag );
+	}
+	else if(  opt_bridge  ) {
+		opt_bridge->set_overtaking_mode( mode );
+		opt_bridge->set_street_flag( flag );
+	}
+	else if(  opt_tunnel  ) {
+		opt_tunnel->set_overtaking_mode( mode );
+		opt_tunnel->set_street_flag( flag );
+	}
+}
+
+
+bool way_edit_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
+{
+	for(  int i = 0;  i < 8;  i++  ) {
+		if(  comp == &bt_mode[i]  ) {
+			for(  int j = 0;  j < 8;  j++  ) {
+				bt_mode[j].pressed = i == j;
+			}
+			apply_road_options();
+			return true;
+		}
+	}
+	if(  comp == &bt_avoid_cityroad  ) {
+		bt_avoid_cityroad.pressed ^= 1;
+		// only meaningful when the road avoids becoming a city road
+		bt_no_building.enable( bt_avoid_cityroad.pressed );
+		bt_allow_branching_cityroad.enable( bt_avoid_cityroad.pressed );
+		if(  !bt_avoid_cityroad.pressed  ) {
+			bt_no_building.pressed = false;
+			bt_allow_branching_cityroad.pressed = false;
+		}
+		apply_road_options();
+		return true;
+	}
+	button_t *const flags[4] = { &bt_citycar_no_entry, &bt_no_building, &bt_allow_branching_cityroad, &bt_pedestrian_no_entry };
+	for(  int i = 0;  i < 4;  i++  ) {
+		if(  comp == flags[i]  ) {
+			flags[i]->pressed ^= 1;
+			apply_road_options();
+			return true;
+		}
+	}
+	if(  comp == &bt_allow_closed_diagonal  ) {
+		bt_allow_closed_diagonal.pressed ^= 1;
+		if(  opt_way  ) {
+			opt_way->set_allow_closed_diagonal( bt_allow_closed_diagonal.pressed );
+		}
+		else if(  opt_tunnel  ) {
+			opt_tunnel->set_allow_closed_diagonal( bt_allow_closed_diagonal.pressed );
+		}
+		return true;
+	}
+	if(  comp == &ni_height_offset  ) {
+		if(  opt_way  ) {
+			opt_way->set_height_offset( (sint8)ni_height_offset.get_value() );
+		}
+		return true;
+	}
+	if(  comp == &ni_vehicle_offset  ) {
+		const sint8 offset = (sint8)ni_vehicle_offset.get_value();
+		if(  opt_way  ) {
+			opt_way->set_vehicle_offset( offset );
+		}
+		else if(  opt_bridge  ) {
+			opt_bridge->set_vehicle_offset( offset );
+		}
+		else if(  opt_tunnel  ) {
+			opt_tunnel->set_vehicle_offset( offset );
+		}
+		return true;
+	}
+	if(  comp == &bt_vehicle_offset_mode  ) {
+		bt_vehicle_offset_mode.pressed ^= 1;
+		if(  opt_way  ) {
+			opt_way->set_vehicle_offset_mode( bt_vehicle_offset_mode.pressed );
+		}
+		else if(  opt_bridge  ) {
+			opt_bridge->set_vehicle_offset_mode( bt_vehicle_offset_mode.pressed );
+		}
+		else if(  opt_tunnel  ) {
+			opt_tunnel->set_vehicle_offset_mode( bt_vehicle_offset_mode.pressed );
+		}
+		return true;
+	}
+	return infra_edit_frame_t::action_triggered( comp, v );
 }
 
 

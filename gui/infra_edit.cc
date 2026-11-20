@@ -594,6 +594,7 @@ void infra_edit_frame_t::draw(scr_coord pos, scr_size size)
 				buf.clear();
 				info_text.recalc_size();
 				update_preview();
+				update_tool_options( NULL );
 				reset_min_windowsize();
 			}
 		}
@@ -620,7 +621,7 @@ void infra_edit_frame_t::change_item_info(sint32 entry)
 
 			char money[64];
 			money_to_string( money, (double)e.price / 100.0 );
-			buf.printf( "%s: %s\n", translator::translate("Price"), money );
+			buf.printf( "%s: %s\n", translator::translate("Construction cost"), money );
 			money_to_string( money, (double)get_monthly_maintenance(e.maintenance) / 100.0 );
 			buf.printf( "%s: %s\n", translator::translate("Maintenance"), money );
 
@@ -655,8 +656,16 @@ void infra_edit_frame_t::change_item_info(sint32 entry)
 		release_tool();
 		update_preview();
 	}
+	update_tool_options( get_selected_entry() );
 	info_text.recalc_size();
 	reset_min_windowsize();
+}
+
+
+tool_t *infra_edit_frame_t::get_options_tool(const infra_entry_t &e) const
+{
+	// the active tool may be another instance of the same tool (e.g. from the toolbar)
+	return is_same_tool( selected_tool, e ) ? selected_tool : e.tool;
 }
 
 

@@ -231,6 +231,12 @@ protected:
 	/// shows the currently selected image
 	virtual void update_preview();
 
+	/// show and fill the options of the tool of @p e (NULL = nothing selected)
+	virtual void update_tool_options(const infra_entry_t *) {}
+
+	/// @returns the tool whose options should be changed for @p e
+	tool_t *get_options_tool(const infra_entry_t &e) const;
+
 	/// called when a filter has been changed
 	virtual void filter_changed() { fill_list(); }
 

@@ -371,7 +371,7 @@ public:
 	sint8 get_height_offset() const { return height_offset; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
 	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
-	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	void set_vehicle_offset_mode(bool a) { a ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
 	bool get_allow_closed_diagonal() const { return allow_closed_diagonal; }
@@ -423,7 +423,7 @@ public:
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
 	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
-	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	void set_vehicle_offset_mode(bool a) { a ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
 	uint8 get_street_flag() const { return street_flag; }
@@ -465,7 +465,7 @@ public:
 	sint8 get_vehicle_offset() const { return vehicle_offset>>1; }
 	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
 	bool get_allow_closed_diagonal() const { return allow_closed_diagonal; } 
-	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	void set_vehicle_offset_mode(bool a) { a ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
 	uint8 get_street_flag() const { return street_flag; }
