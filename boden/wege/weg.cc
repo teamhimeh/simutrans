@@ -472,6 +472,12 @@ void weg_t::rotate90()
 		// horizontal <-> vertical
 		close_diagonal_state ^= 3;
 	}
+	// The two switch images are tied to the corners of the screen (north-west/south-east or
+	// north-east/south-west curve), so after a rotation the same curve is the other image.
+	// The extended images (3, 4) are indexed by the shape of the tile and turn with it.
+	if(  switch_image_override == 1  ||  switch_image_override == 2  ) {
+		switch_image_override = 3 - switch_image_override;
+	}
 }
 
 
