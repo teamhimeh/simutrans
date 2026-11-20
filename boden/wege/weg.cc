@@ -364,7 +364,7 @@ void weg_t::info(cbuffer_t & buf) const
 		}
 	}
 
-	buf.printf("%s%i (%s %s)\n",	translator::translate("\nVehicle offset: "), get_vehicle_offset(), translator::translate("Offset mode:"), get_vehicle_offset_mode()?translator::translate("Direction"):translator::translate("Absolute"));
+	buf.printf("%s%i (%s %s)\n",	translator::translate("\nVehicle offset: "), get_vehicle_offset(), translator::translate("Offset mode:"), get_vehicle_offset_mode()?translator::translate("Absolute"):translator::translate("Direction"));
 	
 	if(  get_waytype() == road_wt  ) {
 		const strasse_t* str = (const strasse_t*) this;

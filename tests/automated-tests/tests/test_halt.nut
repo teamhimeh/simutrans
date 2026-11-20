@@ -747,6 +747,75 @@ function test_halt_build_on_depot()
 }
 
 
+function test_halt_build_on_isolated_way()
+{
+	local pl = player_x(0)
+	local rotator = command_x(tool_rotate_building)
+	local stationbuilder = command_x(tool_build_station)
+	local rail_desc = way_desc_x.get_available_ways(wt_rail, st_flat)[0]
+	local layout2_station = building_desc_x("SandStationMHz") // 2 layouts
+	local layout16_station = building_desc_x("GCGTrainStop")   // 16 layouts
+	local pos = coord3d(4, 3, 0)
+
+	// a single way tile without any connection
+	ASSERT_EQUAL(command_x.build_way(pl, pos, pos, rail_desc, true), null)
+	ASSERT_EQUAL(tile_x(pos.x, pos.y, pos.z).get_way_dirs(wt_rail), dir.none)
+
+	// 16 layouts: a stop can be built on it, default direction is north-south
+	{
+		ASSERT_EQUAL(stationbuilder.work(pl, pos, layout16_station.get_name()), null)
+		ASSERT_TRUE(tile_x(pos.x, pos.y, pos.z).find_object(mo_building) != null)
+
+		// east-west extension is refused, the stop faces north-south
+		ASSERT_TRUE(command_x.build_way(pl, pos, coord3d(5, 3, 0), rail_desc, true) != null)
+		ASSERT_EQUAL(tile_x(pos.x, pos.y, pos.z).get_way_dirs(wt_rail), dir.none)
+		ASSERT_EQUAL(tile_x(5, 3, 0).find_object(mo_way), null)
+
+		// rotating an isolated stop turns it to east-west
+		ASSERT_EQUAL(rotator.work(pl, pos), null)
+		ASSERT_TRUE(command_x.build_way(pl, pos, coord3d(4, 2, 0), rail_desc, true) != null)
+		ASSERT_EQUAL(tile_x(pos.x, pos.y, pos.z).get_way_dirs(wt_rail), dir.none)
+		ASSERT_EQUAL(tile_x(4, 2, 0).find_object(mo_way), null)
+
+		// rotate through the remaining images: 15 -> 14 (north-south) -> 7 (east-west)
+		ASSERT_EQUAL(rotator.work(pl, pos), null)
+		ASSERT_EQUAL(rotator.work(pl, pos), null)
+
+		// now the way can be extended along the stop
+		ASSERT_EQUAL(command_x.build_way(pl, pos, coord3d(5, 3, 0), rail_desc, true), null)
+		ASSERT_EQUAL(tile_x(pos.x, pos.y, pos.z).get_way_dirs(wt_rail), dir.east)
+
+		ASSERT_EQUAL(command_x(tool_remove_way).work(pl, pos, coord3d(5, 3, 0), "" + wt_rail), null)
+		ASSERT_EQUAL(tile_x(pos.x, pos.y, pos.z).find_object(mo_building), null)
+	}
+
+	ASSERT_EQUAL(command_x.build_way(pl, pos, pos, rail_desc, true), null)
+
+	// 2 layouts: can be built and rotated while isolated, upgrade keeps the direction
+	{
+		ASSERT_EQUAL(stationbuilder.work(pl, pos, layout2_station.get_name()), null)
+		ASSERT_EQUAL(rotator.work(pl, pos), null) // east-west
+
+		stationbuilder.set_flags(2) // enable ctrl
+		ASSERT_EQUAL(stationbuilder.work(pl, pos, pos, layout16_station.get_name()), null)
+		stationbuilder.set_flags(0)
+
+		ASSERT_TRUE(command_x.build_way(pl, pos, coord3d(4, 4, 0), rail_desc, true) != null)
+		ASSERT_EQUAL(tile_x(4, 4, 0).find_object(mo_way), null)
+		ASSERT_EQUAL(command_x.build_way(pl, coord3d(3, 3, 0), pos, rail_desc, true), null)
+		ASSERT_EQUAL(tile_x(pos.x, pos.y, pos.z).get_way_dirs(wt_rail), dir.west)
+
+		// connected now: the usual rules apply again (16 layouts -> only the platform side flips)
+		ASSERT_EQUAL(rotator.work(pl, pos), null)
+		ASSERT_EQUAL(command_x.build_way(pl, pos, coord3d(5, 3, 0), rail_desc, true), null)
+	}
+
+	// clean up
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(3, 3, 0), coord3d(5, 3, 0), "" + wt_rail), null)
+	RESET_ALL_PLAYER_FUNDS()
+}
+
+
 function test_halt_build_station_invalid_param()
 {
 	// null default_param

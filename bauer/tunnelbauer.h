@@ -17,6 +17,8 @@ class player_t;
 class tunnel_desc_t;
 class way_desc_t;
 class tool_selector_t;
+class grund_t;
+class weg_t;
 
 /**
  * Baut Tunnel. Tunnel sollten nicht direkt instanziiert werden
@@ -54,6 +56,23 @@ public:
 	static const char *build( player_t *player, koord pos, const tunnel_desc_t *desc, bool full_tunnel, overtaking_mode_t overtaking_mode, uint8 street_flag, sint8 vehicle_offset );
 
 	static const char *remove(player_t *player, koord3d pos, waytype_t wegtyp, bool all);
+
+	/**
+	 * The way on an underground or elevated tile @p gr that must survive the removal of the way
+	 * of @p wegtyp: a different waytype on the opposite diagonal bend (closed diagonal).
+	 * Tram tracks have no tunnels of their own, so they are removed with the way they run on.
+	 * @return NULL if the tile can be removed with the way of @p wegtyp
+	 */
+	static weg_t *get_way_kept_on_removal(const grund_t *gr, waytype_t wegtyp);
+
+	/**
+	 * Removes the way of @p wegtyp (keeping the directions @p rem) from a tile shared with a
+	 * way of @p kept_wt, keeping the tile and the other way. If the tunnel_t of a tunnel tile
+	 * belongs to @p wegtyp and the way goes completely, it is replaced by a tunnel of the
+	 * remaining waytype, which then takes over its maintenance.
+	 * @return false if the way could not be removed completely (see grund_t::remove_everything_from_way())
+	 */
+	static bool remove_way_keep_tile(player_t *player, grund_t *gr, waytype_t wegtyp, waytype_t kept_wt, ribi_t::ribi rem);
 };
 
 #endif
