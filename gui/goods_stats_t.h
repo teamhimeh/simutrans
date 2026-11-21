@@ -28,7 +28,7 @@ public:
 	
 private:
 	// key: the combo box pointer, value: the goods category index of the combo box
-	ptrhashtable_tpl<gui_action_creator_t*, uint8> goods_catg_indexes;
+	ptrhashtable_tpl<gui_action_creator_t*, uint16> goods_catg_indexes;
 	bool action_triggered(gui_action_creator_t*, value_t);
 	void draw(scr_coord offset) OVERRIDE;
 };
