@@ -18,6 +18,10 @@
 #include "gui/citybuilding_edit.h"
 #include "gui/baum_edit.h"
 #include "gui/groundobj_edit.h"
+#include "gui/way_edit.h"
+#include "gui/wayobj_edit.h"
+#include "gui/halt_edit.h"
+#include "gui/roadsign_edit.h"
 #include "gui/jump_frame.h"
 #include "gui/optionen.h"
 #include "gui/map_frame.h"
@@ -540,6 +544,58 @@ public:
 	bool exit(player_t*) OVERRIDE{ destroy_win(magic_edit_groundobj); return false; }
 	bool is_init_network_safe() const OVERRIDE{ return true; }
 	bool is_work_network_safe() const OVERRIDE{ return true; }
+};
+
+/**
+ * Base for the dialogs to select ways, way objects, stops and signs.
+ * The default parameter (from menuconf.tab) is the waytype, e.g. dialog_tool[37],,,2 for tracks.
+ * Without parameter all waytypes are shown.
+ */
+template<class FRAME, uint16 DIALOG_ID, int MAGIC_BASE>
+class dialog_edit_infra_t : public tool_t {
+	const char *title_key;
+public:
+	dialog_edit_infra_t(const char *title) : tool_t(DIALOG_ID | DIALOGE_TOOL), title_key(title) {}
+	waytype_t get_param_waytype() const { return default_param ? (waytype_t)(atoi(default_param) & 0xFF) : ignore_wt; }
+	ptrdiff_t get_magic() const { return MAGIC_BASE + get_param_waytype(); }
+	char const* get_tooltip(player_t const*) const OVERRIDE {
+		snprintf( toolstr, lengthof(toolstr), "%s (%s)", translator::translate(title_key), infra_edit_frame_t::get_waytype_name(get_param_waytype()) );
+		return toolstr;
+	}
+	bool is_selected() const OVERRIDE { return win_get_magic(get_magic()); }
+	bool init(player_t* player) OVERRIDE {
+		if (!is_selected()) {
+			create_win(new FRAME(player, get_param_waytype()), w_info, get_magic());
+		}
+		return false;
+	}
+	bool exit(player_t*) OVERRIDE { destroy_win(get_magic()); return false; }
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
+/* way, elevated way, bridge and tunnel selection dialog */
+class dialog_edit_way_t : public dialog_edit_infra_t<way_edit_frame_t, DIALOG_EDIT_WAY, magic_way_edit> {
+public:
+	dialog_edit_way_t() : dialog_edit_infra_t<way_edit_frame_t, DIALOG_EDIT_WAY, magic_way_edit>("way builder") {}
+};
+
+/* way object selection dialog */
+class dialog_edit_wayobj_t : public dialog_edit_infra_t<wayobj_edit_frame_t, DIALOG_EDIT_WAYOBJ, magic_wayobj_edit> {
+public:
+	dialog_edit_wayobj_t() : dialog_edit_infra_t<wayobj_edit_frame_t, DIALOG_EDIT_WAYOBJ, magic_wayobj_edit>("wayobj builder") {}
+};
+
+/* stop, extension building and harbour selection dialog */
+class dialog_edit_halt_t : public dialog_edit_infra_t<halt_edit_frame_t, DIALOG_EDIT_HALT, magic_halt_edit> {
+public:
+	dialog_edit_halt_t() : dialog_edit_infra_t<halt_edit_frame_t, DIALOG_EDIT_HALT, magic_halt_edit>("halt builder") {}
+};
+
+/* signal and road sign selection dialog */
+class dialog_edit_roadsign_t : public dialog_edit_infra_t<roadsign_edit_frame_t, DIALOG_EDIT_ROADSIGN, magic_roadsign_edit> {
+public:
+	dialog_edit_roadsign_t() : dialog_edit_infra_t<roadsign_edit_frame_t, DIALOG_EDIT_ROADSIGN, magic_roadsign_edit>("roadsign builder") {}
 };
 
 // to increase map-size

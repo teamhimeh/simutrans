@@ -154,6 +154,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\fabrik_info.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\factory_chart.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\factory_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\infra_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\way_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\wayobj_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\halt_edit.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)gui\roadsign_edit.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\factorylist_frame_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\factorylist_stats_t.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)gui\goods_frame_t.cc" />
@@ -519,6 +524,11 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\fabrik_info.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\factory_chart.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\factory_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\infra_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\way_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\wayobj_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\halt_edit.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)gui\roadsign_edit.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\factorylist_frame_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\factorylist_stats_t.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)gui\goods_frame_t.h" />
