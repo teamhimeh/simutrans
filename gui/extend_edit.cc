@@ -324,6 +324,22 @@ void extend_edit_gui_t::apply_prohibit_too_new()
 }
 
 
+void extend_edit_gui_t::draw(scr_coord pos, scr_size size)
+{
+	player_t *const active = welt->get_active_player();
+	if(  active  &&  active != player  ) {
+		// deselect first, so the tool of the previous player is released
+		change_item_info(-1);
+		player = active;
+		set_owner(active);
+		apply_prohibit_too_new();
+		fill_list();
+		reset_min_windowsize();
+	}
+	gui_frame_t::draw(pos, size);
+}
+
+
 /**
  * Mouse click are hereby reported to its GUI-Components
  */

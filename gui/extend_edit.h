@@ -217,6 +217,13 @@ public:
 
 	bool infowin_event(event_t const*) OVERRIDE;
 
+	/**
+	 * Follows the change of the active player: the timeline settings and the list
+	 * depend on the player (the public player ignores settings_t::prohibit_too_new).
+	 * Sub classes overriding draw() must call extend_edit_gui_t::draw.
+	 */
+	void draw(scr_coord pos, scr_size size) OVERRIDE;
+
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 
 	/**

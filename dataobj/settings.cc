@@ -331,7 +331,7 @@ settings_t::settings_t() :
 	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
-	prohibit_too_new = false;
+	prohibit_too_new = true;
 
 	allow_overloading = false;
 
@@ -1301,8 +1301,8 @@ void settings_t::rdwr(loadsave_t *file)
 			file->rdwr_bool( prohibit_too_new );
 		}
 		else if(  file->is_loading()  ) {
-			// map editors could place anything before v64
-			prohibit_too_new = false;
+			// not saved before v64: use the default
+			prohibit_too_new = true;
 		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
