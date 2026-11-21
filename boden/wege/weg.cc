@@ -164,6 +164,7 @@ void weg_t::init()
 	foreground_image = IMG_EMPTY;
 	max_wayobj_speed = 0;
 	vehicle_offset = 0;
+	switch_image_override = -1;
 }
 
 
@@ -262,6 +263,14 @@ void weg_t::rdwr(loadsave_t *file)
 
 	if(  file->get_OTRP_version()>=52  ) {
 		file->rdwr_byte(vehicle_offset);
+	}
+	if(  file->get_OTRP_version()>=64  ) {
+		// 0xFF (-1) is automatic selection, 0..2 are the fixed choices
+		uint8 override_value = (uint8)switch_image_override;
+		file->rdwr_byte(override_value);
+		if(  file->is_loading()  ) {
+			switch_image_override = override_value <= 4 ? (sint8)override_value : -1;
+		}
 	}
 }
 
@@ -592,6 +601,9 @@ bool weg_t::check_season(const bool calc_only_season_change)
 		set_images( image_diagonal, ribi, snow );
 	}
 	else if(  ribi_t::is_threeway( ribi )  &&  desc->has_switch_image()  ) {
+		if(  apply_switch_image_override(snow)  ) {
+			return true;
+		}
 		// there might be two states of the switch; remember it when changing seasons
 		if(  image == desc->get_switch_image_id( ribi, old_snow, false )  ) {
 			set_images( image_switch, ribi, snow, false );
@@ -632,6 +644,9 @@ void weg_t::calc_image()
 #endif
 	grund_t *from = welt->lookup(get_pos());
 	grund_t *to;
+	if(  !is_switch_junction()  ) {
+		switch_image_override = -1;
+	}
 	image_id old_image = image;
 	image_id old_foreground_image = foreground_image;
 
@@ -739,6 +754,11 @@ void weg_t::calc_image()
 				}
 			}
 #endif
+			// Other image-selection passes above may replace the flat switch image.
+			// Reapply the explicit choice last so it wins after every recalculation.
+			if(  switch_image_override >= 0  &&  is_switch_junction()  ) {
+				apply_switch_image_override(snow);
+			}
 
 		}
 	}
@@ -753,7 +773,54 @@ void weg_t::calc_image()
 #endif
 }
 
+bool weg_t::apply_switch_image_override(bool snow)
+{
+	if(  switch_image_override < 0  ||  !is_switch_image_choice_available(switch_image_override)  ) {
+		// automatic, or the add-on has no image for the saved choice
+		return false;
+	}
+	switch(  switch_image_override  ) {
+		case 1: set_images(image_switch, ribi, snow, true); break;
+		case 2: set_images(image_switch, ribi, snow, false); break;
+		case 3: set_images(image_ex, ribi, snow, true); break;
+		case 4: set_images(image_ex, ribi, snow, false); break;
+		default: set_images(image_flat, ribi, snow); break; // standard
+	}
+	return true;
+}
+
+
+bool weg_t::can_fix_switch_image() const
+{
+	return desc  &&  desc->has_switch_image()  &&  is_switch_junction();
+}
+
+
+bool weg_t::is_switch_image_choice_available(sint8 value) const
+{
+	if(  !desc  ||  !is_switch_junction()  ) {
+		return false;
+	}
+	switch(  value  ) {
+		case -1:
+		case 0:
+			return true;
+		case 1:
+		case 2:
+			return desc->has_switch_image()  &&  desc->get_switch_image_id( ribi, 0, value == 1 ) != IMG_EMPTY;
+		case 3:
+		case 4:
+			return desc->has_switch_ex_image()  &&  desc->get_switch_ex_image_id( ribi, 0, value == 3 ) != IMG_EMPTY;
+		default:
+			return false;
+	}
+}
+
+
 void weg_t::select_switch_image(bool snow){
+	if(  apply_switch_image_override(snow)  ) {
+		return;
+	}
 	if(ribi == ribi_t::northsoutheast){
 		grund_t *from = welt->lookup(get_pos());
 		grund_t *east;
@@ -1297,6 +1364,11 @@ void weg_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 	player_t *player = get_owner();
 	if(  player  &&  desc  ) {
 		player_t::add_maintenance( player,  desc->get_maintenance(), desc->get_finance_waytype() );
+	}
+	// The pak may have changed since the game was saved: drop a fixed switch image
+	// whose images do not exist any more and go back to the automatic selection.
+	if(  switch_image_override >= 0  &&  !is_switch_image_choice_available(switch_image_override)  ) {
+		switch_image_override = -1;
 	}
 }
 
