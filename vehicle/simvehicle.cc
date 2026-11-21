@@ -4663,6 +4663,11 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 	if(  !gr->is_halt()  ||  gr->get_halt()!=target_halt  ) {
 		return false;
 	}
+	roadsign_t * rs = gr->find<roadsign_t>(1);
+	if(  rs  &&  rs->get_desc()->get_waytype()==get_waytype()  &&  rs->is_stop_position()  ) {
+		// this tile should not be a stop pos.
+		return false;
+	}
 	const koord dir=gr->get_pos().get_2d()-prev_gr->get_pos().get_2d();
 	const ribi_t::ribi ribi = ribi_type(dir);
 	// direction-aware: on a same-waytype disjoint-diagonal-leg tile, use the leg entered from
@@ -4686,8 +4691,12 @@ bool rail_vehicle_t::is_target(const grund_t *gr,const grund_t *prev_gr, const b
 		schiene_t const* const sch = obj_cast<schiene_t>(to->get_weg(get_waytype(), ribi_t::backward(next_gr_ribi)));
 		if(  sch->can_reserve(cnv->self)||!allow_multi_convoys  ) {
 			if(!((need_electric  &&  !sch->is_electrified())  ||  sch->get_max_speed() == 0  )) {
-				// We can still go forward.
-				return false;
+				roadsign_t * rs = to->find<roadsign_t>(1);
+				if(  !rs  ||  rs->get_desc()->get_waytype()!=get_waytype()  ||  !rs->is_stop_position()  )
+				{
+					// We can still go forward.
+					return false;
+				}
 			}
 		}
 	}
