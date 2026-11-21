@@ -21,7 +21,7 @@ private:
   static repositioning_t instance;
   stringhashtable_tpl<koord> table;
   static koord default_offset;
-  static char tab_filename[128];
+  static char tab_filename[1024];
   
 public:
   static repositioning_t& get_instance() { return instance; };

@@ -799,6 +799,24 @@ public:
 
 	void finish_rd( const uint8 loaded_OTRP_version );
 
+	/**
+	 * Repair inconsistent coupling links of a freshly loaded game.
+	 * Must be called after all convoys are read by rdwr(), but before the convoys in depots are
+	 * filed away (betrete_depot()) and before finish_rd(), i.e. while the states are still the
+	 * saved ones. Every convoy must exist in exactly one place: a convoy in a depot (INITIAL) may
+	 * only be coupled with convoys in the same depot, and a convoy on the map may only pull a
+	 * COUPLED/COUPLED_LOADING child. A child is pulled by at most one parent and chains never loop.
+	 * Broken links are cut, and orphaned COUPLED children are made independent again.
+	 */
+	static void repair_coupling_links_after_load( const vector_tpl<convoi_t*> &loaded );
+
+	/**
+	 * Detach this convoy from the convoy that pulls it, without changing our state.
+	 * The tiles our cars stand on are released from the chain head's reservation.
+	 * Used to repair a child that has to leave its chain (selling a broken child).
+	 */
+	void cut_from_parent_convoi();
+
 	void rotate90( const sint16 y_size );
 
 	/**
@@ -1531,11 +1549,22 @@ public:
 	 */
 	bool board_carrier(convoihandle_t c, halthandle_t dest);
 
+	enum disembark_result_t {
+		DISEMBARK_DONE,    ///< put ashore
+		DISEMBARK_WAIT,    ///< its tile has no room right now: stays aboard, the carrier waits
+		DISEMBARK_INVALID  ///< its scheduled tile is no stop of this halt it may use
+	};
+	/// a chain longer than this is cut aboard and put ashore in parts (tile object list holds 254)
+	enum { MAX_DISEMBARK_VEHICLES = 250 };
+
 	/**
-	 * Put `c` ashore at `halt`, on a tile of its own waytype. Returns false when there is
-	 * no usable tile, in which case `c` simply stays aboard and we retry at a later stop.
+	 * Put `c` ashore at `halt` on the tile of its current schedule entry, regardless of other
+	 * vehicles there. On DISEMBARK_INVALID handle_shipping_at_halt() sends `c` to a depot.
 	 */
-	bool disembark_convoy(convoihandle_t c, halthandle_t halt);
+	disembark_result_t disembark_convoy(convoihandle_t c, halthandle_t halt);
+
+	/// true while a convoy aboard (any carrier of this chain) still has to get off at `halt`
+	bool is_waiting_for_disembark(halthandle_t halt) const;
 
 	/// called on the carrier when it has stopped at `halt`: drop off and pick up convoys
 	void handle_shipping_at_halt(halthandle_t halt);
@@ -1559,6 +1588,13 @@ public:
 	 * from get_pos(), and a land convoy in the middle of the sea can never find a route.
 	 */
 	bool teleport_to_nearest_depot(bool announce = true);
+
+	/**
+	 * Put an off-map chain (aboard a carrier, or split off while being teleported) into
+	 * depots. Every part goes to a depot of its own owner and waytype - teleport_to_nearest_depot()
+	 * splits the chain where needed. Only a convoy whose owner has no such depot is lost.
+	 */
+	static void send_offmap_chain_to_depots(convoihandle_t c);
 
 	/// release every way reservation held by this convoy and take it off the map
 	void withdraw_from_map_for_shipping();

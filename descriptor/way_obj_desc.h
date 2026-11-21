@@ -191,6 +191,13 @@ public:
 		return get_child<image_list_t>(7)->get_image_id(ribi / 3 - 1);
 	}
 
+	// the back diagonal image, or the front one when only that exists
+	image_id get_back_or_front_diagonal_image_id(ribi_t::ribi ribi) const
+	{
+		const image_id back = get_back_diagonal_image_id(ribi);
+		return back != IMG_EMPTY ? back : get_front_diagonal_image_id(ribi);
+	}
+
 	/**
 	 * close diagonals: two parallel diagonals one tile apart (on a fourway way tile)
 	 * nr=0: close1 (northwest+southeast), nr=1: close2 (northeast+southwest)

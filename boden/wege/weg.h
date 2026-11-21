@@ -286,6 +286,13 @@ public:
 	void check_diagonal();
 
 	/**
+	 * true, if this way lies on a diagonal by its shape and its neighbours alone,
+	 * also when its desc has no diagonal images (unlike is_diagonal()).
+	 * Does not change any flag.
+	 */
+	bool calc_diagonal() const;
+
+	/**
 	 * checks, if this fourway way is actually two close diagonals
 	 * and sets close_diagonal_state accordingly
 	 * (only if the way has close diagonal images; otherwise two ways on one tile are used)

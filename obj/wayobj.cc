@@ -434,7 +434,12 @@ void wayobj_t::calc_neighbour_images(const grund_t *gr, waytype_t wt) const
 			if(gr->get_neighbour(to, wt, ribi_t::nesw[r])) {
 				wayobj_t* wo = to->get_wayobj( wt );
 				if(wo) {
+					// its images may change (e.g. flat <-> diagonal): redraw old and new ones
+					wo->mark_image_dirty( wo->get_image(), 0 );
+					wo->mark_image_dirty( wo->get_front_image(), 0 );
 					wo->calc_image();
+					wo->mark_image_dirty( wo->get_image(), 0 );
+					wo->mark_image_dirty( wo->get_front_image(), 0 );
 				}
 			}
 		}

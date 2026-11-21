@@ -27,7 +27,7 @@ static scr_size building_thumbnail_size()
 		(y_grid > 0 ? y_grid : 24)*raster/64+6);
 }
 
-building_thumbnail_t::building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_) : image(desc, 0), name(name_), cell_size(cell_size_) {}
+building_thumbnail_t::building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_, int layout) : image(desc, layout), name(name_), cell_size(cell_size_) {}
 
 scr_size building_thumbnail_t::get_min_size() const
 {
@@ -174,6 +174,10 @@ gui_sorting_item_t::gui_sorting_item_t(uint8 s) : gui_scrolled_list_t::const_tex
 		case BY_COST:                text = translator::translate("Price"); break;
 		case BY_GOODS_NUMBER:        text = translator::translate("Goods"); break;
 		case BY_REMOVAL:             text = translator::translate("cost for removal"); break;
+		case BY_SPEED:               text = translator::translate("Max. speed"); break;
+		case BY_MAINTENANCE:         text = translator::translate("Maintenance"); break;
+		case BY_LEVEL:               text = translator::translate("Level"); break;
+		case BY_TYPE:                text = translator::translate("Type"); break;
 		default:                     text = "";
 	}
 }
@@ -262,7 +266,7 @@ extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 
 	// start filling cont_filter---------------------------------------------------------------------------------------------
 	// climate filter
-	gui_aligned_container_t *tbl_climate = cont_filter.add_table(2,0);
+	tbl_climate = cont_filter.add_table(2,0);
 	tbl_climate->new_component<gui_label_t>("Climate");
 	tbl_climate->add_component(&cb_climates);
 	cb_climates.add_listener(this);
