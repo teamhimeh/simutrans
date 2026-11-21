@@ -834,6 +834,13 @@ void export_map_objects(HSQUIRRELVM vm)
 	 */
 	register_method(vm, &roadsign_t::get_margin_length, "get_margin_length");
 	/**
+	 * Get "stop at middle" flag of a choose signal.
+	 * When true, trains stop at the middle of the platform, excluding the margin tiles
+	 * (front margin with "advance to end", back margin otherwise).
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_stop_at_middle, "is_stop_at_middle");
+	/**
 	 * Get "allow reverse passage" (two ways) flag of a signal.
 	 * When true, trains coming from the reverse direction are allowed to pass the signal.
 	 * @returns true if the flag is set
