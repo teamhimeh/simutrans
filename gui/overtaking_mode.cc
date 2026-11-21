@@ -154,6 +154,14 @@ void overtaking_mode_frame_t::init( player_t* player_, overtaking_mode_t overtak
 		allow_closed_diagonal_button.pressed = tool_class==0 ? tool_w->get_allow_closed_diagonal() : tool_tu->get_allow_closed_diagonal();
 		add_component(&allow_closed_diagonal_button);
 	}
+	if(  tool_class==0  ) {
+		// user setting (env_t), common to all way building tools
+		prohibit_one_tile_way_button.init( button_t::square_state, "prohibit one tile way");
+		prohibit_one_tile_way_button.set_tooltip( translator::translate("Do not build a way on a single tile, even when Ctrl is pressed.") );
+		prohibit_one_tile_way_button.add_listener(this);
+		prohibit_one_tile_way_button.pressed = env_t::prohibit_one_tile_way;
+		add_component(&prohibit_one_tile_way_button);
+	}
 	if(  tool_class != 3  ) {
 	add_table(3,1);
 	{
@@ -239,6 +247,13 @@ bool overtaking_mode_frame_t::action_triggered( gui_action_creator_t *komp, valu
 		else if(  tool_class==2  ) {
 			tool_tu->set_allow_closed_diagonal(allow_closed_diagonal_button.pressed);
 		}
+		// not a road flag
+		return true;
+	}
+	else if(  komp==&prohibit_one_tile_way_button  ) {
+		env_t::prohibit_one_tile_way = !env_t::prohibit_one_tile_way;
+		prohibit_one_tile_way_button.pressed = env_t::prohibit_one_tile_way;
+		tool_build_way_t::update_prohibit_one_tile_way();
 		// not a road flag
 		return true;
 	}

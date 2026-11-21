@@ -23,6 +23,8 @@
 #include "../utils/cbuffer_t.h"
 #include "../simtypes.h"
 
+class gui_label_t;
+
 class player_t;
 
 /**
@@ -172,6 +174,14 @@ protected:
 	gui_combobox_t cb_rotation, cb_climates, cb_sortedby;
 
 	gui_numberinput_t ni_timeline_year, ni_timeline_month;
+	gui_label_t *lb_timeline_month, *lb_timeline_year;
+
+	/**
+	 * settings_t::prohibit_too_new: objects which are not yet available cannot be selected.
+	 * Then only "Show obsolete" is shown and the list always follows the current date
+	 * (if the timeline is used at all).
+	 */
+	void apply_prohibit_too_new();
 
 	virtual void fill_list() {}
 
