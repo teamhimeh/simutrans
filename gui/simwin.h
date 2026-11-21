@@ -131,7 +131,13 @@ enum magic_numbers {
 	magic_depot_picker,
 	magic_citybuilding_preset_confirm,
 	magic_citybuilding_preset_file,
-	magic_max
+	magic_save_heightmap,
+	// map editor dialogs for transport infrastructure, one per waytype
+	magic_way_edit,
+	magic_wayobj_edit   = magic_way_edit      + 256,
+	magic_halt_edit     = magic_wayobj_edit   + 256,
+	magic_roadsign_edit = magic_halt_edit     + 256,
+	magic_max           = magic_roadsign_edit + 256
 };
 
 // Holding time for auto-closing windows

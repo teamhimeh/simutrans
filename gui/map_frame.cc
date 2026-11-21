@@ -9,6 +9,7 @@
 
 #include "minimap.h"
 #include "map_frame.h"
+#include "save_heightmap_frame.h"
 
 #include "simwin.h"
 #include "messagebox.h"
@@ -177,7 +178,7 @@ map_frame_t::map_frame_t() :
 	set_table_layout(1,0);
 
 	// first row of controls
-	add_table(4,1);
+	add_table(5,1);
 	{
 		// first row of controls
 		// selections button
@@ -203,6 +204,11 @@ map_frame_t::map_frame_t() :
 		b_export_map.set_tooltip("Export the entire map with the current display settings.");
 		b_export_map.add_listener(this);
 		add_component(&b_export_map);
+
+		b_export_heightmap.init(button_t::roundbox, "Heightmap PNG");
+		b_export_heightmap.set_tooltip("Export the terrain as a PNG heightmap for a new game.");
+		b_export_heightmap.add_listener(this);
+		add_component(&b_export_heightmap);
 	}
 	end_table();
 
@@ -496,6 +502,9 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 	}
 	else if(  comp == &b_show_directory  ) {
 		show_hide_directory( !b_show_directory.pressed );
+	}
+	else if(  comp == &b_export_heightmap  ) {
+		create_win(new save_heightmap_frame_t(), w_info, magic_save_heightmap);
 	}
 	else if(  comp == &b_export_map  ) {
 		std::string filename, conflicts;

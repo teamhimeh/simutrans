@@ -971,7 +971,8 @@ void vehicle_t::initialise_journey(uint16 start_route_index, bool recalc)
 
 void vehicle_t::clamp_route_index()
 {
-	if(  cnv == NULL  ) {
+	if(  cnv == NULL  ||  cnv == (convoi_t*)1  ) {
+		// no convoy, or still being loaded (see reanchor_route_index())
 		return;
 	}
 	const uint32 count = cnv->get_route()->get_count();
@@ -987,7 +988,11 @@ void vehicle_t::clamp_route_index()
 
 bool vehicle_t::reanchor_route_index()
 {
-	if(  cnv == NULL  ) {
+	// While a vehicle is read, cnv holds the saved "target halt reserved" flag, i.e. NULL or
+	// (convoi_t*)1, until convoi_t::finish_rd() sets the real convoy. karte_t::rdwr_gamestate()
+	// files convoys stored in a depot away with betrete_depot() before that, and betrete_depot()
+	// uncouples a stored chain - so this runs on such vehicles.
+	if(  cnv == NULL  ||  cnv == (convoi_t*)1  ) {
 		return false;
 	}
 	const route_t* r = cnv->get_route();
@@ -1279,7 +1284,7 @@ ribi_t::ribi vehicle_t::get_current_corner_set() const
 	// and the bit pointing back to where we came from: route_index indexes pos_next, so our
 	// own tile sits at route_index-1 and the one we came from at route_index-2. Verify that
 	// invariant before using it -- it does not hold e.g. while a convoy leaves a depot.
-	if(  cnv  &&  route_index>=2u  ) {
+	if(  cnv  &&  cnv!=(convoi_t*)1  &&  route_index>=2u  ) {
 		const route_t *route = cnv->get_route();
 		if(  route  &&  (uint32)route_index-1u < route->get_count()  &&  route->at(route_index-1u)==pos  ) {
 			corner_set |= ribi_t::backward(ribi_type(route->at(route_index-2u), pos));
@@ -5288,23 +5293,40 @@ bool rail_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 	uint8 next_c_steps;
 	grund_t* gr_current = welt->lookup(get_pos());
 	// reset driving without reservation
+	// set_next_stop_index(n) makes n the next block (it stores n+1), so the signal tile itself must
+	// be passed: the signal is then checked by is_signal_clear() below like any other signal.
+	// Pointing behind it would be taken as "signal disappeared" and only reserve a plain block,
+	// skipping choose, pre, longblock and priority signal logic.
 	if(  cnv->is_drive_without_reservation()  ) {
 		if(  gr_current  ) {
 			// direction-aware: the leg we are standing on / about to enter
 			if(weg_t* w = gr_current->get_weg(get_waytype(), get_current_corner_set())) {
 				if(w->has_signal()) {
+					// we stand on the signal (route_index-1)
 					cnv->set_drive_without_reservation(false);
-					cnv->set_next_stop_index(route_index-2);
+					cnv->set_next_stop_index(max(route_index,1)-1);
 				}
 			}
 		}
-		if(  gr  ) {
+		if(  gr  &&  cnv->is_drive_without_reservation()  ) {
 			if(weg_t* w = gr->get_weg(get_waytype(), ribi_t::backward(ribi_type(get_pos(), gr->get_pos())))) {
 				if(w->has_signal()) {
+					// the signal is on the tile we are entering (route_index)
 					cnv->set_drive_without_reservation(false);
-					cnv->set_next_stop_index(route_index-1);
+					cnv->set_next_stop_index(route_index);
 				}
 			}
+		}
+		// While driving without reservation the convoy holds the tiles it stands on (enter_tile()
+		// reserves them) and reserve_route() takes the front vehicle as the end of its reservation,
+		// but next_reservation_index is left wherever the last real reservation ended - typically
+		// the departure tile. Once we fall back to normal reservation that stale index is what
+		// counts again, and after loading a game reserve_route() and rail_vehicle_t::set_convoi()
+		// rebuild the reservation and the next stop from it: the tiles we stand on were left
+		// unreserved, and with an index of 0 set_convoi() even moved next_stop_index back behind
+		// the signal, so it was passed unchecked. So hand our current extent over.
+		if(  !cnv->is_drive_without_reservation()  &&  cnv->get_next_reservation_index()<route_index  ) {
+			cnv->set_next_reservation_index(route_index);
 		}
 	}
 
@@ -6083,6 +6105,22 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 				}
 			}
 		}
+		if(  find_coupling_target  ) {
+			// The target chain itself is no obstacle. It normally makes no difference - its other
+			// cars stand beyond the end we couple to - but a chain just put ashore by a carrier
+			// has every car stacked on the landing tile at the same step (see disembark_convoy()),
+			// and then any car longer than its tail would block the coupling with that very tail.
+			other_step = VEHICLE_STEPS_PER_TILE;
+			for(  uint8 pos=1;  pos<(volatile uint8)gr->get_top();  pos++  ) {
+				if(  rail_vehicle_t* const v = dynamic_cast<rail_vehicle_t*>(gr->obj_bei(pos))  ) {
+					if(  v->get_convoi()->get_most_parent_convoi()==coupling_target->get_most_parent_convoi()  ) {
+						continue;
+					}
+					sint16 const temp_car_step=((v->get_direction()&dir)==0)? tile_length - (sint16)v->get_steps() - 1 : (sint16)v->get_steps()-(sint16)v->get_desc()->get_length()*VEHICLE_STEPS_PER_CARUNIT;
+					other_step = min(other_step,temp_car_step);
+				}
+			}
+		}
 		if(  other_step<c_step  ) {
 			// there are another vehicles front of the target-> wait for clearance (return false);
 			find_coupling_target = false;
@@ -6129,6 +6167,9 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 void rail_vehicle_t::leave_tile()
 {
 	vehicle_t::leave_tile();
+	// no convoy yet while the game is being loaded: a convoy stored in a depot is filed away by
+	// betrete_depot() before finish_rd() replaces cnv's (convoi_t*)1 placeholder
+	convoi_t *const my_cnv = (cnv == (convoi_t*)1) ? NULL : cnv;
 	// fix counters
 	// direction-aware: resolve the leg this vehicle actually occupies, relevant when two
 	// same-waytype disjoint diagonal legs coexist on the tile we are leaving
@@ -6137,12 +6178,12 @@ void rail_vehicle_t::leave_tile()
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
 			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
-			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  cnv  ) {
+			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  my_cnv  ) {
 				// the leg cannot be told from our route (e.g. leaving a depot) => release the
 				// leg our convoy holds, provided that it holds just one of them
 				schiene_t *leg0 = (schiene_t *)gr->get_weg_nr(0);
 				schiene_t *leg1 = (schiene_t *)gr->get_weg_nr(1);
-				const convoihandle_t c = cnv->get_most_parent_convoi();
+				const convoihandle_t c = my_cnv->get_most_parent_convoi();
 				const bool r0 = leg0->is_reserved_by(c);
 				const bool r1 = leg1->is_reserved_by(c);
 				if(  r0 != r1  ) {
@@ -6193,7 +6234,7 @@ void rail_vehicle_t::leave_tile()
 				// unreserve(convoihandle_t) matches primary OR reserved2, while the old
 				// unreserve(vehicle_t*) always cleared the primary slot regardless of which
 				// convoy this vehicle belongs to — causing spurious promotion/clearing bugs.
-				const convoihandle_t self_cnv = cnv ? cnv->get_most_parent_convoi() : convoihandle_t();
+				const convoihandle_t self_cnv = my_cnv ? my_cnv->get_most_parent_convoi() : convoihandle_t();
 				sch0->unreserve(self_cnv);
 				// we should not unreserve this tile if there are other vehicles on this tile.
 				if(  other_convoy.is_bound()  ) {
@@ -6207,9 +6248,9 @@ void rail_vehicle_t::leave_tile()
 						sig->set_state(  roadsign_t::STATE_RED );
 					}
 				}
-				if(  cnv  ) {
+				if(  my_cnv  ) {
 					// for treat reservation safely
-					cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
+					my_cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 				}
 				if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) {
 					// we may need to unreserve the other way as well (not for two independent same-waytype
@@ -6236,9 +6277,9 @@ void rail_vehicle_t::leave_tile()
 					}
 				}
 			}
-			if(  cnv  ) {
+			if(  my_cnv  ) {
 				// If reservation is controlled by next_reservation_index, this does nothing.
-				cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
+				my_cnv->get_most_parent_convoi()->unreserve_pos(get_pos());
 			}
 		}
 	}

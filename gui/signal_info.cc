@@ -93,12 +93,6 @@ signal(s)
 	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );
 	add_component(&bt_two_ways);
 	
-	new_component<gui_divider_t>();
-
-	add_table(2,0);
-	{
-	new_component<gui_fill_t>();
-
 	bt_allow_multi_convoys.init(button_t::square_state, translator::translate("Stop more than one convoys."));
 	bt_allow_multi_convoys.set_tooltip(translator::translate("Allow more than one convoys at same spot(platform)."));
 	bt_allow_multi_convoys.add_listener(this);
@@ -106,6 +100,12 @@ signal(s)
 	if(  signal->get_desc()->is_choose_sign()  ) {
 		add_component(&bt_allow_multi_convoys);
 	}
+	
+	new_component<gui_divider_t>();
+
+	add_table(2,0);
+	{
+	new_component<gui_fill_t>();
 	
 	bt_remove_signal.init( button_t::roundbox, translator::translate("remove signal"));
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );

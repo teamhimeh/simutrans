@@ -167,6 +167,18 @@ public:
 	// If the descriptor does not have slope images the flat layout is used unchanged.
 	static gebaeude_t* build_station_on_slope_way(player_t* player, koord3d pos, int layout, const building_desc_t* desc, halthandle_t halt);
 
+	// Build a stop on a flat, isolated way tile (way ribi is ribi_t::none).
+	// The stop is not connected to anything, so @p layout is used as is (no end bits are
+	// derived from neighbours and the neighbouring stops are not changed).
+	// Default layout: 0 (two layouts) or 6 (isolated NS, both ends) for more layouts.
+	static gebaeude_t* build_station_on_isolated_way(player_t* player, koord3d pos, int layout, const building_desc_t* desc, halthandle_t halt);
+
+	/**
+	 * Next layout of a stop on an isolated way when rotated by the rotate tool:
+	 * 0 <-> 1 (two layouts), 6 <-> 7 (eight layouts), 6 -> 15 -> 14 -> 7 -> 6 (16 and more layouts).
+	 */
+	static uint8 get_next_isolated_station_layout(const building_desc_t* desc, uint8 layout);
+
 	/// @returns house list of type @p typ
 	static const vector_tpl<const building_desc_t *> *get_list(building_desc_t::btype typ);
 

@@ -218,6 +218,10 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(DIALOG_SCRIPT_TOOL);
 		CASE_TO_STRING(DIALOG_EDIT_GROUNDOBJ);
 		CASE_TO_STRING(DIALOG_ROUTE_SEARCH);
+		CASE_TO_STRING(DIALOG_EDIT_WAY);
+		CASE_TO_STRING(DIALOG_EDIT_WAYOBJ);
+		CASE_TO_STRING(DIALOG_EDIT_HALT);
+		CASE_TO_STRING(DIALOG_EDIT_ROADSIGN);
 		}
 	}
 
@@ -368,6 +372,7 @@ tool_t *create_simple_tool(int toolnr)
 		case TOOL_SHOW_ONLY_OWN_VEHICLE_STATES:		tool = new tool_only_own_vehicle_states_t(); break;
 		case TOOL_FOLLOW_CONVOI_UNDERGROUND:		tool = new tool_follow_convoi_underground_t(); break;
 		case TOOL_EXPORT_MINIMAP:      tool = new tool_export_minimap_t(); break;
+		case TOOL_SWITCH_PREV_PLAYER:	tool = new tool_switch_prev_player_t(); break;
 		default:                    dbg->error("create_simple_tool()","cannot satisfy request for simple_tool[%i]!",toolnr);
 		                            return NULL;
 	}
@@ -418,6 +423,10 @@ tool_t *create_dialog_tool(int toolnr)
 		case DIALOG_SCRIPT_TOOL:     tool = new dialog_script_tool_t();     break;
 		case DIALOG_EDIT_GROUNDOBJ:  tool = new dialog_edit_groundobj_t();  break;
 		case DIALOG_ROUTE_SEARCH:    tool = new dialog_route_search_t();    break;
+		case DIALOG_EDIT_WAY:        tool = new dialog_edit_way_t();        break;
+		case DIALOG_EDIT_WAYOBJ:     tool = new dialog_edit_wayobj_t();     break;
+		case DIALOG_EDIT_HALT:       tool = new dialog_edit_halt_t();       break;
+		case DIALOG_EDIT_ROADSIGN:   tool = new dialog_edit_roadsign_t();   break;
 		default:
 			dbg->error("create_dialog_tool()","cannot satisfy request for dialog_tool[%i]!",toolnr);
 			return NULL;

@@ -501,6 +501,14 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 			sint16 step_pos = 0;
 			koord3d drive_pos;
 			uint8 const diagonal_vehicle_steps_per_tile = (uint8)(130560U / welt->get_settings().get_pak_diagonal_multiplier());
+			// A convoy put ashore by a carrier loads with all its vehicles stacked on the landing
+			// tile at the same step (see disembark_convoy()) until vorfahren() lays them out on
+			// departure. That is no broken convoy: realigning it would push it off its stop and
+			// leave it WAITING_FOR_CLEARANCE, so it would no longer wait for coupling.
+			bool landed = state==LOADING;
+			for(  uint8 i=1;  landed  &&  i<anz_vehikel;  i++  ) {
+				landed = fahr[i]->get_pos()==fahr[0]->get_pos()  &&  fahr[i]->get_steps()==fahr[0]->get_steps();
+			}
 			for( uint8 i=0;  i<anz_vehikel;  i++ ) {
 				vehicle_t* v = fahr[i];
 				v->set_leading( i==0 );
@@ -517,7 +525,7 @@ DBG_MESSAGE("convoi_t::finish_rd()","state=%s, next_stop_index=%d", state_names[
 				// if version is 99.17 or lower, some convois are broken, i.e. had too large gaps between vehicles
 				// SHIPPED convoys hold no tile, so their saved positions are stale by design and
 				// must never trigger realignment - move_to() would put them back on the map.
-				if(  !realign_position  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  &&  state != COUPLED  &&  state != COUPLED_LOADING  &&  state != SHIPPED  ) {
+				if(  !realign_position  &&  !landed  &&  state!=INITIAL  &&  state!=LEAVING_DEPOT  &&  state != COUPLED  &&  state != COUPLED_LOADING  &&  state != SHIPPED  ) {
 					if(  i==0  ) {
 						step_pos = v->get_steps();
 					}
@@ -722,6 +730,149 @@ DBG_MESSAGE("convoi_t::finish_rd()","next_stop_index=%d", next_stop_index );
 		}
 		reserve_route();
 	}
+}
+
+
+void convoi_t::repair_coupling_links_after_load( const vector_tpl<convoi_t*> &loaded )
+{
+	// parent_convoi is not saved, finish_rd() rebuilds it. Until then it is free to be used as
+	// the "already pulled by" marker of this pass; it is cleared again at the end.
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		cnv->parent_convoi = convoihandle_t();
+	}
+
+	// 1) validate every link parent -> child
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		const convoihandle_t child = cnv->coupling_convoi;
+		if(  !child.is_bound()  ) {
+			if(  child.get_id()!=0  ) {
+				dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s is coupled with the non-existing convoy %u => uncoupled", cnv->get_name(), child.get_id() );
+			}
+			cnv->coupling_convoi = convoihandle_t();
+			continue;
+		}
+		convoi_t *const c = child.get_rep();
+		const char *reason = NULL;
+		if(  c == cnv  ) {
+			reason = "coupled with itself";
+		}
+		else if(  cnv->state == INITIAL  ) {
+			// coupled in a depot: both have to stand in the same depot
+			if(  c->state != INITIAL  ) {
+				reason = "a convoy in a depot pulls a convoy on the map";
+			}
+			else if(  c->home_depot != cnv->home_depot  ) {
+				reason = "the coupled convoys are in different depots";
+			}
+		}
+		else if(  cnv->state == SHIPPED  ) {
+			if(  c->state != SHIPPED  ) {
+				reason = "a shipped convoy pulls a convoy that is not shipped";
+			}
+		}
+		else {
+			// the parent is on the map
+			if(  c->state == INITIAL  ) {
+				// the child was filed into a depot without being uncoupled. Its cars would be
+				// dragged along by the parent while it is listed in the depot at the same time.
+				reason = "a convoy on the map pulls a convoy in a depot";
+			}
+			else if(  c->state == SHIPPED  ) {
+				reason = "a convoy on the map pulls a shipped convoy";
+			}
+			else if(  c->state != COUPLED  &&  c->state != COUPLED_LOADING  ) {
+				// Both are on the map and the cars stand behind the parent, so the link is real;
+				// only the child's state is wrong (e.g. EDIT_SCHEDULE while coupled).
+				dbg->error( "convoi_t::repair_coupling_links_after_load()", "coupled child %s of %s has state %s => set to coupled", c->get_name(), cnv->get_name(), state_names[c->state] );
+				if(  c->state == EDIT_SCHEDULE  &&  c->schedule  ) {
+					c->schedule->finish_editing();
+				}
+				c->state = cnv->is_loading() ? COUPLED_LOADING : COUPLED;
+			}
+		}
+		if(  !reason  &&  c->parent_convoi.is_bound()  ) {
+			// the same convoy must not be pulled twice (e.g. in a depot and on the map at once);
+			// the first valid parent keeps it
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s is already pulled by %s", c->get_name(), c->parent_convoi->get_name() );
+			reason = "the child is already pulled by another convoy";
+		}
+		if(  reason  ) {
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s (state %s) and child %s (state %s): %s => uncoupled",
+				cnv->get_name(), state_names[cnv->state], c->get_name(), state_names[c->state], reason );
+			cnv->coupling_convoi = convoihandle_t();
+			continue;
+		}
+		c->parent_convoi = cnv->self;
+	}
+
+	// 2) loops: in a closed ring every convoy has a parent, so walking up never ends
+	const uint32 max_steps = loaded.get_count();
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		convoihandle_t p = cnv->parent_convoi;
+		uint32 steps = 0;
+		while(  p.is_bound()  &&  p.get_rep() != cnv  &&  steps++ < max_steps  ) {
+			p = p->parent_convoi;
+		}
+		if(  p.is_bound()  ) {
+			// back at ourselves (or no end found): open the ring in front of us
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "coupling chain of %s is a loop => uncoupled from %s", cnv->get_name(), cnv->parent_convoi->get_name() );
+			cnv->parent_convoi->coupling_convoi = convoihandle_t();
+			cnv->parent_convoi = convoihandle_t();
+		}
+	}
+
+	// 3) orphans: a COUPLED convoy that nobody pulls would stand on the map forever
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		if(  !cnv->parent_convoi.is_bound()  &&  (cnv->state == COUPLED  ||  cnv->state == COUPLED_LOADING)  ) {
+			dbg->error( "convoi_t::repair_coupling_links_after_load()", "%s is coupled, but no convoy pulls it => drives alone", cnv->get_name() );
+			// the same states uncouple_convoi() gives to a released child
+			cnv->state = cnv->state == COUPLED_LOADING ? LOADING : ROUTING_1;
+		}
+	}
+
+	FOR( vector_tpl<convoi_t*>, const cnv, loaded ) {
+		cnv->parent_convoi = convoihandle_t();
+	}
+}
+
+
+void convoi_t::cut_from_parent_convoi()
+{
+	if(  !parent_convoi.is_bound()  ) {
+		return;
+	}
+	const convoihandle_t p = parent_convoi;
+	const convoihandle_t head = get_most_parent_convoi();
+
+	// The chain reserves the tiles of all its cars for the head (see reserve_route()).
+	// Release the part our cars (and our children's) stand on, as uncouple_convoi() hands over.
+	route_t const *r = p->get_route();
+	if(  r  &&  r->get_count() > 0  &&  anz_vehikel > 0  &&  p->anz_vehikel > 0  ) {
+		const uint32 from = max( find_most_child_convoi()->back()->get_route_index(), 1u ) - 1;
+		const uint32 to   = min( (uint32)max( p->back()->get_route_index(), 1u ) - 1, r->get_count() );
+		for(  uint32 i = from;  i < to;  i++  ) {
+			const koord3d pos = r->at(i);
+			if(  grund_t *gr = welt->lookup( pos )  ) {
+				if(  schiene_t *sch = obj_cast<schiene_t>( gr->get_weg( p->front()->get_waytype(), r->get_corner_set(i) ) )  ) {
+					if(  sch->is_reserved_by( head )  ) {
+						sch->unreserve( head );
+					}
+				}
+			}
+			head->unreserve_pos( pos );
+		}
+	}
+
+	p->coupling_convoi = convoihandle_t();
+	if(  p->anz_vehikel > 0  ) {
+		p->back()->set_last( true );
+	}
+	parent_convoi = convoihandle_t();
+	if(  anz_vehikel > 0  ) {
+		front()->set_leading( true );
+	}
+	head->must_recalc_min_top_speed();
+	head->must_recalc_friction_weight();
 }
 
 
@@ -2118,6 +2269,63 @@ void convoi_t::betrete_depot(depot_t *dep, bool is_loading)
 		disembark_all_forced();
 	}
 
+	// A coupled child must never be filed away alone: the parent would keep pulling our cars
+	// while we are listed in the depot, i.e. the same convoy would exist twice. Callers are
+	// expected to send the head of the chain; if one does not, release us from the parent first.
+	if(  parent_convoi.is_bound()  ) {
+		dbg->error( "convoi_t::betrete_depot()", "%s is pulled by %s => uncoupled before entering the depot", get_name(), parent_convoi->get_name() );
+		parent_convoi->uncouple_convoi();
+	}
+
+	// A depot only takes convoys of its own player and of a waytype it accepts. A chain of
+	// several companies has to be split, otherwise another player's convoy would be filed
+	// away in our depot (and sold, edited or started from there by us). Callers are not
+	// reliable about this: send_to_specific_depot() and arriving by schedule never checked,
+	// and a convoy coming off a ship is teleported here with its whole chain.
+	// Not while loading a game: the saved depot lists are taken as they are.
+	if(  !is_loading  ) {
+		convoihandle_t prev = self;
+		for(  convoihandle_t k = coupling_convoi;  k.is_bound();  prev = k, k = k->get_coupling_convoi()  ) {
+			if(  k->get_owner() == dep->get_owner()  &&  k->anz_vehikel > 0  &&  dep->can_accept_waytype( k->front()->get_desc()->get_waytype() )  ) {
+				continue;
+			}
+			// aboard a carrier, or teleported: its cars stand on no tile
+			const bool on_map = k->anz_vehikel > 0  &&  !k->front()->get_flag( obj_t::not_on_map );
+			const convoihandle_t rest = prev->uncouple_convoi( on_map );
+			dbg->message( "convoi_t::betrete_depot()", "%s cannot enter the depot at %s of %s => uncoupled from %s",
+				rest->get_name(), dep->get_pos().get_str(), get_name(), prev->get_name() );
+			if(  on_map  ) {
+				// It stays on the map and runs on by itself. Another company's depot is no stop
+				// for it, so drop the entry send_to_depot*() put into the whole chain's schedules.
+				for(  convoihandle_t r = rest;  r.is_bound();  r = r->get_coupling_convoi()  ) {
+					schedule_t *s = r->get_schedule();
+					bool removed = false;
+					for(  int i = s ? s->get_count()-1 : -1;  i >= 0  &&  s->get_count() > 1;  i--  ) {
+						if(  s->at(i).pos == dep->get_pos()  ) {
+							s->set_current_stop( i );
+							s->remove();
+							removed = true;
+						}
+					}
+					if(  removed  ) {
+						r->set_schedule( s );
+					}
+				}
+				cbuffer_t buf;
+				buf.printf( translator::translate("%s was uncoupled from %s: it cannot enter that depot."), rest->get_name(), prev->get_name() );
+				welt->get_message()->add_message( buf, rest->get_pos().get_2d(), message_t::warnings, PLAYER_FLAG|rest->get_owner()->get_player_nr(), IMG_EMPTY );
+			}
+			else {
+				// No tile to stay on: it goes to a depot of its own owner. Only a safety net -
+				// teleport_to_nearest_depot() unchains such chains before it calls us.
+				dbg->warning( "convoi_t::betrete_depot()", "off-map %s reached the depot still coupled", rest->get_name() );
+				send_offmap_chain_to_depots( rest );
+			}
+			// rest and everything behind it is gone from our chain now
+			break;
+		}
+	}
+
 	// first remove reservation, if train is still on track
 	unreserve_route();
 	clear_reserved_tiles();
@@ -2345,12 +2553,14 @@ void convoi_t::ziel_erreicht()
 					// another convoy on this tile may well be standing on the other lane.
 					continue;
 				}
-				if(  v->get_convoi()->self != get_convoi_coupling_in_progress()  ) {
+				if(  !get_convoi_coupling_in_progress().is_bound()  ) {
 					// we can skip this checklist if it already knows the coupling target convoy.
 					// if there are many convoys in the same tile, the coupled convoy is the front or end convoy!
 					if(  (   (v->get_direction()&front()->get_direction())==0  &&  v->get_convoi()->is_coupled()  )  ||  (  (v->get_direction()&self->front()->get_direction())!=0  &&  v->get_convoi()->get_coupling_convoi().is_bound()  )  ) {
 						continue;
 					}
+				} else if (v->get_convoi()->self != get_convoi_coupling_in_progress()) {
+					continue;
 				}
 				// there is a suitable waiting convoy for coupling -> this is coupling point.
 				akt_speed = 0;
@@ -4264,6 +4474,14 @@ void convoi_t::open_schedule_window( bool show )
 		}
 		return;
 	}
+	// - coupled to a parent: EDIT_SCHEDULE would make is_coupled() false while the parent still
+	//   pulls us, so depot commands would treat us as an independent convoy
+	if(  is_coupled()  ||  parent_convoi.is_bound()  ) {
+		if (show) {
+			create_win( new news_img("Not allowed!\nThe convoi's schedule can\nnot be changed currently.\nTry again later!"), w_time_delete, magic_none );
+		}
+		return;
+	}
 	if(  (state==EDIT_SCHEDULE  ||  line_update_pending.is_bound())  &&  get_owner()==welt->get_active_player()  ) {
 		if (show) {
 			create_win( new news_img("Not allowed!\nThe convoi's schedule can\nnot be changed currently.\nTry again later!"), w_time_delete, magic_none );
@@ -5201,6 +5419,10 @@ void convoi_t::hat_gehalten(halthandle_t halt, uint32 halt_length_in_vehicle_ste
 	if(  state==SUSPENSION_LOADING  ) {
 		departure_cond = false;
 	}
+	if(  !is_coupled()  &&  is_waiting_for_disembark( halt )  ) {
+		// a convoy aboard still has to get off here and waits for room on its tile
+		departure_cond = false;
+	}
 
 	// loading is finished => maybe drive on
 	if(  is_coupled()  ||  departure_cond  ) {
@@ -5600,6 +5822,12 @@ void convoi_t::self_destruct()
 	line_update_pending = linehandle_t(); // does not bother to add it to a new line anyway ...
 	// convois in depot are not contained in the map array!
 	if(state==INITIAL) {
+		// a depot convoy has no parent on the map, unless a coupling was broken; then the
+		// parent must not keep a link to a convoy that is gone
+		if(  parent_convoi.is_bound()  ) {
+			dbg->error( "convoi_t::self_destruct()", "%s is in a depot, but pulled by %s => uncoupled", get_name(), parent_convoi->get_name() );
+			cut_from_parent_convoi();
+		}
 		destroy();
 		return;
 	}
@@ -5650,7 +5878,17 @@ void convoi_t::destroy()
 	if(  state == INITIAL  ) {
 		// in depot => not on map
 		for(  uint8 i = anz_vehikel;  i-- != 0;  ) {
-			fahr[i]->set_flag( obj_t::not_on_map );
+			// ... unless a broken coupling put the car on a tile anyway (a parent on the map
+			// pulled this depot convoy). Deleting such a car without leave_tile() leaves a
+			// dangling object on the tile => crash (pure virtual call) on the next step/redraw.
+			grund_t *gr = welt->lookup( fahr[i]->get_pos() );
+			if(  gr  &&  gr->obj_ist_da( fahr[i] )  ) {
+				dbg->error( "convoi_t::destroy()", "car %i of %s is in a depot, but on the tile %s => removed from there", i, get_name(), fahr[i]->get_pos().get_str() );
+				fahr[i]->clear_flag( obj_t::not_on_map );
+			}
+			else {
+				fahr[i]->set_flag( obj_t::not_on_map );
+			}
 		}
 	}
 	state = SELF_DESTRUCT;
@@ -6504,8 +6742,12 @@ const char* convoi_t::send_to_depot(bool local)
 	if(  is_shipped()  ) {
 		return "Not allowed while the convoy is aboard another convoy.";
 	}
+	// a coupled child cannot go to a depot alone (its parent pulls it)
+	if(  is_coupled()  ||  parent_convoi.is_bound()  ) {
+		return "Convoi is not front convoy.\n";
+	}
 	vehicle_t *v = front();
-	// if we are already at depot (e.g. start but wait for clearance), we go back there. 
+	// if we are already at depot (e.g. start but wait for clearance), we go back there.
 	if(  grund_t *gr=welt->lookup(front()->get_pos())  ) {
 		depot_t *dep=gr->get_depot();
 		// check the owner
@@ -6596,7 +6838,8 @@ const char* convoi_t::send_to_depot_immediately(bool local)
 		return txt;
 	}
 	// If this convoy is not leading, false.
-	if(  is_coupled()  ) {
+	// (parent_convoi too: a child in EDIT_SCHEDULE etc. is not is_coupled(), but still pulled)
+	if(  is_coupled()  ||  parent_convoi.is_bound()  ) {
 		dbg->message("convoi_t::send_to_depot_immediately()","%s is not front convoy.", get_name());
 		txt = "%s is not front convoy.\n", get_name();
 		return txt;
@@ -6705,6 +6948,13 @@ const char* convoi_t::send_to_specific_depot(koord3d depot_pos, bool immediate, 
 {
 	if(  is_shipped()  ) {
 		return "Not allowed while the convoy is aboard another convoy.";
+	}
+	// A coupled child cannot go to a depot alone. Checking is_coupled() alone is not enough:
+	// a child that was put into EDIT_SCHEDULE while coupled was teleported into the depot by
+	// itself, while its parent kept pulling its cars on the map.
+	// (depot_picker sends 'Y' to every convoy of a line, children included.)
+	if(  state != INITIAL  &&  (is_coupled()  ||  parent_convoi.is_bound())  ) {
+		return "Convoi is not front convoy.\n";
 	}
 	// Validate the target depot
 	grund_t *gr = welt->lookup(depot_pos);
@@ -8447,78 +8697,51 @@ bool convoi_t::board_carrier(convoihandle_t c, halthandle_t dest)
 }
 
 
-bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
+convoi_t::disembark_result_t convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 {
-	if(  !c.is_bound()  ||  !halt.is_bound()  ||  c->get_vehicle_count() == 0  ) {
-		return false;
+	if(  !c.is_bound()  ||  !halt.is_bound()  ||  c->get_vehicle_count() == 0  ||  c->get_schedule() == NULL  ||  c->get_schedule()->empty()  ) {
+		return DISEMBARK_INVALID;
 	}
 	const waytype_t wt = c->front()->get_waytype();
+
+	// The convoy lands on the tile its schedule names and nowhere else, whatever else stands
+	// there. get_stoppable_halt() checks the way of our waytype and the owner's access.
+	grund_t *target = welt->lookup( c->get_schedule()->get_current_entry().pos );
+	if(  target == NULL  ||  haltestelle_t::get_stoppable_halt( target->get_pos(), c->get_owner(), wt ) != halt  ) {
+		return DISEMBARK_INVALID;
+	}
 
 	// The whole chain has to be placed at once: objlist_t is a uint8-indexed list capped at
 	// 254 entries and obj_add() simply returns false when it is full - a caller that ignores
 	// that (as convoi_t::start() does) leaves a vehicle belonging to no tile at all. A partial
 	// placement cannot be undone, so count first and place only if everything fits.
+	// A chain longer than MAX_DISEMBARK_VEHICLES could never fit, not even on an empty tile
+	// (the way, the halt building and signals take a few slots), so cut it while it is still
+	// aboard: the part behind the cut stays aboard as a convoy of its own and gets off once
+	// there is room again.
 	uint32 vehicle_count = 0;
 	convoihandle_t k = c;
 	while(  k.is_bound()  ) {
+		if(  vehicle_count + k->get_vehicle_count() > MAX_DISEMBARK_VEHICLES  ) {
+			if(  k == c  ) {
+				// a single convoy too long for any tile: it can never be put ashore
+				return DISEMBARK_INVALID;
+			}
+			convoihandle_t rest = k->get_parent_convoi()->uncouple_convoi( false );
+			for(  convoihandle_t r = rest;  r.is_bound();  r = r->get_coupling_convoi()  ) {
+				r->state = SHIPPED;
+			}
+			rest->carrier_convoi = self;
+			rest->shipping_wait_since = 0;
+			shipped_convois.append( rest );
+			break;
+		}
 		vehicle_count += k->get_vehicle_count();
 		k = k->get_coupling_convoi();
 	}
-
-	// The convoy's own current schedule entry is the tile it actually wants to stand on, so
-	// try that first; landing anywhere else in the halt only costs it a short shuffle, but
-	// landing exactly right means it can carry on without moving at all.
-	koord3d preferred = koord3d::invalid;
-	if(  c->get_schedule() != NULL  &&  !c->get_schedule()->empty()  ) {
-		preferred = c->get_schedule()->get_current_entry().pos;
-	}
-
-	grund_t *target = NULL;
-	for(  uint8 pass = 0;  pass < 2  &&  target == NULL;  pass++  ) {
-	FOR(slist_tpl<haltestelle_t::tile_t>, const &t, halt->get_tiles()) {
-		grund_t *gr = t.grund;
-		if(  gr == NULL  ) {
-			continue;
-		}
-		if(  pass == 0  &&  gr->get_pos() != preferred  ) {
-			// first pass: only the convoy's own scheduled tile
-			continue;
-		}
-		weg_t *w = gr->get_weg( wt );
-		if(  w == NULL  ) {
-			// Ships travel on open water, which carries no way object at all - so for water
-			// convoys a plain water tile of the halt is a perfectly good place to be set down.
-			// Every other waytype needs a real way here.
-			if(  !(wt == water_wt  &&  gr->is_water())  ) {
-				continue;
-			}
-		}
-		// the halt must really be usable by this convoy's owner - the carrier's owner is
-		// irrelevant, and access may have been revoked while the convoy was aboard
-		if(  !haltestelle_t::get_stoppable_halt( gr->get_pos(), c->get_owner(), wt ).is_bound()  ) {
-			continue;
-		}
-		if(  (uint32)gr->get_top() + vehicle_count > 254u  ) {
-			// tile object list would overflow
-			continue;
-		}
-		if(  schiene_t *sch = (w ? obj_cast<schiene_t>(w) : NULL)  ) {
-			// Rail-like ways are block reserved and schiene_t::reserve() grants its second
-			// slot only on a four-way tile with non-crossing directions - which a platform
-			// never is. So unlike road and water, only one convoy fits on a rail tile.
-			if(  sch->is_reserved()  ) {
-				continue;
-			}
-		}
-		target = gr;
-		break;
-	}
-	}
-
-	if(  target == NULL  ) {
-		// Nothing free right now. Keeping the convoy aboard and retrying at a later stop is
-		// far better than materialising it on top of another train.
-		return false;
+	if(  (uint32)target->get_top() + vehicle_count > 254u  ) {
+		// not enough room on the tile right now: stay aboard, the carrier waits for it
+		return DISEMBARK_WAIT;
 	}
 
 	// Put every vehicle of the chain on the target tile, off-map for now. start() adds the
@@ -8655,7 +8878,7 @@ bool convoi_t::disembark_convoy(convoihandle_t c, halthandle_t halt)
 
 	dbg->message("convoi_t::disembark_convoy()","%s put %s ashore at %s (%s)",
 		get_name(), c->get_name(), halt->get_name(), target->get_pos().get_str());
-	return true;
+	return DISEMBARK_DONE;
 }
 
 
@@ -8683,12 +8906,17 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 		const halthandle_t dest = c->get_shipping_dest_halt();
 
 		// ---- arrived: this is the stop it wanted, and we may put things ashore here ----
+		bool no_landing_tile = false;
 		if(  can_unload_here  &&  dest.is_bound()  &&  dest == halt  ) {
-			// disembark_convoy() removes it from shipped_convois on success; on failure (no
-			// free tile of its waytype right now) it simply stays aboard and we try again at
-			// the next stop
-			disembark_convoy( c, halt );
-			continue;
+			// disembark_convoy() removes it from shipped_convois on success
+			const disembark_result_t result = disembark_convoy( c, halt );
+			if(  result != DISEMBARK_INVALID  ) {
+				// done, or waiting for room on its tile - is_waiting_for_disembark() then
+				// keeps us here until it is off
+				continue;
+			}
+			// its scheduled tile cannot take it: put it in a depot below
+			no_landing_tile = true;
 		}
 
 		// ---- still on its way? ----
@@ -8696,7 +8924,7 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 		// notices everything that can go wrong mid-voyage: an UNLOAD_ALL inserted here or
 		// anywhere before the destination, the carrier's schedule (or its line's) edited so it
 		// no longer calls there, or the stop itself rebuilt or demolished.
-		if(  !unload_all_here  &&  dest.is_bound()  &&  can_deliver_shipped_to( dest )  ) {
+		if(  !no_landing_tile  &&  !unload_all_here  &&  dest.is_bound()  &&  can_deliver_shipped_to( dest )  ) {
 			continue;
 		}
 
@@ -8712,17 +8940,28 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 			dbg->warning("convoi_t::handle_shipping_at_halt()",
 				"%s can no longer deliver %s to its stop - sent it to a depot", get_name(), c->get_name());
 			cbuffer_t buf;
-			buf.printf( translator::translate("%s was sent to a depot: %s can no longer reach its transfer stop."), c->get_name(), get_name() );
+			if(  no_landing_tile  ) {
+				buf.printf( translator::translate("%s was sent to a depot: its scheduled tile at %s cannot be used."), c->get_name(), halt->get_name() );
+			}
+			else {
+				buf.printf( translator::translate("%s was sent to a depot: %s can no longer reach its transfer stop."), c->get_name(), get_name() );
+			}
 			welt->get_message()->add_message( buf, halt->get_basis_pos(), message_t::warnings, PLAYER_FLAG|c->get_owner()->get_player_nr(), IMG_EMPTY );
 			continue;
 		}
 
-		// No depot of its waytype exists at all. Setting it down here is a poor outcome, but
-		// it beats destroying it - so try that before giving up.
-		if(  can_unload_here  &&  disembark_convoy( c, halt )  ) {
+		// No depot of its waytype exists at all. Setting it down is a poor outcome, but it beats
+		// destroying it - so try that before giving up. Still only on its scheduled tile, which
+		// works when that tile belongs to this halt.
+		const disembark_result_t result = can_unload_here ? disembark_convoy( c, halt ) : DISEMBARK_INVALID;
+		if(  result == DISEMBARK_DONE  ) {
 			cbuffer_t buf;
 			buf.printf( translator::translate("%s was put ashore at %s: it can no longer reach its transfer stop and there is no depot for it."), c->get_name(), halt->get_name() );
 			welt->get_message()->add_message( buf, halt->get_basis_pos(), message_t::warnings, PLAYER_FLAG|c->get_owner()->get_player_nr(), IMG_EMPTY );
+			continue;
+		}
+		if(  result == DISEMBARK_WAIT  ) {
+			// its tile has no room right now: keep it aboard and try again
 			continue;
 		}
 
@@ -8836,6 +9075,25 @@ void convoi_t::handle_shipping_at_halt(halthandle_t halt)
 }
 
 
+bool convoi_t::is_waiting_for_disembark(halthandle_t halt) const
+{
+	// handle_shipping_at_halt() puts ashore or sends to a depot everything that has to leave
+	// at this stop, so whatever is still aboard with this stop as destination is waiting for
+	// room on its tile. Carriers can be anywhere in the chain.
+	for(  convoihandle_t k = self;  k.is_bound();  k = k->get_coupling_convoi()  ) {
+		if(  k->get_schedule() == NULL  ||  k->get_schedule()->get_current_entry().is_no_unload()  ) {
+			continue;
+		}
+		FOR(vector_tpl<convoihandle_t>, const c, k->shipped_convois) {
+			if(  c.is_bound()  &&  c->get_shipping_dest_halt() == halt  ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+
 bool convoi_t::is_waiting_for_carrier() const
 {
 	if(  schedule == NULL  ||  is_shipped()  ||  is_coupled()  ) {
@@ -8897,14 +9155,28 @@ bool convoi_t::teleport_to_nearest_depot(bool announce)
 	}
 	const waytype_t wt = front()->get_desc()->get_waytype();
 
-	// the whole chain has to belong to the same player and waytype, as betrete_depot() assumes
-	convoihandle_t c = get_coupling_convoi();
-	while(  c.is_bound()  ) {
-		if(  c->get_owner() != get_owner()  ||  c->front()->get_waytype() != front()->get_waytype()  ) {
-			return false;
+	// Split the chain where the owner or the waytype changes: every part goes to a depot of
+	// its own owner, instead of the whole chain being refused (and then destroyed).
+	// Done before a depot is chosen for us, and even if none is found below: the others must
+	// not share our fate. The chain is off the map, so no reservation is handed over.
+	for(  convoihandle_t k = self;  k.is_bound()  &&  k->get_coupling_convoi().is_bound();  k = k->get_coupling_convoi()  ) {
+		convoihandle_t next = k->get_coupling_convoi();
+		if(  next->anz_vehikel == 0  ||  next->get_owner() != k->get_owner()  ||  next->front()->get_waytype() != k->front()->get_waytype()  ) {
+			// uncouple_convoi() resets k->coupling_convoi and rest->parent_convoi
+			convoihandle_t rest = k->uncouple_convoi( false );
+			dbg->message( "convoi_t::teleport_to_nearest_depot()", "%s uncoupled from %s: it goes to a depot of its own owner",
+				rest->get_name(), k->get_name() );
+			// its own owner's nearest depot; this comes back here for it, so it is split again
+			// where needed. Must not be left alone when that fails: it would be on no tile and
+			// in no depot - send_offmap_chain_to_depots() handles that case.
+			if(  !rest->teleport_to_nearest_depot( announce )  ) {
+				send_offmap_chain_to_depots( rest );
+			}
+			break;
 		}
-		c = c->get_coupling_convoi();
 	}
+
+	convoihandle_t c;
 
 	depot_t *best = NULL;
 	uint32 best_dist = 0xFFFFFFFFu;
@@ -8962,15 +9234,27 @@ void convoi_t::disembark_all_forced()
 		c->carrier_convoi      = convoihandle_t();
 		c->shipping_wait_since = 0;
 
+		send_offmap_chain_to_depots( c );
+	}
+}
+
+
+void convoi_t::send_offmap_chain_to_depots(convoihandle_t c)
+{
+	while(  c.is_bound()  ) {
+		// teleport_to_nearest_depot() unchains (and sends here again) whatever its depot cannot take
 		if(  c->teleport_to_nearest_depot()  ) {
-			continue;
+			return;
 		}
-		// A convoy that is on no tile and in no depot cannot exist, so this is the one place
-		// where destroying someone else's convoy is the only remaining option.
+		// Its owner has no depot for it. A convoy that is on no tile and in no depot cannot
+		// exist, so this is the one place where destroying a convoy is the only option left -
+		// but only this one: its children may belong to someone who does have a depot.
+		const convoihandle_t next = c->uncouple_convoi( false );
 		cbuffer_t buf;
-		buf.printf( translator::translate("%s was lost with its carrier: no depot could be found for it."), c->get_name() );
+		buf.printf( translator::translate("%s was lost: no depot could be found for it."), c->get_name() );
 		welt->get_message()->add_message( buf, koord::invalid, message_t::warnings, PLAYER_FLAG|c->get_owner()->get_player_nr(), IMG_EMPTY );
 		c->destroy();
+		c = next;
 	}
 }
 

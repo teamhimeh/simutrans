@@ -84,7 +84,11 @@ public:
 		BY_SIZE,
 		BY_COST,
 		BY_GOODS_NUMBER,
-		BY_REMOVAL
+		BY_REMOVAL,
+		BY_SPEED,
+		BY_MAINTENANCE,
+		BY_LEVEL,
+		BY_TYPE
 	};
 
 	gui_sorting_item_t(uint8 r);
@@ -104,7 +108,7 @@ class building_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
 	const char *name;
 	scr_size cell_size;
 public:
-	building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_);
+	building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_, int layout = 0);
 	const char *get_text() const OVERRIDE { return name; }
 	scr_size get_min_size() const OVERRIDE;
 	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
@@ -148,6 +152,8 @@ protected:
 	/// cont_options: Settings about the active object (eg. rotation)
 	/// cont_scrolly: the scrollable container (image + desc)
 	gui_aligned_container_t cont_filter, cont_options, cont_timeline, cont_scrolly;
+	/// table holding the climate filter (label + cb_climates)
+	gui_aligned_container_t *tbl_climate;
 
 
 
