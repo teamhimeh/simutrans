@@ -3141,8 +3141,8 @@ bool tool_build_way_t::is_selected() const
 
 /**
  * Timeline check for way, bridge and tunnel building tools.
- * The public player may build anything. Others cannot build obsolete objects, and
- * objects which are not yet available only when settings_t::prohibit_too_new is set.
+ * The public player may build anything, and obsolete objects can always be built.
+ * Objects which are not yet available are refused only when settings_t::prohibit_too_new is set.
  */
 static bool is_buildable_by_timeline(const obj_desc_timelined_t *desc, const player_t *player)
 {
@@ -3150,11 +3150,7 @@ static bool is_buildable_by_timeline(const obj_desc_timelined_t *desc, const pla
 	if(  player==NULL  ||  player==welt->get_public_player()  ) {
 		return true;
 	}
-	const uint16 month_now = welt->get_timeline_year_month();
-	if(  desc->is_retired(month_now)  ) {
-		return false;
-	}
-	return !desc->is_future(month_now)  ||  !welt->get_settings().get_prohibit_too_new();
+	return !welt->get_settings().get_prohibit_too_new()  ||  !desc->is_future( welt->get_timeline_year_month() );
 }
 
 bool tool_build_way_t::init( player_t *player, bool called_from_move )

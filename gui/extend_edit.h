@@ -179,7 +179,7 @@ protected:
 	/**
 	 * settings_t::prohibit_too_new: objects which are not yet available cannot be selected.
 	 * Then only "Show obsolete" is shown and the list always follows the current date
-	 * (if the timeline is used at all).
+	 * (if the timeline is used at all). Not applied for the public player.
 	 */
 	void apply_prohibit_too_new();
 

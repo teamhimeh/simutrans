@@ -307,7 +307,9 @@ extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 
 void extend_edit_gui_t::apply_prohibit_too_new()
 {
-	const bool prohibit = welt->get_settings().get_prohibit_too_new();
+	// the public player can always place objects ignoring the timeline
+	const bool is_public = player  &&  player->get_player_nr() == PUBLIC_PLAYER_NR;
+	const bool prohibit = welt->get_settings().get_prohibit_too_new()  &&  !is_public;
 	bt_timeline.set_visible( !prohibit );
 	bt_timeline_custom.set_visible( !prohibit );
 	lb_timeline_month->set_visible( !prohibit );
