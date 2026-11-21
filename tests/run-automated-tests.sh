@@ -84,6 +84,15 @@ EOF
 	local scenario_log="$WORKDIR/script-scenario.log"
 	rm -f "$scenario_log"
 
+	# test_save_game needs a read-only savegame to be refused (see test_save_game_rejects_read_only_target)
+	local ro_file="$WORKDIR/save/script_save_readonly.sve"
+	if [ "$test_file_base" = "test_save_game" ]; then
+		mkdir -p "$WORKDIR/save"
+		rm -f "$ro_file" "$WORKDIR/save/script_save_readonly.sv_"
+		printf 'read-only fixture' > "$ro_file"
+		chmod 444 "$ro_file"
+	fi
+
 	# Start sim in background and redirect output
 	$SIM_BINARY -set_workdir "$WORKDIR" -objects pak -scenario automated-tests -debug 2 -lang en -fps 100 > "$temp_log" 2>&1 &
 	local pid=$!
@@ -137,6 +146,16 @@ EOF
 	if [ $elapsed -ge $timeout ]; then
 		kill_sim $pid
 		result=1
+	fi
+
+	# A refused save must leave the read-only file untouched and no temporary file behind
+	if [ "$test_file_base" = "test_save_game" ]; then
+		if [ $result -eq 0 ] && { [ "$(cat "$ro_file")" != "read-only fixture" ] || [ -e "$WORKDIR/save/script_save_readonly.sv_" ]; }; then
+			echo "  read-only savegame was modified or a temporary file was left behind"
+			result=1
+		fi
+		chmod 644 "$ro_file" 2>/dev/null
+		rm -f "$ro_file" "$WORKDIR/save/script_save_readonly.sv_"
 	fi
 
 	# If test failed, show the last 30 lines

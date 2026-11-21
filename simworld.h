@@ -1876,8 +1876,9 @@ public:
 	/**
 	 * Saves the map to a file.
 	 * @param filename name of the file to write.
+	 * @return true if the file was written completely
 	 */
-	void save(const char *filename, bool autosave, const char *version, bool silent);
+	bool save(const char *filename, bool autosave, const char *version, bool silent);
 
 	/**
 	 * Loads a map from a file.
