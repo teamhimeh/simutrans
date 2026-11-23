@@ -17,6 +17,7 @@
 #include "../obj/zeiger.h"
 #include "../display/simgraph.h"
 #include "../simmenu.h"
+#include "../simtool.h"
 #include "../player/simplay.h"
 #include "../utils/simstring.h"
 #include "../sys/simsys.h"
@@ -58,6 +59,8 @@ enum {
 	IDBTN_SHOW_CONVOY_LOADINGLEVEL,
 	IDBTN_SHOW_WAY_OFFSET_LABEL,
 	IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES,
+	IDBTN_PROHIBIT_ONE_TILE_WAY,
+	IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL,
 	COLORS_MAX_BUTTONS, 
 };
 
@@ -532,6 +535,16 @@ traffic_settings_t::traffic_settings_t()
 	buttons[ IDBTN_SHOW_WAY_OFFSET_LABEL ].init( button_t::square_state, "show way offset label" );
 	buttons[ IDBTN_SHOW_WAY_OFFSET_LABEL ].pressed = env_t::show_way_offset_label;
 	add_component( buttons + IDBTN_SHOW_WAY_OFFSET_LABEL, 2 );
+
+	// way building tool defaults (user settings)
+	buttons[ IDBTN_PROHIBIT_ONE_TILE_WAY ].init( button_t::square_state, "prohibit one tile way" );
+	buttons[ IDBTN_PROHIBIT_ONE_TILE_WAY ].set_tooltip( translator::translate("Do not build a way on a single tile, even when Ctrl is pressed.") );
+	buttons[ IDBTN_PROHIBIT_ONE_TILE_WAY ].pressed = env_t::prohibit_one_tile_way;
+	add_component( buttons + IDBTN_PROHIBIT_ONE_TILE_WAY, 2 );
+	buttons[ IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL ].init( button_t::square_state, "always allow closed diagonal" );
+	buttons[ IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL ].set_tooltip( translator::translate("Way and tunnel building tools allow closed diagonals by default.") );
+	buttons[ IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL ].pressed = env_t::always_allow_closed_diagonal;
+	add_component( buttons + IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL, 2 );
 }
 
 bool traffic_settings_t::action_triggered( gui_action_creator_t *comp, value_t v )
@@ -968,6 +981,14 @@ bool color_gui_t::action_triggered( gui_action_creator_t *comp, value_t p)
 	case IDBTN_SHOW_ONLY_OWN_VEHICLE_STATES:
 		env_t::show_only_own_vehicle_states ^= 1;
 		break;
+	case IDBTN_PROHIBIT_ONE_TILE_WAY:
+		env_t::prohibit_one_tile_way ^= 1;
+		tool_build_way_t::update_prohibit_one_tile_way();
+		break;
+	case IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL:
+		env_t::always_allow_closed_diagonal ^= 1;
+		tool_build_way_t::update_allow_closed_diagonal();
+		break;
 	default:
 		assert( 0 );
 	}
@@ -1011,6 +1032,8 @@ void color_gui_t::draw(scr_coord pos, scr_size size)
 	buttons[IDBTN_RIBI_ARROW].enable(skinverwaltung_t::ribi_arrow!=NULL);
 	buttons[IDBTN_ONEWAY_RIBI_ONLY].pressed = env_t::show_oneway_ribi_only;
 	buttons[IDBTN_ONEWAY_RIBI_ONLY].enable(skinverwaltung_t::ribi_arrow!=NULL);
+	buttons[IDBTN_PROHIBIT_ONE_TILE_WAY].pressed = env_t::prohibit_one_tile_way;
+	buttons[IDBTN_ALWAYS_ALLOW_CLOSED_DIAGONAL].pressed = env_t::always_allow_closed_diagonal;
 
 	// All components are updated, now draw them...
 	gui_frame_t::draw(pos, size);

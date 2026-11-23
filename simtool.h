@@ -335,6 +335,9 @@ protected:
 	sint8 vehicle_offset;
 	// true: closed diagonals (two ways on disjoint diagonal bends) may be built
 	bool allow_closed_diagonal;
+	// true: a one tile way is not built even with ctrl pressed
+	// copy of env_t::prohibit_one_tile_way; transferred via default_param so that all clients build the same
+	bool prohibit_one_tile_way;
 
 	virtual way_desc_t const* get_desc(uint16 timeline_year_month) const;
 	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
@@ -346,7 +349,8 @@ public:
 		street_flag = 0;
 		height_offset = 0;
 		vehicle_offset = 0;
-		allow_closed_diagonal = false;
+		allow_closed_diagonal = env_t::always_allow_closed_diagonal;
+		prohibit_one_tile_way = env_t::prohibit_one_tile_way;
 	 }
 	image_id get_icon(player_t*) const OVERRIDE;
 	char const* get_tooltip(player_t const*) const OVERRIDE;
@@ -375,6 +379,12 @@ public:
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
 	bool get_allow_closed_diagonal() const { return allow_closed_diagonal; }
+	void set_prohibit_one_tile_way(bool yesno) { prohibit_one_tile_way = yesno; }
+	bool get_prohibit_one_tile_way() const { return prohibit_one_tile_way; }
+	/// apply env_t::prohibit_one_tile_way to all way building tools
+	static void update_prohibit_one_tile_way();
+	/// apply env_t::always_allow_closed_diagonal as the new default to all way and tunnel building tools
+	static void update_allow_closed_diagonal();
 	static void set_mode_str(char* str, overtaking_mode_t overtaking_mode);
 	void set_look_toolbar() { look_toolbar = true; }
 	static uint8 get_flag_color(uint8 flag);
@@ -447,7 +457,7 @@ public:
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
 		vehicle_offset = 0;
-		allow_closed_diagonal = false;
+		allow_closed_diagonal = env_t::always_allow_closed_diagonal;
 	}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* check_pos(player_t*, koord3d) OVERRIDE;

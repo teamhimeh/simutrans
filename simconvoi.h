@@ -243,7 +243,7 @@ private:
 	/*
 	 * a list of all catg_index, which can be transported by this convoy.
 	 */
-	minivec_tpl<uint8> goods_catg_index;
+	vector_tpl<uint16> goods_catg_index;
 
 	/**
 	* Convoi owner
@@ -1019,7 +1019,7 @@ public:
 	 * from_index, which must be the given halt's entry, or from the current stop if
 	 * negative; time based routing and wagonload single destination applied).
 	 */
-	void calc_loading_destination_halts(halthandle_t halt, inthashtable_tpl<uint8, vector_tpl<halthandle_t>>& destination_halts, sint16 from_index = -1) const;
+	void calc_loading_destination_halts(halthandle_t halt, inthashtable_tpl<uint16, vector_tpl<halthandle_t>>& destination_halts, sint16 from_index = -1) const;
 
 	/**
 	 * moving the vehicles of a convoi and acceleration/deceleration
@@ -1092,7 +1092,7 @@ public:
 	*/
 	vehicle_t * remove_vehikel_bei(unsigned short i);
 
-	const minivec_tpl<uint8> &get_goods_catg_index() const { return goods_catg_index; }
+	const vector_tpl<uint16> &get_goods_catg_index() const { return goods_catg_index; }
 
 	// recalculates the good transported by this convoy and (in case of changes) will start schedule recalculation
 	void recalc_catg_index();

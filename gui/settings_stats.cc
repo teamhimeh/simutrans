@@ -402,6 +402,7 @@ void settings_economy_stats_t::init(settings_t const* const sets)
 	SEPERATOR
 
 	INIT_BOOL( "allow_buying_obsolete_vehicles", sets->get_allow_buying_obsolete_vehicles() );
+	INIT_BOOL( "prohibit_too_new", sets->get_prohibit_too_new() );
 	INIT_NUM( "used_vehicle_reduction", sets->get_used_vehicle_reduction(), 1, 1000, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "max_rail_convoi_length", sets->get_max_rail_convoi_length(), 1, 254, gui_numberinput_t::AUTOLINEAR, false );
 	INIT_NUM( "max_road_convoi_length", sets->get_max_road_convoi_length(), 1, 254, gui_numberinput_t::AUTOLINEAR, false );
@@ -519,6 +520,7 @@ void settings_economy_stats_t::read(settings_t* const sets)
 	READ_NUM_VALUE( sets->beginner_price_factor );
 
 	READ_BOOL_VALUE( sets->allow_buying_obsolete_vehicles );
+	READ_BOOL_VALUE( sets->prohibit_too_new );
 	READ_NUM_VALUE( sets->used_vehicle_reduction );
 	READ_NUM_VALUE( sets->max_rail_convoi_length );
 	READ_NUM_VALUE( sets->max_road_convoi_length );

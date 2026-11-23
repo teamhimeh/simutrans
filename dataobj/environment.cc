@@ -38,6 +38,8 @@ plainstring env_t::default_theme;
 const char *env_t::user_dir = 0;
 const char *env_t::savegame_version_str = SAVEGAME_VER_NR;
 bool env_t::straight_way_without_control = false;
+bool env_t::prohibit_one_tile_way = true;
+bool env_t::always_allow_closed_diagonal = false;
 bool env_t::networkmode = false;
 bool env_t::restore_UI = false;
 extern uint16 network_server_port;
@@ -360,6 +362,9 @@ void env_t::init()
 	sprintf(otrp_statistics_log, "");
 	show_oneway_ribi_only = false;
 	put_new_toolbar_below_others = false;
+
+	prohibit_one_tile_way = true;
+	always_allow_closed_diagonal = false;
 }
 
 
@@ -655,6 +660,10 @@ void env_t::rdwr(loadsave_t *file)
 	}
 	if(  file->get_OTRP_version()>=54  ) {
 		file->rdwr_byte((uint8&)clip_below);
+	}
+	if(  file->get_OTRP_version()>=64  ) {
+		file->rdwr_bool(prohibit_one_tile_way);
+		file->rdwr_bool(always_allow_closed_diagonal);
 	}
 
 
