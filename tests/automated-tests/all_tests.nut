@@ -25,6 +25,7 @@ include("tests/test_player")
 include("tests/test_powerline")
 include("tests/test_reservation")
 include("tests/test_scenario")
+include("tests/test_save_game")
 include("tests/test_sign")
 include("tests/test_start_signal")
 include("tests/test_stop_before_check_signal")
@@ -57,9 +58,12 @@ include("tests/test_pillar")
 include("tests/test_crossing_reservation")
 include("tests/test_diagonal_two_waytypes")
 include("tests/test_diagonal_two_waytypes_same_desc")
+include("tests/test_switch_image_override")
 include("tests/test_diagonal_elevated")
 
 all_tests <- [
+	test_switch_image_override_scripted,
+	test_switch_image_auto_rail,
 	test_building_build_house_invalid_param,
 	test_building_build_house_random,
 	test_building_build_house_valid_desc,
@@ -181,6 +185,15 @@ all_tests <- [
 	test_scenario_rules_allow_forbid_way_tool_cube,
 	test_scenario_rules_allow_forbid_tool_stacked_rect,
 	test_scenario_rules_allow_forbid_tool_stacked_cube,
+	test_save_game_valid_name,
+	test_save_game_multibyte_name,
+	test_save_game_rejects_directory_traversal,
+	test_save_game_rejects_forbidden_characters,
+	test_save_game_rejects_reserved_names,
+	test_save_game_rejects_control_and_invisible_characters,
+	test_save_game_rejects_empty_and_long_names,
+	test_save_game_rejects_non_string,
+	test_save_game_rejects_read_only_target,
 	test_sign_build_oneway,
 	test_sign_remove_trafficlight,
 	test_sign_build_private_way,

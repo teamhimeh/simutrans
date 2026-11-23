@@ -1278,7 +1278,7 @@ static void recode_img_src_target_15(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 							// expand transparent player color
 							PIXVAL rgb555 = rgbmap_day_night[(*src-0x8020)/31+0x8000];
 							PIXVAL alpha = (*src-0x8020) % 31;
-							PIXVAL pix = ((rgb555 >> 6) & 0x0380) | ((rgb555 >>  4) & 0x0038) | ((rgb555 >> 2) & 0x07);
+							PIXVAL pix = ((rgb555 >> 5) & 0x0380) | ((rgb555 >> 3) & 0x0078) | ((rgb555 >> 2) & 0x07);
 							*target++ = 0x8020 + 31*31 + pix*31 + alpha;
 							src ++;
 						}
@@ -1315,7 +1315,7 @@ static void recode_img_src_target_16(scr_coord_val h, PIXVAL *src, PIXVAL *targe
 							// expand transparent player color
 							PIXVAL rgb565 = rgbmap_day_night[(*src-0x8020)/31+0x8000];
 							PIXVAL alpha = (*src-0x8020) % 31;
-							PIXVAL pix = ((rgb565 >> 6) & 0x0380) | ((rgb565 >>  3) & 0x0078) | ((rgb565 >> 2) & 0x07);
+							PIXVAL pix = ((rgb565 >> 6) & 0x0380) | ((rgb565 >> 4) & 0x0078) | ((rgb565 >> 2) & 0x07);
 							*target++ = 0x8020 + 31*31 + pix*31 + alpha;
 							src ++;
 						}

@@ -372,7 +372,7 @@ convoihandle_t depot_t::copy_convoi(convoihandle_t old_cnv, bool local_execution
 {
 	if(  old_cnv.is_bound()  &&  !convoihandle_t::is_exhausted()  &&
 		old_cnv->get_vehicle_count() > 0  ) {
-		if(  !can_accept_waytype(old_cnv->front()->get_waytype())  ) {
+		if(  !can_accept_waytype(old_cnv->front()->get_desc()->get_waytype())  ) {
 			// invalid waytype!
 			return convoihandle_t();
 		}
