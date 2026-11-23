@@ -12,6 +12,7 @@
 #include "../simconst.h"
 
 #include "ribi.h"
+#include "../bauer/goods_manager.h"
 
 class player_t;
 class loadsave_t;
@@ -339,6 +340,9 @@ private:
 
 	// if true, you can buy obsolete stuff
 	bool allow_buying_obsolete_vehicles;
+
+	// map editors (extend_edit_t) cannot place objects (buildings, factories, ways, ...) which are not yet available
+	bool prohibit_too_new;
 	// vehicle value is decrease by this factor/1000 when a vehicle leaved the depot
 	sint16 used_vehicle_reduction;
 
@@ -419,7 +423,7 @@ private:
 
 	// The flag whether the time based goods routing is enabled for the goods.
 	// The array index is the goods category index.
-	bool is_time_based_routing_enabled[256];
+	bool is_time_based_routing_enabled[goods_manager_t::MAX_GOODS_COUNT+1];
 	
 	// When the amount of waiting goods/passengers exceeds this value,
 	// goods are loaded with "nearest first" policy to reduce the calculation load.
@@ -779,6 +783,9 @@ public:
 	// disallow using obsolete vehicles in depot
 	bool get_allow_buying_obsolete_vehicles() const { return allow_buying_obsolete_vehicles; }
 
+	bool get_prohibit_too_new() const { return prohibit_too_new; }
+	void set_prohibit_too_new(bool b) { prohibit_too_new = b; }
+
 	// forest stuff
 	uint8 get_forest_base_size() const { return forest_base_size; }
 	uint8 get_forest_map_size_divisor() const { return forest_map_size_divisor; }
@@ -876,7 +883,7 @@ public:
 
 	bool get_first_come_first_serve() const { return first_come_first_serve; }
 	void set_first_come_first_serve(bool b) { first_come_first_serve = b; }
-	bool get_first_come_first_serve(uint8 goods_catg_index) const
+	bool get_first_come_first_serve(uint16 goods_catg_index) const
 		{ return first_come_first_serve || get_time_based_routing_enabled(goods_catg_index); }
 	uint32 get_waiting_limit_for_first_come_first_serve() const 
 		{ return waiting_limit_for_first_come_first_serve; }
@@ -890,8 +897,8 @@ public:
 	uint16 get_spacing_shift_divisor() const { return spacing_shift_divisor; }
 
 	uint32 get_base_waiting_ticks(waytype_t waytype) const;
-	bool get_time_based_routing_enabled(uint8 goods_catg_index) const { return is_time_based_routing_enabled[goods_catg_index]; }
-	void set_time_based_routing_enabled(uint8 goods_catg_index, bool is_on) {
+	bool get_time_based_routing_enabled(uint16 goods_catg_index) const { return is_time_based_routing_enabled[goods_catg_index]; }
+	void set_time_based_routing_enabled(uint16 goods_catg_index, bool is_on) {
 		is_time_based_routing_enabled[goods_catg_index] = is_on; 
 	}
 	// get default reverse

@@ -94,7 +94,7 @@ private:
 	vector_tpl<linehandle_t> lines;
 
 	vector_tpl<const goods_desc_t *> viewable_freight_types;
-	bool is_matching_freight_catg( const minivec_tpl<uint8> &goods_catg_index );
+	bool is_matching_freight_catg( const vector_tpl<uint16> &goods_catg_index );
 
 	uint8 current_sort_mode;
 	void build_line_list(int filter);

@@ -250,11 +250,11 @@ extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 	bt_timeline_custom.add_listener(this);
 	cont_timeline.add_component(&bt_timeline_custom, 4);
 
-	cont_timeline.new_component<gui_label_t>("Month");
+	lb_timeline_month = cont_timeline.new_component<gui_label_t>("Month");
 	ni_timeline_month.init( (sint32)(welt->get_current_month()%12+1), 1, 12, 1, true );
 	ni_timeline_month.add_listener(this);
 	cont_timeline.add_component(&ni_timeline_month);
-	cont_timeline.new_component<gui_label_t>("Year");
+	lb_timeline_year = cont_timeline.new_component<gui_label_t>("Year");
 	ni_timeline_year.init( (sint32)(welt->get_current_month()/12), 0, 2999, 1, false );
 	ni_timeline_year.add_listener(this);
 	cont_timeline.add_component(&ni_timeline_year);
@@ -262,6 +262,7 @@ extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 	bt_obsolete.init( button_t::square_state, "Show obsolete");
 	bt_obsolete.add_listener(this);
 	cont_timeline.add_component(&bt_obsolete, 4);
+	apply_prohibit_too_new();
 	// end filling cont_timeline---------------------------------------------------------------------------------------------
 
 	// start filling cont_filter---------------------------------------------------------------------------------------------
@@ -301,6 +302,41 @@ extend_edit_gui_t::extend_edit_gui_t(const char *name, player_t* player_) :
 	//setting scrollable content box
 	scrolly.set_visible(true);
 	scrolly.set_min_width( (D_DEFAULT_WIDTH-D_MARGIN_LEFT-D_MARGIN_RIGHT-2*D_H_SPACE)/2 );
+}
+
+
+void extend_edit_gui_t::apply_prohibit_too_new()
+{
+	// the public player can always place objects ignoring the timeline
+	const bool is_public = player  &&  player->get_player_nr() == PUBLIC_PLAYER_NR;
+	const bool prohibit = welt->get_settings().get_prohibit_too_new()  &&  !is_public;
+	bt_timeline.set_visible( !prohibit );
+	bt_timeline_custom.set_visible( !prohibit );
+	lb_timeline_month->set_visible( !prohibit );
+	ni_timeline_month.set_visible( !prohibit );
+	lb_timeline_year->set_visible( !prohibit );
+	ni_timeline_year.set_visible( !prohibit );
+	if(  prohibit  ) {
+		// no specific date: always the current date when the timeline is used
+		bt_timeline.pressed = welt->get_settings().get_use_timeline();
+		bt_timeline_custom.pressed = false;
+	}
+}
+
+
+void extend_edit_gui_t::draw(scr_coord pos, scr_size size)
+{
+	player_t *const active = welt->get_active_player();
+	if(  active  &&  active != player  ) {
+		// deselect first, so the tool of the previous player is released
+		change_item_info(-1);
+		player = active;
+		set_owner(active);
+		apply_prohibit_too_new();
+		fill_list();
+		reset_min_windowsize();
+	}
+	gui_frame_t::draw(pos, size);
 }
 
 
@@ -441,6 +477,11 @@ void extend_edit_gui_t::rdwr(loadsave_t *file)
 	sint32 ni_timeline_month_value = ni_timeline_month.get_value();
 	file->rdwr_long(ni_timeline_month_value);
 	ni_timeline_month.set_value(ni_timeline_month_value);
+
+	if(  file->is_loading()  ) {
+		// the restored state must not request a specific date
+		apply_prohibit_too_new();
+	}
 
 	sint32 scl_selection = scl.get_selection();
 	file->rdwr_long(scl_selection);

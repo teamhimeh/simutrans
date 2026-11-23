@@ -126,7 +126,9 @@ public:
 			// freight type
 			goods_desc_t const& g = *v->get_cargo_type();
 			char const* const  name = translator::translate( g.get_catg() == 0?g.get_name():g.get_catg_name() );
-			label_freight_summary.buf().printf( "%u/%u%s %s", v->get_total_cargo(), v->get_cargo_max(), translator::translate( v->get_cargo_mass() ), name );
+			const sint32 total_cargo = v->get_total_cargo();
+			const sint32 cargo_max = v->get_cargo_max();
+			label_freight_summary.buf().printf( "%d/%d%s %s", total_cargo, cargo_max, translator::translate( v->get_cargo_mass() ), name );
 			label_freight_summary.update();
 
 			freight_info.clear();
