@@ -634,6 +634,7 @@ SOURCES += utils/cbuffer_t.cc
 SOURCES += utils/checklist.cc
 SOURCES += utils/csv.cc
 SOURCES += utils/log.cc
+SOURCES += utils/save_filename.cc
 SOURCES += utils/searchfolder.cc
 SOURCES += utils/sha1.cc
 SOURCES += utils/sha1_hash.cc

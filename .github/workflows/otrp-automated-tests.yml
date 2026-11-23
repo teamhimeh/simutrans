@@ -23,7 +23,7 @@ jobs:
         wget https://github.com/facebook/zstd/releases/download/v1.4.4/zstd-1.4.4.tar.gz
         tar -zxvf zstd-1.4.4.tar.gz
         cd zstd-1.4.4
-        make -j
+        make -j$(nproc)
         sudo make install
         cd $GITHUB_WORKSPACE
 
@@ -35,7 +35,7 @@ jobs:
         echo "FLAGS = -DREVISION=$(svn info --show-item revision svn://servers.simutrans.org/simutrans) " >>config.default
         echo "STATIC = 1" >>config.default
         cat config.default
-        make -j
+        make -j$(nproc)
 
     - name: Collect binary and shared libraries
       run: |

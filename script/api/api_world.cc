@@ -12,6 +12,10 @@
 #include "../api_class.h"
 #include "../api_function.h"
 #include "../../simworld.h"
+#include "../../dataobj/environment.h"
+#include "../../pathes.h"
+#include "../../sys/simsys.h"
+#include "../../utils/save_filename.h"
 #include "../../simversion.h"
 #include "../../simmenu.h"
 #include "../../player/simplay.h"
@@ -66,6 +70,34 @@ bool world_remove_player(karte_t *welt, player_t *player)
 	// now call - will not have immediate effect in network games
 	welt->call_change_player_tool(karte_t::delete_player, player->get_player_nr(), 0, true /*scripted*/);
 	return true;
+}
+
+
+/**
+ * Saves the game as save/<name>.sve. Returns null on success, otherwise an error message.
+ * The name is checked, never rewritten: nothing is written if it is not safe.
+ */
+SQInteger world_save_game(HSQUIRRELVM vm)
+{
+	const SQChar *str = NULL;
+	SQInteger len = 0;
+	if (SQ_FAILED(sq_getstringandsize(vm, 2, &str, &len))) {
+		return sq_raise_error(vm, "save_game: name must be a string");
+	}
+	// squirrel strings may contain NUL: check the full length, not just the C string
+	const std::string name(str, (size_t)len);
+
+	std::string error;
+	if (!is_valid_script_save_name(name, error)) {
+		return param<const char*>::push(vm, ("Invalid save name: " + error).c_str());
+	}
+
+	dr_mkdir(SAVE_PATH);
+	const std::string path = std::string(SAVE_PATH_X) + name + ".sve";
+	if (!welt->save(path.c_str(), false, env_t::savegame_version_str, true)) {
+		return param<const char*>::push(vm, "Saving failed");
+	}
+	return param<const char*>::push(vm, NULL);
 }
 
 
@@ -336,6 +368,22 @@ void export_world(HSQUIRRELVM vm, bool scenario)
 		 */
 		STATIC register_method(vm, &world_generate_goods, "generate_goods", true);
 	}
+
+	/**
+	 * Saves the game as "save/<name>.sve" (silent, like an autosave).
+	 *
+	 * @p name is the file name without folder and without extension. It is checked, never
+	 * rewritten, and nothing is written if it is rejected. Rejected are: empty or longer than
+	 * 128 bytes, invalid UTF-8, control or invisible characters, / \ : * ? " < > |,
+	 * a leading dot, leading or trailing space, a trailing dot, and Windows device names
+	 * (CON, NUL, COM1, ...). Other Unicode letters are accepted. An existing save of the
+	 * same name is replaced, unless that file is read-only (then nothing is written and an error is returned).
+	 *
+	 * @param name name of the savegame
+	 * @returns null on success, otherwise a string describing why nothing was saved
+	 */
+	STATIC register_function(vm, world_save_game, "save_game", 2, ".s");
+
 	/**
 	 * Returns player number @p pl. If player does not exist, returns null.
 	 * @param pl player number
