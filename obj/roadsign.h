@@ -63,7 +63,8 @@ protected:
 		detailed_oneway	= 1U<<9, // per-entry-direction exit ribi table stored in ticks_ns/ticks_ow (only meaningful for single_way signs)
 		ignore_length = 1U<<10,	 // ignore length (for track)
 		allow_multi_convoys	= 1U<<11,	// can enter more than one convoys in one platform.
-		stop_at_middle		= 1U<<12	// in choose signal, stop at the middle of the platform (except for the margin tiles; front or back margin is selected by advance_to_end).
+		stop_at_middle		= 1U<<12,	// in choose signal, stop at the middle of the platform (except for the margin tiles; front or back margin is selected by advance_to_end).
+		stop_position		= 1U<<13	// in end of choose sign, this is as stop position for choose signal.
 	};
 
 	uint8 choose_signal_margin_length;
@@ -226,6 +227,8 @@ public:
 	void set_allow_multi_convoys(bool tf) { tf? choose_sign_flag|=allow_multi_convoys: choose_sign_flag&=~allow_multi_convoys; }
 	bool is_stop_at_middle() const {return(choose_sign_flag&stop_at_middle)>0;}
 	void set_stop_at_middle(bool tf) { tf? choose_sign_flag|=stop_at_middle: choose_sign_flag&=~stop_at_middle; }
+	bool is_stop_position() const {return(choose_sign_flag&stop_position)>0;}
+	void set_stop_position(bool tf) { tf? choose_sign_flag|=stop_position: choose_sign_flag&=~stop_position; } 
 
 	// When detailed_oneway is set, ticks_ns/ticks_ow store 4-bit packed allowed-exit ribis per entry direction.
 	// ticks_ns bits 0-3 = allowed exits for entry ribi N, bits 4-7 = allowed exits for entry ribi S.
