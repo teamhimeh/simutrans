@@ -75,22 +75,13 @@ public:
 		return imglist->get_image_id( ribi );
 	}
 
-	image_id get_crossing_image_ex_id(ribi_t::ribi ribi, bool nw, bool front = false) const
+	/// junction image @p nr (16..35) of the image list, as numbered for ways; IMG_EMPTY if there is none
+	image_id get_switch_image_id_by_nr(uint8 nr, bool front) const
 	{
-		if(  front  &&  !get_child<image_list_t>(2)->get_count()  ) {
+		if(  nr < 16  ) {
 			return IMG_EMPTY;
 		}
-		image_list_t const* const imglist = get_child<image_list_t>(3-front);
-		// only do this if extended switches are there
-		if(  imglist->get_count()>26  ) {
-			static uint8 ribi_to_extra[16] = {
-				255, 255, 255, 255, 255, 255, 255, 0,
-				255, 255, 255, 1, 255, 2, 3, 4
-			};
-			return ribi < 16 ? imglist->get_image_id( ribi_to_extra[ribi]+26+(nw*5) )  : IMG_EMPTY;
-		}
-		// else return standard values
-		return imglist->get_image_id( ribi );
+		return get_child<image_list_t>(front ? 2 : 3)->get_image_id(nr);
 	}
 
 	image_id get_back_image_id(ribi_t::ribi ribi) const { return get_child<image_list_t>(3)->get_image_id(ribi); }
@@ -218,11 +209,6 @@ public:
 	bool has_switch_image() const {
 		return get_child<image_list_t>(2)->get_image_id(16) != IMG_EMPTY
 		||     get_child<image_list_t>(3)->get_image_id(16) != IMG_EMPTY;
-	}
-
-	bool has_switch_ex_image() const {
-		return get_child<image_list_t>(2)->get_image_id(26) != IMG_EMPTY
-		||     get_child<image_list_t>(3)->get_image_id(26) != IMG_EMPTY;
 	}
 
 	/**

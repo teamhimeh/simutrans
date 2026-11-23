@@ -345,6 +345,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)utils\checklist.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)utils\csv.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)utils\log.cc" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)utils\save_filename.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)utils\searchfolder.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)utils\sha1.cc" />
     <ClCompile Include="$(MSBuildThisFileDirectory)utils\sha1_hash.cc" />
@@ -724,6 +725,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)utils\csv.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)utils\checklist.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)utils\log.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)utils\save_filename.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)utils\searchfolder.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)utils\sha1.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)utils\sha1_hash.h" />
