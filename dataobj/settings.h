@@ -340,6 +340,9 @@ private:
 
 	// if true, you can buy obsolete stuff
 	bool allow_buying_obsolete_vehicles;
+
+	// map editors (extend_edit_t) cannot place objects (buildings, factories, ways, ...) which are not yet available
+	bool prohibit_too_new;
 	// vehicle value is decrease by this factor/1000 when a vehicle leaved the depot
 	sint16 used_vehicle_reduction;
 
@@ -779,6 +782,9 @@ public:
 
 	// disallow using obsolete vehicles in depot
 	bool get_allow_buying_obsolete_vehicles() const { return allow_buying_obsolete_vehicles; }
+
+	bool get_prohibit_too_new() const { return prohibit_too_new; }
+	void set_prohibit_too_new(bool b) { prohibit_too_new = b; }
 
 	// forest stuff
 	uint8 get_forest_base_size() const { return forest_base_size; }

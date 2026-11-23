@@ -3111,6 +3111,8 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 	sint8 hf = height_offset;
 	sint8 vo = vehicle_offset;
 	bool acd = allow_closed_diagonal;
+	// user setting of this client, not of the tool
+	bool const pow = env_t::prohibit_one_tile_way;
 	if (look_toolbar) {
 		tool_build_way_t* toolbar_tool = get_build_way_tool_from_toolbar(desc);
 		if (toolbar_tool) {
@@ -3122,7 +3124,7 @@ const char* tool_build_way_t::get_default_param(player_t *player) const
 		}
 	}
 	static char buf[300];
-	sprintf(buf, "%s,%d,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo, (int)acd);
+	sprintf(buf, "%s,%d,%d,%d,%d,%d,%d", way_name ? way_name : "", (int)mode, (int)flag, (int)hf, (int)vo, (int)acd, (int)pow);
 	return buf;
 }
 
@@ -3137,6 +3139,20 @@ bool tool_build_way_t::is_selected() const
 	return (selected  &&  selected->get_desc(welt->get_timeline_year_month()) == get_desc(welt->get_timeline_year_month()));
 }
 
+/**
+ * Timeline check for way, bridge and tunnel building tools.
+ * The public player may build anything, and obsolete objects can always be built.
+ * Objects which are not yet available are refused only when settings_t::prohibit_too_new is set.
+ */
+static bool is_buildable_by_timeline(const obj_desc_timelined_t *desc, const player_t *player)
+{
+	karte_t *const welt = world();
+	if(  player==NULL  ||  player==welt->get_public_player()  ) {
+		return true;
+	}
+	return !welt->get_settings().get_prohibit_too_new()  ||  !desc->is_future( welt->get_timeline_year_month() );
+}
+
 bool tool_build_way_t::init( player_t *player, bool called_from_move )
 {
 	two_click_tool_t::init( player );
@@ -3149,25 +3165,33 @@ bool tool_build_way_t::init( player_t *player, bool called_from_move )
 	if(  desc  &&  desc->get_cursor()->get_image_id(0) != IMG_EMPTY  ) {
 		cursor = desc->get_cursor()->get_image_id(0);
 	}
-	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
+	if(  desc  &&  !is_buildable_by_timeline(desc, player)  ) {
 		// non available way => fail
 		return false;
 	}
 
-	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle[,allow_closed_diagonal]")
+	// Parse field values from default_param (format: "way_name,mode,flag,height,vehicle[,allow_closed_diagonal[,prohibit_one_tile_way]]")
+	bool params_parsed = false;
 	if (default_param) {
 		const char* comma = strchr(default_param, ',');
 		if (comma) {
-			int mode, flag, hf, vo, acd = 0;
-			if (sscanf(comma + 1, "%d,%d,%d,%d,%d", &mode, &flag, &hf, &vo, &acd) >= 4) {
+			int mode, flag, hf, vo, acd = 0, pow = 0;
+			if (sscanf(comma + 1, "%d,%d,%d,%d,%d,%d", &mode, &flag, &hf, &vo, &acd, &pow) >= 4) {
 				overtaking_mode = (overtaking_mode_t)mode;
 				street_flag = (uint8)flag;
 				height_offset = (sint8)hf;
 				vehicle_offset = (sint8)vo;
 				// missing (older format) => no closed diagonals
 				allow_closed_diagonal = acd!=0;
+				// missing (older format) => one tile ways allowed (old behaviour)
+				prohibit_one_tile_way = pow!=0;
+				params_parsed = true;
 			}
 		}
+	}
+	if(  !params_parsed  ) {
+		// local tool (default_param is only the way name): use the setting of this client
+		prohibit_one_tile_way = env_t::prohibit_one_tile_way;
 	}
 
 	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
@@ -3373,8 +3397,8 @@ const char *tool_build_way_t::do_work( player_t *player, const koord3d &start, c
 	bauigel.set_overtaking_mode(mode);
 	bauigel.set_street_flag(flag);
 	bauigel.set_vehicle_offset(vehicle_offset);
-	// allow building an isolated one-tile way: ctrl held and start/end coincide
-	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_route().get_count() == 1;
+	// allow building an isolated one-tile way: ctrl held and start/end coincide (unless prohibited)
+	bool const single_tile_way = !prohibit_one_tile_way  &&  start == end  &&  is_ctrl_pressed()  &&  bauigel.get_route().get_count() == 1;
 	if(  bauigel.get_route().get_count()>1  ||  single_tile_way  ) {
 		welt->mute_sound(true);
 		bauigel.build(single_tile_way);
@@ -3413,7 +3437,7 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 	bool is_elevated = desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt;
 	uint8 offset = is_elevated ? welt->get_settings().get_way_height_clearance() + hf : 0;
 
-	bool const single_tile_way = start == end  &&  is_ctrl_pressed()  &&  bauigel.get_count() == 1;
+	bool const single_tile_way = !prohibit_one_tile_way  &&  start == end  &&  is_ctrl_pressed()  &&  bauigel.get_count() == 1;
 	if(  bauigel.get_count()>1  ||  single_tile_way  ) {
 		// Set tooltip first (no dummygrounds, if bauigel.calc_casts() is called).
 		win_set_static_tooltip( tooltip_with_price_length("Building costs estimates", bauigel.calc_costs(), bauigel.get_count() ) );
@@ -3481,6 +3505,27 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 			way->set_yoff(-gr->get_weg_yoff() );
 			marked.insert( way );
 			way->mark_image_dirty( way->get_image(), 0 );
+		}
+	}
+}
+
+void tool_build_way_t::update_prohibit_one_tile_way()
+{
+	FOR(vector_tpl<tool_t*>, tool, tool_t::general_tool) {
+		if(  tool_build_way_t* way_tool = dynamic_cast<tool_build_way_t*>(tool)  ) {
+			way_tool->set_prohibit_one_tile_way( env_t::prohibit_one_tile_way );
+		}
+	}
+}
+
+void tool_build_way_t::update_allow_closed_diagonal()
+{
+	FOR(vector_tpl<tool_t*>, tool, tool_t::general_tool) {
+		if(  tool_build_way_t* way_tool = dynamic_cast<tool_build_way_t*>(tool)  ) {
+			way_tool->set_allow_closed_diagonal( env_t::always_allow_closed_diagonal );
+		}
+		else if(  tool_build_tunnel_t* tunnel_tool = dynamic_cast<tool_build_tunnel_t*>(tool)  ) {
+			tunnel_tool->set_allow_closed_diagonal( env_t::always_allow_closed_diagonal );
 		}
 	}
 }
@@ -3598,7 +3643,7 @@ bool tool_build_bridge_t::init( player_t *player, bool called_from_move )
 	two_click_tool_t::init( player );
 	// now get current desc
 	const bridge_desc_t *desc = bridge_builder_t::get_desc(default_param);
-	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
+	if(  desc  &&  !is_buildable_by_timeline(desc, player)  ) {
 		return false;
 	}
 	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {
@@ -3893,7 +3938,7 @@ bool tool_build_tunnel_t::init( player_t *player, bool called_from_move )
 	two_click_tool_t::init( player );
 	// now get current desc
 	const tunnel_desc_t *desc = tunnel_builder_t::get_desc(default_param);
-	if(  desc  &&  !desc->is_available(welt->get_timeline_year_month())  &&  player!=NULL  &&  player!=welt->get_public_player()  ) {
+	if(  desc  &&  !is_buildable_by_timeline(desc, player)  ) {
 		return false;
 	}
 	if (  !called_from_move  &&  is_ctrl_pressed()  &&  can_use_gui()  ) {

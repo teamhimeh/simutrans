@@ -331,6 +331,7 @@ settings_t::settings_t() :
 	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
+	prohibit_too_new = true;
 
 	allow_overloading = false;
 
@@ -1296,6 +1297,13 @@ void settings_t::rdwr(loadsave_t *file)
 			// before v63 all stations and sea tiles used the single station_coverage
 			set_all_station_coverages( station_coverage_size );
 		}
+		if(  file->get_OTRP_version() >= 64  ) {
+			file->rdwr_bool( prohibit_too_new );
+		}
+		else if(  file->is_loading()  ) {
+			// not saved before v64: use the default
+			prohibit_too_new = true;
+		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
@@ -1346,6 +1354,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	env_t::moving_object_probability = contents.get_int_clamped( "random_wildlife_probability", env_t::moving_object_probability, 0, INT_MAX);
 
 	env_t::straight_way_without_control = contents.get_int( "straight_way_without_control", env_t::straight_way_without_control ) != 0;
+	env_t::prohibit_one_tile_way = contents.get_int( "prohibit_one_tile_way", env_t::prohibit_one_tile_way ) != 0;
+	env_t::always_allow_closed_diagonal = contents.get_int( "always_allow_closed_diagonal", env_t::always_allow_closed_diagonal ) != 0;
 
 	env_t::road_user_info = contents.get_int( "pedes_and_car_info", env_t::road_user_info ) != 0;
 	env_t::tree_info      = contents.get_int( "tree_info",          env_t::tree_info      ) != 0;
@@ -1739,6 +1749,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	show_pax           = contents.get_int( "stop_pedestrians",   show_pax           ) != 0;
 
 	allow_buying_obsolete_vehicles = contents.get_int( "allow_buying_obsolete_vehicles", allow_buying_obsolete_vehicles ) != 0;
+	prohibit_too_new               = contents.get_int( "prohibit_too_new", prohibit_too_new ) != 0;
 	used_vehicle_reduction         = contents.get_int_clamped( "used_vehicle_reduction", used_vehicle_reduction, 0, 1000 );
 	traffic_level                  = contents.get_int_clamped( "citycar_level",          traffic_level,          0, 16);
 	stadtauto_duration             = contents.get_int_clamped( "default_citycar_life",   stadtauto_duration,     0, 1200 );
