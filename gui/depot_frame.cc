@@ -1837,7 +1837,7 @@ void depot_frame_t::update_data()
 
 	if(  cnv.is_bound()  ) {
 		if(  cnv->get_vehicle_count() > 0  ) {
-			uint8 selected_good_index = 0;
+			uint16 selected_good_index = 0;
 			if(  depot->selected_filter > VEHICLE_FILTER_RELEVANT  ) {
 				// Filter is set to specific good
 				const uint32 goods_index = depot->selected_filter - VEHICLE_FILTER_GOODS_OFFSET;
@@ -1863,7 +1863,7 @@ void depot_frame_t::update_data()
 						min_weight = min(min_weight, (uint32)ware->get_weight_per_unit());
 
 						// find number of goods in in this category. TODO: gotta be a better way...
-						uint8 catg_count = 0;
+						uint32 catg_count = 0;
 						FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 							if(  ware->get_catg_index() == i->get_catg_index()  ) {
 								catg_count++;
@@ -1929,7 +1929,7 @@ void depot_frame_t::update_data()
 									max_weight = max(max_weight, (uint32)ware->get_weight_per_unit());
 
 									// find number of goods in in this category. TODO: gotta be a better way...
-									uint8 catg_count = 0;
+									uint32 catg_count = 0;
 									FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 										if(  ware->get_catg_index() == i->get_catg_index()  ) {
 											catg_count++;
