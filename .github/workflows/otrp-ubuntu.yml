@@ -40,7 +40,7 @@ jobs:
         wget https://github.com/facebook/zstd/releases/download/v1.4.4/zstd-1.4.4.tar.gz
         tar -zxvf zstd-1.4.4.tar.gz
         cd zstd-1.4.4
-        make -j
+        make -j$(nproc)
         sudo make install
         cd $GITHUB_WORKSPACE
         
@@ -55,7 +55,7 @@ jobs:
         
     - name: make
       run: |
-        make -j
+        make -j$(nproc)
 
     - name: Set suffix for file naming
       if: matrix.distribute

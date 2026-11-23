@@ -97,3 +97,13 @@ See `.github/workflows/otrp-automated-tests.yml` for the workflow configuration.
   - `tests/` - Individual test cases
 - `run-automated-tests.sh` - Test runner script
 - `simutrans-test-base.zip` - Test environment (pak files, fonts, etc.)
+
+## Unit test for script save names
+
+`world.save_game()` validates the name with `utils/save_filename.cc`. That validator has its own
+test that needs no pakset and no game executable:
+
+    python tests/test_save_name.py --cxx g++
+
+The game-side behavior (returned error strings, written files) is covered by
+`tests/automated-tests/tests/test_save_game.nut`; it writes to `save/` of the working directory.

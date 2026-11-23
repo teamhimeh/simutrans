@@ -157,6 +157,30 @@ private:
 	 */
 	bool straight_route_mode;
 
+	/**
+	 * Underground ways are always built with calc_straight_route(), so straight_route_mode
+	 * alone does not tell whether ctrl was pressed there. The tunnel tool sets this flag
+	 * from its ctrl state: only then build_tunnel_tile() adds a same-waytype way disjoint
+	 * from an existing diagonal bend as an independent second leg (closed diagonal)
+	 * instead of extending the existing way into a junction.
+	 */
+	bool tunnel_dual_leg_allowed;
+
+	/**
+	 * true if the existing elevated ground @p gr can carry our way: it has our waytype, or
+	 * (closed diagonal) a single way of another waytype on a diagonal bend that does not use
+	 * @p entry (ribi_t::none: no direction known yet)
+	 */
+	bool is_elevated_ground_usable(const grund_t *gr, ribi_t::ribi entry) const;
+
+	/**
+	 * true: closed diagonals may be created, i.e. a second same-waytype leg (ctrl) or a
+	 * different waytype on the opposite diagonal bend of a tile. Off by default (AI, cities,
+	 * ...); the way/tunnel tools switch it on only when "allow closed diagonal" is selected.
+	 * Tiles which already carry both ways can always be continued.
+	 */
+	bool allow_closed_diagonal;
+
 	bool build_sidewalk;
 
 	uint32 maximum;    // hoechste Suchtiefe
@@ -247,6 +271,15 @@ public:
 	void set_keep_city_roads(bool yesno) { keep_existing_city_roads = yesno; }
 
 	void set_build_sidewalk(bool yesno) { build_sidewalk = yesno; }
+
+	/// true: closed diagonals (two ways on disjoint diagonal bends) may be created
+	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
+
+	/// allow building a second, independent diagonal leg in tunnels (ctrl pressed)
+	void set_tunnel_dual_leg_allowed(bool yesno) { tunnel_dual_leg_allowed = yesno; }
+
+	/// true if build_tunnel_tile() adds the way with @p ribi as a second leg on @p gr
+	bool is_tunnel_dual_leg(const grund_t *gr, ribi_t::ribi ribi) const;
 
 	void init_builder(bautyp_t wt, const way_desc_t * desc, const tunnel_desc_t *tunnel_desc=NULL, const bridge_desc_t *bridge_desc=NULL);
 

@@ -9,7 +9,7 @@
 
 repositioning_t repositioning_t::instance;
 koord repositioning_t::default_offset = koord(0,4);
-char repositioning_t::tab_filename[128] = "";
+char repositioning_t::tab_filename[1024] = "";
 
 void repositioning_t::set_offset(const char* name, koord k) {
   table.set(name, k);
@@ -36,7 +36,9 @@ koord repositioning_t::get_offset(const char* c) {
 }
 
 void repositioning_t::read_tabfile(const char* filename) {
-  strcpy(tab_filename, filename);
+  // bounded copy: a long install path must not overflow into the neighbouring statics
+  strncpy(tab_filename, filename, sizeof(tab_filename)-1);
+  tab_filename[sizeof(tab_filename)-1] = 0;
   table.clear();
   
   FILE* file;

@@ -372,7 +372,7 @@ convoihandle_t depot_t::copy_convoi(convoihandle_t old_cnv, bool local_execution
 {
 	if(  old_cnv.is_bound()  &&  !convoihandle_t::is_exhausted()  &&
 		old_cnv->get_vehicle_count() > 0  ) {
-		if(  !can_accept_waytype(old_cnv->front()->get_waytype())  ) {
+		if(  !can_accept_waytype(old_cnv->front()->get_desc()->get_waytype())  ) {
 			// invalid waytype!
 			return convoihandle_t();
 		}
@@ -430,6 +430,11 @@ convoihandle_t depot_t::copy_convoi(convoihandle_t old_cnv, bool local_execution
 bool depot_t::disassemble_convoi(convoihandle_t cnv, bool sell)
 {
 	if(  cnv.is_bound()  ) {
+		// A convoy listed in this depot can still be pulled by a parent on the map when a
+		// coupling was broken (see convoi_t::repair_coupling_links_after_load()). The loop
+		// below only finds parents that are in this depot, so cut that link explicitly.
+		cnv->cut_from_parent_convoi();
+
 		if(  !sell  ) {
 			// store vehicles in depot
 			while(  vehicle_t* const v = cnv->remove_vehikel_bei(0)  ) {

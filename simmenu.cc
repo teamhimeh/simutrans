@@ -129,6 +129,7 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(TOOL_CHANGE_WAY_OFFSET);
 		CASE_TO_STRING(TOOL_REMOVE_HOUSE);
 		CASE_TO_STRING(TOOL_REMOVE_PILLAR);
+		CASE_TO_STRING(TOOL_SET_SWITCH_IMAGE);
 		}
 	}
 	else if (id & SIMPLE_TOOL) {
@@ -218,6 +219,10 @@ const char *tool_t::id_to_string(uint16 id)
 		CASE_TO_STRING(DIALOG_SCRIPT_TOOL);
 		CASE_TO_STRING(DIALOG_EDIT_GROUNDOBJ);
 		CASE_TO_STRING(DIALOG_ROUTE_SEARCH);
+		CASE_TO_STRING(DIALOG_EDIT_WAY);
+		CASE_TO_STRING(DIALOG_EDIT_WAYOBJ);
+		CASE_TO_STRING(DIALOG_EDIT_HALT);
+		CASE_TO_STRING(DIALOG_EDIT_ROADSIGN);
 		}
 	}
 
@@ -298,6 +303,7 @@ tool_t *create_general_tool(int toolnr)
 		case TOOL_CHANGE_WAY_OFFSET:           tool = new tool_change_way_offset_t();  break;
 		case TOOL_REMOVE_HOUSE:                tool = new tool_remove_house_t();       break;
 		case TOOL_REMOVE_PILLAR:               tool = new tool_remove_pillar_t();      break;
+		case TOOL_SET_SWITCH_IMAGE:             tool = new tool_set_switch_image_t();   break;
 		default:
 			dbg->error("create_general_tool()","cannot satisfy request for general_tool[%i]!",toolnr);
 			return NULL;
@@ -419,6 +425,10 @@ tool_t *create_dialog_tool(int toolnr)
 		case DIALOG_SCRIPT_TOOL:     tool = new dialog_script_tool_t();     break;
 		case DIALOG_EDIT_GROUNDOBJ:  tool = new dialog_edit_groundobj_t();  break;
 		case DIALOG_ROUTE_SEARCH:    tool = new dialog_route_search_t();    break;
+		case DIALOG_EDIT_WAY:        tool = new dialog_edit_way_t();        break;
+		case DIALOG_EDIT_WAYOBJ:     tool = new dialog_edit_wayobj_t();     break;
+		case DIALOG_EDIT_HALT:       tool = new dialog_edit_halt_t();       break;
+		case DIALOG_EDIT_ROADSIGN:   tool = new dialog_edit_roadsign_t();   break;
 		default:
 			dbg->error("create_dialog_tool()","cannot satisfy request for dialog_tool[%i]!",toolnr);
 			return NULL;

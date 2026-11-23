@@ -4936,12 +4936,29 @@ bool karte_t::play_sound_area_clipped(koord const k, uint16 const idx, sound_typ
 }
 
 
-void karte_t::save(const char *filename, bool autosave, const char *version_str, bool silent )
+bool karte_t::save(const char *filename, bool autosave, const char *version_str, bool silent )
 {
 DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
+	bool saved = false;
 	loadsave_t  file;
 	std::string savename = filename;
 	savename[savename.length()-1] = '_';
+
+	// An existing read-only file must stay untouched: refuse before anything is written.
+	// (Windows cannot replace it by renaming; elsewhere the rename would silently replace it.)
+	if(  FILE *existing = dr_fopen( filename, "rb" )  ) {
+		fclose( existing );
+		if(  FILE *writable = dr_fopen( filename, "ab" )  ) {
+			fclose( writable );
+		}
+		else {
+			dbg->error( "karte_t::save()", "'%s' exists and cannot be overwritten (read-only?)", filename );
+			if(  !silent  ) {
+				create_win( new news_img("Kann Spielstand\nnicht speichern.\n"), w_info, magic_none );
+			}
+			return false;
+		}
+	}
 
 	display_show_load_pointer( true );
 	const loadsave_t::mode_t mode = autosave ? loadsave_t::autosave_mode : loadsave_t::save_mode;
@@ -4958,10 +4975,19 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 			static char err_str[512];
 			sprintf( err_str, translator::translate("Error during saving:\n%s"), success );
 			create_win( new news_img(err_str), w_time_delete, magic_none);
+			dr_remove( savename.c_str() );
 		}
 		else {
-			dr_rename( savename.c_str(), filename );
-			if(!silent) {
+			saved = ( dr_rename( savename.c_str(), filename ) == 0 );
+			if(  !saved  ) {
+				// do not report success, and do not leave the temporary file behind
+				dbg->error( "karte_t::save()", "cannot replace '%s'", filename );
+				dr_remove( savename.c_str() );
+				if(  !silent  ) {
+					create_win( new news_img("Kann Spielstand\nnicht speichern.\n"), w_info, magic_none );
+				}
+			}
+			else if(!silent) {
 				create_win( new news_img("Spielstand wurde\ngespeichert!\n"), w_time_delete, magic_none);
 				// update the filename, if no autosave
 				settings.set_filename(filename);
@@ -4970,6 +4996,7 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 		reset_interaction();
 	}
 	display_show_load_pointer( false );
+	return saved;
 }
 
 
@@ -6325,6 +6352,12 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				ls->set_progress( get_size().y+(get_size().y*convoi_array.get_count())/(2*max_convoi)+128 );
 			}
 		}
+		// All convoys are read, but none is filed into its depot yet: the states are still the
+		// saved ones. Cut coupling links that would make one convoy exist in two places, e.g. a
+		// child listed in a depot while a parent on the map pulls its cars. betrete_depot()
+		// below follows the coupling chain, so this must come first.
+		convoi_t::repair_coupling_links_after_load( loading_convoi_array );
+
 		FOR( vector_tpl<convoi_t*>, cnv, loading_convoi_array ) {
 			if(cnv->in_depot()) {
 				grund_t * gr = lookup(cnv->get_pos());
