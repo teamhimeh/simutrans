@@ -659,7 +659,7 @@ bool bridge_builder_t::can_place_ramp(player_t *player, const grund_t *gr, wayty
 		else {
 			// If road and tram, we have to check both ribis.
 			ribi_t::ribi ribi = ribi_t::none;
-			for(int i=0;i<2;i++) {
+			for(int i=0;i<grund_t::MAX_WAYS_PER_TILE;i++) {
 				if (const weg_t *w = gr->get_weg_nr(i)) {
 					if (w->get_waytype()!=road_wt  &&  !w->get_desc()->is_tram()) {
 						return false;

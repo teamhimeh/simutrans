@@ -105,8 +105,14 @@ public:
 		draw_as_obj    = 1 << 4, ///< is a slope etc => draw as one
 		is_halt_flag   = 1 << 5, ///< is a part of a halt
 		has_way1       = 1 << 6,
-		has_way2       = 1 << 7
+		has_way2       = 1 << 7,
+		has_way3       = 1 << 8, ///< only a tram track can be the third way
+		has_way4       = 1 << 9, ///< only a tram track can be the fourth way
+		has_ways_mask  = has_way1 | has_way2 | has_way3 | has_way4
 	};
+
+	/// maximum number of ways on one tile (ways 3 and 4 can only be tram tracks)
+	static const uint8 MAX_WAYS_PER_TILE = 4;
 
 	/**
 	 * @brief Back wall corner count.
@@ -157,7 +163,8 @@ public:
 	static uint16 const MAXIMUM_HIDE_TEST_DISTANCE = 5;
 
 	// just to calculate the offset for skipping the ways ...
-	static uint8 offsets[4];
+	// index is (flags & has_ways_mask) / has_way1; the has_way flags are cumulative
+	static uint8 offsets[16];
 
 public:
 	/** true, when showing a grid
@@ -219,7 +226,7 @@ protected:
 	/**
 	 * Flags to indicate existence of halts, ways, to mark dirty
 	 */
-	uint8 flags;
+	uint16 flags;
 
 
 public:
@@ -602,7 +609,7 @@ public:
 	 */
 	void display_overlay(sint16 xpos, sint16 ypos);
 
-	inline obj_t *first_obj() const { return objlist.bei(offsets[flags/has_way1]); }
+	inline obj_t *first_obj() const { return objlist.bei(get_way_count()); }
 	obj_t *suche_obj(obj_t::typ typ) const { return objlist.suche(typ,0); }
 	obj_t *obj_remove_top() { return objlist.remove_last(); }
 
@@ -610,10 +617,10 @@ public:
 
 	bool obj_add(obj_t *obj) { return objlist.add(obj); }
 	bool obj_remove(const obj_t* obj) { return objlist.remove(obj); }
-	bool obj_loesche_alle(player_t *player) { return objlist.loesche_alle(player,offsets[flags/has_way1]); }
+	bool obj_loesche_alle(player_t *player) { return objlist.loesche_alle(player,get_way_count()); }
 	bool obj_ist_da(const obj_t* obj) const { return objlist.ist_da(obj); }
 	obj_t * obj_bei(uint8 n) const { return objlist.bei(n); }
-	uint8  obj_count() const { return objlist.get_top()-offsets[flags/has_way1]; }
+	uint8  obj_count() const { return objlist.get_top()-get_way_count(); }
 	uint8 get_top() const {return objlist.get_top();}
 
 	// moves all object from the old to the new grund_t
@@ -622,7 +629,7 @@ public:
 	/**
 	* @return NULL wenn OK, oder Meldung, warum nicht
 	*/
-	const char * kann_alle_obj_entfernen(const player_t *player) const { return objlist.kann_alle_entfernen(player,offsets[flags/has_way1]); }
+	const char * kann_alle_obj_entfernen(const player_t *player) const { return objlist.kann_alle_entfernen(player,get_way_count()); }
 
 	/**
 	* Interface zur Bauen und abfragen von Gebaeuden
@@ -647,8 +654,12 @@ public:
 
 	/**
 	* The only way to get the type (typ) of a way on a tile
+	* @param i index of the way, 0..MAX_WAYS_PER_TILE-1 (ways 2 and 3 can only be tram tracks)
 	*/
-	weg_t *get_weg_nr(uint8 i) const { return (flags&(has_way1<<i)) ? static_cast<weg_t *>(obj_bei(i)) : NULL; }
+	weg_t *get_weg_nr(uint8 i) const { return (i<MAX_WAYS_PER_TILE  &&  (flags&(has_way1<<i))) ? static_cast<weg_t *>(obj_bei(i)) : NULL; }
+
+	/// @returns the number of ways on this tile (0..MAX_WAYS_PER_TILE)
+	inline uint8 get_way_count() const { return offsets[(flags&has_ways_mask)/has_way1]; }
 
 	/**
 	* Inline da sehr oft aufgerufen.
@@ -661,8 +672,10 @@ public:
 				return w;
 			}
 			if (flags & has_way2) {
-				// try second way (if exists)
-				if (weg_t* const w = get_weg_nr(1)) {
+				// try further ways (if exist)
+				const uint8 count = get_way_count();
+				for(  uint8 i=1;  i<count;  i++  ) {
+					weg_t* const w = static_cast<weg_t *>(obj_bei(i));
 					if (w->get_waytype() == typ) {
 						return w;
 					}
@@ -672,20 +685,79 @@ public:
 		return NULL;
 	}
 
+	/// true, if there are at least two ways on this tile
 	bool has_two_ways() const { return flags&has_way2; }
 
+	/// true, if there are more than two ways on this tile (i.e. tram tracks as third/fourth way)
+	bool has_more_than_two_ways() const { return flags&has_way3; }
+
+	/// @returns the number of ways of waytype @p wt on this tile
+	uint8 get_weg_count(waytype_t wt) const {
+		uint8 n = 0;
+		const uint8 count = get_way_count();
+		for(  uint8 i=0;  i<count;  i++  ) {
+			if(  static_cast<weg_t *>(obj_bei(i))->get_waytype()==wt  ) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/// @returns the @p n-th way (counted from 0) of waytype @p wt on this tile, or NULL
+	weg_t *get_weg_leg(waytype_t wt, uint8 n) const {
+		const uint8 count = get_way_count();
+		for(  uint8 i=0;  i<count;  i++  ) {
+			weg_t *w = static_cast<weg_t *>(obj_bei(i));
+			if(  w->get_waytype()==wt  ) {
+				if(  n==0  ) {
+					return w;
+				}
+				n--;
+			}
+		}
+		return NULL;
+	}
+
+	/// @returns another way of the same waytype as @p w on this tile (its other leg), or NULL
+	weg_t *get_other_leg(const weg_t *w) const {
+		const uint8 count = get_way_count();
+		for(  uint8 i=0;  i<count;  i++  ) {
+			weg_t *o = static_cast<weg_t *>(obj_bei(i));
+			if(  o!=w  &&  o->get_waytype()==w->get_waytype()  ) {
+				return o;
+			}
+		}
+		return NULL;
+	}
+
 	/**
-	* true when both way slots hold the SAME waytype, i.e. two disjoint diagonal legs
+	* true when two ways of the SAME waytype @p wt coexist on this tile, i.e. two disjoint
+	* diagonal legs (see weg_erweitern()). This includes a tram track (on a road leg)
+	* sharing the tile with a rail leg, since both are of track_wt.
+	*/
+	bool has_two_same_waytype_ways(waytype_t wt) const {
+		return has_two_ways()  &&  get_weg_count(wt)>=2;
+	}
+
+	/**
+	* true when any waytype has two ways (disjoint diagonal legs) on this tile
 	* (see weg_erweitern()). Unlike has_two_ways(), this is false for tram-on-road,
-	* level crossings and other tiles shared by two different waytypes.
+	* level crossings and other tiles shared only by different waytypes.
 	*/
 	bool has_two_same_waytype_ways() const {
 		if(  !has_two_ways()  ) {
 			return false;
 		}
-		const weg_t *w0 = get_weg_nr(0);
-		const weg_t *w1 = get_weg_nr(1);
-		return w0  &&  w1  &&  w0->get_waytype()==w1->get_waytype();
+		const uint8 count = get_way_count();
+		for(  uint8 i=1;  i<count;  i++  ) {
+			const waytype_t wt = static_cast<weg_t *>(obj_bei(i))->get_waytype();
+			for(  uint8 j=0;  j<i;  j++  ) {
+				if(  static_cast<weg_t *>(obj_bei(j))->get_waytype()==wt  ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -696,16 +768,27 @@ public:
 	* the ordinary waytype-only lookup when dir==ribi_t::none or only one weg matches typ.
 	*/
 	weg_t *get_weg(waytype_t typ, ribi_t::ribi dir) const {
-		weg_t *w0 = get_weg_nr(0);
-		weg_t *w1 = has_two_ways() ? get_weg_nr(1) : NULL;
-		bool m0 = w0 && (w0->get_waytype()==typ || (typ==any_wt && w0->get_waytype()>0));
-		bool m1 = w1 && (w1->get_waytype()==typ || (typ==any_wt && w1->get_waytype()>0));
-		if(  m0  &&  m1  &&  dir!=ribi_t::none  ) {
-			if(  w0->get_ribi_unmasked() & dir  ) return w0;
-			if(  w1->get_ribi_unmasked() & dir  ) return w1;
-			return NULL; // dir isn't on either leg here => genuinely disconnected
+		weg_t *first = NULL;
+		bool several = false;
+		const uint8 count = get_way_count();
+		for(  uint8 i=0;  i<count;  i++  ) {
+			weg_t *w = static_cast<weg_t *>(obj_bei(i));
+			if(  w->get_waytype()==typ  ||  (typ==any_wt  &&  w->get_waytype()>0)  ) {
+				if(  first==NULL  ) {
+					first = w;
+				}
+				else {
+					several = true;
+				}
+				if(  dir!=ribi_t::none  &&  (w->get_ribi_unmasked() & dir)  ) {
+					return w;
+				}
+			}
 		}
-		return m0 ? w0 : (m1 ? w1 : NULL);
+		if(  several  &&  dir!=ribi_t::none  ) {
+			return NULL; // dir isn't on any leg here => genuinely disconnected
+		}
+		return first;
 	}
 
 	/**
@@ -714,6 +797,13 @@ public:
 	* touches both legs, or touches one leg only and would turn it into a junction.
 	*/
 	bool would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi) const;
+
+	/**
+	* true when a tram track (@p new_desc) built here with @p ribi must be a separate way instead
+	* of an extension of the track way @p weg: @p weg lies on one leg of a closed diagonal, and
+	* @p ribi belongs to a road on the other, disjoint leg (the tram track follows that road).
+	*/
+	bool is_separate_tram_leg(const weg_t *weg, ribi_t::ribi ribi, const way_desc_t *new_desc) const;
 
 	bool hat_weg(waytype_t typ) const { return get_weg(typ)!=NULL; }
 
@@ -770,10 +860,67 @@ public:
 
 
 	/// @returns true if there is at least one way on this ground.
-	inline bool hat_wege() const { return (flags&(has_way1|has_way2))!=0;}
+	inline bool hat_wege() const { return (flags&has_way1)!=0;}
+
+	/// @returns the union of the (unmasked) ribis of all ways on this tile
+	ribi_t::ribi get_all_ways_ribi_unmasked() const {
+		ribi_t::ribi ribi = ribi_t::none;
+		const uint8 count = get_way_count();
+		for(  uint8 i=0;  i<count;  i++  ) {
+			ribi |= static_cast<weg_t *>(obj_bei(i))->get_ribi_unmasked();
+		}
+		return ribi;
+	}
+
+	/// true, if @p w is a tram track (the only kind of way, which can be the third or fourth way on a tile)
+	static bool is_tram_track(const weg_t *w) { return w  &&  w->get_waytype()==track_wt  &&  w->get_desc()->get_styp()==type_tram; }
+
+	/// true, if a track (tram track) lies on a road on this tile, i.e. they share a direction
+	bool has_tram_on_road() const {
+		const uint8 count = get_way_count();
+		for(  uint8 i=0;  i<count;  i++  ) {
+			const weg_t *t = static_cast<weg_t *>(obj_bei(i));
+			if(  t->get_waytype()==track_wt  ) {
+				for(  uint8 j=0;  j<count;  j++  ) {
+					const weg_t *r = static_cast<weg_t *>(obj_bei(j));
+					if(  r->get_waytype()==road_wt  &&  ((r->get_ribi_unmasked() & t->get_ribi_unmasked())!=0  ||  r->get_ribi_unmasked()==ribi_t::none  ||  t->get_ribi_unmasked()==ribi_t::none)  ) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
 
 	/**
-	 * Recalculates the has_way1/has_way2 flags from the way objects really in the object list
+	 * true, if a way with descriptor @p desc may be added as a new (additional) way on this tile
+	 * as far as the number of ways is concerned: at most two ways which are not tram tracks,
+	 * and at most MAX_WAYS_PER_TILE ways in total (i.e. only tram tracks can be the third and
+	 * fourth way).
+	 */
+	bool can_add_way_count(const way_desc_t *desc) const;
+
+private:
+	/// sets the has_way flag for one more way
+	void inc_way_count() {
+		const uint8 count = get_way_count();
+		if(  count<MAX_WAYS_PER_TILE  ) {
+			flags |= (has_way1<<count);
+		}
+	}
+
+	/// clears the has_way flag of the last way
+	void dec_way_count() {
+		const uint8 count = get_way_count();
+		if(  count>0  ) {
+			flags &= ~(has_way1<<(count-1));
+		}
+	}
+
+public:
+
+	/**
+	 * Recalculates the has_way1..has_way4 flags from the way objects really in the object list
 	 * (e.g. ways moved onto a foundation lose these flags). Also corrects the position of the ways.
 	 * @return true, if the flags were changed
 	 */
@@ -785,7 +932,8 @@ public:
 	*/
 	inline crossing_t *get_crossing() const {
 		if (flags & has_way2) {
-			if (obj_t* obj = objlist.bei(2)) {
+			// the crossing follows directly after the ways
+			if (obj_t* obj = objlist.bei(get_way_count())) {
 				if (obj->get_typ() == obj_t::crossing) {
 					return static_cast<crossing_t*>(obj);
 				}
@@ -848,6 +996,9 @@ public:
 	 * @param ribi_rem sollen die ribis der nachbar zururckgesetzt werden?
 	 */
 	sint64 weg_entfernen(waytype_t wegtyp, bool ribi_rem);
+
+	/// like weg_entfernen(waytype_t,bool), but removes the given way @p weg of this tile (e.g. one of two legs of the same waytype)
+	sint64 weg_entfernen(weg_t *weg, bool ribi_rem);
 
 	/**
 	 * Merges two same-waytype disjoint diagonal legs into one way: @p removed_leg is deleted
@@ -941,6 +1092,9 @@ public:
 	 * powerline ond other stuff
 	 */
 	bool remove_everything_from_way(player_t *player,waytype_t wt,ribi_t::ribi ribi_rem);
+
+	/// like remove_everything_from_way(player_t*,waytype_t,ribi_t::ribi), but for the given way @p weg of this tile
+	bool remove_everything_from_way(player_t *player,weg_t *weg,ribi_t::ribi ribi_rem);
 
 	/// @returns true if this is a dummy ground that is only there for UI purposes
 	/// (previews for bridges, elevated ways and tunnels)

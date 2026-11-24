@@ -39,7 +39,7 @@ grund_info_t::grund_info_t(const grund_t* gr_) :
 	end_table();
 	add_component(&textarea2);
 	// every way of a switch junction can have its image fixed
-	for(  uint8 i = 0;  i < 2;  i++  ) {
+	for(  uint8 i = 0;  i < MAX_SWITCH_CHOICES;  i++  ) {
 		weg_t *way = gr->get_weg_nr(i);
 		if(  way  &&  way->can_fix_switch_image()  &&  way->is_deletable(welt->get_active_player()) == NULL  ) {
 			switch_choice_t &choice = switch_choice[switch_choice_count++];

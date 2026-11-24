@@ -1180,7 +1180,7 @@ grund_t* vehicle_t::hop_check()
 		const waytype_t wt = get_waytype();
 		if(  air_wt != wt  &&  route_index < cnv->get_route()->get_count()-1  ) {
 			uint8 dir = get_ribi(bd);
-			if(  bd->has_two_same_waytype_ways()  ) {
+			if(  bd->has_two_same_waytype_ways(wt)  ) {
 				// get_ribi(bd) only sees the first of the two legs => use the one we enter
 				dir = get_ribi(bd, ribi_type(get_pos(), pos_next));
 			}
@@ -2060,7 +2060,7 @@ ribi_t::ribi vehicle_t::get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const
 	// Tiles shared with another waytype (tram on road, level crossing) must not come here,
 	// since their way is unambiguous and the masked ribi below has to be used.
 	const weg_t *leg = NULL;
-	if(  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways()  ) {
+	if(  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways(get_waytype())  ) {
 		leg = gr->get_weg(get_waytype(), ribi_t::backward(from_dir));
 	}
 
@@ -6203,11 +6203,11 @@ void rail_vehicle_t::leave_tile()
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
 			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
-			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  my_cnv  ) {
+			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways(get_waytype())  &&  my_cnv  ) {
 				// the leg cannot be told from our route (e.g. leaving a depot) => release the
 				// leg our convoy holds, provided that it holds just one of them
-				schiene_t *leg0 = (schiene_t *)gr->get_weg_nr(0);
-				schiene_t *leg1 = (schiene_t *)gr->get_weg_nr(1);
+				schiene_t *leg0 = (schiene_t *)gr->get_weg_leg(get_waytype(), 0);
+				schiene_t *leg1 = (schiene_t *)gr->get_weg_leg(get_waytype(), 1);
 				const convoihandle_t c = my_cnv->get_most_parent_convoi();
 				const bool r0 = leg0->is_reserved_by(c);
 				const bool r1 = leg1->is_reserved_by(c);
@@ -6227,7 +6227,7 @@ void rail_vehicle_t::leave_tile()
 						// no vehicle, same convoy, or not yet finished loading (cnv placeholder)
 						continue;
 					}
-					if(  gr->has_two_same_waytype_ways()  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
+					if(  gr->has_two_same_waytype_ways(get_waytype())  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
 						// runs over the other of two same-waytype disjoint legs: it holds its own leg
 						continue;
 					}
@@ -6553,7 +6553,7 @@ ribi_t::ribi air_vehicle_t::get_ribi(const grund_t *gr, ribi_t::ribi from_dir) c
 	// two same-waytype disjoint diagonal legs: use the leg entered via from_dir, but with the
 	// state dependent rules of an airplane (vehicle_t::get_ribi() would ignore the state and
 	// e.g. confine a flying plane to the taxiway below it)
-	if(  gr  &&  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways()  ) {
+	if(  gr  &&  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways(air_wt)  ) {
 		return get_ribi_of_way(gr->get_weg(air_wt, ribi_t::backward(from_dir)));
 	}
 	return vehicle_t::get_ribi(gr, from_dir);

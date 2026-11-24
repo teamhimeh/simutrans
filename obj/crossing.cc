@@ -190,6 +190,10 @@ void crossing_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 		// after loading restore speedlimits
 		w1->count_sign();
 		w2->count_sign();
+		// tram tracks on the road of this crossing (third and fourth way) get the crossing as well
+		for(  uint8 i=2;  i<gr->get_way_count();  i++  ) {
+			gr->get_weg_nr(i)->count_sign();
+		}
 		ns = ribi_t::is_straight_ns(w2->get_ribi_unmasked())||ribi_t::is_straight_ew(w1->get_ribi_unmasked());
 #ifdef MULTI_THREAD
 		pthread_mutex_lock( &crossing_logic_mutex );

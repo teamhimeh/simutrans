@@ -56,10 +56,10 @@ static waytype_t overhead_way_waytype(const way_obj_desc_t *desc)
 }
 
 
-// true when both way slots of gr hold ways of waytype wt (two disjoint diagonal legs)
+// true when gr holds two ways of waytype wt (two disjoint diagonal legs)
 static bool has_two_legs(const grund_t *gr, waytype_t wt)
 {
-	return gr->has_two_same_waytype_ways()  &&  gr->get_weg_nr(0)->get_waytype()==wt;
+	return gr->has_two_same_waytype_ways(wt);
 }
 
 
@@ -139,8 +139,8 @@ wayobj_t::~wayobj_t()
 			weg = gr->get_weg(wt);
 			if(  weg  &&  has_two_legs(gr, wt)  ) {
 				// we spanned both legs, so neither is electrified any more
-				unelectrify_way(gr, gr->get_weg_nr(0), wt);
-				unelectrify_way(gr, gr->get_weg_nr(1), wt);
+				unelectrify_way(gr, gr->get_weg_leg(wt, 0), wt);
+				unelectrify_way(gr, gr->get_weg_leg(wt, 1), wt);
 			}
 			else if(weg) {
 				unelectrify_way(gr, weg, wt);
@@ -246,7 +246,7 @@ void wayobj_t::finish_rd(const uint8 /*loaded_OTRP_version*/)
 		weg_t *w=gr->get_weg(wt);
 		if(  w  &&  has_two_legs(gr, wt)  ) {
 			// we span both legs
-			dir = gr->get_weg_nr(0)->get_ribi_unmasked() | gr->get_weg_nr(1)->get_ribi_unmasked();
+			dir = gr->get_weg_leg(wt, 0)->get_ribi_unmasked() | gr->get_weg_leg(wt, 1)->get_ribi_unmasked();
 		}
 		else if(w) {
 			dir = w->get_ribi_unmasked();
@@ -366,7 +366,7 @@ void wayobj_t::update_electrification()
 	const waytype_t wt = overhead_way_waytype(desc);
 	if(  has_two_legs(gr, wt)  ) {
 		for(  uint8 i=0;  i<2;  i++  ) {
-			weg_t *leg = gr->get_weg_nr(i);
+			weg_t *leg = gr->get_weg_leg(wt, i);
 			if(  leg->get_ribi_unmasked() & dir  ) {
 				electrify_way(leg, desc, wt);
 			}
@@ -493,8 +493,8 @@ void wayobj_t::calc_image()
 		else if (on_two_legs) {
 			// two same-waytype disjoint diagonal legs: this one wayobj covers both (its dir
 			// mask below is unioned across them, same as the any_wt/powerline case above)
-			w = gr->get_weg_nr(0);
-			sec_way_ribi_unmasked = gr->get_weg_nr(1)->get_ribi_unmasked();
+			w = gr->get_weg_leg(wt, 0);
+			sec_way_ribi_unmasked = gr->get_weg_leg(wt, 1)->get_ribi_unmasked();
 		}
 
 		set_yoff( -gr->get_weg_yoff() );

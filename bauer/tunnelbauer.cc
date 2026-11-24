@@ -674,7 +674,7 @@ weg_t *tunnel_builder_t::get_way_kept_on_removal(const grund_t *gr, waytype_t we
 	if(  wegtyp==powerline_wt  ||  gr->ist_karten_boden()  ) {
 		return NULL;
 	}
-	for(  uint8 i=0;  i<2;  i++  ) {
+	for(  uint8 i=0;  i<grund_t::MAX_WAYS_PER_TILE;  i++  ) {
 		weg_t *w = gr->get_weg_nr(i);
 		if(  w  &&  w->get_waytype()!=wegtyp  &&  !w->get_desc()->is_tram()  ) {
 			return w;
@@ -857,22 +857,31 @@ const char *tunnel_builder_t::remove(player_t *player, koord3d start, waytype_t 
 		}
 		// remove the ways of other waytypes (tram tracks) first in the tunnel, so their
 		// neighbours are reconnected (weg_entfernen() with ribi_rem)
-		waytype_t other_wt[2] = { invalid_wt, invalid_wt };
-		for(  uint8 i=0;  i<2;  i++  ) {
+		waytype_t other_wt[grund_t::MAX_WAYS_PER_TILE] = { invalid_wt, invalid_wt, invalid_wt, invalid_wt };
+		for(  uint8 i=0;  i<grund_t::MAX_WAYS_PER_TILE;  i++  ) {
 			if(  weg_t *w = gr->get_weg_nr(i)  ) {
 				if(  w->get_waytype()!=wegtyp  ) {
 					other_wt[i] = w->get_waytype();
 				}
 			}
 		}
-		for(  uint8 i=0;  i<2;  i++  ) {
-			if(  other_wt[i]!=invalid_wt  ) {
+		for(  uint8 i=0;  i<grund_t::MAX_WAYS_PER_TILE;  i++  ) {
+			// a waytype may have two legs here, so remove all of its ways
+			while(  other_wt[i]!=invalid_wt  &&  gr->get_weg(other_wt[i])  ) {
+				const uint8 count = gr->get_way_count();
 				gr->remove_everything_from_way(player,other_wt[i],ribi_t::none);
+				if(  gr->get_way_count()==count  ) {
+					break;
+				}
 			}
 		}
-		// then the second leg of our waytype (closed diagonal of the same waytype)
-		if(gr->get_weg_nr(1)) {
+		// then the further legs of our waytype (closed diagonal of the same waytype)
+		while(  gr->get_weg_nr(1)  ) {
+			const uint8 count = gr->get_way_count();
 			gr->remove_everything_from_way(player,gr->get_weg_nr(1)->get_waytype(),ribi_t::none);
+			if(  gr->get_way_count()==count  ) {
+				break;
+			}
 		}
 		gr->remove_everything_from_way(player,wegtyp,ribi_t::none); // removes stop and signals correctly
 		// remove everything else

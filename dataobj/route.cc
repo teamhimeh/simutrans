@@ -150,7 +150,7 @@ class route_closed_list_t
 
 	// the leg entered via from, or NULL when the tile is an ordinary one
 	const weg_t *get_leg(const grund_t *gr, ribi_t::ribi from) const {
-		if(  from==ribi_t::none  ||  !ribi_t::is_single(from)  ||  !gr->has_two_same_waytype_ways()  ) {
+		if(  from==ribi_t::none  ||  !ribi_t::is_single(from)  ||  !gr->has_two_same_waytype_ways(wt)  ) {
 			return NULL;
 		}
 		return gr->get_weg(wt, ribi_t::backward(from));
@@ -158,7 +158,7 @@ class route_closed_list_t
 
 	// a start node on a two-leg tile has no leg yet: it is never closed
 	bool is_open_start(const grund_t *gr, ribi_t::ribi from) const {
-		return from==ribi_t::none  &&  gr->has_two_same_waytype_ways();
+		return from==ribi_t::none  &&  gr->has_two_same_waytype_ways(wt);
 	}
 
 public:
@@ -534,7 +534,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 		uint32 topnode_f = !queue.empty() ? queue.front()->f : max_cost;
 
 		ribi_t::ribi way_ribi;
-		if(  tmp->parent==NULL  &&  gr->has_two_same_waytype_ways()  ) {
+		if(  tmp->parent==NULL  &&  gr->has_two_same_waytype_ways(wegtyp)  ) {
 			// start tile with two same-waytype disjoint diagonal legs: start on the leg we are on
 			// (known from the heading with which it was entered), or on either one if unknown
 			if(  start_heading!=ribi_t::none  ) {
@@ -543,7 +543,7 @@ bool route_t::intern_calc_route(karte_t *welt, const koord3d ziel, const koord3d
 			else {
 				way_ribi = ribi_t::none;
 				for(  uint8 i=0;  i<2;  i++  ) {
-					const ribi_t::ribi leg_ribi = gr->get_weg_nr(i)->get_ribi_unmasked();
+					const ribi_t::ribi leg_ribi = gr->get_weg_leg(wegtyp, i)->get_ribi_unmasked();
 					// any single bit of the leg selects it; get_ribi() expects the entry heading
 					const ribi_t::ribi leg_bit = leg_ribi & (ribi_t::ribi)(~leg_ribi+1u);
 					if(  leg_bit!=ribi_t::none  ) {
