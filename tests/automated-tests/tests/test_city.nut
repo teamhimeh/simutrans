@@ -146,3 +146,37 @@ function test_city_change_size_to_minimum()
 	ASSERT_EQUAL(command_x(tool_remover).work(player_x(1), coord3d(1, 2, 0)), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
+
+
+// The townhall is in the corner (0, 0): the tiles on its far side are outside of the map.
+// When its road is gone and the city grows, the townhall is rebuilt and the search for the old road
+// must not look at tiles outside of the map.
+function test_city_townhall_rebuild_without_road_at_map_border()
+{
+	ASSERT_EQUAL(command_x(tool_add_city).work(player_x(1), coord3d(0, 0, 0)), null)
+	ASSERT_TRUE(tile_x(0, 0, 0).find_object(mo_building) != null)
+	ASSERT_TRUE(tile_x(0, 1, 0).get_way(wt_road) != null)
+
+	// the road next to the townhall disappears
+	ASSERT_EQUAL(command_x(tool_remover).work(player_x(1), coord3d(0, 1, 0)), null)
+
+	// a big city needs a bigger townhall
+	ASSERT_EQUAL(command_x(tool_change_city_size).work(player_x(0), coord3d(0, 0, 0), "1500"), null)
+	sleep()
+	ASSERT_TRUE(tile_x(0, 0, 0).find_object(mo_building) != null)
+
+	// clean up: remove everything the city has built
+	for (local pass = 0; pass < 3; ++pass) {
+		for (local x = 0; x < 16; ++x) {
+			for (local y = 0; y < 16; ++y) {
+				command_x(tool_remover).work(player_x(1), coord3d(x, y, 0))
+			}
+		}
+	}
+	for (local x = 0; x < 16; ++x) {
+		for (local y = 0; y < 16; ++y) {
+			ASSERT_TRUE(tile_x(x, y, 0).is_empty())
+		}
+	}
+	RESET_ALL_PLAYER_FUNDS()
+}

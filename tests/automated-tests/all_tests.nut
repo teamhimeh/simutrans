@@ -60,6 +60,7 @@ include("tests/test_diagonal_two_waytypes")
 include("tests/test_diagonal_two_waytypes_same_desc")
 include("tests/test_switch_image_override")
 include("tests/test_diagonal_elevated")
+include("tests/test_pedestrian")
 
 all_tests <- [
 	test_switch_image_override_scripted,
@@ -86,6 +87,7 @@ all_tests <- [
 	test_city_add_by_public_player,
 	test_city_add_on_existing_townhall,
 	test_city_add_near_map_border,
+	test_city_townhall_rebuild_without_road_at_map_border,
 	test_city_change_size_invalid_params,
 	test_climate_invalid,
 	test_climate_flat,
@@ -384,6 +386,7 @@ all_tests <- [
 	test_diagonal_two_waytypes_same_desc_partial_leg,
 	test_diagonal_elevated_two_waytypes_straight,
 	test_diagonal_elevated_two_waytypes_route,
+	test_pedestrian_arrive_at_dead_road_on_map_border,
 ]
 
 
