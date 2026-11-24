@@ -108,11 +108,20 @@ EOF
 	if [ -n "$sf_format" ]; then
 		if [ "$(uname -s)" != "Linux" ] || [ ! -c /dev/full ]; then
 			echo "  - skipped (needs /dev/full, Linux only)"
+			rm -f "$temp_log"
 			return 0
 		fi
 		mkdir -p "$sf_dir"
+		# a backup left by an interrupted run holds the original config: restore it first
+		[ -f "$sf_config.save_failure_bak" ] && mv -f "$sf_config.save_failure_bak" "$sf_config"
 		cp "$sf_config" "$sf_config.save_failure_bak"
 		sed -i "s/^saveformat *=.*/saveformat = $sf_format/" "$sf_config"
+		if ! grep -q "^saveformat = ${sf_format}[[:space:]]*$" "$sf_config"; then
+			echo "  cannot select save format $sf_format in $sf_config"
+			mv -f "$sf_config.save_failure_bak" "$sf_config"
+			return 1
+		fi
+		local sf_name
 		for sf_name in save_failure_disk_full save_failure_unwritable; do
 			rm -rf "$sf_dir/$sf_name.sv_"
 			printf 'existing save' > "$sf_dir/$sf_name.sve"

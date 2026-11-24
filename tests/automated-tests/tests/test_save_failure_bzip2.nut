@@ -5,8 +5,8 @@
 
 
 //
-// Saving must fail cleanly (no crash, an error is returned, an existing save and no
-// temporary file are left changed) when the temporary file cannot be written.
+// Saving must fail cleanly (no crash, an error is returned, an existing save stays unchanged and no
+// temporary file is left behind) when the temporary file cannot be written.
 // Format: bzip2. run-automated-tests.sh selects the save format and prepares, per test file:
 //   save/save_failure_disk_full.sv_   -> symlink to /dev/full (Linux only; skipped elsewhere)
 //   save/save_failure_unwritable.sv_  -> a directory, so it cannot be opened for writing
