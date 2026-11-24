@@ -43,10 +43,10 @@ function test_pedestrian_arrive_at_dead_road_on_map_border()
 	sleep()
 
 	// several packets of passengers: each of them creates pedestrians next to the stop
-	local num_packets = 3
+	local num_packets = 4
 	local pax_per_packet = bus.get_capacity() / num_packets
 	for (local i = 0; i < num_packets; ++i) {
-		ASSERT_EQUAL(world.generate_goods(coord(1, 7), coord(1, 2 + i), good_desc_x.passenger, pax_per_packet), 1)
+		ASSERT_EQUAL(world.generate_goods(coord(1, 6 + i % 3), coord(1, 2 + i % 3), good_desc_x.passenger, pax_per_packet), 1)
 	}
 	local num_pax = num_packets * pax_per_packet
 
@@ -68,6 +68,7 @@ function test_pedestrian_arrive_at_dead_road_on_map_border()
 		for (local pass = 0; pass < 20  &&  !tile_x(0, y, 0).is_empty(); ++pass) {
 			command_x(tool_remover).work(pl, coord3d(0, y, 0))
 		}
+		ASSERT_TRUE(tile_x(0, y, 0).is_empty())
 	}
 	RESET_ALL_PLAYER_FUNDS()
 }
