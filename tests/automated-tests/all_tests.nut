@@ -30,6 +30,8 @@ include("tests/test_save_failure_xml")
 include("tests/test_save_failure_bzip")
 include("tests/test_save_failure_zstd")
 include("tests/test_save_failure_binary")
+include("tests/test_save_failure_zipped")
+include("tests/test_save_failure_xml_zipped")
 include("tests/test_sign")
 include("tests/test_start_signal")
 include("tests/test_stop_before_check_signal")
@@ -206,6 +208,10 @@ all_tests <- [
 	test_save_failure_zstd_unwritable,
 	test_save_failure_binary_disk_full,
 	test_save_failure_binary_unwritable,
+	test_save_failure_zipped_disk_full,
+	test_save_failure_zipped_unwritable,
+	test_save_failure_xml_zipped_disk_full,
+	test_save_failure_xml_zipped_unwritable,
 	test_sign_build_oneway,
 	test_sign_remove_trafficlight,
 	test_sign_build_private_way,
