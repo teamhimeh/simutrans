@@ -23,6 +23,10 @@ zlib_file_rdwr_stream_t::zlib_file_rdwr_stream_t(const std::string &filename, bo
 	else {
 		gzfp = dr_gzopen(filename.c_str(), "rb");
 	}
+	if (gzfp == NULL) {
+		status = STATUS_ERR_NOT_EXISTING;
+		return;
+	}
 	gzbuffer(gzfp, 65536);
 	status = STATUS_OK;
 }
@@ -30,11 +34,27 @@ zlib_file_rdwr_stream_t::zlib_file_rdwr_stream_t(const std::string &filename, bo
 
 zlib_file_rdwr_stream_t::~zlib_file_rdwr_stream_t()
 {
-	if (is_writing()) {
-		gzflush(gzfp, Z_FINISH);
+	zlib_file_rdwr_stream_t::finish();
+}
+
+
+void zlib_file_rdwr_stream_t::finish()
+{
+	if (!gzfp) {
+		return;
 	}
 
-	gzclose(gzfp);
+	// zlib buffers the data: a full disk shows up when flushing and closing
+	bool failed = false;
+	if (is_writing()) {
+		failed = (gzflush(gzfp, Z_FINISH) != Z_OK);
+	}
+	failed |= (gzclose(gzfp) != Z_OK)  &&  is_writing();
+	gzfp = NULL;
+
+	if (failed  &&  status == STATUS_OK) {
+		status = STATUS_ERR_FULL;
+	}
 }
 
 
