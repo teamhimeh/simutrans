@@ -31,6 +31,9 @@ public:
 	/// @copydoc rdwr_stream_t::write
 	size_t write(const void *buf, size_t len) OVERRIDE;
 
+	/// @copydoc rdwr_stream_t::finish
+	void finish() OVERRIDE;
+
 private:
 	FILE *file;
 };

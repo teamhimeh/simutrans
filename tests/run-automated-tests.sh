@@ -93,6 +93,44 @@ EOF
 		chmod 444 "$ro_file"
 	fi
 
+	# test_save_failure_<format> checks that a save which cannot be written fails cleanly.
+	# Per test file: select the save format, then put in place
+	#   save/save_failure_disk_full.sv_  -> symlink to /dev/full (the temporary file of a full disk)
+	#   save/save_failure_unwritable.sv_ -> a directory (the temporary file cannot be opened)
+	# and, next to each, an existing save that must survive the failed save unchanged.
+	# /dev/full exists on Linux only: elsewhere the test is skipped (reported as passed).
+	local sf_dir="$WORKDIR/save"
+	local sf_config="$WORKDIR/config/simuconf.tab"
+	local sf_format=""
+	case "$test_file_base" in
+		test_save_failure_bzip) sf_format="bzip2" ;; # no digit in the test names: CI picks them with test_[a-z_]+
+		test_save_failure_*) sf_format="${test_file_base#test_save_failure_}" ;;
+	esac
+	if [ -n "$sf_format" ]; then
+		if [ "$(uname -s)" != "Linux" ] || [ ! -c /dev/full ]; then
+			echo "  - skipped (needs /dev/full, Linux only)"
+			rm -f "$temp_log"
+			return 0
+		fi
+		mkdir -p "$sf_dir"
+		# a backup left by an interrupted run holds the original config: restore it first
+		[ -f "$sf_config.save_failure_bak" ] && mv -f "$sf_config.save_failure_bak" "$sf_config"
+		cp "$sf_config" "$sf_config.save_failure_bak"
+		sed -i "s/^saveformat *=.*/saveformat = $sf_format/" "$sf_config"
+		if ! grep -q "^saveformat = ${sf_format}[[:space:]]*$" "$sf_config"; then
+			echo "  cannot select save format $sf_format in $sf_config"
+			mv -f "$sf_config.save_failure_bak" "$sf_config"
+			return 1
+		fi
+		local sf_name
+		for sf_name in save_failure_disk_full save_failure_unwritable; do
+			rm -rf "$sf_dir/$sf_name.sv_"
+			printf 'existing save' > "$sf_dir/$sf_name.sve"
+		done
+		ln -s /dev/full "$sf_dir/save_failure_disk_full.sv_"
+		mkdir "$sf_dir/save_failure_unwritable.sv_"
+	fi
+
 	# Start sim in background and redirect output
 	$SIM_BINARY -set_workdir "$WORKDIR" -objects pak -scenario automated-tests -debug 2 -lang en -fps 100 > "$temp_log" 2>&1 &
 	local pid=$!
@@ -156,6 +194,24 @@ EOF
 		fi
 		chmod 644 "$ro_file" 2>/dev/null
 		rm -f "$ro_file" "$WORKDIR/save/script_save_readonly.sv_"
+	fi
+
+	# A failed save must leave the existing saves untouched and no temporary file behind
+	if [ -n "$sf_format" ]; then
+		for sf_name in save_failure_disk_full save_failure_unwritable; do
+			if [ $result -eq 0 ] && [ "$(cat "$sf_dir/$sf_name.sve")" != "existing save" ]; then
+				echo "  $sf_name.sve was modified by the failed save"
+				result=1
+			fi
+		done
+		# in the disk full case the symlink to /dev/full is the temporary file itself and has to be removed
+		if [ $result -eq 0 ] && [ "${test_name%_disk_full}" != "$test_name" ] && { [ -e "$sf_dir/save_failure_disk_full.sv_" ] || [ -L "$sf_dir/save_failure_disk_full.sv_" ]; }; then
+			echo "  temporary file save_failure_disk_full.sv_ was left behind"
+			result=1
+		fi
+		mv -f "$sf_config.save_failure_bak" "$sf_config"
+		rm -rf "$sf_dir/save_failure_disk_full.sve" "$sf_dir/save_failure_disk_full.sv_" \
+		       "$sf_dir/save_failure_unwritable.sve" "$sf_dir/save_failure_unwritable.sv_"
 	fi
 
 	# If test failed, show the last 30 lines

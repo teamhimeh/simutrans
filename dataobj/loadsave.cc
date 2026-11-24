@@ -495,6 +495,10 @@ const char *loadsave_t::close()
 		set_buffered(false);
 	}
 
+	// The compressors only write their last block and the file is only closed now,
+	// so a full disk can still show up here. Do not read the status before that.
+	stream->finish();
+
 	const char *errmsg = NULL;
 
 	switch (stream->get_status()) {
@@ -605,8 +609,12 @@ void loadsave_t::flush_buffer(int buf_num)
 	pthread_mutex_lock(&loadsave_mutex);
 #endif
 
-	const size_t sz = stream->write(buff[buf_num].buf, buff[buf_num].pos);
-	assert(sz == buff[buf_num].pos);
+	// Cannot abort the saving process, so just ignore any further flushes
+	// if the previous flush has failed.
+	// loadsave_t::close() handles propagation of the error message.
+	if (stream->get_status() == rdwr_stream_t::STATUS_OK) {
+		stream->write(buff[buf_num].buf, buff[buf_num].pos);
+	}
 	buff[buf_num].pos = 0;
 
 #ifdef MULTI_THREAD

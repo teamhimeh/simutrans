@@ -15,7 +15,9 @@
 
 zstd_file_rdwr_stream_t::zstd_file_rdwr_stream_t(const std::string &filename, bool writing, int compression_level) :
 	raw_file_rdwr_stream_t(filename, writing),
-	zbuff(NULL)
+	zbuff(NULL),
+	compression_context(NULL),
+	decompression_context(NULL)
 {
 	if (status != STATUS_OK) {
 		return; // Could not open file
@@ -107,34 +109,52 @@ zstd_file_rdwr_stream_t::zstd_file_rdwr_stream_t(const std::string &filename, bo
 
 zstd_file_rdwr_stream_t::~zstd_file_rdwr_stream_t()
 {
-	if (is_writing()) {
-		// write zero length dummy to indicate end of data
-		zin.src = "";
-		zin.size = 0;
-		zin.pos = 0;
+	zstd_file_rdwr_stream_t::finish();
 
-		zout.dst = zbuff;
-		zout.size = ZSTD_FILE_BUF_SIZE;
-		zout.pos = 0;
-
-		size_t ret;
-		do {
-			zout.pos = 0;
-			ret = ZSTD_endStream( compression_context, &zout );
-			if (ZSTD_isError(ret)) {
-				dbg->error("zstd_file_rdwr_stream_t::~zstd_file_rdwr_stream_t", "Error flushing stream: %s", ZSTD_getErrorName(ret));
-			}
-
-			raw_file_rdwr_stream_t::write( zout.dst, zout.pos );
-		} while( ret>0 );
-
-		ZSTD_freeCCtx( compression_context );
-	}
-	else {
+	if (decompression_context) {
 		ZSTD_freeDCtx( decompression_context );
 	}
 
 	free( zbuff );
+}
+
+
+void zstd_file_rdwr_stream_t::finish()
+{
+	// compression_context only exists while writing; the constructor may have failed before the buffer was set up
+	if (compression_context) {
+		if (zbuff  &&  status == STATUS_OK) {
+			// write zero length dummy to indicate end of data
+			zin.src = "";
+			zin.size = 0;
+			zin.pos = 0;
+
+			zout.dst = zbuff;
+			zout.size = ZSTD_FILE_BUF_SIZE;
+			zout.pos = 0;
+
+			size_t ret;
+			do {
+				zout.pos = 0;
+				ret = ZSTD_endStream( compression_context, &zout );
+				if (ZSTD_isError(ret)) {
+					dbg->error("zstd_file_rdwr_stream_t::finish", "Error flushing stream: %s", ZSTD_getErrorName(ret));
+					status = STATUS_ERR_CORRUPT;
+					break;
+				}
+
+				if (raw_file_rdwr_stream_t::write( zout.dst, zout.pos ) != zout.pos) {
+					// disk full
+					break;
+				}
+			} while( ret>0 );
+		}
+
+		ZSTD_freeCCtx( compression_context );
+		compression_context = NULL;
+	}
+
+	raw_file_rdwr_stream_t::finish();
 }
 
 

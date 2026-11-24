@@ -22,30 +22,50 @@ bzip2_file_rdwr_stream_t::bzip2_file_rdwr_stream_t(const std::string &filename, 
 		bzfp = BZ2_bzReadOpen( &bse, fp, 0, 0, NULL, 0 );
 	}
 
+	status = STATUS_OK;
+	if (fp==NULL) {
+		status = STATUS_ERR_NOT_EXISTING;
+	}
 	if(  bse!=BZ_OK  ) {
 		status = STATUS_ERR_CORRUPT;
 	}
-
-	status = STATUS_OK;
 }
 
 
 bzip2_file_rdwr_stream_t::~bzip2_file_rdwr_stream_t()
 {
-	if (is_writing()) {
-		// BZLIB seems to eat the last byte if it is at an odd position
-		// => we just write a dummy zero padding byte
-		if (status == STATUS_OK) {
-			write( "", 1 );
+	bzip2_file_rdwr_stream_t::finish();
+}
+
+
+void bzip2_file_rdwr_stream_t::finish()
+{
+	if (bzfp) {
+		if (is_writing()) {
+			// BZLIB seems to eat the last byte if it is at an odd position
+			// => we just write a dummy zero padding byte
+			if (status == STATUS_OK) {
+				write( "", 1 );
+			}
+
+			// the last block is written here, so this is where a full disk shows up
+			BZ2_bzWriteClose( &bse, bzfp, status != STATUS_OK, NULL, NULL );
+			if (bse != BZ_OK  &&  status == STATUS_OK) {
+				status = STATUS_ERR_FULL;
+			}
 		}
-
-		BZ2_bzWriteClose( &bse, bzfp, 0, NULL, NULL );
+		else {
+			BZ2_bzReadClose( &bse, bzfp );
+		}
+		bzfp = NULL;
 	}
-	else {
-		BZ2_bzReadClose( &bse, bzfp );
-	}
 
-	fclose( fp );
+	if (fp) {
+		if (fclose( fp ) != 0  &&  is_writing()  &&  status == STATUS_OK) {
+			status = STATUS_ERR_FULL;
+		}
+		fp = NULL;
+	}
 }
 
 
