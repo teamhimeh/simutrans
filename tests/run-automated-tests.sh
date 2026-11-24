@@ -103,6 +103,7 @@ EOF
 	local sf_config="$WORKDIR/config/simuconf.tab"
 	local sf_format=""
 	case "$test_file_base" in
+		test_save_failure_bzip) sf_format="bzip2" ;; # no digit in the test names: CI picks them with test_[a-z_]+
 		test_save_failure_*) sf_format="${test_file_base#test_save_failure_}" ;;
 	esac
 	if [ -n "$sf_format" ]; then

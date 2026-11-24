@@ -27,7 +27,7 @@ include("tests/test_reservation")
 include("tests/test_scenario")
 include("tests/test_save_game")
 include("tests/test_save_failure_xml")
-include("tests/test_save_failure_bzip2")
+include("tests/test_save_failure_bzip")
 include("tests/test_save_failure_zstd")
 include("tests/test_save_failure_binary")
 include("tests/test_sign")
@@ -200,8 +200,8 @@ all_tests <- [
 	test_save_game_rejects_read_only_target,
 	test_save_failure_xml_disk_full,
 	test_save_failure_xml_unwritable,
-	test_save_failure_bzip2_disk_full,
-	test_save_failure_bzip2_unwritable,
+	test_save_failure_bzip_disk_full,
+	test_save_failure_bzip_unwritable,
 	test_save_failure_zstd_disk_full,
 	test_save_failure_zstd_unwritable,
 	test_save_failure_binary_disk_full,
