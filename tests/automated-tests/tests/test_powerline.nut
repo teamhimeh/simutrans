@@ -586,3 +586,66 @@ function test_powerline_remove_powerbridge()
 	ASSERT_EQUAL(command_x.set_slope(pl, coord3d(4, 3, 0), slope.flat), null)
 	RESET_ALL_PLAYER_FUNDS()
 }
+
+
+// Builds a long snake-shaped powerline from the row y_top to the row y_bottom (both inclusive, every second row).
+// Returns the number of tiles.
+function build_snake_powerline(pl, powerline, y_top, y_bottom)
+{
+	local count = 0
+	local to_right = true
+	for (local y = y_top; y <= y_bottom; y += 2) {
+		ASSERT_EQUAL(command_x.build_way(pl, coord3d(0, y, 0), coord3d(15, y, 0), powerline, true), null)
+		count += 16
+		if (y < y_bottom) {
+			// connect to the next row at alternating ends
+			local x = to_right ? 15 : 0
+			ASSERT_EQUAL(command_x.build_way(pl, coord3d(x, y, 0), coord3d(x, y + 2, 0), powerline, true), null)
+			count += 1
+			to_right = !to_right
+		}
+	}
+	return count
+}
+
+
+// Connecting two big powerline networks replaces the network of one side tile by tile.
+// This must not recurse once per tile (stack overflow on huge maps).
+function test_powerline_connect_big_networks()
+{
+	local pl = player_x(0)
+	local powerline = way_desc_x.get_available_ways(wt_power, st_flat)[0]
+	ASSERT_TRUE(powerline != null)
+
+	// two separate networks with a gap of one row between them
+	local count_a = build_snake_powerline(pl, powerline, 0, 6)
+	local count_b = build_snake_powerline(pl, powerline, 8, 14)
+	ASSERT_TRUE(count_a + count_b > 120)
+
+	local a_start = powerline_x(0, 0, 0)
+	local a_end   = powerline_x(0, 6, 0)
+	local b_start = powerline_x(0, 8, 0)
+	local b_end   = powerline_x(0, 14, 0)
+	ASSERT_TRUE(a_start.is_connected(a_end))
+	ASSERT_TRUE(b_start.is_connected(b_end))
+	ASSERT_FALSE(a_start.is_connected(b_end))
+
+	// the new piece joins both networks
+	ASSERT_EQUAL(command_x.build_way(pl, coord3d(0, 6, 0), coord3d(0, 8, 0), powerline, true), null)
+	ASSERT_TRUE(a_start.is_connected(b_end))
+	ASSERT_TRUE(a_end.is_connected(b_start))
+	ASSERT_TRUE(powerline_x(0, 7, 0).is_connected(b_end))
+
+	// cutting the snake in the middle splits the network again
+	ASSERT_EQUAL(command_x(tool_remove_way).work(pl, coord3d(0, 3, 0), coord3d(0, 3, 0), "" + wt_power), null)
+	ASSERT_FALSE(a_start.is_connected(a_end))
+	ASSERT_TRUE(a_end.is_connected(b_end))
+
+	// clean up
+	for (local x = 0; x < 16; ++x) {
+		for (local y = 0; y < 16; ++y) {
+			command_x(tool_remove_way).work(pl, coord3d(x, y, 0), coord3d(x, y, 0), "" + wt_power)
+		}
+	}
+	RESET_ALL_PLAYER_FUNDS()
+}
