@@ -170,6 +170,7 @@ all_tests <- [
 	test_player_name,
 	test_player_lines,
 	test_powerline_connect,
+	test_powerline_connect_big_networks,
 	test_powerline_build_below_powerbridge,
 	test_powerline_build_powerbridge_above_powerline,
 	test_powerline_build_transformer,
