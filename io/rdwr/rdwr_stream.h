@@ -61,6 +61,13 @@ public:
 	/// @returns Undefined (but not @p len), if an error occurred.
 	virtual size_t write(const void *buf, size_t len) = 0;
 
+	/// When writing: flushes everything still buffered (also inside the compressor) and closes the file.
+	/// Errors that only show up now (disk full, I/O error on close) are reported via @ref get_status().
+	/// The destructor calls this too, but by then nobody can look at the status any more:
+	/// the owner has to call it before reading the final status. May be called more than once.
+	/// Call it after the last @ref write(). Does nothing when reading.
+	virtual void finish() {}
+
 protected:
 	/// @warning This must be updated to the correct value when @p read() or @p write() or the constructor fails.
 	status_t status;

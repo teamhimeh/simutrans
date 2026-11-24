@@ -495,6 +495,10 @@ const char *loadsave_t::close()
 		set_buffered(false);
 	}
 
+	// The compressors only write their last block and the file is only closed now,
+	// so a full disk can still show up here. Do not read the status before that.
+	stream->finish();
+
 	const char *errmsg = NULL;
 
 	switch (stream->get_status()) {

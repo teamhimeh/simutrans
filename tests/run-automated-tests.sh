@@ -194,8 +194,8 @@ EOF
 				result=1
 			fi
 		done
-		# the symlink to /dev/full is the temporary file itself and has to be removed
-		if [ $result -eq 0 ] && { [ -e "$sf_dir/save_failure_disk_full.sv_" ] || [ -L "$sf_dir/save_failure_disk_full.sv_" ]; }; then
+		# in the disk full case the symlink to /dev/full is the temporary file itself and has to be removed
+		if [ $result -eq 0 ] && [ "${test_name%_disk_full}" != "$test_name" ] && { [ -e "$sf_dir/save_failure_disk_full.sv_" ] || [ -L "$sf_dir/save_failure_disk_full.sv_" ]; }; then
 			echo "  temporary file save_failure_disk_full.sv_ was left behind"
 			result=1
 		fi

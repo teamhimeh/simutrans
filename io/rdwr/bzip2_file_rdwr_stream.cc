@@ -34,21 +34,37 @@ bzip2_file_rdwr_stream_t::bzip2_file_rdwr_stream_t(const std::string &filename, 
 
 bzip2_file_rdwr_stream_t::~bzip2_file_rdwr_stream_t()
 {
-	if (is_writing()) {
-		// BZLIB seems to eat the last byte if it is at an odd position
-		// => we just write a dummy zero padding byte
-		if (status == STATUS_OK) {
-			write( "", 1 );
-		}
+	bzip2_file_rdwr_stream_t::finish();
+}
 
-		BZ2_bzWriteClose( &bse, bzfp, 0, NULL, NULL );
-	}
-	else {
-		BZ2_bzReadClose( &bse, bzfp );
+
+void bzip2_file_rdwr_stream_t::finish()
+{
+	if (bzfp) {
+		if (is_writing()) {
+			// BZLIB seems to eat the last byte if it is at an odd position
+			// => we just write a dummy zero padding byte
+			if (status == STATUS_OK) {
+				write( "", 1 );
+			}
+
+			// the last block is written here, so this is where a full disk shows up
+			BZ2_bzWriteClose( &bse, bzfp, status != STATUS_OK, NULL, NULL );
+			if (bse != BZ_OK  &&  status == STATUS_OK) {
+				status = STATUS_ERR_FULL;
+			}
+		}
+		else {
+			BZ2_bzReadClose( &bse, bzfp );
+		}
+		bzfp = NULL;
 	}
 
 	if (fp) {
-		fclose( fp );
+		if (fclose( fp ) != 0  &&  is_writing()  &&  status == STATUS_OK) {
+			status = STATUS_ERR_FULL;
+		}
+		fp = NULL;
 	}
 }
 

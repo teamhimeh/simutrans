@@ -44,9 +44,27 @@ raw_file_rdwr_stream_t::raw_file_rdwr_stream_t(FILE *f, bool writing) :
 
 raw_file_rdwr_stream_t::~raw_file_rdwr_stream_t()
 {
-	if (file) {
-		fflush(file);
-		fclose(file);
+	raw_file_rdwr_stream_t::finish();
+}
+
+
+void raw_file_rdwr_stream_t::finish()
+{
+	if (!file) {
+		return;
+	}
+
+	// A failed write is only reliably seen here: ferror() stays set once a write has failed,
+	// and fflush() / fclose() report the data that could not be written out any more.
+	bool failed = false;
+	if (is_writing()) {
+		failed = (fflush(file) != 0)  ||  ferror(file);
+	}
+	failed |= (fclose(file) != 0)  &&  is_writing();
+	file = NULL;
+
+	if (failed  &&  status == STATUS_OK) {
+		status = STATUS_ERR_FULL;
 	}
 }
 
