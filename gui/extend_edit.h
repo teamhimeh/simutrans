@@ -23,6 +23,8 @@
 #include "../utils/cbuffer_t.h"
 #include "../simtypes.h"
 
+class gui_label_t;
+
 class player_t;
 
 /**
@@ -84,7 +86,11 @@ public:
 		BY_SIZE,
 		BY_COST,
 		BY_GOODS_NUMBER,
-		BY_REMOVAL
+		BY_REMOVAL,
+		BY_SPEED,
+		BY_MAINTENANCE,
+		BY_LEVEL,
+		BY_TYPE
 	};
 
 	gui_sorting_item_t(uint8 r);
@@ -97,6 +103,34 @@ public:
 
 
 
+/** A selectable, depot-sized preview shared by building editors. */
+class building_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
+{
+	gui_building_t image;
+	const char *name;
+	scr_size cell_size;
+public:
+	building_thumbnail_t(const building_desc_t *desc, const char *name_, scr_size cell_size_, int layout = 0);
+	const char *get_text() const OVERRIDE { return name; }
+	scr_size get_min_size() const OVERRIDE;
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+	void draw(scr_coord offset) OVERRIDE;
+};
+
+/** A selectable preview for trees and ground objects. */
+class image_thumbnail_t : public gui_scrolled_list_t::scrollitem_t
+{
+	image_id image;
+	const char *name;
+	scr_size cell_size;
+public:
+	image_thumbnail_t(image_id image_, const char *name_, scr_size cell_size_) : image(image_), name(name_), cell_size(cell_size_) {}
+	const char *get_text() const OVERRIDE { return name; }
+	scr_size get_min_size() const OVERRIDE;
+	scr_size get_max_size() const OVERRIDE { return get_min_size(); }
+	void draw(scr_coord offset) OVERRIDE;
+};
+
 /**
  * Base class map editor dialogues to select object to place on map.
  */
@@ -106,6 +140,13 @@ class extend_edit_gui_t :
 {
 protected:
 	player_t *player;
+	button_t bt_thumbnails, bt_large_thumbnails;
+	gui_aligned_container_t cont_thumbnail_options;
+	void init_thumbnail_options();
+	scr_size get_thumbnail_size() const;
+	uint8 thumbnail_layout;
+	void update_thumbnail_columns();
+	void show_selected_building();
 	/// cont_left: left column, cont_right: right column
 	gui_aligned_container_t cont_left, cont_right;
 	/// cont_filter: Settings about the content of the list (above list)
@@ -113,6 +154,8 @@ protected:
 	/// cont_options: Settings about the active object (eg. rotation)
 	/// cont_scrolly: the scrollable container (image + desc)
 	gui_aligned_container_t cont_filter, cont_options, cont_timeline, cont_scrolly;
+	/// table holding the climate filter (label + cb_climates)
+	gui_aligned_container_t *tbl_climate;
 
 
 
@@ -131,6 +174,14 @@ protected:
 	gui_combobox_t cb_rotation, cb_climates, cb_sortedby;
 
 	gui_numberinput_t ni_timeline_year, ni_timeline_month;
+	gui_label_t *lb_timeline_month, *lb_timeline_year;
+
+	/**
+	 * settings_t::prohibit_too_new: objects which are not yet available cannot be selected.
+	 * Then only "Show obsolete" is shown and the list always follows the current date
+	 * (if the timeline is used at all). Not applied for the public player.
+	 */
+	void apply_prohibit_too_new();
 
 	virtual void fill_list() {}
 
@@ -165,6 +216,13 @@ public:
 	void set_windowsize( scr_size s ) OVERRIDE;
 
 	bool infowin_event(event_t const*) OVERRIDE;
+
+	/**
+	 * Follows the change of the active player: the timeline settings and the list
+	 * depend on the player (the public player ignores settings_t::prohibit_too_new).
+	 * Sub classes overriding draw() must call extend_edit_gui_t::draw.
+	 */
+	void draw(scr_coord pos, scr_size size) OVERRIDE;
 
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
 

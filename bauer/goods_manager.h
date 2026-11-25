@@ -27,7 +27,7 @@ private:
 	static goods_desc_t *load_none;
 
 	// number of different good classes;
-	static uint8 max_catg_index;
+	static uint16 max_catg_index;
 
 	/**
 	 * Convoy shipping: the dummy good that represents "space aboard a carrier convoy for a
@@ -44,6 +44,17 @@ public:
 		INDEX_NONE = 2
 	};
 
+	/**
+	 * A goods index has to fit into the 10 bit field ware_t::index, so at most this many
+	 * goods can be registered. Category indices are bounded by the same number, because
+	 * every special freight gets a category of its own.
+	 * Kept in sync with ware_t::GOODS_INDEX_LIMIT by a static_assert in goods_manager.cc.
+	 */
+	enum {
+		MAX_GOODS_COUNT     = 1023,
+		INVALID_GOODS_INDEX = 0xFFFF
+	};
+
 	static const goods_desc_t *passengers;
 	static const goods_desc_t *mail;
 	static const goods_desc_t *none;
@@ -51,7 +62,7 @@ public:
 	static bool successfully_loaded();
 	static bool register_desc(goods_desc_t *desc);
 
-	static uint8 get_max_catg_index() { return max_catg_index; }
+	static uint16 get_max_catg_index() { return max_catg_index; }
 
 	/**
 	* Search the good 'name' information and return
@@ -64,13 +75,13 @@ public:
 
 	static const goods_desc_t *get_info(uint16 idx) { return goods[idx]; }
 
-	static uint8 get_count() { return (uint8)goods.get_count(); }
+	static uint16 get_count() { return (uint16)goods.get_count(); }
 
 	// good by catg
 	static const goods_desc_t *get_info_catg(const uint8 catg);
 
 	// good by catg_index
-	static const goods_desc_t *get_info_catg_index(const uint8 catg_index);
+	static const goods_desc_t *get_info_catg_index(const uint16 catg_index);
 
 	/**
 	 * Convoy shipping: the dummy good representing space for a convoy of waytype `wt` aboard

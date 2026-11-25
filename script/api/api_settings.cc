@@ -44,7 +44,7 @@ bool get_time_based_routing_enabled(settings_t* settings, const goods_desc_t* go
 bool set_time_based_routing_enabled(settings_t* settings, const goods_desc_t* goods, bool enabled)
 {
 	if(  settings  &&  goods  ) {
-		const uint8 catg_index = goods->get_catg_index();
+		const uint16 catg_index = goods->get_catg_index();
 		if(  settings->get_time_based_routing_enabled(catg_index) != enabled  ) {
 			settings->set_time_based_routing_enabled(catg_index, enabled);
 			welt->set_schedule_counter();
@@ -167,7 +167,7 @@ void export_settings(HSQUIRRELVM vm)
 	register_local_method(vm, get_start_time, "get_start_time");
 
 	/// @returns station coverage
-	register_method(vm, &settings_t::get_station_coverage, "get_station_coverage");
+	register_method<uint16 (settings_t::*)() const>(vm, &settings_t::get_station_coverage, "get_station_coverage");
 	/// @returns passenger factors influences passenger generation in cities
 	register_method(vm, &settings_t::get_passenger_factor, "get_passenger_factor");
 	register_method(vm, &settings_t::get_passenger_factor_float, "get_passenger_factor_float");

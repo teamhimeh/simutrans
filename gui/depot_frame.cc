@@ -67,6 +67,20 @@ static int sort_by_action;
 
 bool depot_frame_t::show_retired_vehicles = false;
 bool depot_frame_t::show_all = false;
+uint8 depot_frame_t::vehicle_spacing = 1;
+
+static const uint8 MAX_VEHICLE_SPACING = 5;
+static const char *vehicle_spacing_texts[MAX_VEHICLE_SPACING] = { "1x", "2x", "3x", "4x", "5x" };
+
+uint8 depot_frame_t::vehicle_list_dir = ribi_t::dir_south;
+
+// entries of the direction selector (clockwise, starting with the default south view)
+static const uint8 VEHICLE_DIR_COUNT = 8;
+static const char *vehicle_dir_texts[VEHICLE_DIR_COUNT] = { "S", "SW", "W", "NW", "N", "NE", "E", "SE" };
+static const uint8 vehicle_dir_values[VEHICLE_DIR_COUNT] = {
+	ribi_t::dir_south, ribi_t::dir_southwest, ribi_t::dir_west, ribi_t::dir_northwest,
+	ribi_t::dir_north, ribi_t::dir_northeast, ribi_t::dir_east, ribi_t::dir_southeast
+};
 
 
 class gui_template_panel_t : public gui_action_creator_t, public gui_component_t {
@@ -397,6 +411,9 @@ depot_frame_t::depot_frame_t(depot_t* depot) :
 	lb_convoi_line("Serves Line:", SYSCOL_TEXT, gui_label_t::left),
 	lb_child_convoy("Child convoy:", SYSCOL_TEXT, gui_label_t::right),
 	lb_sort_by("Sort by:", SYSCOL_TEXT, gui_label_t::right),
+	lb_vehicle_spacing("Spacing:", SYSCOL_TEXT, gui_label_t::left),
+	lb_vehicle_dir("Direction:", SYSCOL_TEXT, gui_label_t::left),
+	empty_filter_index(-1),
 	lb_name_filter_input("Search:", SYSCOL_TEXT, gui_label_t::right),
 	lb_veh_action("Fahrzeuge:", SYSCOL_TEXT, gui_label_t::right),
 	convoi(&convoi_pics),
@@ -433,6 +450,8 @@ void depot_frame_t::init(depot_t *dep)
 	set_name(depot->get_name());
 	set_owner(depot->get_owner());
 	icnv = depot->convoi_count()-1;
+	// "Empty" entry of the vehicle filter follows "All", "Relevant" and the goods
+	empty_filter_index = VEHICLE_FILTER_GOODS_OFFSET + welt->get_goods_list().get_count();
 
 	scr_size size = scr_size(0,0);
 
@@ -656,6 +675,26 @@ DBG_DEBUG("depot_frame_t::depot_frame_t()","get_max_convoi_length()=%i",depot->g
 	vehicle_filter.add_listener(this);
 	add_component(&vehicle_filter);
 
+	for(  uint8 i = 0;  i < MAX_VEHICLE_SPACING;  i++  ) {
+		vehicle_spacing_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(vehicle_spacing_texts[i], SYSCOL_TEXT);
+	}
+	vehicle_spacing_selector.set_selection(vehicle_spacing - 1);
+	vehicle_spacing_selector.add_listener(this);
+	add_component(&vehicle_spacing_selector);
+	lb_vehicle_spacing.set_tooltip("Extra space between vehicles in the vehicle list (for vehicles drawn larger than the pak size)");
+	add_component(&lb_vehicle_spacing);
+
+	for(  uint8 i = 0;  i < VEHICLE_DIR_COUNT;  i++  ) {
+		vehicle_dir_selector.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(vehicle_dir_texts[i]), SYSCOL_TEXT);
+		if(  vehicle_dir_values[i] == vehicle_list_dir  ) {
+			vehicle_dir_selector.set_selection(i);
+		}
+	}
+	vehicle_dir_selector.add_listener(this);
+	add_component(&vehicle_dir_selector);
+	lb_vehicle_dir.set_tooltip("Direction of the vehicle images in the vehicle list");
+	add_component(&lb_vehicle_dir);
+
 	tstrncpy(name_filter_value, depot->get_name_filter(), lengthof(name_filter_value));
 	name_filter_input.set_text(name_filter_value, lengthof(name_filter_value));
 	add_component(&name_filter_input);
@@ -756,6 +795,12 @@ void depot_frame_t::layout(scr_size *size)
 	grid_dx = depot->get_grid_dx() * get_base_tile_raster_width() / 64 / 2;
 	placement_dx = depot->get_placement_dx() * get_base_tile_raster_width() / 64 / 4;
 
+	// cell size of the vehicle list tabs, enlarged by the user selected spacing
+	// (some paks contain vehicles drawn larger than the base raster)
+	scr_coord list_grid;
+	list_grid.x = depot->get_x_grid() * get_base_tile_raster_width() * vehicle_spacing / 64 + 4;
+	list_grid.y = depot->get_y_grid() * get_base_tile_raster_width() * vehicle_spacing / 64 + 6;
+
 	// calculate some useful default width first (since everything depends on width)
 	scr_size win_size = (size != NULL) ? *size : get_windowsize();
 	if (win_size.w <= 0) {
@@ -815,7 +860,8 @@ void depot_frame_t::layout(scr_size *size)
 	/*
 	 * Structure of [VINFO] is one multiline text.
 	 */
-	const scr_coord_val VINFO_HEIGHT =  7*LINESPACE + D_BUTTON_HEIGHT + D_EDIT_HEIGHT + 5*D_V_SPACE;
+	// (incl. the 4th row with the vehicle list display options)
+	const scr_coord_val VINFO_HEIGHT =  7*LINESPACE + D_BUTTON_HEIGHT*2 + D_EDIT_HEIGHT + 6*D_V_SPACE;
 
 	/*
 	 *  Now we can do the first vertical adjustment:
@@ -835,12 +881,12 @@ void depot_frame_t::layout(scr_size *size)
 	 */
 	const scr_coord_val TAB_HEADER_HEIGHT = tabs.get_required_size().h;
 	const scr_coord_val total_h = PANEL_VSTART + VINFO_HEIGHT + D_TITLEBAR_HEIGHT + TAB_HEADER_HEIGHT + 2 * gui_image_list_t::BORDER + D_MARGIN_BOTTOM + 1;
-	scr_coord_val PANEL_ROWS = max(1, ((win_size.h - total_h) / grid.y));
+	scr_coord_val PANEL_ROWS = max(1, ((win_size.h - total_h) / list_grid.y));
 	if (size  &&  size->h == 0) {
 		PANEL_ROWS = 3;
 	}
-	const scr_coord_val PANEL_HEIGHT = PANEL_ROWS * grid.y + TAB_HEADER_HEIGHT + 2 * gui_image_list_t::BORDER;
-	const scr_coord_val MIN_PANEL_HEIGHT = grid.y + TAB_HEADER_HEIGHT + 2 * gui_image_list_t::BORDER;
+	const scr_coord_val PANEL_HEIGHT = PANEL_ROWS * list_grid.y + TAB_HEADER_HEIGHT + 2 * gui_image_list_t::BORDER;
+	const scr_coord_val MIN_PANEL_HEIGHT = list_grid.y + TAB_HEADER_HEIGHT + 2 * gui_image_list_t::BORDER;
 	const scr_coord_val INFO_VSTART = PANEL_VSTART + PANEL_HEIGHT + div_tabbottom.get_size().h;
 
 	/*
@@ -999,83 +1045,83 @@ void depot_frame_t::layout(scr_size *size)
 	tabs.set_pos(scr_coord(0, PANEL_VSTART));
 	tabs.set_size(scr_size(win_size.w, PANEL_HEIGHT));
 
-	pas.set_grid(grid);
+	pas.set_grid(list_grid);
 	pas.set_placement(placement);
 	pas.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	pas.recalc_size();
 	pas.set_pos(scr_coord(0, 0));
 	scrolly_pas.set_size(scrolly_pas.get_size());
-	scrolly_pas.set_scroll_amount_y(grid.y);
+	scrolly_pas.set_scroll_amount_y(list_grid.y);
 	scrolly_pas.set_scroll_discrete_y(false);
 	scrolly_pas.set_size_corner(false);
 
-	electrics.set_grid(grid);
+	electrics.set_grid(list_grid);
 	electrics.set_placement(placement);
 	electrics.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	electrics.recalc_size();
 	electrics.set_pos(scr_coord(0, 0));
 	scrolly_electrics.set_size(scrolly_electrics.get_size());
-	scrolly_electrics.set_scroll_amount_y(grid.y);
+	scrolly_electrics.set_scroll_amount_y(list_grid.y);
 	scrolly_electrics.set_scroll_discrete_y(false);
 	scrolly_electrics.set_size_corner(false);
 
-	loks.set_grid(grid);
+	loks.set_grid(list_grid);
 	loks.set_placement(placement);
 	loks.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	loks.recalc_size();
 	loks.set_pos(scr_coord(0, 0));
 	scrolly_loks.set_size(scrolly_loks.get_size());
-	scrolly_loks.set_scroll_amount_y(grid.y);
+	scrolly_loks.set_scroll_amount_y(list_grid.y);
 	scrolly_loks.set_scroll_discrete_y(false);
 	scrolly_loks.set_size_corner(false);
 
-	waggons.set_grid(grid);
+	waggons.set_grid(list_grid);
 	waggons.set_placement(placement);
 	waggons.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	waggons.recalc_size();
 	waggons.set_pos(scr_coord(0, 0));
 	scrolly_waggons.set_size(scrolly_waggons.get_size());
-	scrolly_waggons.set_scroll_amount_y(grid.y);
+	scrolly_waggons.set_scroll_amount_y(list_grid.y);
 	scrolly_waggons.set_scroll_discrete_y(false);
 	scrolly_waggons.set_size_corner(false);
 
-	tram_pas.set_grid(grid);
+	tram_pas.set_grid(list_grid);
 	tram_pas.set_placement(placement);
 	tram_pas.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	tram_pas.recalc_size();
 	tram_pas.set_pos(scr_coord(0, 0));
 	scrolly_tram_pas.set_size(scrolly_tram_pas.get_size());
-	scrolly_tram_pas.set_scroll_amount_y(grid.y);
+	scrolly_tram_pas.set_scroll_amount_y(list_grid.y);
 	scrolly_tram_pas.set_scroll_discrete_y(false);
 	scrolly_tram_pas.set_size_corner(false);
 
-	tram_electrics.set_grid(grid);
+	tram_electrics.set_grid(list_grid);
 	tram_electrics.set_placement(placement);
 	tram_electrics.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	tram_electrics.recalc_size();
 	tram_electrics.set_pos(scr_coord(0, 0));
 	scrolly_tram_electrics.set_size(scrolly_tram_electrics.get_size());
-	scrolly_tram_electrics.set_scroll_amount_y(grid.y);
+	scrolly_tram_electrics.set_scroll_amount_y(list_grid.y);
 	scrolly_tram_electrics.set_scroll_discrete_y(false);
 	scrolly_tram_electrics.set_size_corner(false);
 
-	tram_loks.set_grid(grid);
+	tram_loks.set_grid(list_grid);
 	tram_loks.set_placement(placement);
 	tram_loks.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	tram_loks.recalc_size();
 	tram_loks.set_pos(scr_coord(0, 0));
 	scrolly_tram_loks.set_size(scrolly_tram_loks.get_size());
-	scrolly_tram_loks.set_scroll_amount_y(grid.y);
+	scrolly_tram_loks.set_scroll_amount_y(list_grid.y);
 	scrolly_tram_loks.set_scroll_discrete_y(false);
 	scrolly_tram_loks.set_size_corner(false);
 
-	tram_waggons.set_grid(grid);
+	tram_waggons.set_grid(list_grid);
 	tram_waggons.set_placement(placement);
 	tram_waggons.set_size(tabs.get_size() - scr_size(D_SCROLLBAR_WIDTH, 0));
 	tram_waggons.recalc_size();
 	tram_waggons.set_pos(scr_coord(0, 0));
 	scrolly_tram_waggons.set_size(scrolly_tram_waggons.get_size());
-	scrolly_tram_waggons.set_scroll_amount_y(grid.y);
+	scrolly_tram_waggons.set_scroll_amount_y(list_grid.y);
 	scrolly_tram_waggons.set_scroll_discrete_y(false);
 	scrolly_tram_waggons.set_size_corner(false);
 
@@ -1127,7 +1173,33 @@ void depot_frame_t::layout(scr_size *size)
 	bt_show_tram.set_pos(scr_coord(D_MARGIN_LEFT + BUTTON_WIDTH_DEPOT + D_H_SPACE, INFO_VSTART + (D_BUTTON_HEIGHT + D_V_SPACE)*2));
 	bt_show_tram.set_visible(depot->get_secondary_waytype() != invalid_wt);
 
-	div_action_bottom.set_pos(scr_coord(0, INFO_VSTART + (D_BUTTON_HEIGHT + D_V_SPACE) * 3));
+	// 4th line: display options of the vehicle list
+	{
+		const scr_coord_val row_y = INFO_VSTART + (D_BUTTON_HEIGHT + D_V_SPACE)*3;
+		const scr_coord_val arrows_w = D_ARROW_LEFT_WIDTH + D_ARROW_RIGHT_WIDTH + D_H_SPACE*2 + 8;
+		scr_coord_val x = D_MARGIN_LEFT;
+
+		lb_vehicle_spacing.set_pos(scr_coord(x, row_y + D_GET_CENTER_ALIGN_OFFSET(LINESPACE,D_BUTTON_HEIGHT)));
+		lb_vehicle_spacing.set_width(proportional_string_width(translator::translate("Spacing:")) + D_H_SPACE);
+		x += lb_vehicle_spacing.get_size().w;
+		vehicle_spacing_selector.set_pos(scr_coord(x, row_y));
+		vehicle_spacing_selector.set_size(scr_size(proportional_string_width("5x") + arrows_w, D_BUTTON_HEIGHT));
+		vehicle_spacing_selector.set_max_size(scr_size(vehicle_spacing_selector.get_size().w, LINESPACE * (MAX_VEHICLE_SPACING + 1) + 4));
+		x += vehicle_spacing_selector.get_size().w + D_H_SPACE*3;
+
+		scr_coord_val dir_text_w = 0;
+		for(  uint8 i = 0;  i < VEHICLE_DIR_COUNT;  i++  ) {
+			dir_text_w = max(dir_text_w, proportional_string_width(translator::translate(vehicle_dir_texts[i])));
+		}
+		lb_vehicle_dir.set_pos(scr_coord(x, row_y + D_GET_CENTER_ALIGN_OFFSET(LINESPACE,D_BUTTON_HEIGHT)));
+		lb_vehicle_dir.set_width(proportional_string_width(translator::translate("Direction:")) + D_H_SPACE);
+		x += lb_vehicle_dir.get_size().w;
+		vehicle_dir_selector.set_pos(scr_coord(x, row_y));
+		vehicle_dir_selector.set_size(scr_size(dir_text_w + arrows_w, D_BUTTON_HEIGHT));
+		vehicle_dir_selector.set_max_size(scr_size(vehicle_dir_selector.get_size().w, LINESPACE * (VEHICLE_DIR_COUNT + 1) + 4));
+	}
+
+	div_action_bottom.set_pos(scr_coord(0, INFO_VSTART + (D_BUTTON_HEIGHT + D_V_SPACE) * 4));
 	div_action_bottom.set_width(win_size.w);
 
 	const scr_coord_val margin = 4;
@@ -1171,6 +1243,30 @@ bool depot_frame_t::is_in_vehicle_list(const vehicle_desc_t *info)
 }
 
 
+// image shown in the vehicle list tabs (not used for the convoy and the templates)
+image_id depot_frame_t::get_vehicle_list_image(const vehicle_desc_t *info) const
+{
+	const ribi_t::dir dir = vehicle_list_dir;
+	if(  depot->selected_filter == empty_filter_index  ) {
+		// "Empty" selected: show EmptyImage
+		const image_id img = info->get_image_id(dir, NULL);
+		return img != IMG_EMPTY ? img : info->get_image_id(dir, info->get_freight_type());
+	}
+	const goods_desc_t *ware = info->get_freight_type();
+	if(  depot->selected_filter >= VEHICLE_FILTER_GOODS_OFFSET  ) {
+		// a specific good selected: show the freight image of this good (if the vehicle can carry it)
+		const uint32 goods_index = depot->selected_filter - VEHICLE_FILTER_GOODS_OFFSET;
+		if(  goods_index < welt->get_goods_list().get_count()  ) {
+			const goods_desc_t *selected_good = welt->get_goods_list()[goods_index];
+			if(  info->get_capacity() > 0  &&  ware->get_catg_index() == selected_good->get_catg_index()  ) {
+				ware = selected_good;
+			}
+		}
+	}
+	return info->get_image_id(dir, ware);
+}
+
+
 // add a single vehicle (helper function). is_secondary=true routes to tram tabs.
 void depot_frame_t::add_to_vehicle_list(const vehicle_desc_t *info, bool is_secondary)
 {
@@ -1211,7 +1307,7 @@ void depot_frame_t::add_to_vehicle_list(const vehicle_desc_t *info, bool is_seco
 		}
 	}
 
-	gui_image_list_t::image_data_t* img_data = new gui_image_list_t::image_data_t(info->get_name(), info->get_base_image());
+	gui_image_list_t::image_data_t* img_data = new gui_image_list_t::image_data_t(info->get_name(), get_vehicle_list_image(info));
 
 	if(  is_secondary  ) {
 		// Route to tram (secondary waytype) tabs
@@ -1801,8 +1897,16 @@ void depot_frame_t::update_data()
 	FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 		vehicle_filter.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(i->get_name()), SYSCOL_TEXT);
 	}
+	// "Empty" is always the last entry (no filtering, but show the empty images)
+	// keep it selected even when the goods list has grown meanwhile
+	const int new_empty_filter_index = vehicle_filter.count_elements();
+	if(  empty_filter_index >= 0  &&  depot->selected_filter == empty_filter_index  ) {
+		depot->selected_filter = new_empty_filter_index;
+	}
+	empty_filter_index = new_empty_filter_index;
+	vehicle_filter.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Empty"), SYSCOL_TEXT);
 
-	if(  depot->selected_filter > vehicle_filter.count_elements()  ) {
+	if(  depot->selected_filter >= vehicle_filter.count_elements()  ) {
 		depot->selected_filter = VEHICLE_FILTER_RELEVANT;
 	}
 	vehicle_filter.set_selection(depot->selected_filter);
@@ -1837,7 +1941,7 @@ void depot_frame_t::update_data()
 
 	if(  cnv.is_bound()  ) {
 		if(  cnv->get_vehicle_count() > 0  ) {
-			uint8 selected_good_index = 0;
+			uint16 selected_good_index = 0;
 			if(  depot->selected_filter > VEHICLE_FILTER_RELEVANT  ) {
 				// Filter is set to specific good
 				const uint32 goods_index = depot->selected_filter - VEHICLE_FILTER_GOODS_OFFSET;
@@ -1863,7 +1967,7 @@ void depot_frame_t::update_data()
 						min_weight = min(min_weight, (uint32)ware->get_weight_per_unit());
 
 						// find number of goods in in this category. TODO: gotta be a better way...
-						uint8 catg_count = 0;
+						uint32 catg_count = 0;
 						FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 							if(  ware->get_catg_index() == i->get_catg_index()  ) {
 								catg_count++;
@@ -1929,7 +2033,7 @@ void depot_frame_t::update_data()
 									max_weight = max(max_weight, (uint32)ware->get_weight_per_unit());
 
 									// find number of goods in in this category. TODO: gotta be a better way...
-									uint8 catg_count = 0;
+									uint32 catg_count = 0;
 									FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 										if(  ware->get_catg_index() == i->get_catg_index()  ) {
 											catg_count++;
@@ -2303,6 +2407,18 @@ bool depot_frame_t::action_triggered( gui_action_creator_t *comp, value_t p)
 		}
 		else if(  comp == &sort_by  ) {
 			depot->selected_sort_by = sort_by.get_selection();
+		}
+		else if(  comp == &vehicle_dir_selector  ) {
+			const sint32 sel = vehicle_dir_selector.get_selection();
+			if(  sel >= 0  &&  sel < VEHICLE_DIR_COUNT  ) {
+				vehicle_list_dir = vehicle_dir_values[sel];
+			}
+		}
+		else if(  comp == &vehicle_spacing_selector  ) {
+			const sint32 sel = vehicle_spacing_selector.get_selection();
+			vehicle_spacing = (uint8)clamp<sint32>(sel + 1, 1, MAX_VEHICLE_SPACING);
+			scr_size size = get_windowsize();
+			layout(&size);
 		}
 		else if(  comp == &bt_copy_convoi  ) {
 			if(  cnv.is_bound()  ) {

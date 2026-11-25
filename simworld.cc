@@ -99,6 +99,7 @@
 #include "bauer/hausbauer.h"
 #include "bauer/vehikelbauer.h"
 
+#include "descriptor/building_desc.h"
 #include "descriptor/ground_desc.h"
 #include "descriptor/intro_dates.h"
 
@@ -2075,21 +2076,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 	set_schedule_counter();
 
 	// Refresh the haltlist for the affected tiles / stations.
-	// It is enough to check the tile just at the border ...
-	uint16 const cov = settings.get_station_coverage();
+	// It is enough to check the stations with tiles just at the border ...
+	uint16 const cov = settings.get_max_station_coverage();
+	vector_tpl<halthandle_t> border_halts;
 	if(  old_y < new_size_y  ) {
 		for(  sint16 y=0;  y<old_y;  y++  ) {
 			for(  sint16 x=max(0,old_x-cov);  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=max(0,x-cov);  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=y;  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
@@ -2100,18 +2097,17 @@ void karte_t::enlarge_map(settings_t const* sets, sint8 const* const h_field)
 			for(  sint16 x=0;  x<old_x;  x++  ) {
 				const planquadrat_t* pl = access_nocheck(x,y);
 				for(  uint8 i=0;  i < pl->get_boden_count();  i++  ) {
-					// update halt
 					halthandle_t h = pl->get_boden_bei(i)->get_halt();
 					if(  h.is_bound()  ) {
-						for(  sint16 xp=x;  xp<min(new_size_x,x+cov+1);  xp++  ) {
-							for(  sint16 yp=max(0,y-cov);  yp<min(new_size_y,y+cov+1);  yp++  ) {
-								access_nocheck(xp,yp)->add_to_haltlist(h);
-							}
-						}
+						border_halts.append_unique(h);
 					}
 				}
 			}
 		}
+	}
+	// re-adding the whole coverage also covers the new tiles
+	FOR(vector_tpl<halthandle_t>, const h, border_halts) {
+		h->refresh_coverage();
 	}
 	clear_random_mode( MAP_CREATE_RANDOM );
 
@@ -4836,7 +4832,14 @@ bool karte_t::is_water(koord k, koord dim) const
 }
 
 
-bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl) const
+grund_t *karte_t::lookup_no_dummy(const koord3d &pos) const
+{
+	grund_t *gr = lookup(pos);
+	return (gr  &&  !gr->is_dummy_ground()) ? gr : NULL;
+}
+
+
+bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_bits cl, const building_desc_t *desc) const
 {
 	if(k.x < 0  ||  k.y < 0  ||  k.x+w > get_size().x || k.y+h > get_size().y) {
 		return false;
@@ -4866,9 +4869,17 @@ bool karte_t::square_is_free(koord k, sint16 w, sint16 h, int *last_y, climate_b
 					test_climate = water_climate;
 				}
 			}
+			// is there an elevated way/bridge above that this building would be too tall to fit under?
+			bool blocked_above = false;
+			if(  desc  &&  desc->get_height_clearance() > 0  ) {
+				for(  uint8 z = 1;  z <= desc->get_height_clearance()  &&  !blocked_above;  z++  ) {
+					blocked_above = lookup_no_dummy( gr->get_pos() + koord3d(0,0,z) ) != NULL;
+				}
+			}
+
 			if( (platz_max_h != max_height  &&  platz_base_h != gr->get_hoehe())  ||  !gr->ist_natur()  ||  gr->kann_alle_obj_entfernen(NULL) != NULL  ||
-			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup( gr->get_pos()+koord3d(0,0,1) ) ||
-			     (slope_t::max_diff(slope)==2 && lookup( gr->get_pos()+koord3d(0,0,2) )) ))  ) {
+			     (cl & (1 << test_climate)) == 0  ||  ( slope && (lookup_no_dummy( gr->get_pos()+koord3d(0,0,1) ) ||
+			     (slope_t::max_diff(slope)==2 && lookup_no_dummy( gr->get_pos()+koord3d(0,0,2) )) ))  ||  blocked_above  ) {
 				if(  last_y  ) {
 					*last_y = k_check.y;
 				}
@@ -4925,12 +4936,29 @@ bool karte_t::play_sound_area_clipped(koord const k, uint16 const idx, sound_typ
 }
 
 
-void karte_t::save(const char *filename, bool autosave, const char *version_str, bool silent )
+bool karte_t::save(const char *filename, bool autosave, const char *version_str, bool silent )
 {
 DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
+	bool saved = false;
 	loadsave_t  file;
 	std::string savename = filename;
 	savename[savename.length()-1] = '_';
+
+	// An existing read-only file must stay untouched: refuse before anything is written.
+	// (Windows cannot replace it by renaming; elsewhere the rename would silently replace it.)
+	if(  FILE *existing = dr_fopen( filename, "rb" )  ) {
+		fclose( existing );
+		if(  FILE *writable = dr_fopen( filename, "ab" )  ) {
+			fclose( writable );
+		}
+		else {
+			dbg->error( "karte_t::save()", "'%s' exists and cannot be overwritten (read-only?)", filename );
+			if(  !silent  ) {
+				create_win( new news_img("Kann Spielstand\nnicht speichern.\n"), w_info, magic_none );
+			}
+			return false;
+		}
+	}
 
 	display_show_load_pointer( true );
 	const loadsave_t::mode_t mode = autosave ? loadsave_t::autosave_mode : loadsave_t::save_mode;
@@ -4947,10 +4975,19 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 			static char err_str[512];
 			sprintf( err_str, translator::translate("Error during saving:\n%s"), success );
 			create_win( new news_img(err_str), w_time_delete, magic_none);
+			dr_remove( savename.c_str() );
 		}
 		else {
-			dr_rename( savename.c_str(), filename );
-			if(!silent) {
+			saved = ( dr_rename( savename.c_str(), filename ) == 0 );
+			if(  !saved  ) {
+				// do not report success, and do not leave the temporary file behind
+				dbg->error( "karte_t::save()", "cannot replace '%s'", filename );
+				dr_remove( savename.c_str() );
+				if(  !silent  ) {
+					create_win( new news_img("Kann Spielstand\nnicht speichern.\n"), w_info, magic_none );
+				}
+			}
+			else if(!silent) {
 				create_win( new news_img("Spielstand wurde\ngespeichert!\n"), w_time_delete, magic_none);
 				// update the filename, if no autosave
 				settings.set_filename(filename);
@@ -4959,6 +4996,7 @@ DBG_MESSAGE("karte_t::save()", "saving game to '%s'", filename);
 		reset_interaction();
 	}
 	display_show_load_pointer( false );
+	return saved;
 }
 
 
@@ -5546,6 +5584,12 @@ DBG_MESSAGE("karte_t::load()", "%d ways loaded",weg_t::get_alle_wege().get_count
 
 	world_xy_loop(&karte_t::plans_finish_rd, SYNCX_FLAG);
 
+	// correct way flags and remove invalid objects on tiles of multitile and special buildings (not multithread safe, so after plans_finish_rd)
+	// only on the server (or offline): a network client must keep the server's game state
+	if(  !env_t::networkmode  ||  env_t::server  ) {
+		hausbauer_t::cleanup_multitile_buildings_finish_rd();
+	}
+
 	// update power nets with correct power
 	powernet_t::step_all(1);
 
@@ -5803,7 +5847,10 @@ DBG_MESSAGE("karte_t::load()", "%d factories loaded", fab_list.get_count());
 	}
 
 	if(  file->is_version_atleast(102, 4)  ) {
-		if(  env_t::restore_UI  ) {
+		// standard 124.3+ dialogs save their state differently (e.g. halt_info without sort mode,
+		// new window ids), so their windows cannot be restored; skipping is safe at the end of file
+		const bool std_dialogs_unreadable = file->get_OTRP_version() == 0  &&  file->is_version_atleast(124, 3);
+		if(  env_t::restore_UI  &&  !std_dialogs_unreadable  ) {
 			file->rdwr_byte( active_player_nr );
 			active_player = players[active_player_nr];
 			/* restore all open windows
@@ -6305,6 +6352,12 @@ void karte_t::rdwr_gamestate(loadsave_t *file, loadingscreen_t *ls)
 				ls->set_progress( get_size().y+(get_size().y*convoi_array.get_count())/(2*max_convoi)+128 );
 			}
 		}
+		// All convoys are read, but none is filed into its depot yet: the states are still the
+		// saved ones. Cut coupling links that would make one convoy exist in two places, e.g. a
+		// child listed in a depot while a parent on the map pulls its cars. betrete_depot()
+		// below follows the coupling chain, so this must come first.
+		convoi_t::repair_coupling_links_after_load( loading_convoi_array );
+
 		FOR( vector_tpl<convoi_t*>, cnv, loading_convoi_array ) {
 			if(cnv->in_depot()) {
 				grund_t * gr = lookup(cnv->get_pos());

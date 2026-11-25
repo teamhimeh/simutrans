@@ -6,6 +6,7 @@
 #include "../simmenu.h"
 #include "../simworld.h"
 #include "../dataobj/ribi.h"
+#include "components/gui_divider.h"
 
 signal_info_t::signal_info_t(signal_t* s) :
 obj_infowin_t(s),
@@ -32,11 +33,18 @@ signal(s)
 		add_component(&bt_require_parent);
 	}
 
-	bt_advance_to_end.init( button_t::square_state, translator::translate("Advance to end") );
+	bt_advance_to_end.init( button_t::square_state, "Advance to end" );
 	bt_advance_to_end.add_listener(this);
 	bt_advance_to_end.pressed = signal->is_advance_to_end();
 	if(  signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end() ) {
 		add_component(&bt_advance_to_end);
+	}
+
+	bt_stop_at_middle.init( button_t::square_state, translator::translate("Stop at middle") );
+	bt_stop_at_middle.add_listener(this);
+	bt_stop_at_middle.pressed = signal->is_stop_at_middle();
+	if(  signal->get_desc()->is_choose_sign()  &&  !welt->get_settings().get_advance_to_end()  ) {
+		add_component(&bt_stop_at_middle);
 	}
 	
 	bt_choose_signal.init( button_t::square_state, translator::translate("Choose signal") );
@@ -64,7 +72,7 @@ signal(s)
 	lb_tiles_margin.set_tooltip(translator::translate("tiles length of the margin to stop when choosing. Set this margin to the stop side(advance to end->end side)"));
 	numinp_tiles_margin.set_width(50);
 	numinp_tiles_margin.set_height(5);
-	numinp_tiles_margin.set_limits(0,200);
+	numinp_tiles_margin.set_limits(0,50);
 	numinp_tiles_margin.set_increment_mode(1);
 	numinp_tiles_margin.disable();
 	numinp_tiles_margin.add_listener(this);
@@ -91,11 +99,27 @@ signal(s)
 	bt_two_ways.pressed = signal->get_two_ways();
 	bt_two_ways.enable( ribi_t::is_single(signal->get_dir()) );
 	add_component(&bt_two_ways);
+	
+	bt_allow_multi_convoys.init(button_t::square_state, translator::translate("Stop more than one convoys."));
+	bt_allow_multi_convoys.set_tooltip(translator::translate("Allow more than one convoys at same spot(platform)."));
+	bt_allow_multi_convoys.add_listener(this);
+	bt_allow_multi_convoys.pressed = signal->is_allow_multi_convoys();
+	if(  signal->get_desc()->is_choose_sign()  ) {
+		add_component(&bt_allow_multi_convoys);
+	}
+	
+	new_component<gui_divider_t>();
 
+	add_table(2,0);
+	{
+	new_component<gui_fill_t>();
+	
 	bt_remove_signal.init( button_t::roundbox, translator::translate("remove signal"));
 	bt_remove_signal.enable( !signal->is_deletable( welt->get_active_player() ) );
 	bt_remove_signal.add_listener(this);
 	add_component(&bt_remove_signal);
+	}
+	end_table();
 	
 	reset_min_windowsize();
 	set_windowsize(get_min_windowsize() );
@@ -139,9 +163,16 @@ bool signal_info_t::action_triggered( gui_action_creator_t* comp, value_t p)
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+	if(  comp==&bt_stop_at_middle  ) {
+		char param[256];
+		sprintf( param, "%s,%i,M", signal->get_pos().get_str(), !signal->is_stop_at_middle() );
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param( param );
+		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
+		return true;		
+	}
 	if(  comp==&numinp_tiles_margin  ) {
 		char param[256];
-		sprintf( param, "%s,%i,m,", signal->get_pos().get_str(), (uint8)p.i );
+		sprintf( param, "%s,%i,m", signal->get_pos().get_str(), (int)clamp<sint32>(p.i,0,255) );
 		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param( param );
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
@@ -186,6 +217,13 @@ bool signal_info_t::action_triggered( gui_action_creator_t* comp, value_t p)
 		welt->set_tool( tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player() );
 		return true;
 	}
+	if(  comp==&bt_allow_multi_convoys) {
+		char param[256];
+		sprintf(param, "%s,%i,q", signal->get_pos().get_str(), (int)!signal->is_allow_multi_convoys());
+		tool_t::simple_tool[TOOL_CHANGE_ROADSIGN]->set_default_param(param);
+		welt->set_tool(tool_t::simple_tool[TOOL_CHANGE_ROADSIGN], welt->get_active_player());
+		return true;
+	}
 	if(  comp==&bt_ignore_length  ) {
 		char param[256];
 		bool v = signal->is_ignore_length();
@@ -209,16 +247,30 @@ void signal_info_t::update_data()
 	bt_start_signal.pressed = signal->is_start_signal();
 	bt_length_based.pressed = signal->is_length_based();
 	bt_ignore_length.pressed = signal->is_ignore_length();
+	bt_allow_multi_convoys.pressed = signal->is_allow_multi_convoys();
+	bt_stop_at_middle.pressed = signal->is_stop_at_middle();
+	// with stop at middle, advance_to_end flag selects which side of the platform the margin is taken
+	const char *advance_to_end_text = signal->is_stop_at_middle() ? "Margin for end" : "Advance to end";
+	if(  strcmp(bt_advance_to_end.get_text(), advance_to_end_text)!=0  ) {
+		bt_advance_to_end.set_text( advance_to_end_text );
+		bt_advance_to_end.set_tooltip( signal->is_stop_at_middle() ? translator::translate("Take the margin at the end (exit side) of the platform. Otherwise, take the margin at the front (entry side).") : NULL );
+		reset_min_windowsize();
+	}
 	if(  signal->is_choose_signal()  ) {
+		// with stop at middle, advance_to_end selects whether the margin is taken at the front or the back of the platform.
 		bt_advance_to_end.enable();
 		numinp_tiles_margin.enable();
 		numinp_tiles_margin.set_value(signal->get_margin_length());
 		bt_length_based.enable();
+		bt_allow_multi_convoys.enable();
+		bt_stop_at_middle.enable();
 	} else {
 		bt_advance_to_end.disable();
 		numinp_tiles_margin.disable();
 		bt_stop_before_check.enable(signal->get_desc()->is_longblock_signal());
 		bt_length_based.disable();
+		bt_allow_multi_convoys.disable();
+		bt_stop_at_middle.disable();
 	}
 	if(  signal->get_desc()->is_simple_signal()  ||  signal->get_desc()->is_longblock_signal()  ||  signal->get_desc()->is_choose_sign()  ) {
 		bt_stop_before_check.enable();

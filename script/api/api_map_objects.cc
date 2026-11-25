@@ -477,6 +477,12 @@ bool field_is_deleteable(field_t* f)
 }
 
 
+uint32 get_way_image_id(weg_t* weg)
+{
+	return weg ? weg->get_image() : 0;
+}
+
+
 vector_tpl<sint64> const& get_way_stat(weg_t* weg, sint32 INDEX)
 {
 	static vector_tpl<sint64> v;
@@ -705,6 +711,14 @@ void export_map_objects(HSQUIRRELVM vm)
 	 */
 	register_method(vm, &weg_t::get_desc, "get_desc");
 	/**
+	 * Returns the fixed railway switch image override, or -1 for automatic selection.
+	 */
+	register_method(vm, &weg_t::get_switch_image_override, "get_switch_image_override");
+	/**
+	 * Returns the image id currently drawn for this way (for tests).
+	 */
+	register_method(vm, &get_way_image_id, "get_image_id", true);
+	/**
 	 * Returns maximal allowed speed on this way.
 	 * Takes limits from crossings, overhead-wires, bridges, etc, into account.
 	 * @returns max speed in kmh.
@@ -833,6 +847,13 @@ void export_map_objects(HSQUIRRELVM vm)
 	 * @returns margin length in tiles
 	 */
 	register_method(vm, &roadsign_t::get_margin_length, "get_margin_length");
+	/**
+	 * Get "stop at middle" flag of a choose signal.
+	 * When true, trains stop at the middle of the platform, excluding the margin tiles
+	 * (front margin with "advance to end", back margin otherwise).
+	 * @returns true if the flag is set
+	 */
+	register_method(vm, &roadsign_t::is_stop_at_middle, "is_stop_at_middle");
 	/**
 	 * Get "allow reverse passage" (two ways) flag of a signal.
 	 * When true, trains coming from the reverse direction are allowed to pass the signal.

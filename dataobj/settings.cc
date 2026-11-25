@@ -10,6 +10,7 @@
 #include "environment.h"
 #include "../pathes.h"
 #include "../simconst.h"
+#include "../simcolor.h"
 #include "../simtypes.h"
 #include "../simdebug.h"
 #include "../simworld.h"
@@ -56,7 +57,7 @@ settings_t::settings_t() :
 	city_count = 16;
 	mean_citizen_count = 1600;
 
-	station_coverage_size = 2;
+	set_all_station_coverages( 2 );
 
 	traffic_level = 5;
 
@@ -264,6 +265,11 @@ settings_t::settings_t() :
 	// convoy shipping: mirrors the way toll by default, and carrying earns only the toll
 	toll_shipping_percentage = 0;
 	shipping_income_percentage = 0;
+	for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+		for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+			shipping_revenue[i][j] = 0;
+		}
+	}
 	way_toll_waycost_percentage = 0;
 	maintenance_cost_multiplier_way = 100;
 	maintenance_cost_multiplier_overhead = 100;
@@ -325,6 +331,7 @@ settings_t::settings_t() :
 	overloaded_acceleration = false;
 
 	allow_buying_obsolete_vehicles = true;
+	prohibit_too_new = true;
 
 	allow_overloading = false;
 
@@ -346,7 +353,7 @@ settings_t::settings_t() :
 	
 	advance_to_end = true;
 	first_come_first_serve = false;
-	MEMZERON(is_time_based_routing_enabled, 256);
+	MEMZERON(is_time_based_routing_enabled, lengthof(is_time_based_routing_enabled));
 	waiting_limit_for_first_come_first_serve = 500000;
 	
 	routecost_wait = 8;
@@ -1033,7 +1040,7 @@ void settings_t::rdwr(loadsave_t *file)
 			first_come_first_serve = dummy > 0;
 			if(  dummy==2  ) {
 				// Time based goods routing has to be enabled for all goods categories.
-				for(uint16 i=0; i<256; i++) {
+				for(uint32 i=0; i<lengthof(is_time_based_routing_enabled); i++) {
 					is_time_based_routing_enabled[i] = true;
 				}
 			}
@@ -1053,14 +1060,14 @@ void settings_t::rdwr(loadsave_t *file)
 			if(  file->is_saving()  ) {
 				// count enabled entries that have a valid goods desc
 				uint16 count = 0;
-				for(uint16 i = 0; i < 256; i++) {
+				for(uint32 i = 0; i < goods_manager_t::get_max_catg_index(); i++) {
 					if(  is_time_based_routing_enabled[i]  ) {
 						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
 						if(  desc  ) { count++; }
 					}
 				}
 				file->rdwr_short(count);
-				for(uint16 i = 0; i < 256; i++) {
+				for(uint32 i = 0; i < goods_manager_t::get_max_catg_index(); i++) {
 					if(  is_time_based_routing_enabled[i]  ) {
 						const goods_desc_t *desc = goods_manager_t::get_info_catg_index(i);
 						if(  desc  ) {
@@ -1072,7 +1079,7 @@ void settings_t::rdwr(loadsave_t *file)
 			}
 			else {
 				// loading: reset all flags first, then restore by name
-				MEMZERON(is_time_based_routing_enabled, 256);
+				MEMZERON(is_time_based_routing_enabled, lengthof(is_time_based_routing_enabled));
 				uint16 count = 0;
 				file->rdwr_short(count);
 				for(uint16 j = 0; j < count; j++) {
@@ -1265,6 +1272,38 @@ void settings_t::rdwr(loadsave_t *file)
 			toll_shipping_percentage = way_toll_runningcost_percentage;
 			shipping_income_percentage = 0;
 		}
+		if(  file->get_OTRP_version() >= 63  ) {
+			for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+				for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+					file->rdwr_long( shipping_revenue[i][j] );
+				}
+			}
+		}
+		else if(  file->is_loading()  ) {
+			// carrying a convoy earned nothing by itself before v63
+			for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+				for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+					shipping_revenue[i][j] = 0;
+				}
+			}
+		}
+		if(  file->get_OTRP_version() >= 63  ) {
+			for(  uint8 i=0;  i<=air_wt;  i++  ) {
+				file->rdwr_short( station_coverage_size_wt[i] );
+			}
+			file->rdwr_short( station_coverage_size_water );
+		}
+		else if(  file->is_loading()  ) {
+			// before v63 all stations and sea tiles used the single station_coverage
+			set_all_station_coverages( station_coverage_size );
+		}
+		if(  file->get_OTRP_version() >= 64  ) {
+			file->rdwr_bool( prohibit_too_new );
+		}
+		else if(  file->is_loading()  ) {
+			// not saved before v64: use the default
+			prohibit_too_new = true;
+		}
 		// v<56: values were never saved; parse_simuconf already set them from simuconf.tab
 		// otherwise the default values of the last one will be used
 	}
@@ -1315,6 +1354,8 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	env_t::moving_object_probability = contents.get_int_clamped( "random_wildlife_probability", env_t::moving_object_probability, 0, INT_MAX);
 
 	env_t::straight_way_without_control = contents.get_int( "straight_way_without_control", env_t::straight_way_without_control ) != 0;
+	env_t::prohibit_one_tile_way = contents.get_int( "prohibit_one_tile_way", env_t::prohibit_one_tile_way ) != 0;
+	env_t::always_allow_closed_diagonal = contents.get_int( "always_allow_closed_diagonal", env_t::always_allow_closed_diagonal ) != 0;
 
 	env_t::road_user_info = contents.get_int( "pedes_and_car_info", env_t::road_user_info ) != 0;
 	env_t::tree_info      = contents.get_int( "tree_info",          env_t::tree_info      ) != 0;
@@ -1708,6 +1749,7 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	show_pax           = contents.get_int( "stop_pedestrians",   show_pax           ) != 0;
 
 	allow_buying_obsolete_vehicles = contents.get_int( "allow_buying_obsolete_vehicles", allow_buying_obsolete_vehicles ) != 0;
+	prohibit_too_new               = contents.get_int( "prohibit_too_new", prohibit_too_new ) != 0;
 	used_vehicle_reduction         = contents.get_int_clamped( "used_vehicle_reduction", used_vehicle_reduction, 0, 1000 );
 	traffic_level                  = contents.get_int_clamped( "citycar_level",          traffic_level,          0, 16);
 	stadtauto_duration             = contents.get_int_clamped( "default_citycar_life",   stadtauto_duration,     0, 1200 );
@@ -1844,7 +1886,22 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	maint_building = contents.get_int_clamped( "maintenance_building", maint_building, 1, 100000000 );
 
 	numbered_stations     = contents.get_int( "numbered_stations", numbered_stations ) != 0;
-	station_coverage_size = contents.get_int_clamped( "station_coverage", station_coverage_size, 0, 64);
+	if(  *contents.get( "station_coverage" )  ) {
+		// station_coverage sets the default of all waytypes and of water; the specific keys below override it
+		set_all_station_coverages( contents.get_int_clamped( "station_coverage", station_coverage_size, 0, 64 ) );
+	}
+	// station_coverage[road] etc.: coverage of stations of this waytype
+	{
+		static const waytype_t coverage_wts[] = { road_wt, track_wt, water_wt, monorail_wt, maglev_wt, tram_wt, narrowgauge_wt, air_wt };
+		static const char *const coverage_wt_names[] = { "road", "track", "water", "monorail_track", "maglev_track", "tram_track", "narrowgauge_track", "air" };
+		for(  uint8 i=0;  i<lengthof(coverage_wts);  i++  ) {
+			char buf[64];
+			sprintf( buf, "station_coverage[%s]", coverage_wt_names[i] );
+			station_coverage_size_wt[coverage_wts[i]] = contents.get_int_clamped( buf, station_coverage_size_wt[coverage_wts[i]], 0, 64 );
+		}
+	}
+	// coverage for sea tiles (not rivers)
+	station_coverage_size_water = contents.get_int_clamped( "station_coverage_water", station_coverage_size_water, 0, 64 );
 
 	// time stuff
 	bits_per_month = contents.get_int_clamped( "bits_per_month", bits_per_month, 1, 31 );
@@ -1917,6 +1974,11 @@ void settings_t::parse_simuconf( tabfile_t& simuconf, sint16& disp_width, sint16
 	// existed; naming toll_shipping_percentage explicitly overrides that.
 	toll_shipping_percentage   = contents.get_int_clamped("toll_shipping_percentage",   way_toll_runningcost_percentage, 0, 100 );
 	shipping_income_percentage = contents.get_int_clamped("shipping_income_percentage", shipping_income_percentage,      0, 100 );
+	for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+		for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+			shipping_revenue[i][j] = contents.get_int_clamped( get_shipping_revenue_name(i, j), shipping_revenue[i][j], 0, 1000000 );
+		}
+	}
 	maintenance_cost_multiplier_way      = contents.get_int_clamped("maintenance_cost_multiplier_way",      maintenance_cost_multiplier_way,      1, 250 );
 	maintenance_cost_multiplier_overhead = contents.get_int_clamped("maintenance_cost_multiplier_overhead", maintenance_cost_multiplier_overhead, 1, 250 );
 	running_cost_multiplier_vehicle      = contents.get_int_clamped("running_cost_multiplier_vehicle",      running_cost_multiplier_vehicle,      1, 250 );
@@ -2261,70 +2323,66 @@ void settings_t::set_default_player_color(uint8 player_nr, uint8 color1, uint8 c
 // returns default player colors for new players
 void settings_t::set_player_color_to_default(player_t* const player) const
 {
+	// number of selectable color families (each family has 8 shades)
+	const uint8 color_family_count = SPECIAL_COLOR_COUNT / 8;
 	karte_ptr_t welt;
-	uint8 color1 = default_player_color[player->get_player_nr()][0];
-	if(  color1 == 255  ) {
+	const uint8 player_nr = player->get_player_nr();
+
+	uint8 color1 = default_player_color[player_nr][0];
+	if(  color1 >= color_family_count  ) {
+		color1 = player_nr % color_family_count;
 		if(  default_player_color_random  ) {
 			// build a vector with all colors
-			minivec_tpl<uint8>all_colors1(28);
-			for(  uint8 i=0;  i<28;  i++  ) {
+			minivec_tpl<uint8>all_colors1(color_family_count);
+			for(  uint8 i=0;  i<color_family_count;  i++  ) {
 				all_colors1.append(i);
 			}
 			// remove all used colors
 			for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
 				player_t *test_sp = welt->get_player(i);
+				uint8 rem = 255;
 				if(  test_sp  &&  player!=test_sp  ) {
-					uint8 rem = 1<<(player->get_player_color1()/8);
-					if(  all_colors1.is_contained(rem)  ) {
-						all_colors1.remove( rem );
-					}
+					rem = test_sp->get_player_color1()/8;
 				}
-				else if(  default_player_color[i][0]!=255  ) {
-					uint8 rem = default_player_color[i][0];
-					if(  all_colors1.is_contained(rem)  ) {
-						all_colors1.remove( rem );
-					}
+				else if(  default_player_color[i][0]<color_family_count  ) {
+					rem = default_player_color[i][0];
 				}
+				all_colors1.remove( rem );
 			}
-			// now choose a random empty color
-			color1 = pick_any(all_colors1);
-		}
-		else {
-			color1 = player->get_player_nr();
+			// now choose a random empty color (if all are used, keep the fallback)
+			if(  !all_colors1.empty()  ) {
+				color1 = pick_any(all_colors1);
+			}
 		}
 	}
 
-	uint8 color2 = default_player_color[player->get_player_nr()][1];
-	if(  color2 == 255  ) {
+	uint8 color2 = default_player_color[player_nr][1];
+	if(  color2 >= color_family_count  ) {
+		color2 = (player_nr + 3) % color_family_count;
 		if(  default_player_color_random  ) {
 			// build a vector with all colors
-			minivec_tpl<uint8>all_colors2(28);
-			for(  uint8 i=0;  i<28;  i++  ) {
+			minivec_tpl<uint8>all_colors2(color_family_count);
+			for(  uint8 i=0;  i<color_family_count;  i++  ) {
 				all_colors2.append(i);
 			}
 			// remove color1
-			all_colors2.remove( color1/8 );
+			all_colors2.remove( color1 );
 			// remove all used colors
 			for(  uint8 i=0;  i<MAX_PLAYER_COUNT;  i++  ) {
 				player_t *test_sp = welt->get_player(i);
+				uint8 rem = 255;
 				if(  test_sp  &&  player!=test_sp  ) {
-					uint8 rem = 1<<(player->get_player_color2()/8);
-					if(  all_colors2.is_contained(rem)  ) {
-						all_colors2.remove( rem );
-					}
+					rem = test_sp->get_player_color2()/8;
 				}
-				else if(  default_player_color[i][1]!=255  ) {
-					uint8 rem = default_player_color[i][1];
-					if(  all_colors2.is_contained(rem)  ) {
-						all_colors2.remove( rem );
-					}
+				else if(  default_player_color[i][1]<color_family_count  ) {
+					rem = default_player_color[i][1];
 				}
+				all_colors2.remove( rem );
 			}
-			// now choose a random empty color
-			color2 = pick_any(all_colors2);
-		}
-		else {
-			color2 = player->get_player_nr() + 3;
+			// now choose a random empty color (if all are used, keep the fallback)
+			if(  !all_colors2.empty()  ) {
+				color2 = pick_any(all_colors2);
+			}
 		}
 	}
 
@@ -2350,4 +2408,81 @@ uint32 settings_t::get_base_waiting_ticks(waytype_t waytype) const {
 	else {
 		return base_waiting_ticks_for_rail_convoi;
 	}
+}
+
+
+void settings_t::set_all_station_coverages(uint16 cov)
+{
+	station_coverage_size = cov;
+	for(  uint8 i=0;  i<=air_wt;  i++  ) {
+		station_coverage_size_wt[i] = cov;
+	}
+	station_coverage_size_water = cov;
+}
+
+
+uint16 settings_t::get_max_station_coverage() const
+{
+	uint16 cov = max( station_coverage_size, station_coverage_size_water );
+	for(  uint8 i=0;  i<=air_wt;  i++  ) {
+		if(  has_station_coverage_wt( (waytype_t)i )  ) {
+			cov = max( cov, station_coverage_size_wt[i] );
+		}
+	}
+	return cov;
+}
+
+// convoy shipping revenue: the waytypes in table order, with their simuconf.tab names
+static const struct { waytype_t wt; const char *name; } shipping_revenue_wts[settings_t::SHIPPING_REVENUE_CARRIER_WT_COUNT] = {
+	{ road_wt,        "road"        },
+	{ track_wt,       "track"       },
+	{ tram_wt,        "tram"        },
+	{ monorail_wt,    "monorail"    },
+	{ maglev_wt,      "maglev"      },
+	{ narrowgauge_wt, "narrowgauge" },
+	{ water_wt,       "water"       },
+	// air can carry but is never carried, so it must stay last (outside the shipped range)
+	{ air_wt,         "air"         }
+};
+
+
+sint8 settings_t::get_shipping_revenue_wt_index(waytype_t wt)
+{
+	for(  uint8 i = 0;  i < SHIPPING_REVENUE_CARRIER_WT_COUNT;  i++  ) {
+		if(  shipping_revenue_wts[i].wt == wt  ) {
+			return (sint8)i;
+		}
+	}
+	return -1;
+}
+
+
+const char *settings_t::get_shipping_revenue_name(uint8 shipped_idx, uint8 carrier_idx)
+{
+	// built once; the settings dialog keeps pointers to these labels, so they must stay put
+	static char names[SHIPPING_REVENUE_SHIPPED_WT_COUNT][SHIPPING_REVENUE_CARRIER_WT_COUNT][64];
+	static bool initialized = false;
+	if(  !initialized  ) {
+		for(  uint8 i = 0;  i < SHIPPING_REVENUE_SHIPPED_WT_COUNT;  i++  ) {
+			for(  uint8 j = 0;  j < SHIPPING_REVENUE_CARRIER_WT_COUNT;  j++  ) {
+				sprintf( names[i][j], "revenue_%s_shipped_by_%s", shipping_revenue_wts[i].name, shipping_revenue_wts[j].name );
+			}
+		}
+		initialized = true;
+	}
+	if(  shipped_idx >= SHIPPING_REVENUE_SHIPPED_WT_COUNT  ||  carrier_idx >= SHIPPING_REVENUE_CARRIER_WT_COUNT  ) {
+		return "";
+	}
+	return names[shipped_idx][carrier_idx];
+}
+
+
+sint32 settings_t::get_shipping_revenue(waytype_t shipped, waytype_t carrier) const
+{
+	const sint8 i = get_shipping_revenue_wt_index( shipped );
+	const sint8 j = get_shipping_revenue_wt_index( carrier );
+	if(  i < 0  ||  i >= SHIPPING_REVENUE_SHIPPED_WT_COUNT  ||  j < 0  ) {
+		return 0;
+	}
+	return shipping_revenue[i][j];
 }

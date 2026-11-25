@@ -74,6 +74,7 @@ private:
 	button_t b_show_legend;
 	button_t b_show_scale;
 	button_t b_export_map;
+	button_t b_export_heightmap;
 	gui_combobox_t c_show_outlines;
 	button_t b_show_directory;
 	button_t b_overlay_networks;

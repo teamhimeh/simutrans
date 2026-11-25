@@ -762,6 +762,61 @@ bool scenario_t::open_info_win(const char* tab) const
 }
 
 
+void scenario_t::rdwr_standard_forbidden_tools(loadsave_t *file)
+{
+	// standard 124.3+: one list for each of its 16 player slots (slot 15 = all players),
+	// entries without player_nr but with parameter_hash, and a different forbid_type numbering
+	const uint8 STD_PLAYER_COUNT = 16;
+	const uint8 STD_PLAYER_UNOWNED = 15;
+	enum { std_forbid_tool = 1, std_allow_tool_rect = 2, std_forbid_tool_rect = 3 };
+
+	for(  uint8 pnr = 0;  pnr < STD_PLAYER_COUNT;  pnr++  ) {
+		uint32 count = 0;
+		file->rdwr_long(count);
+
+		for(  uint32 i = 0;  i < count;  i++  ) {
+			forbidden_t *f = new forbidden_t();
+			uint8 t;
+			file->rdwr_byte(t);
+			file->rdwr_short(f->toolnr);
+			file->rdwr_short(f->waytype);
+			uint32 parameter_hash;
+			file->rdwr_long(parameter_hash);
+			file->rdwr_short(f->pos_nw.x); file->rdwr_short(f->pos_nw.y);
+			file->rdwr_short(f->pos_se.x); file->rdwr_short(f->pos_se.y);
+			file->rdwr_byte(f->hmin);
+			file->rdwr_byte(f->hmax);
+			file->rdwr_str(f->error);
+
+			f->player_nr = (pnr == STD_PLAYER_UNOWNED) ? PLAYER_UNOWNED : pnr;
+			if(  f->waytype == ignore_wt  ) {
+				// standard uses ignore_wt as wildcard, OTRP uses invalid_wt
+				f->waytype = invalid_wt;
+			}
+			if(  t == std_forbid_tool  ) {
+				f->type = forbidden_t::forbid_tool;
+			}
+			else if(  t == std_forbid_tool_rect  ) {
+				f->type = forbidden_t::forbid_tool_rect;
+			}
+			else {
+				// allow rules are not supported
+				dbg->warning("scenario_t::rdwr_standard_forbidden_tools", "skipping unsupported rule type %d for tool %d", t, f->toolnr);
+				delete f;
+				continue;
+			}
+			if(  parameter_hash != 0  ) {
+				// rules for a specific tool parameter are not supported; applying them to all parameters would forbid too much
+				dbg->warning("scenario_t::rdwr_standard_forbidden_tools", "skipping parameter specific rule for tool %d", f->toolnr);
+				delete f;
+				continue;
+			}
+			forbidden_tools.insert_ordered(f, forbidden_t::compare);
+		}
+	}
+}
+
+
 void scenario_t::rdwr(loadsave_t *file)
 {
 	file->rdwr_short(what_scenario);
@@ -861,14 +916,23 @@ void scenario_t::rdwr(loadsave_t *file)
 	if (file->is_loading()) {
 		clear_ptr_vector(forbidden_tools);
 	}
-	uint32 count = forbidden_tools.get_count();
-	file->rdwr_long(count);
+	if(  file->is_loading()  &&  file->get_OTRP_version()==0  &&  file->is_version_atleast(124, 3)  ) {
+		rdwr_standard_forbidden_tools(file);
+	}
+	else {
+		uint32 count = forbidden_tools.get_count();
+		file->rdwr_long(count);
 
-	for(uint32 i=0; i<count; i++) {
-		if (file->is_loading()) {
-			forbidden_tools.append(new forbidden_t());
+		for(uint32 i=0; i<count; i++) {
+			if (file->is_loading()) {
+				forbidden_tools.append(new forbidden_t());
+			}
+			forbidden_tools[i]->rdwr(file);
+			if(  file->is_loading()  &&  file->get_OTRP_version() < 59  &&  forbidden_tools[i]->player_nr == 15  ) {
+				// pre-v59 savegames used 15 as "all players"
+				forbidden_tools[i]->player_nr = PLAYER_UNOWNED;
+			}
 		}
-		forbidden_tools[i]->rdwr(file);
 	}
 
 	// cached strings

@@ -202,6 +202,10 @@ void display_fit_img_to_width( const image_id, sint16)
 {
 }
 
+void display_base_img_scaled(image_id, scr_rect CLIP_NUM_DEF_NOUSE)
+{
+}
+
 void display_img_stretch( const stretch_map_t &, scr_rect)
 {
 }

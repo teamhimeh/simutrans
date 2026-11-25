@@ -110,7 +110,26 @@ private:
 
 	bool is_ex_image;
 
+	/**
+	* number of the junction image shown, in the image list of the way: 16..25 switch images,
+	* 26..35 extended (ex) images, 0 for any other image. Not saved; used to redraw the same
+	* junction image when the season changes.
+	*/
+	uint8 switch_image_nr;
+
+	/**
+	* close diagonals (two parallel diagonals, every second tile is a fourway tile)
+	* 0=no, 1=northwest+southeast, 2=northeast+southwest
+	*/
+	uint8 close_diagonal_state;
+
 	uint16 max_wayobj_speed;
+	// -1 selects the automatic junction image. Fixed choices:
+	// 0 = standard, 1/2 = switch image (nw true/false), 3/4 = extended (ex) switch image (nw true/false)
+	sint8 switch_image_override;
+
+	/// Changing the connections invalidates a fixed switch image.
+	void update_ribi(uint8 new_ribi) { new_ribi &= 15; if(  ribi != new_ribi  ) { ribi = new_ribi; switch_image_override = -1; } }
 
 
 	/**
@@ -152,7 +171,8 @@ public:
 		image_slope,
 		image_diagonal,
 		image_switch,
-		image_ex
+		image_ex,
+		image_close_diagonal
 	};
 
 	/**
@@ -217,7 +237,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_add(ribi_t::ribi ribi) { this->ribi |= (uint8)ribi;}
+	void ribi_add(ribi_t::ribi ribi) { update_ribi(this->ribi | (uint8)ribi); }
 
 	/**
 	* Remove direction bits (ribi) for a way.
@@ -225,7 +245,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void ribi_rem(ribi_t::ribi ribi) { this->ribi &= (uint8)~ribi;}
+	void ribi_rem(ribi_t::ribi ribi) { update_ribi(this->ribi & (uint8)~ribi); }
 
 	/**
 	* Set direction bits (ribi) for the way.
@@ -233,7 +253,7 @@ public:
 	* @note After changing of ribi the image of the way is wrong. To correct this,
 	* grund_t::calc_image needs to be called. This is not done here (Too expensive).
 	*/
-	void set_ribi(ribi_t::ribi ribi) { this->ribi = (uint8)ribi;}
+	void set_ribi(ribi_t::ribi ribi) { update_ribi((uint8)ribi); }
 
 	/**
 	* Get the unmasked direction bits (ribi) for the way (without signals or other ribi changer).
@@ -278,6 +298,20 @@ public:
 
 	void check_diagonal();
 
+	/**
+	 * true, if this way lies on a diagonal by its shape and its neighbours alone,
+	 * also when its desc has no diagonal images (unlike is_diagonal()).
+	 * Does not change any flag.
+	 */
+	bool calc_diagonal() const;
+
+	/**
+	 * checks, if this fourway way is actually two close diagonals
+	 * and sets close_diagonal_state accordingly
+	 * (only if the way has close diagonal images; otherwise two ways on one tile are used)
+	 */
+	void check_close_diagonal();
+
 	void count_sign();
 
 	/* flag query routines */
@@ -292,6 +326,7 @@ public:
 	inline bool has_wayobj() const {return flags&HAS_WAYOBJ; }
 	inline bool is_crossing() const {return flags&HAS_CROSSING; }
 	inline bool is_diagonal() const {return flags&IS_DIAGONAL; }
+	inline uint8 is_close_diagonal() const { return close_diagonal_state; }
 	inline bool is_snow() const {return flags&IS_SNOW; }
 
 	// this is needed during a change from crossing to tram track
@@ -311,10 +346,21 @@ public:
 
 	inline void set_is_ex_image( bool c ) { is_ex_image = c; }
 	bool get_is_ex_image() const  {return is_ex_image;}
-
+	/// number of the junction image shown (16..35), 0 for any other image
+	uint8 get_switch_image_nr() const { return switch_image_nr; }
+	/// shows junction image @p nr (16..35) again; false (and nothing changed) for other numbers
+	bool show_switch_image_nr(uint8 nr, bool snow);
 
 	void select_switch_image(bool snow);
-	void select_switch_road_image(bool snow);
+	bool apply_switch_image_override(bool snow);
+	/// true if the way is a junction whose add-on provides switch images, so the image can be fixed
+	bool can_fix_switch_image() const;
+	/// true if the images for the fixed choice @p value (-1..4) exist for this junction
+	bool is_switch_image_choice_available(sint8 value) const;
+	bool has_switch_image_override() const { return switch_image_override >= 0; }
+	bool is_switch_junction() const { return ribi_t::is_threeway(get_ribi_unmasked()) && !(is_diagonal() || is_close_diagonal()); }
+	sint8 get_switch_image_override() const { return switch_image_override; }
+	void set_switch_image_override(sint8 value) { switch_image_override = value; }
 
 
 	void set_max_wayobj_speed(uint16 s) { max_wayobj_speed = s; }
@@ -326,5 +372,8 @@ public:
 
 	virtual bool is_clipping_below_needed() const OVERRIDE;
 } GCC_PACKED;
+
+// calculate the platform length, and append the string of the platform length to buf.
+void append_platform_length_string_if_needed(cbuffer_t & buf, const weg_t* weg);
 
 #endif

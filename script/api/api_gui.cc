@@ -23,6 +23,8 @@
 #include "../../dataobj/environment.h"
 #include "../../network/network.h"
 #include "../../network/network_cmd_scenario.h"
+#include "../../utils/plainstring.h"
+#include "../../gui/minimap.h"
 
 using namespace script_api;
 
@@ -98,6 +100,25 @@ void_t take_screenshot()
 {
 	display_snapshot( scr_rect(0, 0, display_get_width(), display_get_height()) );
 	return void_t();
+}
+
+plainstring export_minimap()
+{
+	std::string filename;
+	if (!minimap_t::get_instance()->export_to_png(filename)) {
+		return plainstring();
+	}
+	return filename.c_str();
+}
+
+plainstring export_minimap_with_mode(const char *mapmode)
+{
+	minimap_t::MAP_DISPLAY_MODE export_mode;
+	std::string filename;
+	if (!minimap_t::parse_display_mode(mapmode, export_mode)  ||  !minimap_t::get_instance()->export_to_png(filename, export_mode)) {
+		return plainstring();
+	}
+	return filename.c_str();
 }
 
 void_t set_zoom(uint8 val)
@@ -500,7 +521,23 @@ void export_gui(HSQUIRRELVM vm, bool scenario)
 	* Take a screen shot.
 	*/
 	STATIC register_method(vm, &take_screenshot, "take_screenshot");
-	
+
+	/**
+	* Render the entire minimap (the whole world, not just the current viewport)
+	* to a PNG file in the screenshot folder.
+	* @return path to the exported file, or empty/null string on failure.
+	*/
+	STATIC register_method(vm, &export_minimap, "export_minimap");
+
+	/**
+	* Render the entire minimap with the given map mode to a PNG file in the
+	* screenshot folder. The map mode of the map window is not changed.
+	* @param mapmode bit mask as string, or mode names joined by '|',
+	*                e.g. "MAP_TOWN|MAP_LINES" (MAP_ prefix optional, case insensitive).
+	* @return path to the exported file, or empty/null string on failure (also for an invalid mode).
+	*/
+	STATIC register_method(vm, &export_minimap_with_mode, "export_minimap_with_mode");
+
 	/**
 	* Set zoom factor.
 	*

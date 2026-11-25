@@ -9,6 +9,7 @@
 
 #include "minimap.h"
 #include "map_frame.h"
+#include "save_heightmap_frame.h"
 
 #include "simwin.h"
 #include "messagebox.h"
@@ -177,7 +178,7 @@ map_frame_t::map_frame_t() :
 	set_table_layout(1,0);
 
 	// first row of controls
-	add_table(4,1);
+	add_table(5,1);
 	{
 		// first row of controls
 		// selections button
@@ -203,6 +204,11 @@ map_frame_t::map_frame_t() :
 		b_export_map.set_tooltip("Export the entire map with the current display settings.");
 		b_export_map.add_listener(this);
 		add_component(&b_export_map);
+
+		b_export_heightmap.init(button_t::roundbox, "Heightmap PNG");
+		b_export_heightmap.set_tooltip("Export the terrain as a PNG heightmap for a new game.");
+		b_export_heightmap.add_listener(this);
+		add_component(&b_export_heightmap);
 	}
 	end_table();
 
@@ -497,11 +503,17 @@ bool map_frame_t::action_triggered( gui_action_creator_t *comp, value_t v )
 	else if(  comp == &b_show_directory  ) {
 		show_hide_directory( !b_show_directory.pressed );
 	}
+	else if(  comp == &b_export_heightmap  ) {
+		create_win(new save_heightmap_frame_t(), w_info, magic_save_heightmap);
+	}
 	else if(  comp == &b_export_map  ) {
-		std::string filename;
-		const char *message = minimap_t::get_instance()->export_to_png(filename) ?
-			"Map image exported to the screenshot folder." : "Map image export failed.";
-		create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
+		std::string filename, conflicts;
+		const bool ok = minimap_t::get_instance()->export_to_png(filename);
+		// on conflicts export_to_png() already showed the result together with the warning
+		if(  minimap_t::check_display_mode((minimap_t::MAP_DISPLAY_MODE)env_t::default_mapmode, conflicts)  ) {
+			const char *message = ok ? "Map image exported to the screenshot folder." : "Map image export failed.";
+			create_win(new news_img(translator::translate(message)), w_time_delete, magic_none);
+		}
 	}
 	else if(  comp == &c_show_outlines  ) {
 		if( v.i == 2 ) {

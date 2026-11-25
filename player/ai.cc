@@ -167,12 +167,12 @@ bool ai_t::suche_platz(koord pos, koord &size, koord *dirs)
 /** needed renovation due to different sized factories
  * also try "nicest" place first
  */
-bool ai_t::suche_platz(koord &start, koord &size, koord target, koord off)
+bool ai_t::suche_platz(koord &start, koord &size, koord target, koord off, waytype_t wt)
 {
 	// distance of last found point
 	int dist=0x7FFFFFFF;
 	koord platz;
-	int const cov = welt->get_settings().get_station_coverage();
+	int const cov = welt->get_settings().get_station_coverage(wt);
 	int xpos = start.x;
 	int ypos = start.y;
 

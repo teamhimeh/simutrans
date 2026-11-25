@@ -12,6 +12,7 @@
 #include "../simconst.h"
 
 #include "ribi.h"
+#include "../bauer/goods_manager.h"
 
 class player_t;
 class loadsave_t;
@@ -53,6 +54,13 @@ public:
 		HUMIDITY_BASED,
 		MAP_BASED
 	} climate_generate_t;
+
+	// convoy shipping revenue table: every waytype that can be carried, and additionally air
+	// (last), which can only carry
+	enum {
+		SHIPPING_REVENUE_SHIPPED_WT_COUNT = 7,
+		SHIPPING_REVENUE_CARRIER_WT_COUNT = 8
+	};
 
 private:
 	sint32 size_x, size_y;
@@ -111,6 +119,15 @@ private:
 	bool factory_enforce_demand;
 
 	uint16 station_coverage_size;
+
+	// station coverage for each building waytype (indexed by waytype, only station waytypes are used)
+	uint16 station_coverage_size_wt[air_wt+1];
+
+	// coverage applied to sea tiles (not rivers)
+	uint16 station_coverage_size_water;
+
+	// sets station_coverage_size and all waytype and water coverages to cov
+	void set_all_station_coverages(uint16 cov);
 
 	// the maximum length of each convoi
 	uint8 max_rail_convoi_length;
@@ -323,6 +340,9 @@ private:
 
 	// if true, you can buy obsolete stuff
 	bool allow_buying_obsolete_vehicles;
+
+	// map editors (extend_edit_t) cannot place objects (buildings, factories, ways, ...) which are not yet available
+	bool prohibit_too_new;
 	// vehicle value is decrease by this factor/1000 when a vehicle leaved the depot
 	sint16 used_vehicle_reduction;
 
@@ -354,6 +374,18 @@ private:
 	 * of it and the carrier earns only the toll.
 	 */
 	sint32 shipping_income_percentage;
+
+	/**
+	 * Convoy shipping: revenue the carrier earns for carrying a convoy, as
+	 * shipping_revenue[shipped waytype][carrier waytype] (indices from
+	 * get_shipping_revenue_wt_index()). Unit: 1/100 credit per tile travelled per tile
+	 * (CARUNITS_PER_TILE) of carried convoy length. Set in simuconf.tab as
+	 * revenue_<shipped>_shipped_by_<carrier>, e.g. revenue_road_shipped_by_water.
+	 * Booked as way toll: the carried convoy's owner pays it to the carrier's owner when put
+	 * ashore, on top of toll_shipping_percentage; nothing is paid between a player's own
+	 * convoys. 0 (the default) charges nothing.
+	 */
+	sint32 shipping_revenue[SHIPPING_REVENUE_SHIPPED_WT_COUNT][SHIPPING_REVENUE_CARRIER_WT_COUNT];
 
 	// multipliers [%] applied on the pakset values of maintenance and running costs
 	sint32 maintenance_cost_multiplier_way;
@@ -391,7 +423,7 @@ private:
 
 	// The flag whether the time based goods routing is enabled for the goods.
 	// The array index is the goods category index.
-	bool is_time_based_routing_enabled[256];
+	bool is_time_based_routing_enabled[goods_manager_t::MAX_GOODS_COUNT+1];
 	
 	// When the amount of waiting goods/passengers exceeds this value,
 	// goods are loaded with "nearest first" policy to reduce the calculation load.
@@ -568,6 +600,28 @@ public:
 
 	uint16 get_station_coverage() const {return station_coverage_size;}
 
+	/// true for the waytypes which have their own station coverage
+	static bool has_station_coverage_wt(waytype_t wt) {
+		switch(  wt  ) {
+			case road_wt: case track_wt: case water_wt: case monorail_wt: case maglev_wt:
+			case tram_wt: case narrowgauge_wt: case air_wt:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/// coverage of a station building with this waytype; invalid_wt (no waytype building) returns get_station_coverage()
+	uint16 get_station_coverage(waytype_t wt) const {
+		return has_station_coverage_wt(wt) ? station_coverage_size_wt[wt] : station_coverage_size;
+	}
+
+	/// coverage applied to sea tiles (not rivers), whatever station tile covers them
+	uint16 get_station_coverage_water() const {return station_coverage_size_water;}
+
+	/// the largest coverage of all waytypes and water, i.e. the reach of any station tile
+	uint16 get_max_station_coverage() const;
+
 	uint8 get_max_rail_convoi_length() const {return max_rail_convoi_length;}
 	uint8 get_max_road_convoi_length() const {return max_road_convoi_length;}
 	uint8 get_max_ship_convoi_length() const {return max_ship_convoi_length;}
@@ -729,6 +783,9 @@ public:
 	// disallow using obsolete vehicles in depot
 	bool get_allow_buying_obsolete_vehicles() const { return allow_buying_obsolete_vehicles; }
 
+	bool get_prohibit_too_new() const { return prohibit_too_new; }
+	void set_prohibit_too_new(bool b) { prohibit_too_new = b; }
+
 	// forest stuff
 	uint8 get_forest_base_size() const { return forest_base_size; }
 	uint8 get_forest_map_size_divisor() const { return forest_map_size_divisor; }
@@ -787,6 +844,12 @@ public:
 	sint32 get_way_toll_waycost_percentage() const { return way_toll_waycost_percentage; }
 	sint32 get_toll_shipping_percentage() const { return toll_shipping_percentage; }
 	sint32 get_shipping_income_percentage() const { return shipping_income_percentage; }
+	/// revenue [1/100 credit per tile per tile of convoy length] for a `shipped` convoy aboard a `carrier`
+	sint32 get_shipping_revenue(waytype_t shipped, waytype_t carrier) const;
+	/// index into shipping_revenue for a waytype, or -1 if it has none (air can only be a carrier)
+	static sint8 get_shipping_revenue_wt_index(waytype_t wt);
+	/// simuconf.tab key (and settings dialog label) for a shipping_revenue entry
+	static const char *get_shipping_revenue_name(uint8 shipped_idx, uint8 carrier_idx);
 
 	sint32 get_maintenance_cost_multiplier_way() const { return maintenance_cost_multiplier_way; }
 	sint32 get_maintenance_cost_multiplier_overhead() const { return maintenance_cost_multiplier_overhead; }
@@ -820,7 +883,7 @@ public:
 
 	bool get_first_come_first_serve() const { return first_come_first_serve; }
 	void set_first_come_first_serve(bool b) { first_come_first_serve = b; }
-	bool get_first_come_first_serve(uint8 goods_catg_index) const
+	bool get_first_come_first_serve(uint16 goods_catg_index) const
 		{ return first_come_first_serve || get_time_based_routing_enabled(goods_catg_index); }
 	uint32 get_waiting_limit_for_first_come_first_serve() const 
 		{ return waiting_limit_for_first_come_first_serve; }
@@ -834,8 +897,8 @@ public:
 	uint16 get_spacing_shift_divisor() const { return spacing_shift_divisor; }
 
 	uint32 get_base_waiting_ticks(waytype_t waytype) const;
-	bool get_time_based_routing_enabled(uint8 goods_catg_index) const { return is_time_based_routing_enabled[goods_catg_index]; }
-	void set_time_based_routing_enabled(uint8 goods_catg_index, bool is_on) {
+	bool get_time_based_routing_enabled(uint16 goods_catg_index) const { return is_time_based_routing_enabled[goods_catg_index]; }
+	void set_time_based_routing_enabled(uint16 goods_catg_index, bool is_on) {
 		is_time_based_routing_enabled[goods_catg_index] = is_on; 
 	}
 	// get default reverse

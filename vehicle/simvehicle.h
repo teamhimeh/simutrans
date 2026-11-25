@@ -539,7 +539,7 @@ class road_vehicle_t : public vehicle_t
 private:
 	// called internally only from ist_weg_frei()
 	// returns true on success
-	bool choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based );
+	bool choose_route(sint32 &restart_speed, ribi_t::ribi start_direction, uint16 index, const bool length_based, const bool allow_multi_convoys );
 
 	// Guide signal handling, called internally only from can_enter_tile(): a try-coupling convoy
 	// may only pass a guide signal once the convoy it wants to couple with is waiting in the target
@@ -603,7 +603,8 @@ public:
 	bool can_enter_tile(const grund_t *gr_next, sint32 &restart_speed, uint8 second_check_count) OVERRIDE;
 
 	// returns true for the way search to an unknown target.
-	bool is_target(const grund_t *,const grund_t *) const OVERRIDE;
+	bool is_target(const grund_t*, const grund_t*, const bool, const bool, const uint8, const bool) const OVERRIDE;
+	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr,false,false,0,false);}
 
 	// returns true for the way search of a guide signal: gr holds a convoy we may couple with.
 	bool is_coupling_target(const grund_t *, const grund_t *) const OVERRIDE;
@@ -714,8 +715,8 @@ public:
 	uint32 get_cost_upslope() const OVERRIDE { return 25; }
 
 	// returns true for the way search to an unknown target.
-	bool is_target(const grund_t*, const grund_t*, const bool, const uint8, const bool) const OVERRIDE;
-	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr,false,0,false);}
+	bool is_target(const grund_t*, const grund_t*, const bool, const bool, const uint8, const bool) const OVERRIDE;
+	bool is_target(const grund_t *gr,const grund_t *prev_gr) const OVERRIDE {return is_target(gr,prev_gr,false,false,0,false);}
 	bool is_coupling_target(const grund_t *, const grund_t *,const bool) const OVERRIDE;
 
 	// handles all block stuff and route choosing ...
@@ -894,6 +895,18 @@ protected:
 
 	// find a route and reserve the stop position
 	bool find_route_to_stop_position();
+
+	// true, if gr is a runway end where a plane coming from approach can land
+	bool is_landing_runway_end(const grund_t *gr, ribi_t::ribi approach) const;
+
+	// appends the approach to the runway end end_pos (straight line, holding circle, landing roll)
+	// returns the indices of touchdown and search for stop within route
+	bool append_landing_route(route_t *route, koord3d end_pos, uint32 &touchdown_idx, uint32 &search_idx) const;
+
+	// while circling: search another free runway connected to the target halt,
+	// reroute to it from the current position and reserve it
+	// must be called in a step (uses the route finder)
+	bool find_runway();
 
 public:
 	void increment_route_index(sint16 i){route_index+=i;}

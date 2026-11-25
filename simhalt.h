@@ -138,7 +138,7 @@ private:
 	uint16 last_player_count;
 	vector_tpl<scr_coord_val> last_bar_height; // caches the last height of the station bar for each good type drawn in display_status(). used for dirty tile management
 	uint32 capacity[3]; // passenger, mail, goods
-	uint8 overcrowded[256/8]; ///< bit field for each goods type (max 256)
+	uint8 overcrowded[(goods_manager_t::MAX_GOODS_COUNT+1+7)/8]; ///< bit field for each goods type
 
 	static uint8 status_step; // NONE or SCHEDULING or REROUTING
 
@@ -235,13 +235,14 @@ public:
 	 */
 	struct tile_t
 	{
-		tile_t(grund_t* grund_) : grund(grund_) {}
+		tile_t(grund_t* grund_) : grund(grund_), coverage(0) {}
 
 		bool operator ==(const tile_t& o) { return grund == o.grund; }
 		bool operator !=(const tile_t& o) { return grund != o.grund; }
 
 		grund_t*       grund;
 		convoihandle_t reservation[2];
+		uint16         coverage; ///< station coverage of this tile, set by add_grund()
 	};
 
 	const slist_tpl<tile_t> &get_tiles() const { return tiles; }
@@ -273,7 +274,7 @@ public:
 		static bool compare(const connection_t &a, const connection_t &b) { return a.halt.get_id() < b.halt.get_id(); }
 	};
 
-	bool is_transfer(const uint8 catg) const { return all_links[catg].is_transfer; }
+	bool is_transfer(const uint16 catg) const { return all_links[catg].is_transfer; }
 
 private:
 	slist_tpl<tile_t> tiles;
@@ -338,7 +339,7 @@ private:
 	 * @param catg category of cargo network
 	 * @param comp number of component
 	 */
-	void fill_connected_component(uint8 catg, uint16 comp);
+	void fill_connected_component(uint16 catg, uint16 comp);
 
 	using cargo_item_t = std::shared_ptr<halt_waiting_goods_t>;
 
@@ -364,12 +365,18 @@ private:
 	// private helper function for recalc_station_type()
 	void add_to_station_type( grund_t *gr );
 
+	/// largest distance this station tile can cover (its own coverage or station_coverage_water)
+	static uint16 get_tile_reach(const tile_t &tile);
+
+	/// adds this halt to the haltlists of all tiles covered by this station tile
+	void add_tile_coverage(const tile_t &tile, bool insert_unsorted);
+
 	/**
 	 * Reconnect and reroute if counter different from welt->get_schedule_counter()
 	 */
 	static uint8 reconnect_counter;
 	// since we do partial routing, we remember the last offset
-	uint8 last_catg_index;
+	uint16 last_catg_index;
 
 	/* The flags of what kind of packets are accepted. See station_goods_type enum for the definition. */
 	uint8 enables;
@@ -496,10 +503,10 @@ public:
 	vector_tpl<connection_t> const& get_mail_connections() const { return all_links[goods_manager_t::INDEX_MAIL].connections; }
 
 	// returns the matching warenziele (goods objectives/destinations)
-	vector_tpl<connection_t> const& get_connections(uint8 const catg_index) const { return all_links[catg_index].connections; }
+	vector_tpl<connection_t> const& get_connections(uint16 const catg_index) const { return all_links[catg_index].connections; }
 
 	// returns true if the connection to dest (for the given category) is a foot-path
-	bool is_foot_path_connection(halthandle_t dest, uint8 catg_index) const;
+	bool is_foot_path_connection(halthandle_t dest, uint16 catg_index) const;
 
 	// If the ware's next hop is a foot-path, move it immediately to the next halt.
 	// Returns true if the ware was teleported (caller must not add it to cargo queue).
@@ -511,9 +518,9 @@ public:
 	 * @param catg_index freight category index
 	 * @return 0 - not connected, 1 - connected, -1 - undecided (call again later...)
 	 */
-	sint8 is_connected(halthandle_t halt, uint8 catg_index) const;
+	sint8 is_connected(halthandle_t halt, uint16 catg_index) const;
 
-	bool has_available_network( const player_t* player, uint8 catg_index = goods_manager_t::INDEX_NONE ) const;
+	bool has_available_network( const player_t* player, uint16 catg_index = goods_manager_t::INDEX_NONE ) const;
 
 	const slist_tpl<fabrik_t*>& get_fab_list() const { return fab_list; }
 
@@ -583,7 +590,7 @@ private:
 	 * Remember last route search start and catg to resume search
 	 */
 	static halthandle_t last_search_origin;
-	static uint8        last_search_ware_catg_idx;
+	static uint16       last_search_ware_catg_idx;
 
 	static void build_transit_halts_from_halt_data(vector_tpl<halthandle_t> &transit_halts, const halthandle_t destination);
 
@@ -614,7 +621,7 @@ private:
 	 * Updated by recalc_status().
 	 * The key is the goods category index.
 	 */
-	inthashtable_tpl<uint8, bool> waiting_amount_exceeds_FIFO_limit;
+	inthashtable_tpl<uint16, bool> waiting_amount_exceeds_FIFO_limit;
 
 	void search_route_for_invalid_zwischenziel_goods(cargo_queue_t *wares);
 
@@ -693,7 +700,7 @@ public:
 	}
 
 	// a separate version for checking with goods category index
-	bool is_enabled( const uint8 catg_index ) const
+	bool is_enabled( const uint16 catg_index ) const
 	{
 		if (catg_index == goods_manager_t::INDEX_PAS) {
 			return get_pax_enabled();
@@ -756,6 +763,31 @@ public:
 	bool add_grund(grund_t *gb, bool relink_factories = true);
 	bool rem_grund(grund_t *gb);
 
+	/**
+	 * Station coverage of a station tile. It depends on the waytype of the building on it.
+	 * Buildings without waytype (e.g. extensions) use invalid_wt, i.e. settings_t::get_station_coverage().
+	 */
+	static uint16 get_tile_coverage(const grund_t *gr);
+
+	/// true, if pos is covered by this station tile (sea tiles may use station_coverage_water)
+	static bool is_tile_covering(const tile_t &tile, koord pos);
+
+	/// true, if pos is covered by any tile of this station
+	bool is_covering(koord pos) const;
+
+	/// true, if any tile of other is covered by this station
+	/// (walking transfer needs this in both directions)
+	bool covers_any_tile_of(halthandle_t other) const;
+
+	/// re-adds this halt to the haltlists of all covered tiles
+	void refresh_coverage();
+
+	/**
+	 * Recalculates the coverage of all station tiles and rebuilds all haltlists and factory links.
+	 * Needed after the station coverage settings were changed.
+	 */
+	static void recalc_all_coverages();
+
 	uint32 get_capacity(uint8 typ) const { return capacity[typ]; }
 
 	bool existiert_in_welt() const;
@@ -776,7 +808,7 @@ public:
 	koord get_next_pos( koord start ) const;
 
 	/// true, if this station is overcrowded for this ware
-	bool is_overcrowded( const uint8 idx ) const { return (overcrowded[idx/8] & (1<<(idx%8)))!=0; }
+	bool is_overcrowded( const uint16 idx ) const { return (overcrowded[idx/8] & (1<<(idx%8)))!=0; }
 
 	/// @returns total amount of the good waiting at this halt.
 	uint32 get_ware_summe(const goods_desc_t *warentyp) const;
@@ -832,7 +864,7 @@ public:
 	 * @param goods_category_indexes The list of goods category indexes.
 	 * @param cnv The convoy which is requesting the destination halts.
 	 */
-	void calc_destination_halt(inthashtable_tpl<uint8, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const vector_tpl<reachable_halt_t> &temp_stop_halts, const minivec_tpl<uint8> &goods_category_indexes, convoihandle_t cnv);
+	void calc_destination_halt(inthashtable_tpl<uint16, vector_tpl<halthandle_t>> &destination_halts, const vector_tpl<reachable_halt_t> &reachable_halts, const vector_tpl<reachable_halt_t> &temp_stop_halts, const vector_tpl<uint16> &goods_category_indexes, convoihandle_t cnv);
 
 	struct loadable_fresh_goods_t {
 		ware_t::goods_amount_t amount;
@@ -842,7 +874,14 @@ public:
 		loadable_fresh_goods_t() : amount(0), arrived_time(INVALID_CARGO_ARRIVED_TIME) {}
 	};
 
-	void fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to, const uint8 goods_category_index, const vector_tpl<halthandle_t>& destination_halts);
+	void fetch_loadable_fresh_goods(vector_tpl<loadable_fresh_goods_t>& to, const uint16 goods_category_index, const vector_tpl<halthandle_t>& destination_halts);
+
+	/**
+	 * Returns true if any cargo of the given category waiting here has one of the given
+	 * halts as its next hop. Unlike fetch_loadable_fresh_goods(), this looks at all waiting
+	 * cargo (not only fresh cargo) and does not modify anything.
+	 */
+	bool has_goods_for_zwischenziel(const uint16 goods_category_index, const vector_tpl<halthandle_t>& zwischenziele) const;
 
 	// Book revenue for passengers that just boarded a vehicle at this halt.
 	void book_pax_boarding_revenue(uint16 boarded_pax);
@@ -1014,10 +1053,19 @@ public:
 	 * @returns true when the departure slot was successfully booked. false when denied.
 	 */
 	bool book_departure (uint32 arr_tick, uint32 dep_tick, uint32 exp_tick, convoihandle_t cnv);
+
+	/*
+	 * true when the departure slots of both convoys compete with each other,
+	 * i.e. both convoys have lines and their departure_slot_group_id are the same.
+	 */
+	static bool is_same_departure_slot_group(convoihandle_t a, convoihandle_t b);
 	
 	bool erase_departure(uint32 dep_tick, convoihandle_t cnv);
 	
 	bool is_departure_booked(uint32 dep_tick, uint8 stop_index, linehandle_t line) const;
+
+	// true when the slot is booked by cnv or by another convoy coupled with it (compared by the most parent convoy).
+	bool is_departure_booked_by(uint32 dep_tick, convoihandle_t cnv) const;
 
 	void extinguish_all_waiting_goods();
 

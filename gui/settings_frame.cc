@@ -138,6 +138,12 @@ bool settings_frame_t::infowin_event(const event_t *ev)
 		const uint32 old_foot_path_weight    = sets->get_foot_path_weight();
 		const uint32 old_foot_path_time_ticks = sets->get_foot_path_time_ticks();
 		const sint32 old_tile_length          = sets->get_tile_length();
+		uint16 old_coverage[air_wt+1];
+		for(  uint8 i=0;  i<=air_wt;  i++  ) {
+			// index 0 (ignore_wt) is the coverage of buildings without waytype
+			old_coverage[i] = sets->get_station_coverage( i==0 ? invalid_wt : (waytype_t)i );
+		}
+		const uint16 old_coverage_water       = sets->get_station_coverage_water();
 		general.read( sets );
 		display.read( sets );
 		routing.read( sets );
@@ -154,6 +160,18 @@ bool settings_frame_t::infowin_event(const event_t *ev)
 		     sets->get_foot_path_weight() != old_foot_path_weight  ||
 		     sets->get_foot_path_time_ticks() != old_foot_path_time_ticks  ) {
 			world()->set_schedule_counter();
+		}
+
+		// station coverages changed: update the coverage areas of all stations
+		// (only for the running game; the new world dialog edits its own settings)
+		if(  sets == &world()->get_settings()  ) {
+			bool coverage_changed = sets->get_station_coverage_water() != old_coverage_water;
+			for(  uint8 i=0;  i<=air_wt  &&  !coverage_changed;  i++  ) {
+				coverage_changed = sets->get_station_coverage( i==0 ? invalid_wt : (waytype_t)i ) != old_coverage[i];
+			}
+			if(  coverage_changed  ) {
+				haltestelle_t::recalc_all_coverages();
+			}
 		}
 
 		// tile_length changed: rescale all stored *_DISTANCE_METERS records for convois and lines

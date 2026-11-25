@@ -560,6 +560,14 @@ public:
 	/// as if ctrl-key permanently pressed
 	/// cannot be used in network mode
 	static bool straight_way_without_control;
+
+	/// never build a one tile way, even when ctrl is pressed
+	/// user setting: not synchronized with the server, not saved in the savegame (only settings.xml)
+	static bool prohibit_one_tile_way;
+
+	/// the way and tunnel building tools allow closed diagonals by default
+	/// user setting: not synchronized with the server, not saved in the savegame (only settings.xml)
+	static bool always_allow_closed_diagonal;
 	
 	/// statistical log string of otrp
 	static char otrp_statistics_log[PATH_MAX];

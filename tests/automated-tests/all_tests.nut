@@ -25,6 +25,7 @@ include("tests/test_player")
 include("tests/test_powerline")
 include("tests/test_reservation")
 include("tests/test_scenario")
+include("tests/test_save_game")
 include("tests/test_sign")
 include("tests/test_start_signal")
 include("tests/test_stop_before_check_signal")
@@ -34,6 +35,7 @@ include("tests/test_two_ways")
 include("tests/test_slope")
 include("tests/test_terraform")
 include("tests/test_transport")
+include("tests/test_no_go_section")
 include("tests/test_transit_by_foot")
 include("tests/test_trees")
 include("tests/test_way_bridge")
@@ -44,6 +46,7 @@ include("tests/test_way_tram")
 include("tests/test_way_tunnel")
 include("tests/test_wayobj")
 include("tests/test_schedule")
+include("tests/test_loading_departure_slot")
 include("tests/test_road_api")
 include("tests/test_road_choose")
 include("tests/test_priority_signal")
@@ -55,8 +58,12 @@ include("tests/test_pillar")
 include("tests/test_crossing_reservation")
 include("tests/test_diagonal_two_waytypes")
 include("tests/test_diagonal_two_waytypes_same_desc")
+include("tests/test_switch_image_override")
+include("tests/test_diagonal_elevated")
 
 all_tests <- [
+	test_switch_image_override_scripted,
+	test_switch_image_auto_rail,
 	test_building_build_house_invalid_param,
 	test_building_build_house_random,
 	test_building_build_house_valid_desc,
@@ -104,6 +111,9 @@ all_tests <- [
 	test_dir_to_slope,
 	test_dir_to_coord,
 	test_factory_build_pp,
+	test_factory_high_production,
+	test_factory_high_production_multi_output,
+	test_factory_high_production_fields,
 	test_factory_build_with_fields,
 	test_factory_build_climate,
 	test_factory_link,
@@ -139,6 +149,7 @@ all_tests <- [
 	test_halt_build_near_factories,
 	test_halt_build_on_bridge_end,
 	test_halt_build_on_depot,
+	test_halt_build_on_isolated_way,
 	test_halt_build_station_extension,
 	test_halt_make_public_single,
 	test_halt_make_public_multi_tile,
@@ -174,6 +185,15 @@ all_tests <- [
 	test_scenario_rules_allow_forbid_way_tool_cube,
 	test_scenario_rules_allow_forbid_tool_stacked_rect,
 	test_scenario_rules_allow_forbid_tool_stacked_cube,
+	test_save_game_valid_name,
+	test_save_game_multibyte_name,
+	test_save_game_rejects_directory_traversal,
+	test_save_game_rejects_forbidden_characters,
+	test_save_game_rejects_reserved_names,
+	test_save_game_rejects_control_and_invisible_characters,
+	test_save_game_rejects_empty_and_long_names,
+	test_save_game_rejects_non_string,
+	test_save_game_rejects_read_only_target,
 	test_sign_build_oneway,
 	test_sign_remove_trafficlight,
 	test_sign_build_private_way,
@@ -235,9 +255,28 @@ all_tests <- [
 	test_transport_generate_pax_walked,
 	test_transport_generate_pax_no_route,
 	test_transport_pax_valid_route,
+	test_transport_pax_packet_amount_limit,
 	test_transport_mail_valid_route,
 	test_transport_freight_valid_route,
 	test_transport_pax_no_load,
+	test_no_go_section_baseline,
+	test_no_go_section_single_stop,
+	test_no_go_section_single_stop_without_time_based_routing,
+	test_no_go_section_two_stops,
+	test_no_go_section_middle_entry,
+	test_no_go_section_waypoint_before_section,
+	test_no_go_section_two_sections,
+	test_no_go_section_freight_single_stop,
+	test_no_go_section_freight_single_stop_without_time_based_routing,
+	test_no_go_section_freight_committed,
+	test_no_go_section_abcd_no_goods,
+	test_no_go_section_abcd_b_to_d,
+	test_no_go_section_abcd_d_to_b,
+	test_no_go_section_abcd_freight_no_goods,
+	test_no_go_section_abcd_freight_b_to_d,
+	test_no_go_section_abcd_freight_d_to_b,
+	test_single_freight_destination_off,
+	test_single_freight_destination_on,
 	test_transport_pax_no_unload,
 	test_transport_pax_unload_all,
 	test_transport_pax_temp_load,
@@ -302,6 +341,13 @@ all_tests <- [
 	test_schedule_next_line_non_null,
 	test_schedule_current,
 	test_schedule_entry_time_statistics,
+	test_loading_departure_slot_after_long_wait,
+	test_loading_departure_slot_delay_tolerance,
+	test_loading_departure_slot_wait_timeout,
+	test_departure_slot_allowance_timeout,
+	test_departure_slot_coupling_timeout,
+	test_loading_departure_slot_without_loading_limit,
+	test_loading_departure_slot_without_time_wait,
 	test_road_api,
 	test_road_choose_stop_behind_halt_mode,
 	test_road_choose_stop_behind_oneway_mode,
@@ -333,8 +379,11 @@ all_tests <- [
 	test_diagonal_two_waytypes_same_waytype,
 	test_diagonal_two_waytypes_split_to_threeway,
 	test_diagonal_two_waytypes_partial_leg,
+	test_diagonal_two_waytypes_not_allowed,
 	test_diagonal_two_waytypes_same_desc,
 	test_diagonal_two_waytypes_same_desc_partial_leg,
+	test_diagonal_elevated_two_waytypes_straight,
+	test_diagonal_elevated_two_waytypes_route,
 ]
 
 

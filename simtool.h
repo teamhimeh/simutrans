@@ -333,6 +333,11 @@ protected:
 	uint8 street_flag;
 	sint8 height_offset;
 	sint8 vehicle_offset;
+	// true: closed diagonals (two ways on disjoint diagonal bends) may be built
+	bool allow_closed_diagonal;
+	// true: a one tile way is not built even with ctrl pressed
+	// copy of env_t::prohibit_one_tile_way; transferred via default_param so that all clients build the same
+	bool prohibit_one_tile_way;
 
 	virtual way_desc_t const* get_desc(uint16 timeline_year_month) const;
 	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
@@ -344,6 +349,8 @@ public:
 		street_flag = 0;
 		height_offset = 0;
 		vehicle_offset = 0;
+		allow_closed_diagonal = env_t::always_allow_closed_diagonal;
+		prohibit_one_tile_way = env_t::prohibit_one_tile_way;
 	 }
 	image_id get_icon(player_t*) const OVERRIDE;
 	char const* get_tooltip(player_t const*) const OVERRIDE;
@@ -368,8 +375,16 @@ public:
 	sint8 get_height_offset() const { return height_offset; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
 	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
-	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	void set_vehicle_offset_mode(bool a) { a ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
+	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
+	bool get_allow_closed_diagonal() const { return allow_closed_diagonal; }
+	void set_prohibit_one_tile_way(bool yesno) { prohibit_one_tile_way = yesno; }
+	bool get_prohibit_one_tile_way() const { return prohibit_one_tile_way; }
+	/// apply env_t::prohibit_one_tile_way to all way building tools
+	static void update_prohibit_one_tile_way();
+	/// apply env_t::always_allow_closed_diagonal as the new default to all way and tunnel building tools
+	static void update_allow_closed_diagonal();
 	static void set_mode_str(char* str, overtaking_mode_t overtaking_mode);
 	void set_look_toolbar() { look_toolbar = true; }
 	static uint8 get_flag_color(uint8 flag);
@@ -418,7 +433,7 @@ public:
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
 	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
-	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	void set_vehicle_offset_mode(bool a) { a ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
 	uint8 get_street_flag() const { return street_flag; }
@@ -429,6 +444,8 @@ private:
 	overtaking_mode_t overtaking_mode;
 	uint8 street_flag;
 	sint8 vehicle_offset;
+	// true: closed diagonals (two ways on disjoint diagonal bends) may be built
+	bool allow_closed_diagonal;
 
 	void calc_route( way_builder_t &bauigel, const koord3d &, const koord3d &);
 	char const* do_work(player_t*, koord3d const&, koord3d const&) OVERRIDE;
@@ -440,6 +457,7 @@ public:
 		overtaking_mode = twoway_mode;
 		street_flag = 0;
 		vehicle_offset = 0;
+		allow_closed_diagonal = env_t::always_allow_closed_diagonal;
 	}
 	char const* get_tooltip(player_t const*) const OVERRIDE;
 	char const* check_pos(player_t*, koord3d) OVERRIDE;
@@ -454,8 +472,10 @@ public:
 	void set_overtaking_mode(overtaking_mode_t ov) { overtaking_mode = ov; }
 	overtaking_mode_t get_overtaking_mode() const { return overtaking_mode; }
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a*2+(vehicle_offset&1); }
-	sint8 get_vehicle_offset() const { return vehicle_offset>>1; } 
-	void set_vehicle_offset_mode(bool a) { a? vehicle_offset |= a: vehicle_offset &= ~a; }
+	sint8 get_vehicle_offset() const { return vehicle_offset>>1; }
+	void set_allow_closed_diagonal(bool yesno) { allow_closed_diagonal = yesno; }
+	bool get_allow_closed_diagonal() const { return allow_closed_diagonal; } 
+	void set_vehicle_offset_mode(bool a) { a ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset&1; }
 	void set_street_flag (uint8 a) { street_flag = a; }
 	uint8 get_street_flag() const { return street_flag; }
@@ -953,6 +973,15 @@ public:
 	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
+class tool_export_minimap_t : public tool_t {
+public:
+	tool_export_minimap_t() : tool_t(TOOL_EXPORT_MINIMAP | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE;
+	bool init(player_t * ) OVERRIDE;
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
 // builds next chain
 class tool_increase_industry_t : public tool_t {
 public:
@@ -984,6 +1013,30 @@ public:
 	bool is_work_network_safe() const OVERRIDE { return true; }
 };
 
+/* switch to previous player
+ */
+class tool_switch_prev_player_t : public tool_t {
+public:
+	tool_switch_prev_player_t() : tool_t(TOOL_SWITCH_PREV_PLAYER | SIMPLE_TOOL) {}
+	char const* get_tooltip(player_t const*) const OVERRIDE { return translator::translate("Previous player"); }
+	bool init( player_t * ) OVERRIDE {
+		const uint8 current = welt->get_active_player_nr();
+		uint8 prev = current==0?MAX_PLAYER_COUNT-2:current-1;
+		while(  prev!=current  ) {
+			if (welt->get_player(prev)!=NULL) {
+				break;
+			}
+			prev = prev==0? MAX_PLAYER_COUNT-2: prev-1;
+		}
+		welt->switch_active_player( prev, true );
+		return false;
+	}
+	// since it is handled internally
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return true; }
+};
+
+
 // step one year forward
 class tool_step_year_t : public tool_t {
 public:
@@ -1002,7 +1055,7 @@ class tool_change_game_speed_t : public tool_t {
 public:
 	tool_change_game_speed_t() : tool_t(TOOL_CHANGE_GAME_SPEED | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE {
-		int factor = atoi(default_param);
+		int factor = default_param ? atoi(default_param) : 0;
 		return factor>0 ? translator::translate("Accelerate time") : translator::translate("Deccelerate time");
 	}
 	bool init( player_t *player ) OVERRIDE {
@@ -1018,6 +1071,7 @@ class tool_reset_game_speed_t : public tool_t {
 public:
 	tool_reset_game_speed_t() : tool_t(TOOL_RESET_GAME_SPEED | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE {
+		return translator::translate("Reset game speed");
 	}
 	bool init( player_t *player ) OVERRIDE {
 		if(  !env_t::networkmode  ||  player->is_public_service()  ) {
@@ -1032,7 +1086,7 @@ class tool_fix_game_speed_t : public tool_t {
 public:
 	tool_fix_game_speed_t() : tool_t(TOOL_FIX_GAME_SPEED | SIMPLE_TOOL) {}
 	char const* get_tooltip(player_t const*) const OVERRIDE {
-		env_t::networkmode? translator::translate("Fix game speed."): translator::translate("deactivated in offline mode");
+		return env_t::networkmode? translator::translate("Fix game speed."): translator::translate("deactivated in offline mode");
 	}
 	image_id get_icon(player_t*) const OVERRIDE { return env_t::networkmode ? icon : IMG_EMPTY; }
 	bool is_selected() const OVERRIDE { return welt->is_game_speed_fixed(); }
@@ -1626,6 +1680,14 @@ public:
 	sint8 get_vehicle_offset() const { return vehicle_offset >> 1; }
 	void set_vehicle_offset_mode(bool m) { m ? vehicle_offset |= 1 : vehicle_offset &= ~1; }
 	bool get_vehicle_offset_mode() const { return vehicle_offset & 1; }
+};
+
+class tool_set_switch_image_t : public tool_t {
+public:
+	tool_set_switch_image_t() : tool_t(TOOL_SET_SWITCH_IMAGE | GENERAL_TOOL) {}
+	bool is_init_network_safe() const OVERRIDE { return true; }
+	bool is_work_network_safe() const OVERRIDE { return false; }
+	char const* work(player_t*, koord3d) OVERRIDE;
 };
 
 #endif

@@ -21,22 +21,32 @@ class ware_t
 {
 	friend class goods_manager_t;
 
-private:
-	/// private lookup table to speedup
-	static const goods_desc_t *index_to_desc[256];
-
 public:
 	// Type used to specify an amount of goods. Always positive.
 	typedef uint32 goods_amount_t;
 
-	// Maximum number of goods per ware package. Limited by the bit field used.
-	static goods_amount_t const GOODS_AMOUNT_LIMIT = (1 << 23) - 1;
+	/**
+	 * index, menge and to_factory share one 32 bit word. Widening the goods index means
+	 * narrowing the amount by the same number of bits, so that a packet stays 4 bytes:
+	 * there is one packet per (goods type, destination) pair on every halt and in every
+	 * vehicle, and they dominate the memory a large game uses.
+	 */
+	// Highest valid goods index. Limited by the bit field used.
+	static uint32 const GOODS_INDEX_LIMIT = (1 << 10) - 1;
 
+	// Maximum number of goods per ware package. Limited by the bit field used.
+	static goods_amount_t const GOODS_AMOUNT_LIMIT = (1 << 21) - 1;
+
+private:
+	/// private lookup table to speedup
+	static const goods_desc_t *index_to_desc[GOODS_INDEX_LIMIT+1];
+
+public:
 	/// type of good, used as index into goods-types array
-	uint32 index: 8;
+	uint32 index : 10;
 
 	/// amount of goods
-	goods_amount_t menge : 23;
+	goods_amount_t menge : 21;
 
 	/**
 	 * To indicate that the ware's destination is a factory/consumer store
@@ -90,7 +100,6 @@ public:
 
 	ware_t();
 	ware_t(const goods_desc_t *typ);
-	ware_t(loadsave_t *file);
 	ware_t(const ware_t&);
 	ware_t& operator=(const ware_t&);
 
@@ -98,11 +107,21 @@ public:
 	const char *get_name() const { return get_desc()->get_name(); }
 	const char *get_mass() const { return get_desc()->get_mass(); }
 	uint8 get_catg() const { return get_desc()->get_catg(); }
-	uint8 get_index() const { return index; }
+	uint16 get_index() const { return index; }
 
 	const goods_desc_t* get_desc() const { return index_to_desc[index]; }
 
-	void rdwr(loadsave_t *file);
+	/**
+	 * Reads or writes one goods packet.
+	 *
+	 * menge holds at most GOODS_AMOUNT_LIMIT units. Savegames written while the field was
+	 * wider can store more than that in a single packet, so when loading such a packet the
+	 * surplus is split off into further packets - copies of this one, same goods and same
+	 * destination - appended to @p split_off. Every caller that loads packets has to pass a
+	 * vector and store its contents next to this packet; when it does not, the surplus is
+	 * dropped and a warning is logged.
+	 */
+	void rdwr(loadsave_t *file, vector_tpl<ware_t> *split_off = NULL);
 
 	void finish_rd(karte_t *welt);
 

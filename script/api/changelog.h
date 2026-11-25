@@ -11,6 +11,7 @@
  *
  * - Added @ref gui::open_dialog_tool to open dialog tools
  * - Added @ref world::create_player to create player companies (scenario only)
+ * - Added @ref world::save_game to save the game under a script-chosen, validated name
  * - Added @ref command_x::grid_lower, @ref command_x::grid_raise
  * - Added @ref settings::has_double_slopes, @ref settings::get_way_height_clearance
  * - Added @ref tile_x::is_crossing

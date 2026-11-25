@@ -47,6 +47,8 @@ private:
 	gui_label_t vehicle_offset_label;
 	button_t vehicle_offset_mode;
 	button_t allow_branching_cityroad_button;
+	button_t allow_closed_diagonal_button;
+	button_t prohibit_one_tile_way_button;
 	void init(player_t *player, overtaking_mode_t overtaking_mode, uint8 street_flag, bool show_avoid_cityroad);
 
 public:

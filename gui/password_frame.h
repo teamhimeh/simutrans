@@ -28,12 +28,17 @@ protected:
 	gui_label_t fnlabel, const_player_name;
 	button_t unlock_button;
 
+	// sets the enabled state of the "Clear Password" button
+	void update_unlock_button();
+
 public:
 	password_frame_t( player_t *player );
 
 	const char * get_help_filename() const OVERRIDE {return "password.txt";}
 
 	bool action_triggered(gui_action_creator_t*, value_t) OVERRIDE;
+
+	void draw(scr_coord pos, scr_size size) OVERRIDE;
 };
 
 #endif

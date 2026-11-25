@@ -295,9 +295,10 @@ struct build_way_args_t {
 	uint8 street_flag;
 	sint8 height_offset;
 	sint8 vehicle_offset;
+	bool allow_closed_diagonal; ///< scripts may build closed diagonals unless they say otherwise
 
-	build_way_args_t(bool keep_city_roads, sint8 overtaking_mode, uint8 street_flag, sint8 height_offset, sint8 vehicle_offset)
-		: keep_city_roads(keep_city_roads), overtaking_mode(overtaking_mode), street_flag(street_flag), height_offset(height_offset), vehicle_offset(vehicle_offset) {}
+	build_way_args_t(bool keep_city_roads, sint8 overtaking_mode, uint8 street_flag, sint8 height_offset, sint8 vehicle_offset, bool allow_closed_diagonal = true)
+		: keep_city_roads(keep_city_roads), overtaking_mode(overtaking_mode), street_flag(street_flag), height_offset(height_offset), vehicle_offset(vehicle_offset), allow_closed_diagonal(allow_closed_diagonal) {}
 };
 
 call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_desc_t* way, bool straight, build_way_args_t args)
@@ -310,7 +311,7 @@ call_tool_work build_way(player_t* pl, koord3d start, koord3d end, const way_des
 	}
 	static cbuffer_t buf;
 	buf.clear();
-	buf.printf("%s,%d,%d,%d,%d", way->get_name(), args.overtaking_mode, args.street_flag, args.height_offset, args.vehicle_offset);
+	buf.printf("%s,%d,%d,%d,%d,%d", way->get_name(), args.overtaking_mode, args.street_flag, args.height_offset, args.vehicle_offset, args.allow_closed_diagonal ? 1 : 0);
 	return call_tool_work(TOOL_BUILD_WAY | GENERAL_TOOL, buf, (straight ? 2 : 0) + (args.keep_city_roads ? 1 : 0), pl, start, end);
 }
 
@@ -346,6 +347,7 @@ SQInteger command_build_road(HSQUIRRELVM vm)
 	uint8 street_flag = 0;
 	sint8 height_offset = 0;
 	sint8 vehicle_offset = 0;
+	bool allow_closed_diagonal = true;
 
 	if (sq_gettype(vm, 7) == OT_TABLE) {
 		get_slot(vm, "keep_city_roads", keep_city_roads, 7);
@@ -365,11 +367,12 @@ SQInteger command_build_road(HSQUIRRELVM vm)
 		if (SQ_SUCCEEDED(get_slot(vm, "vehicle_offset", vo, 7))) {
 			vehicle_offset = (sint8)vo;
 		}
+		get_slot(vm, "allow_closed_diagonal", allow_closed_diagonal, 7);
 	}
 	else {
 		keep_city_roads = param<bool>::get(vm, 7);
 	}
-	build_way_args_t args(keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset);
+	build_way_args_t args(keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset, allow_closed_diagonal);
 	return param<call_tool_work>::push(vm, build_way(pl, start, end, way, straight, args));
 }
 
@@ -554,6 +557,13 @@ call_tool_init set_signal_margin_length(player_t* pl, koord3d pos, int val)
 	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
 }
 
+call_tool_init set_signal_stop_at_middle(player_t* pl, koord3d pos, int val)
+{
+	cbuffer_t buf;
+	buf.printf("%hi,%hi,%hi,%hi,M", (sint16)pos.x, (sint16)pos.y, (sint16)pos.z, (sint16)val);
+	return call_tool_init(TOOL_CHANGE_ROADSIGN | SIMPLE_TOOL, (const char*)buf, 0, pl);
+}
+
 call_tool_init set_signal_two_ways(player_t* pl, koord3d pos, int val)
 {
 	cbuffer_t buf;
@@ -669,7 +679,7 @@ void export_commands(HSQUIRRELVM vm)
 	 * @param end   coordinate, where work ends
 	 * @param way type of way to be built
 	 * @param straight force building of straight ways, similar as building way with control key pressed
-	 * @param args table of arguments (keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset)
+	 * @param args table of arguments (keep_city_roads, overtaking_mode, street_flag, height_offset, vehicle_offset, allow_closed_diagonal (default true))
 	 */
 	STATIC register_function(vm, command_build_road, "build_road", 7, ".xt|x|yt|x|yt|x|yb.", true /* static */);
 	/**
@@ -816,6 +826,17 @@ void export_commands(HSQUIRRELVM vm)
 	 * @typemask string(player_x, coord3d, int)
 	 */
 	STATIC register_method(vm, set_signal_margin_length, "set_margin_length", false, true);
+	/**
+	 * Set or clear the "stop at middle" flag of a choose signal.
+	 * When set, trains stop at the middle of the platform, excluding the margin tiles.
+	 * The margin is taken at the front of the platform when "advance to end" is set, otherwise at the back.
+	 * @param pl player executing the command
+	 * @param pos position of signal
+	 * @param val new state of the flag
+	 * @returns null if successful, an error string otherwise
+	 * @typemask string(player_x, coord3d, int)
+	 */
+	STATIC register_method(vm, set_signal_stop_at_middle, "set_stop_at_middle", false, true);
 	/**
 	 * Set or clear the "allow reverse passage" (two ways) flag of a signal.
 	 * When set (true), trains coming from the reverse direction are allowed to pass the signal.
