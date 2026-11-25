@@ -151,8 +151,12 @@ private:
 	gui_label_t lb_vehicle_dir;
 	gui_combobox_t vehicle_dir_selector;
 
-	/// index of the "Empty" entry in vehicle_filter (last entry, after all goods)
-	int empty_filter_index;
+	/**
+	 * index of the first image entry in vehicle_filter. After all goods follow
+	 * "Empty", "Reverse", "No_Electric" and "Reverse_No_Electric" (see image_filter_t).
+	 * These entries do not filter vehicles, they only select the shown images.
+	 */
+	int image_filter_index;
 
 	gui_label_t lb_name_filter_input;
 	char name_filter_value[64];

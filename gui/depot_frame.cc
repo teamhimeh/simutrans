@@ -77,6 +77,10 @@ uint8 depot_frame_t::vehicle_list_dir = ribi_t::dir_south;
 // entries of the direction selector (clockwise, starting with the default south view)
 static const uint8 VEHICLE_DIR_COUNT = 8;
 static const char *vehicle_dir_texts[VEHICLE_DIR_COUNT] = { "S", "SW", "W", "NW", "N", "NE", "E", "SE" };
+// image entries of the vehicle filter, appended after all goods
+enum image_filter_t { IMG_FILTER_EMPTY = 0, IMG_FILTER_REVERSE, IMG_FILTER_NO_ELECTRIC, IMG_FILTER_REVERSE_NO_ELECTRIC, IMG_FILTER_COUNT };
+static const char *image_filter_texts[IMG_FILTER_COUNT] = { "Empty", "Reverse", "No_Electric", "Reverse_No_Electric" };
+
 static const uint8 vehicle_dir_values[VEHICLE_DIR_COUNT] = {
 	ribi_t::dir_south, ribi_t::dir_southwest, ribi_t::dir_west, ribi_t::dir_northwest,
 	ribi_t::dir_north, ribi_t::dir_northeast, ribi_t::dir_east, ribi_t::dir_southeast
@@ -413,7 +417,7 @@ depot_frame_t::depot_frame_t(depot_t* depot) :
 	lb_sort_by("Sort by:", SYSCOL_TEXT, gui_label_t::right),
 	lb_vehicle_spacing("Spacing:", SYSCOL_TEXT, gui_label_t::left),
 	lb_vehicle_dir("Direction:", SYSCOL_TEXT, gui_label_t::left),
-	empty_filter_index(-1),
+	image_filter_index(-1),
 	lb_name_filter_input("Search:", SYSCOL_TEXT, gui_label_t::right),
 	lb_veh_action("Fahrzeuge:", SYSCOL_TEXT, gui_label_t::right),
 	convoi(&convoi_pics),
@@ -450,8 +454,8 @@ void depot_frame_t::init(depot_t *dep)
 	set_name(depot->get_name());
 	set_owner(depot->get_owner());
 	icnv = depot->convoi_count()-1;
-	// "Empty" entry of the vehicle filter follows "All", "Relevant" and the goods
-	empty_filter_index = VEHICLE_FILTER_GOODS_OFFSET + welt->get_goods_list().get_count();
+	// image entries of the vehicle filter follow "All", "Relevant" and the goods
+	image_filter_index = VEHICLE_FILTER_GOODS_OFFSET + welt->get_goods_list().get_count();
 
 	scr_size size = scr_size(0,0);
 
@@ -1247,10 +1251,18 @@ bool depot_frame_t::is_in_vehicle_list(const vehicle_desc_t *info)
 image_id depot_frame_t::get_vehicle_list_image(const vehicle_desc_t *info) const
 {
 	const ribi_t::dir dir = vehicle_list_dir;
-	if(  depot->selected_filter == empty_filter_index  ) {
+	const int img_filter = depot->selected_filter - image_filter_index;
+	if(  img_filter == IMG_FILTER_EMPTY  ) {
 		// "Empty" selected: show EmptyImage
 		const image_id img = info->get_image_id(dir, NULL);
 		return img != IMG_EMPTY ? img : info->get_image_id(dir, info->get_freight_type());
+	}
+	if(  img_filter > IMG_FILTER_EMPTY  &&  img_filter < IMG_FILTER_COUNT  ) {
+		// "Reverse", "No_Electric" or "Reverse_No_Electric": let get_image_id() choose the special image
+		// (falls back to the normal image, if the vehicle does not have it; No_Electric only for electric vehicles)
+		const bool is_reversed    = img_filter == IMG_FILTER_REVERSE     ||  img_filter == IMG_FILTER_REVERSE_NO_ELECTRIC;
+		const bool is_no_electric = img_filter == IMG_FILTER_NO_ELECTRIC ||  img_filter == IMG_FILTER_REVERSE_NO_ELECTRIC;
+		return info->get_image_id(dir, info->get_freight_type(), is_reversed, is_no_electric);
 	}
 	const goods_desc_t *ware = info->get_freight_type();
 	if(  depot->selected_filter >= VEHICLE_FILTER_GOODS_OFFSET  ) {
@@ -1897,14 +1909,16 @@ void depot_frame_t::update_data()
 	FOR(vector_tpl<goods_desc_t const*>, const i, welt->get_goods_list()) {
 		vehicle_filter.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(i->get_name()), SYSCOL_TEXT);
 	}
-	// "Empty" is always the last entry (no filtering, but show the empty images)
-	// keep it selected even when the goods list has grown meanwhile
-	const int new_empty_filter_index = vehicle_filter.count_elements();
-	if(  empty_filter_index >= 0  &&  depot->selected_filter == empty_filter_index  ) {
-		depot->selected_filter = new_empty_filter_index;
+	// image entries ("Empty", "Reverse", ...) are always the last entries (no filtering, only the shown images change)
+	// keep the selected one even when the goods list has grown meanwhile
+	const int new_image_filter_index = vehicle_filter.count_elements();
+	if(  image_filter_index >= 0  &&  depot->selected_filter >= image_filter_index  &&  depot->selected_filter < image_filter_index + IMG_FILTER_COUNT  ) {
+		depot->selected_filter += new_image_filter_index - image_filter_index;
 	}
-	empty_filter_index = new_empty_filter_index;
-	vehicle_filter.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate("Empty"), SYSCOL_TEXT);
+	image_filter_index = new_image_filter_index;
+	for(  int i = 0;  i < IMG_FILTER_COUNT;  i++  ) {
+		vehicle_filter.new_component<gui_scrolled_list_t::const_text_scrollitem_t>(translator::translate(image_filter_texts[i]), SYSCOL_TEXT);
+	}
 
 	if(  depot->selected_filter >= vehicle_filter.count_elements()  ) {
 		depot->selected_filter = VEHICLE_FILTER_RELEVANT;
