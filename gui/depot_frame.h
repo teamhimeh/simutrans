@@ -76,6 +76,17 @@ private:
 	static bool show_all;
 
 	/**
+	 * spacing multiplier (1..5) of the cells in the vehicle list tabs (same for all depots).
+	 * Gives room for vehicle images drawn larger than the pak's base raster.
+	 */
+	static uint8 vehicle_spacing;
+
+	/**
+	 * direction (ribi_t::dir) of the vehicle images in the vehicle list tabs (same for all depots).
+	 */
+	static uint8 vehicle_list_dir;
+
+	/**
 	 * Gui elements
 	 */
 	gui_label_t lb_convois;
@@ -133,6 +144,19 @@ private:
 
 	gui_label_t lb_sort_by;
 	gui_combobox_t sort_by;
+
+	gui_label_t lb_vehicle_spacing;
+	gui_combobox_t vehicle_spacing_selector;
+
+	gui_label_t lb_vehicle_dir;
+	gui_combobox_t vehicle_dir_selector;
+
+	/**
+	 * index of the first image entry in vehicle_filter. After all goods follow
+	 * "Empty", "Reverse", "No_Electric" and "Reverse_No_Electric" (see image_filter_t).
+	 * These entries do not filter vehicles, they only select the shown images.
+	 */
+	int image_filter_index;
 
 	gui_label_t lb_name_filter_input;
 	char name_filter_value[64];
@@ -269,6 +293,9 @@ private:
 
 	/// true if already stored here
 	bool is_in_vehicle_list(const vehicle_desc_t *info);
+
+	/// image of a vehicle in the vehicle list tabs, according to selected direction and goods filter
+	image_id get_vehicle_list_image(const vehicle_desc_t *info) const;
 
 	/// add a single vehicle (helper function). is_secondary=true routes to tram tabs.
 	void add_to_vehicle_list(const vehicle_desc_t *info, bool is_secondary = false);
