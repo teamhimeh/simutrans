@@ -376,6 +376,7 @@ convoihandle_t depot_t::copy_convoi(convoihandle_t old_cnv, bool local_execution
 			// invalid waytype!
 			return convoihandle_t();
 		}
+
 		convoihandle_t new_cnv = add_convoi( false );
 		new_cnv->set_name(old_cnv->get_internal_name());
 		int vehicle_count = old_cnv->get_vehicle_count();
