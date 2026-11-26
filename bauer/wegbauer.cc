@@ -354,6 +354,11 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 				return true;
 			}
 			const weg_t *other = w0->get_waytype()==road_wt ? w1 : w0;
+			if (other->get_waytype()!=water_wt  &&  other->get_waytype()!=air_wt) {
+				// a tram track can overlay other tracks (monorail, maglev, narrow gauge) like it
+				// overlays the road: any direction, also diagonally through the crossing
+				return true;
+			}
 			if ((other->get_ribi_unmasked() & own_bit)!=0) {
 				return false;
 			}

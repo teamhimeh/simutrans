@@ -438,11 +438,15 @@ void grund_t::rdwr(loadsave_t *file)
 		// saving all ways ...
 		// savegames before OTRP v65 can hold only two ways per tile: the tram tracks
 		// as third and fourth way are not saved there
-		const uint8 max_saved_ways = file->get_OTRP_version()>=65 ? MAX_WAYS_PER_TILE : 2;
+		const bool old_format = file->get_OTRP_version()<65;
+		const uint8 max_saved_ways = old_format ? 2 : MAX_WAYS_PER_TILE;
 		for(  uint8 i=0;  i<max_saved_ways;  i++  ) {
 			if (weg_t* const w = get_weg_nr(i)) {
 				file->wr_obj_id(w->get_waytype());
+				// do not save connections to the ways, which are left out on the neighbour tiles
+				weg_t::save_ribi_remove = old_format ? get_ribi_to_unsaved_ways(w) : (ribi_t::ribi)ribi_t::none;
 				w->rdwr(file);
+				weg_t::save_ribi_remove = ribi_t::none;
 			}
 		}
 		file->wr_obj_id(-1);   // Way end
@@ -595,6 +599,26 @@ void grund_t::enlarge_map( sint16, sint16 /*new_size_y*/ )
 		ground_texts.put(iter.key, iter.value);
 	}
 	ground_texts_enlarged.clear();
+}
+
+
+ribi_t::ribi grund_t::get_ribi_to_unsaved_ways(const weg_t *w) const
+{
+	ribi_t::ribi remove = ribi_t::none;
+	const waytype_t wt = w->get_waytype();
+	const ribi_t::ribi ribi = w->get_ribi_unmasked();
+	for(  uint8 r=0;  r<4;  r++  ) {
+		const ribi_t::ribi dir = ribi_t::nesw[r];
+		grund_t *to;
+		if(  (ribi & dir)  &&  get_neighbour(to, wt, dir)  &&  to->has_more_than_two_ways()  ) {
+			const weg_t *w2 = to->get_weg(wt, ribi_t::backward(dir));
+			if(  w2  &&  w2!=to->get_weg_nr(0)  &&  w2!=to->get_weg_nr(1)  ) {
+				// connected to the third or fourth way there
+				remove |= dir;
+			}
+		}
+	}
+	return remove;
 }
 
 

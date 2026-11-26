@@ -3011,7 +3011,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				overtaking_on_tile = false;
 			}
 			// since reserve function modifies variables of the instance...
-			strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
+			strasse_t* s = (strasse_t *)gr->get_weg(road_wt, ribi_type(gr->get_pos(), next));
 			if(  !s  ||  !s->reserve(this, overtaking_on_tile, get_pos(), next)  ) {
 				// A convoy waiting to be coupled with holds the junction it stands on. That
 				// reservation must not lock us out, exactly like its vehicles must not block us -
@@ -3202,7 +3202,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 					overtaking_on_tile = false;
 				}
 				// since reserve function modifies variables of the instance...
-				strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
+				strasse_t* s = (strasse_t *)gr->get_weg(road_wt, ribi_type(gr->get_pos(), next));
 				if(  !s  ||  !s->reserve(this, overtaking_on_tile, r.at(test_index - 1u), next)  ) {
 					// see above: the convoy we are going to couple with may hold this junction.
 					if(  s  &&  is_coupling_partner( s->get_reserver(this, overtaking_on_tile, r.at(test_index - 1u), next) )  ) {
@@ -4270,9 +4270,13 @@ void road_vehicle_t::leave_tile() {
 	vehicle_t::leave_tile();
 	// unreserve the tile
 	grund_t* gr = welt->lookup(get_pos());
-	strasse_t* str = gr ? (strasse_t*)(gr->get_weg(road_wt)) : NULL;
-	if(  str  ) {
-		str->unreserve(this);
+	// release all road legs here (a closed diagonal has two of them)
+	if(  gr  &&  gr->hat_weg(road_wt)  ) {
+		for(  uint8 n=0;  n<2;  n++  ) {
+			if(  strasse_t* str = (strasse_t*)gr->get_weg_leg(road_wt, n)  ) {
+				str->unreserve(this);
+			}
+		}
 		reserving_tiles.remove(gr->get_pos());
 	}
 }
@@ -4329,9 +4333,11 @@ void road_vehicle_t::unreserve_all_tiles() {
 	for(uint32 i=0; i<reserving_tiles.get_count(); i++) {
 		grund_t* gr = welt->lookup(reserving_tiles[i]);
 		if(  gr  ) {
-			strasse_t* str = (strasse_t*) (gr->get_weg(road_wt));
-			if(  str  ) {
-				str->unreserve(this);
+			// release all road legs here (a closed diagonal has two of them)
+			for(  uint8 n=0;  n<2;  n++  ) {
+				if(  strasse_t* str = (strasse_t*)gr->get_weg_leg(road_wt, n)  ) {
+					str->unreserve(this);
+				}
 			}
 		}
 	}
@@ -6088,7 +6094,8 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 		ribi_t::ribi coupling_target_ribi = ribi_t::none;
 		// check the stop step for coupling
 		sint16 c_step = -VEHICLE_STEPS_PER_TILE;
-		const bool is_diagonal_way = ribi_t::is_bend(gr->get_weg(get_waytype())->get_ribi_unmasked());
+		// direction-aware: the leg (or the third/fourth way, a tram track) our route runs over
+		const bool is_diagonal_way = ribi_t::is_bend(gr->get_weg(get_waytype(), route->get_corner_set(i))->get_ribi_unmasked());
 		const sint16 tile_length = is_diagonal_way ? diagonal_vehicle_steps_per_tile : VEHICLE_STEPS_PER_TILE;
 		// check the real coupling target if there are vehicles in same tile. 
 		sint16 other_step = VEHICLE_STEPS_PER_TILE;
@@ -6177,7 +6184,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			return true;
 		}
 		// check for signals
-		schiene_t * sch = gr ? (schiene_t *)gr->get_weg(get_waytype()) : NULL;
+		schiene_t * sch = gr ? (schiene_t *)gr->get_weg(get_waytype(), route->get_corner_set(i)) : NULL;
 		if(  !sch  ||  (!ignore_signals  &&  sch->has_signal())  ||  !sch->can_reserve(cnv->self)  ) {
 			// end of truck or section. or unreachable for some reasons. anyway, convoy for coupling is not found.
 			cnv->unset_convoi_coupling_in_progress();

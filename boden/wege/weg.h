@@ -206,6 +206,12 @@ public:
 	// returns a way with the matching type
 	static weg_t *alloc(waytype_t wt);
 
+	/**
+	 * directions which rdwr() leaves out when saving (only set by grund_t::rdwr() while saving
+	 * in a format before OTRP v65: they lead to tram tracks as third/fourth way, which are not saved)
+	 */
+	static ribi_t::ribi save_ribi_remove;
+
 	// returns a string with the "official name of the waytype"
 	static const char *waytype_to_string(waytype_t wt);
 

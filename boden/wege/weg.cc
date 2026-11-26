@@ -222,6 +222,9 @@ bool weg_t::needs_crossing(const way_desc_t* other) const
 	return true;
 }
 
+ribi_t::ribi weg_t::save_ribi_remove = ribi_t::none;
+
+
 void weg_t::rdwr(loadsave_t *file)
 {
 	xml_tag_t t( file, "weg_t" );
@@ -234,7 +237,7 @@ void weg_t::rdwr(loadsave_t *file)
 	}
 
 	// all connected directions
-	uint8 dummy8 = ribi;
+	uint8 dummy8 = file->is_saving() ? (ribi & ~save_ribi_remove) : ribi;
 	file->rdwr_byte(dummy8);
 	if(  file->is_loading()  ) {
 		ribi = dummy8 & 15; // before: high bits was maske

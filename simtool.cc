@@ -412,15 +412,15 @@ static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, 
 		}
 	}
 
-	// tram
+	// tram (any of the track ways, a tram track can also be the third or fourth way next to a rail leg)
 	if(wt==tram_wt) {
-		weg_t *way = gr->get_weg(track_wt);
-		if (way  &&  way->get_desc()->get_styp() == type_tram &&  way->is_deletable(player)==NULL) {
-			return gr;
+		for(  uint8 n=0;  n<gr->get_weg_count(track_wt);  n++  ) {
+			weg_t *way = gr->get_weg_leg(track_wt, n);
+			if (way->get_desc()->get_styp() == type_tram &&  way->is_deletable(player)==NULL) {
+				return gr;
+			}
 		}
-		else {
-			return NULL;
-		}
+		return NULL;
 	}
 
 
@@ -428,8 +428,12 @@ static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, 
 	if(  !gr->hat_weg(wt)  ) {
 		return NULL;
 	}
-	// check for ownership
-	if(gr->get_weg(wt)->is_deletable(player)!=NULL){
+	// check for ownership (of any way of this waytype, e.g. a tram track on a road leg next to a rail leg)
+	bool own_way = gr->get_weg(wt)->is_deletable(player)==NULL; // also any_wt
+	for(  uint8 n=0;  n<gr->get_weg_count(wt)  &&  !own_way;  n++  ) {
+		own_way = gr->get_weg_leg(wt, n)->is_deletable(player)==NULL;
+	}
+	if(!own_way){
 		// way owner is different from activa player, but we must check wayobj if we need
 		if(  check_wayobj&&gr->get_wayobj(wt)&&gr->get_wayobj(wt)->is_deletable(player)==NULL  ) {
 			// wayobj owner is me. I can delete

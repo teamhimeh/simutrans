@@ -927,6 +927,12 @@ public:
 	bool update_way_flags();
 
 	/**
+	 * @returns the directions of way @p w (on this tile), which lead to a third or fourth way
+	 * (a tram track) on the neighbour tile. These are not saved in formats before OTRP v65.
+	 */
+	ribi_t::ribi get_ribi_to_unsaved_ways(const weg_t *w) const;
+
+	/**
 	* Are two ways crossing here?
 	* To not discover trams, we look for the crossing object
 	*/
