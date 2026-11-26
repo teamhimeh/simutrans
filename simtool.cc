@@ -412,15 +412,15 @@ static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, 
 		}
 	}
 
-	// tram
+	// tram (any of the track ways, a tram track can also be the third or fourth way next to a rail leg)
 	if(wt==tram_wt) {
-		weg_t *way = gr->get_weg(track_wt);
-		if (way  &&  way->get_desc()->get_styp() == type_tram &&  way->is_deletable(player)==NULL) {
-			return gr;
+		for(  uint8 n=0;  n<gr->get_weg_count(track_wt);  n++  ) {
+			weg_t *way = gr->get_weg_leg(track_wt, n);
+			if (way->get_desc()->get_styp() == type_tram &&  way->is_deletable(player)==NULL) {
+				return gr;
+			}
 		}
-		else {
-			return NULL;
-		}
+		return NULL;
 	}
 
 
@@ -428,8 +428,12 @@ static grund_t *tool_intern_koord_to_weg_grund(player_t *player, karte_t *welt, 
 	if(  !gr->hat_weg(wt)  ) {
 		return NULL;
 	}
-	// check for ownership
-	if(gr->get_weg(wt)->is_deletable(player)!=NULL){
+	// check for ownership (of any way of this waytype, e.g. a tram track on a road leg next to a rail leg)
+	bool own_way = gr->get_weg(wt)->is_deletable(player)==NULL; // also any_wt
+	for(  uint8 n=0;  n<gr->get_weg_count(wt)  &&  !own_way;  n++  ) {
+		own_way = gr->get_weg_leg(wt, n)->is_deletable(player)==NULL;
+	}
+	if(!own_way){
 		// way owner is different from activa player, but we must check wayobj if we need
 		if(  check_wayobj&&gr->get_wayobj(wt)&&gr->get_wayobj(wt)->is_deletable(player)==NULL  ) {
 			// wayobj owner is me. I can delete
@@ -835,7 +839,18 @@ DBG_MESSAGE("tool_remover()",  "took out powerline");
 DBG_MESSAGE("tool_remover()", "removing way");
 
 	waytype_t wt = ignore_wt;
-	if(gr->get_typ()!=grund_t::tunnelboden  ||  gr->has_two_ways()) {
+	if(gr->has_more_than_two_ways()) {
+		// tram tracks as third/fourth way: always remove the last one first
+		weg_t *w = gr->get_weg_nr(gr->get_way_count()-1);
+		if(  const char *err = w->is_deletable(player)  ) {
+			msg = err;
+			return false;
+		}
+		if(  !gr->remove_everything_from_way(player, w, ribi_t::none)  ) {
+			return false;
+		}
+	}
+	else if(gr->get_typ()!=grund_t::tunnelboden  ||  gr->has_two_ways()) {
 		weg_t *w = gr->get_weg_nr(1);
 		if(gr->get_typ()==grund_t::brueckenboden  &&  w==NULL) {
 			// do not delete the middle of a bridge
@@ -1680,10 +1695,7 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 			// check the resulting slope
 			ribi_t::ribi ribis = 0;
 			if( gr1->hat_wege()) {
-				ribis |= gr1->get_weg_nr(0)->get_ribi_unmasked();
-				if(  gr1->get_weg_nr(1)  ) {
-					ribis |= gr1->get_weg_nr(1)->get_ribi_unmasked();
-				}
+				ribis |= gr1->get_all_ways_ribi_unmasked();
 			}
 			if( gr1->get_leitung()) {
 				ribis |= gr1->get_leitung()->get_ribi();
@@ -1886,11 +1898,10 @@ const char *tool_setslope_t::tool_set_slope_work( player_t *player, koord3d pos,
 
 			// check way ownership
 			if(gr1->hat_wege()) {
-				if(gr1->get_weg_nr(0)->is_deletable(player)!=NULL) {
-					return NOTICE_TILE_FULL;
-				}
-				if(gr1->has_two_ways()  &&  gr1->get_weg_nr(1)->is_deletable(player)!=NULL) {
-					return NOTICE_TILE_FULL;
+				for(  uint8 i=0;  i<gr1->get_way_count();  i++  ) {
+					if(gr1->get_weg_nr(i)->is_deletable(player)!=NULL) {
+						return NOTICE_TILE_FULL;
+					}
 				}
 			}
 
@@ -2082,7 +2093,7 @@ const char *tool_clear_reservation_t::work( player_t *, koord3d pos )
 		}
 
 		// then unreserve the current tile
-		for(unsigned wnr=0;  wnr<2;  wnr++  ) {
+		for(unsigned wnr=0;  wnr<grund_t::MAX_WAYS_PER_TILE;  wnr++  ) {
 
 			schiene_t const* const w = obj_cast<schiene_t>(gr->get_weg_nr(wnr));
 			strasse_t* s = dynamic_cast<strasse_t*>(gr->get_weg_nr(wnr));
@@ -3854,7 +3865,7 @@ uint8 tool_build_bridge_t::is_valid_pos(  player_t *player, const koord3d &pos, 
 			}
 			else {
 				// way types are checked, take all ribis
-				for(int i=0;i<2;i++) {
+				for(int i=0;i<grund_t::MAX_WAYS_PER_TILE;i++) {
 					if (const weg_t *w = gr->get_weg_nr(i)) {
 						rw |= w->get_ribi_unmasked();
 					}
@@ -4514,7 +4525,7 @@ const char *tool_wayremover_t::do_work( player_t *player, const koord3d &start, 
 					if(can_delete  &&  gr->get_weg(wt)==NULL) {
 						// remove the remaining ways (tram tracks, which have no tunnel/elevated
 						// ground of their own) with their neighbours' connections
-						for(  uint8 n=0;  n<2  &&  gr->get_weg_nr(0)!=NULL;  n++  ) {
+						for(  uint8 n=0;  n<grund_t::MAX_WAYS_PER_TILE  &&  gr->get_weg_nr(0)!=NULL;  n++  ) {
 							gr->remove_everything_from_way(player,gr->get_weg_nr(0)->get_waytype(),ribi_t::none);
 						}
 						gr->obj_loesche_alle(player);
@@ -5539,17 +5550,42 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// the ordinary two-way case (crossing, tram-on-road) where the union of both ribis is
 	// what determines validity/orientation. If either way is straight, this is false and the
 	// existing union-based logic below applies unchanged.
-	const bool disjoint_diagonal_halt = bd->has_two_ways()
-		&&  ribi_t::are_disjoint_legs( bd->get_weg_nr(0)->get_ribi_unmasked(), bd->get_weg_nr(1)->get_ribi_unmasked() );
+	// With tram tracks as third/fourth way, the pair is the two legs of the stop's waytype, or
+	// the way of the stop's waytype and a way on the other (disjoint) leg.
+	const waytype_t halt_leg_wt = (wegtype==tram_wt) ? track_wt : wegtype;
+	const weg_t *halt_leg0 = NULL;
+	const weg_t *halt_leg1 = NULL;
+	if(  bd->has_two_same_waytype_ways(halt_leg_wt)  ) {
+		halt_leg0 = bd->get_weg_leg(halt_leg_wt, 0);
+		halt_leg1 = bd->get_weg_leg(halt_leg_wt, 1);
+	}
+	else if(  bd->has_two_ways()  ) {
+		halt_leg0 = bd->get_weg_nr(0);
+		halt_leg1 = bd->get_weg_nr(1);
+		if(  bd->has_more_than_two_ways()  ) {
+			if(  const weg_t *own = bd->get_weg(halt_leg_wt)  ) {
+				for(  uint8 i=0;  i<bd->get_way_count();  i++  ) {
+					const weg_t *other = bd->get_weg_nr(i);
+					if(  other!=own  &&  ribi_t::are_disjoint_legs( own->get_ribi_unmasked(), other->get_ribi_unmasked() )  ) {
+						halt_leg0 = own;
+						halt_leg1 = other;
+						break;
+					}
+				}
+			}
+		}
+	}
+	const bool disjoint_diagonal_halt = halt_leg0  &&  halt_leg1
+		&&  ribi_t::are_disjoint_legs( halt_leg0->get_ribi_unmasked(), halt_leg1->get_ribi_unmasked() );
 
 	// On such a tile the stop goes on a bend of its own waytype. When both legs are such bends
 	// (a closed diagonal), each leg gets its own platform image (see gebaeude_t::get_tile2()).
 	ribi_t::ribi disjoint_leg_ribi = ribi_t::none;
 	ribi_t::ribi second_leg_ribi = ribi_t::none;
 	if(  disjoint_diagonal_halt  ) {
-		const waytype_t leg_wt = (wegtype==tram_wt) ? track_wt : wegtype;
-		const weg_t *w0 = bd->get_weg_nr(0);
-		const weg_t *w1 = bd->get_weg_nr(1);
+		const waytype_t leg_wt = halt_leg_wt;
+		const weg_t *w0 = halt_leg0;
+		const weg_t *w1 = halt_leg1;
 		const bool leg0_ok = w0->get_waytype()==leg_wt  &&  ribi_t::is_bend( w0->get_ribi_unmasked() );
 		const bool leg1_ok = w1->get_waytype()==leg_wt  &&  ribi_t::is_bend( w1->get_ribi_unmasked() );
 		// unless only the second leg is suitable, keep using the first one (refused below if unsuitable)
@@ -5560,7 +5596,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		// both platforms belong to the halt owner: the builder must be allowed to use both legs
 		for(  uint8 i=0;  i<2;  i++  ) {
-			weg_t *w = bd->get_weg_nr(i);
+			weg_t *w = const_cast<weg_t *>(i==0 ? w0 : w1);
 			if(  (w==first  ||  second_leg_ribi!=ribi_t::none)  &&  w->is_deletable(player)!=NULL  ) {
 				return "Das Feld gehoert\neinem anderen Spieler\n";
 			}
@@ -5573,10 +5609,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 	// Slope tiles are not handled here: their direction always comes from the slope.
 	bool isolated_halt = false;
 	if(  desc->get_all_layouts()!=4  &&  bd->hat_wege()  &&  bd->get_weg_hang()==slope_t::flat  ) {
-		ribi_t::ribi all_ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
-		if(  bd->has_two_ways()  ) {
-			all_ribi |= bd->get_weg_nr(1)->get_ribi_unmasked();
-		}
+		const ribi_t::ribi all_ribi = bd->get_all_ways_ribi_unmasked();
 		isolated_halt = (all_ribi==ribi_t::none);
 	}
 
@@ -5591,7 +5624,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+			ribi = bd->get_all_ways_ribi_unmasked();
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
@@ -5613,7 +5646,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+			ribi = bd->get_all_ways_ribi_unmasked();
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
@@ -5635,7 +5668,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		}
 		else if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+			ribi = bd->get_all_ways_ribi_unmasked();
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
@@ -5654,7 +5687,7 @@ DBG_MESSAGE("tool_station_aux()", "building %s on square %d,%d for waytype %x", 
 		// through station
 		if(  bd->has_two_ways()  ) {
 			// a crossing or maybe just a tram track on a road ...
-			ribi = bd->get_weg_nr(0)->get_ribi_unmasked()  |  bd->get_weg_nr(1)->get_ribi_unmasked();
+			ribi = bd->get_all_ways_ribi_unmasked();
 		}
 		else if(  bd->hat_wege()  ) {
 			ribi = bd->get_weg_nr(0)->get_ribi_unmasked();
@@ -6378,10 +6411,7 @@ const char *tool_rotate_building_t::rotate_building_at( player_t *player, koord3
 
 		if(  gr->hat_wege()  ) {
 			// this is almost certainly a station ...
-			ribi_t::ribi all_ribi = gr->get_weg_nr(0)->get_ribi_unmasked();
-			if(  gr->has_two_ways()  ) {
-				all_ribi |= gr->get_weg_nr(1)->get_ribi_unmasked();
-			}
+			const ribi_t::ribi all_ribi = gr->get_all_ways_ribi_unmasked();
 			if(  gr->get_halt().is_bound()  &&  !gb->get_tile2()  &&  desc->get_all_layouts()!=4
 			     &&  gr->get_weg_hang()==slope_t::flat  &&  all_ribi==ribi_t::none  ) {
 				// stop on an isolated way: it may be turned to any direction
@@ -8510,7 +8540,7 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 				return NOTICE_UNSUITABLE_GROUND;
 			}
 
-			for (int j = 0; j < 2; j++) {
+			for (int j = 0; j < grund_t::MAX_WAYS_PER_TILE; j++) {
 				if (weg_t* w = gr->get_weg_nr(j)) {
 					// no public way with private signs
 					if(  w->has_sign()  ) {
@@ -8523,7 +8553,7 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 			}
 
 			bool has_been_announced = false;
-			for (int j = 0; j < 2; j++) {
+			for (int j = 0; j < grund_t::MAX_WAYS_PER_TILE; j++) {
 				if (weg_t* w = gr->get_weg_nr(j)) {
 					// change ownership of way...
 					player_t* wplayer = w->get_owner();
@@ -8616,7 +8646,7 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 				sint64 workcost = -welt->scale_with_month_length(halt->calc_maintenance() * welt->get_settings().cst_make_public_months);
 				// the ways of the previous owner are taken over as well
 				FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
-					for(  int j=0;  j<2;  j++  ) {
+					for(  int j=0;  j<grund_t::MAX_WAYS_PER_TILE;  j++  ) {
 						if(  weg_t *w=i.grund->get_weg_nr(j)  ) {
 							if(  w->get_owner()==prev_owner  ) {
 								sint64 cost = w->get_desc()->get_maintenance();
@@ -8651,7 +8681,7 @@ const char *tool_make_stop_public_t::work( player_t *player, koord3d p )
 	if(!is_ctrl_pressed()) {
 		FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
 			// make way public if any suitable
-			for(  int j=0;  j<2;  j++  ) {
+			for(  int j=0;  j<grund_t::MAX_WAYS_PER_TILE;  j++  ) {
 				if(  weg_t *w=i.grund->get_weg_nr(j)  ) {
 					if(  player_t::check_owner( player, w->get_owner() )  &&  w->get_owner()  ) {
 						// no public ways?
@@ -12183,7 +12213,7 @@ uint8 tool_change_way_offset_t::is_valid_pos(player_t *player, const koord3d &po
 		waytype_t preferred_wt = default_param ? (waytype_t)atoi(default_param) : invalid_wt;
 		waytype_t wt = invalid_wt;
 		if(  is_shift_pressed()  ) {
-			for(  int i = 0;  i < 2;  i++  ) {
+			for(  int i = 0;  i < grund_t::MAX_WAYS_PER_TILE;  i++  ) {
 				weg_t *w = gr->get_weg_nr(i);
 				if(  w  &&  w->get_waytype() != preferred_wt  ) {
 					wt = w->get_waytype();

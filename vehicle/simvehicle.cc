@@ -1180,7 +1180,7 @@ grund_t* vehicle_t::hop_check()
 		const waytype_t wt = get_waytype();
 		if(  air_wt != wt  &&  route_index < cnv->get_route()->get_count()-1  ) {
 			uint8 dir = get_ribi(bd);
-			if(  bd->has_two_same_waytype_ways()  ) {
+			if(  bd->has_two_same_waytype_ways(wt)  ) {
 				// get_ribi(bd) only sees the first of the two legs => use the one we enter
 				dir = get_ribi(bd, ribi_type(get_pos(), pos_next));
 			}
@@ -2060,7 +2060,7 @@ ribi_t::ribi vehicle_t::get_ribi(const grund_t* gr, ribi_t::ribi from_dir) const
 	// Tiles shared with another waytype (tram on road, level crossing) must not come here,
 	// since their way is unambiguous and the masked ribi below has to be used.
 	const weg_t *leg = NULL;
-	if(  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways()  ) {
+	if(  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways(get_waytype())  ) {
 		leg = gr->get_weg(get_waytype(), ribi_t::backward(from_dir));
 	}
 
@@ -3011,7 +3011,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 				overtaking_on_tile = false;
 			}
 			// since reserve function modifies variables of the instance...
-			strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
+			strasse_t* s = (strasse_t *)gr->get_weg(road_wt, ribi_type(gr->get_pos(), next));
 			if(  !s  ||  !s->reserve(this, overtaking_on_tile, get_pos(), next)  ) {
 				// A convoy waiting to be coupled with holds the junction it stands on. That
 				// reservation must not lock us out, exactly like its vehicles must not block us -
@@ -3202,7 +3202,7 @@ bool road_vehicle_t::can_enter_tile(const grund_t *gr, sint32 &restart_speed, ui
 					overtaking_on_tile = false;
 				}
 				// since reserve function modifies variables of the instance...
-				strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
+				strasse_t* s = (strasse_t *)gr->get_weg(road_wt, ribi_type(gr->get_pos(), next));
 				if(  !s  ||  !s->reserve(this, overtaking_on_tile, r.at(test_index - 1u), next)  ) {
 					// see above: the convoy we are going to couple with may hold this junction.
 					if(  s  &&  is_coupling_partner( s->get_reserver(this, overtaking_on_tile, r.at(test_index - 1u), next) )  ) {
@@ -4270,9 +4270,13 @@ void road_vehicle_t::leave_tile() {
 	vehicle_t::leave_tile();
 	// unreserve the tile
 	grund_t* gr = welt->lookup(get_pos());
-	strasse_t* str = gr ? (strasse_t*)(gr->get_weg(road_wt)) : NULL;
-	if(  str  ) {
-		str->unreserve(this);
+	// release all road legs here (a closed diagonal has two of them)
+	if(  gr  &&  gr->hat_weg(road_wt)  ) {
+		for(  uint8 n=0;  n<2;  n++  ) {
+			if(  strasse_t* str = (strasse_t*)gr->get_weg_leg(road_wt, n)  ) {
+				str->unreserve(this);
+			}
+		}
 		reserving_tiles.remove(gr->get_pos());
 	}
 }
@@ -4329,9 +4333,11 @@ void road_vehicle_t::unreserve_all_tiles() {
 	for(uint32 i=0; i<reserving_tiles.get_count(); i++) {
 		grund_t* gr = welt->lookup(reserving_tiles[i]);
 		if(  gr  ) {
-			strasse_t* str = (strasse_t*) (gr->get_weg(road_wt));
-			if(  str  ) {
-				str->unreserve(this);
+			// release all road legs here (a closed diagonal has two of them)
+			for(  uint8 n=0;  n<2;  n++  ) {
+				if(  strasse_t* str = (strasse_t*)gr->get_weg_leg(road_wt, n)  ) {
+					str->unreserve(this);
+				}
 			}
 		}
 	}
@@ -6088,7 +6094,8 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 		ribi_t::ribi coupling_target_ribi = ribi_t::none;
 		// check the stop step for coupling
 		sint16 c_step = -VEHICLE_STEPS_PER_TILE;
-		const bool is_diagonal_way = ribi_t::is_bend(gr->get_weg(get_waytype())->get_ribi_unmasked());
+		// direction-aware: the leg (or the third/fourth way, a tram track) our route runs over
+		const bool is_diagonal_way = ribi_t::is_bend(gr->get_weg(get_waytype(), route->get_corner_set(i))->get_ribi_unmasked());
 		const sint16 tile_length = is_diagonal_way ? diagonal_vehicle_steps_per_tile : VEHICLE_STEPS_PER_TILE;
 		// check the real coupling target if there are vehicles in same tile. 
 		sint16 other_step = VEHICLE_STEPS_PER_TILE;
@@ -6177,7 +6184,7 @@ bool rail_vehicle_t::can_couple(const route_t* route, uint16 start_index, uint16
 			return true;
 		}
 		// check for signals
-		schiene_t * sch = gr ? (schiene_t *)gr->get_weg(get_waytype()) : NULL;
+		schiene_t * sch = gr ? (schiene_t *)gr->get_weg(get_waytype(), route->get_corner_set(i)) : NULL;
 		if(  !sch  ||  (!ignore_signals  &&  sch->has_signal())  ||  !sch->can_reserve(cnv->self)  ) {
 			// end of truck or section. or unreachable for some reasons. anyway, convoy for coupling is not found.
 			cnv->unset_convoi_coupling_in_progress();
@@ -6203,11 +6210,11 @@ void rail_vehicle_t::leave_tile()
 		grund_t *gr = welt->lookup( get_pos() );
 		if(gr) {
 			schiene_t *sch0 = (schiene_t *) gr->get_weg(get_waytype(), corner_set);
-			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways()  &&  my_cnv  ) {
+			if(  corner_set==ribi_t::none  &&  gr->has_two_same_waytype_ways(get_waytype())  &&  my_cnv  ) {
 				// the leg cannot be told from our route (e.g. leaving a depot) => release the
 				// leg our convoy holds, provided that it holds just one of them
-				schiene_t *leg0 = (schiene_t *)gr->get_weg_nr(0);
-				schiene_t *leg1 = (schiene_t *)gr->get_weg_nr(1);
+				schiene_t *leg0 = (schiene_t *)gr->get_weg_leg(get_waytype(), 0);
+				schiene_t *leg1 = (schiene_t *)gr->get_weg_leg(get_waytype(), 1);
 				const convoihandle_t c = my_cnv->get_most_parent_convoi();
 				const bool r0 = leg0->is_reserved_by(c);
 				const bool r1 = leg1->is_reserved_by(c);
@@ -6227,7 +6234,7 @@ void rail_vehicle_t::leave_tile()
 						// no vehicle, same convoy, or not yet finished loading (cnv placeholder)
 						continue;
 					}
-					if(  gr->has_two_same_waytype_ways()  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
+					if(  gr->has_two_same_waytype_ways(get_waytype())  &&  gr->get_weg(get_waytype(), v->get_current_corner_set())!=sch0  ) {
 						// runs over the other of two same-waytype disjoint legs: it holds its own leg
 						continue;
 					}
@@ -6553,7 +6560,7 @@ ribi_t::ribi air_vehicle_t::get_ribi(const grund_t *gr, ribi_t::ribi from_dir) c
 	// two same-waytype disjoint diagonal legs: use the leg entered via from_dir, but with the
 	// state dependent rules of an airplane (vehicle_t::get_ribi() would ignore the state and
 	// e.g. confine a flying plane to the taxiway below it)
-	if(  gr  &&  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways()  ) {
+	if(  gr  &&  from_dir!=ribi_t::none  &&  gr->has_two_same_waytype_ways(air_wt)  ) {
 		return get_ribi_of_way(gr->get_weg(air_wt, ribi_t::backward(from_dir)));
 	}
 	return vehicle_t::get_ribi(gr, from_dir);

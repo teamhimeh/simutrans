@@ -497,7 +497,7 @@ void player_t::ai_bankrupt()
 			// only concerns public stops tiles
 			FOR(slist_tpl<haltestelle_t::tile_t>, const& i, halt->get_tiles()) {
 				grund_t const* const gr = i.grund;
-				for(  uint8 wnr=0;  wnr<2;  wnr++  ) {
+				for(  uint8 wnr=0;  wnr<grund_t::MAX_WAYS_PER_TILE;  wnr++  ) {
 					weg_t *w = gr->get_weg_nr(wnr);
 					// make public
 					if(  w  &&  w->get_owner()==this  ) {
@@ -899,7 +899,17 @@ sint64 player_t::undo()
 	FOR(vector_tpl<koord3d>, const& i, last_built) {
 		grund_t* const gr = welt->lookup(i);
 		if(  undo_type != powerline_wt  ) {
-			cost += gr->weg_entfernen(undo_type,true);
+			weg_t *w = gr->get_weg(undo_type);
+			if(  undo_type==track_wt  &&  gr->get_weg_count(track_wt)>1  &&  !grund_t::is_tram_track(w)  ) {
+				// a tram track (on a road leg) next to a rail leg: the tram track is the one built last
+				for(  uint8 n=1;  n<gr->get_weg_count(track_wt);  n++  ) {
+					if(  grund_t::is_tram_track( gr->get_weg_leg(track_wt, n) )  ) {
+						w = gr->get_weg_leg(track_wt, n);
+						break;
+					}
+				}
+			}
+			cost += gr->weg_entfernen(w,true);
 		}
 		else {
 			if (leitung_t* lt = gr->get_leitung()) {

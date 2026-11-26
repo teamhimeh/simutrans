@@ -33,7 +33,7 @@ protected:
 	location_view_t view;
 	gui_textarea_t textarea, textarea2;
 	/// one choice list per way on the tile that has a fixable switch junction
-	enum { MAX_SWITCH_CHOICES = 2 };
+	enum { MAX_SWITCH_CHOICES = 4 }; // grund_t::MAX_WAYS_PER_TILE
 	struct switch_choice_t {
 		gui_label_t label;
 		gui_combobox_t list;

@@ -75,7 +75,8 @@
 karte_ptr_t grund_t::welt;
 volatile bool grund_t::show_grid = false;
 
-uint8 grund_t::offsets[4]={0,1,2/*illegal!*/,2};
+// index: (flags & has_ways_mask) / has_way1; the has_way flags are cumulative, other values are illegal
+uint8 grund_t::offsets[16]={0,1,2/*illegal!*/,2, 3,3,3,3, 4,4,4,4, 4,4,4,4};
 
 sint8 grund_t::underground_level = 127;
 uint8 grund_t::underground_mode = ugm_none;
@@ -328,7 +329,8 @@ void grund_t::rdwr(loadsave_t *file)
 			wtyp = (waytype_t)file->rd_obj_id();
 			weg_t *weg = NULL;
 
-			if(++i < 2) {
+			// up to four ways (the third and fourth way are tram tracks, saved since OTRP v65)
+			if(++i < MAX_WAYS_PER_TILE) {
 				switch(wtyp) {
 					default:
 #if MSG_LEVEL
@@ -411,7 +413,7 @@ void grund_t::rdwr(loadsave_t *file)
 						// we do not delete them, to keep maintenance costs correct
 					}
 					else {
-						assert((flags&has_way2)==0); // maximum two ways on one tile ...
+						assert((flags&has_way4)==0); // maximum four ways on one tile (third and fourth only trams) ...
 						weg->set_pos(pos);
 						// check illegal overtaking_mode
 						if(  wtyp==road_wt  ) {
@@ -424,10 +426,7 @@ void grund_t::rdwr(loadsave_t *file)
 							weg->set_owner(welt->get_player(owner_n));
 						}
 						objlist.add(weg);
-						if(flags&has_way1) {
-							flags |= has_way2;
-						}
-						flags |= has_way1;
+						inc_way_count();
 					}
 				}
 			}
@@ -437,13 +436,18 @@ void grund_t::rdwr(loadsave_t *file)
 	}
 	else {
 		// saving all ways ...
-		if (weg_t* const w = get_weg_nr(0)) {
-			file->wr_obj_id(w->get_waytype());
-			w->rdwr(file);
-		}
-		if (weg_t* const w = get_weg_nr(1)) {
-			file->wr_obj_id(w->get_waytype());
-			w->rdwr(file);
+		// savegames before OTRP v65 can hold only two ways per tile: the tram tracks
+		// as third and fourth way are not saved there
+		const bool old_format = file->get_OTRP_version()<65;
+		const uint8 max_saved_ways = old_format ? 2 : MAX_WAYS_PER_TILE;
+		for(  uint8 i=0;  i<max_saved_ways;  i++  ) {
+			if (weg_t* const w = get_weg_nr(i)) {
+				file->wr_obj_id(w->get_waytype());
+				// do not save connections to the ways, which are left out on the neighbour tiles
+				weg_t::save_ribi_remove = old_format ? get_ribi_to_unsaved_ways(w) : (ribi_t::ribi)ribi_t::none;
+				w->rdwr(file);
+				weg_t::save_ribi_remove = ribi_t::none;
+			}
 		}
 		file->wr_obj_id(-1);   // Way end
 	}
@@ -598,9 +602,29 @@ void grund_t::enlarge_map( sint16, sint16 /*new_size_y*/ )
 }
 
 
+ribi_t::ribi grund_t::get_ribi_to_unsaved_ways(const weg_t *w) const
+{
+	ribi_t::ribi remove = ribi_t::none;
+	const waytype_t wt = w->get_waytype();
+	const ribi_t::ribi ribi = w->get_ribi_unmasked();
+	for(  uint8 r=0;  r<4;  r++  ) {
+		const ribi_t::ribi dir = ribi_t::nesw[r];
+		grund_t *to;
+		if(  (ribi & dir)  &&  get_neighbour(to, wt, dir)  &&  to->has_more_than_two_ways()  ) {
+			const weg_t *w2 = to->get_weg(wt, ribi_t::backward(dir));
+			if(  w2  &&  w2!=to->get_weg_nr(0)  &&  w2!=to->get_weg_nr(1)  ) {
+				// connected to the third or fourth way there
+				remove |= dir;
+			}
+		}
+	}
+	return remove;
+}
+
+
 bool grund_t::update_way_flags()
 {
-	const uint8 old_flags = flags & (has_way1|has_way2);
+	const uint16 old_flags = flags & has_ways_mask;
 
 	// ways have the highest priority, so they are always at the start of the object list
 	uint8 way_count = 0;
@@ -611,19 +635,17 @@ bool grund_t::update_way_flags()
 		}
 		way_count++;
 	}
-	if(  way_count > 2  ) {
-		dbg->error( "grund_t::update_way_flags()", "%d ways at (%s), only two are possible", way_count, pos.get_str() );
+	if(  way_count > MAX_WAYS_PER_TILE  ) {
+		dbg->error( "grund_t::update_way_flags()", "%d ways at (%s), only %d are possible", way_count, pos.get_str(), MAX_WAYS_PER_TILE );
+		way_count = MAX_WAYS_PER_TILE;
 	}
 
-	flags &= ~(has_way1|has_way2);
-	if(  way_count >= 1  ) {
-		flags |= has_way1;
-	}
-	if(  way_count >= 2  ) {
-		flags |= has_way2;
+	flags &= ~has_ways_mask;
+	for(  uint8 i=0;  i<way_count;  i++  ) {
+		flags |= (has_way1<<i);
 	}
 
-	if(  old_flags != (flags & (has_way1|has_way2))  ) {
+	if(  old_flags != (flags & has_ways_mask)  ) {
 		set_flag( dirty );
 		return true;
 	}
@@ -639,14 +661,8 @@ void grund_t::take_obj_from(grund_t* other_gr)
 		objlist.add( other_gr->obj_remove_top() );
 	}
 	// transfer the way flags
-	if(other_gr->get_flag(has_way1)) {
-		flags |= has_way1;
-		other_gr->clear_flag(has_way1);
-	}
-	if(other_gr->get_flag(has_way2)) {
-		flags |= has_way2;
-		other_gr->clear_flag(has_way2);
-	}
+	flags |= (other_gr->flags & has_ways_mask);
+	other_gr->flags &= ~has_ways_mask;
 }
 
 
@@ -684,12 +700,14 @@ void grund_t::info(cbuffer_t& buf) const
 				buf.printf(translator::translate("Constructed by %s"), maker);
 				buf.append("\n\n");
 			}
-			// second way
+			// second way (and tram tracks as third and fourth way)
 			if(flags&has_way2) {
-				buf.append(translator::translate(get_weg_nr(1)->get_name()));
-				buf.append("\n");
-				obj_bei(1)->info(buf);
-				buf.append("\n");
+				for(  uint8 i=1;  i<get_way_count();  i++  ) {
+					buf.append(translator::translate(get_weg_nr(i)->get_name()));
+					buf.append("\n");
+					obj_bei(i)->info(buf);
+					buf.append("\n");
+				}
 				if(crossing_t* crossing = get_crossing()) {
 					crossing->info(buf);
 				}
@@ -852,11 +870,11 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 	const koord k = get_pos().get_2d();
 
 	clear_flag(grund_t::draw_as_obj);
-	weg_t const* w;
-	if(  (  (w = get_weg_nr(0))  &&  w->get_desc()->is_draw_as_obj()  )  ||
-			(  (w = get_weg_nr(1))  &&  w->get_desc()->is_draw_as_obj()  )
-	  ) {
-		set_flag(grund_t::draw_as_obj);
+	for(  uint8 i=0;  i<get_way_count();  i++  ) {
+		if(  get_weg_nr(i)->get_desc()->is_draw_as_obj()  ) {
+			set_flag(grund_t::draw_as_obj);
+			break;
+		}
 	}
 
 	for(  size_t i=0;  i<grund_t::BACK_WALL_COUNT;  i++  ) {
@@ -907,11 +925,7 @@ void grund_t::calc_back_image(const sint8 hgt, const slope_t::type slope_this)
 			if(diff_from_ground_1-corner_a<0  ||  diff_from_ground_2-corner_b<0)  {
 				if(  corner_a==corner_b  ) {
 					// ok, we need a fence here, if there is not a vertical bridgehead
-					weg_t const* w;
-					fence[i] = !(w = get_weg_nr(0)) || (
-						!(w->get_ribi_unmasked() & ribi_t::nesw[(i+3)&3]) &&
-						(!(w = get_weg_nr(1)) || !(w->get_ribi_unmasked() & ribi_t::nesw[(i+3)&3]))
-					);
+					fence[i] = !(get_all_ways_ribi_unmasked() & ribi_t::nesw[(i+3)&3]);
 
 					// no fences between water tiles or between invisible tiles
 					if(  fence[i]  &&  ( (is_water() && gr->is_water()) || (!isvisible && !gr->is_visible()) )  ) {
@@ -1111,10 +1125,7 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 					&& (flags & has_way1)
 					&& !env_t::simple_drawing;
 				if (clip_surface) {
-					ribi_t::ribi way_ribi = get_weg_nr(0)->get_ribi_unmasked();
-					if (weg_t const* const way2 = get_weg_nr(1)) {
-						way_ribi |= way2->get_ribi_unmasked();
-					}
+					const ribi_t::ribi way_ribi = get_all_ways_ribi_unmasked();
 					clip_way_background(xpos, ypos, raster_tile_width, way_ribi, get_disp_way_slope(), tile_raster_scale_y(TILE_HEIGHT_STEP, raster_tile_width) CLIP_NUM_PAR);
 				}
 				display_normal( get_image(), xpos, ypos, 0, true, dirty CLIP_NUM_PAR );
@@ -1268,7 +1279,7 @@ void grund_t::display_boden(const sint16 xpos, const sint16 ypos, const sint16 r
 	if(  visible  &&  (flags&has_way1)  ){
 		const bool clip = (  (flags&draw_as_obj)  ||  !ist_karten_boden()  )  &&  !env_t::simple_drawing;
 		const int hgt_step = tile_raster_scale_y( TILE_HEIGHT_STEP, raster_tile_width );
-		for(  uint8 i = 0;  i < offsets[flags / has_way1];  i++  ) {
+		for(  uint8 i = 0;  i < get_way_count();  i++  ) {
 			obj_t* d = obj_bei(i);
 			// clip
 			// .. nonconvex n/w if not both n/w are active
@@ -1413,7 +1424,7 @@ slope_t::type grund_t::get_disp_way_slope() const
 void grund_t::display_obj_all_quick_and_dirty(const sint16 xpos, sint16 ypos, const sint16 raster_tile_width, const bool is_global CLIP_NUM_DEF ) const
 {
 	const bool dirty = get_flag(grund_t::dirty);
-	const uint8 start_offset=offsets[flags/has_way1];
+	const uint8 start_offset=get_way_count();
 
 	// here: we are either ground(kartenboden) or visible
 	const bool visible = !ist_karten_boden()  ||  is_karten_boden_visible();
@@ -1503,14 +1514,8 @@ void grund_t::display_obj_all(const sint16 xpos, const sint16 ypos, const sint16
 	// here: we are either ground(kartenboden) or visible
 	const bool visible = !ist_karten_boden()  ||  is_karten_boden_visible();
 
-	ribi_t::ribi ribi = ribi_t::none;
-	if (weg_t const* const w1 = get_weg_nr(0)) {
-		ribi |= w1->get_ribi_unmasked();
-		if (weg_t const* const w2 = get_weg_nr(1)) {
-			ribi |= w2->get_ribi_unmasked();
-		}
-	}
-	else if (is_water()) {
+	ribi_t::ribi ribi = get_all_ways_ribi_unmasked();
+	if (!hat_wege()  &&  is_water()) {
 		ribi = (static_cast<const wasser_t*>(this))->get_display_ribi();
 	}
 
@@ -1701,7 +1706,7 @@ uint8 grund_t::display_obj_bg(const sint16 xpos, const sint16 ypos, const bool i
 			}
 		}
 		// display background images of everything but vehicles
-		const uint8 start_offset = draw_ways ? 0 : offsets[flags/has_way1];
+		const uint8 start_offset = draw_ways ? 0 : get_way_count();
 		return objlist.display_obj_bg( xpos, ypos, start_offset CLIP_NUM_PAR );
 	}
 	else { // must be karten_boden
@@ -1828,7 +1833,8 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 	}
 
 	if( env_t::show_way_offset_label  &&  hat_wege() ) {
-		if( weg_t* w = get_weg_nr( 0 ) ) {
+		for(  uint8 i=0;  i<get_way_count();  i++  ) {
+			weg_t* w = get_weg_nr( i );
 			const sint8 offset = w->get_vehicle_offset();
 			if( offset != 0 ) {
 				char buf[8];
@@ -1836,19 +1842,7 @@ void grund_t::display_overlay(const sint16 xpos, const sint16 ypos)
 				const sint16 raster_tile_width = get_tile_raster_width();
 				const int width = proportional_string_width( buf ) + 7;
 				int new_xpos = xpos + (raster_tile_width-width)/2;
-				int new_ypos = ypos + raster_tile_width/2;
-				display_text_label( new_xpos, new_ypos, buf, w->get_owner(), dirty );
-			}
-		}
-		if( weg_t* w = get_weg_nr( 1 ) ) {
-			const sint8 offset = w->get_vehicle_offset();
-			if( offset != 0 ) {
-				char buf[8];
-				sprintf( buf, "%+d%c", offset, w->get_vehicle_offset_mode() ? 'A' : 'D' );
-				const sint16 raster_tile_width = get_tile_raster_width();
-				const int width = proportional_string_width( buf ) + 7;
-				int new_xpos = xpos + (raster_tile_width-width)/2;
-				int new_ypos = ypos + raster_tile_width/2 + D_LABEL_HEIGHT + D_V_SPACE;
+				int new_ypos = ypos + raster_tile_width/2 + i*(D_LABEL_HEIGHT + D_V_SPACE);
 				display_text_label( new_xpos, new_ypos, buf, w->get_owner(), dirty );
 			}
 		}
@@ -1972,14 +1966,58 @@ bool grund_t::has_depot() const
 }
 
 
-bool grund_t::would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi) const
+bool grund_t::can_add_way_count(const way_desc_t *desc) const
 {
-	if(  !has_two_ways()  ) {
+	const uint8 count = get_way_count();
+	if(  count>=MAX_WAYS_PER_TILE  ) {
 		return false;
 	}
-	const weg_t *leg0 = get_weg_nr(0);
-	const weg_t *leg1 = get_weg_nr(1);
-	if(  !leg0  ||  !leg1  ||  leg0->get_waytype()!=wegtyp  ||  leg1->get_waytype()!=wegtyp  ) {
+	if(  desc->get_wtyp()==track_wt  &&  desc->get_styp()==type_tram  ) {
+		// tram tracks can be the third and fourth way
+		return true;
+	}
+	uint8 non_tram = 0;
+	for(  uint8 i=0;  i<count;  i++  ) {
+		if(  !is_tram_track(get_weg_nr(i))  ) {
+			non_tram++;
+		}
+	}
+	return non_tram<2;
+}
+
+
+bool grund_t::is_separate_tram_leg(const weg_t *weg, ribi_t::ribi ribi, const way_desc_t *new_desc) const
+{
+	if(  !weg  ||  !new_desc  ||  new_desc->get_wtyp()!=track_wt  ||  new_desc->get_styp()!=type_tram  ||  ribi==ribi_t::none  ) {
+		return false;
+	}
+	const ribi_t::ribi wr = weg->get_ribi_unmasked();
+	if(  (wr & ribi)!=0  ||  !(ribi_t::is_bend(wr)  ||  ribi_t::is_single(wr))  ) {
+		return false;
+	}
+	// a road leg here owns the new bits, but not those of weg => the tram follows this road leg
+	const uint8 count = get_way_count();
+	for(  uint8 i=0;  i<count;  i++  ) {
+		const weg_t *r = get_weg_nr(i);
+		if(  r->get_waytype()==road_wt  ) {
+			const ribi_t::ribi rr = r->get_ribi_unmasked();
+			if(  (rr & ribi)!=0  &&  (rr & wr)==0  &&  ribi_t::are_disjoint_legs(rr, wr)  ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+
+bool grund_t::would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi) const
+{
+	if(  !has_two_same_waytype_ways(wegtyp)  ) {
+		return false;
+	}
+	const weg_t *leg0 = get_weg_leg(wegtyp, 0);
+	const weg_t *leg1 = get_weg_leg(wegtyp, 1);
+	if(  !leg0  ||  !leg1  ) {
 		return false;
 	}
 	const bool on0 = (ribi & leg0->get_ribi_unmasked())!=0;
@@ -1997,12 +2035,12 @@ bool grund_t::would_merge_same_waytype_legs(waytype_t wegtyp, ribi_t::ribi ribi)
 
 void grund_t::merge_same_waytype_legs(weg_t *removed_leg)
 {
-	weg_t *kept_leg = get_weg_nr(0)==removed_leg ? get_weg_nr(1) : get_weg_nr(0);
+	weg_t *kept_leg = get_other_leg(removed_leg);
 	const ribi_t::ribi removed_ribi = removed_leg->get_ribi_unmasked();
 	removed_leg->mark_image_dirty( get_image(), 0 );
 	removed_leg->cleanup( NULL );
 	delete removed_leg;
-	flags &= ~has_way2;
+	dec_way_count();
 	kept_leg->ribi_add( removed_ribi );
 	// the tile's one wayobj spanned both legs and now lies on a single way, which (as any
 	// single way) is electrified wherever the catenary is - even if only the removed leg was
@@ -2027,7 +2065,7 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 		if(  is_halt()  ) {
 			haltestelle_t::remove( NULL, get_pos() );
 		}
-		merge_same_waytype_legs( get_weg_nr(1) );
+		merge_same_waytype_legs( get_weg_leg(wegtyp, 1) );
 	}
 
 	// resolve which way we're extending. When two same-waytype legs still coexist (the second
@@ -2041,12 +2079,10 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 	// descriptor (in which case descriptor matching alone can't disambiguate). Descriptor match
 	// is only used as a tie-breaker for the rare case where both legs would stay valid.
 	weg_t *weg = NULL;
-	if(  has_two_ways()  ) {
-		weg_t *leg0 = get_weg_nr(0);
-		weg_t *leg1 = get_weg_nr(1);
-		bool m0 = leg0 && leg0->get_waytype()==wegtyp;
-		bool m1 = leg1 && leg1->get_waytype()==wegtyp;
-		if(  m0  &&  m1  ) {
+	if(  has_two_same_waytype_ways(wegtyp)  ) {
+		weg_t *leg0 = get_weg_leg(wegtyp, 0);
+		weg_t *leg1 = get_weg_leg(wegtyp, 1);
+		{
 			auto stays_valid = [&](weg_t* leg) {
 				ribi_t::ribi combined = leg->get_ribi_unmasked() | ribi;
 				return ribi_t::is_bend(combined) || ribi_t::is_single(combined);
@@ -2073,11 +2109,18 @@ bool grund_t::weg_erweitern(waytype_t wegtyp, ribi_t::ribi ribi, const way_desc_
 	// be just a single bit, same as the per-edge check in check_crossing()): this is a second,
 	// independent leg sharing the tile, not an extension of the first -- decline so the caller
 	// (build_track()/build_road()) falls through to neuen_weg_bauen() and adds it as weg_nr(1).
-	if(  allow_same_waytype_dual_leg  &&  !has_two_ways()  ) {
-		if(  weg  &&  new_desc
+	if(  allow_same_waytype_dual_leg  &&  get_weg_count(wegtyp)<2  ) {
+		if(  weg  &&  new_desc  &&  can_add_way_count(new_desc)
 		  &&  ribi_t::is_bend(weg->get_ribi_unmasked())  &&  (ribi & weg->get_ribi_unmasked())==0  ) {
 			return false;
 		}
+	}
+
+	// a tram track following a road leg of a closed diagonal, while the only track here lies on
+	// the other (disjoint) leg (a rail leg, or a tram on the other road leg): the new tram track
+	// is a separate way on this tile (as third or fourth way), not an extension of the other leg
+	if(  get_weg_count(wegtyp)<2  &&  new_desc  &&  can_add_way_count(new_desc)  &&  is_separate_tram_leg( weg, ribi, new_desc )  ) {
+		return false;
 	}
 
 	if(weg) {
@@ -2143,9 +2186,12 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 	// descriptor matches, since the player wants two independent, non-connected tracks here
 	// rather than a merged junction), so here we add the new way as an independent second leg
 	// instead of refusing outright.
-	const bool same_waytype_dual_leg = allow_same_waytype_dual_leg && alter_weg!=NULL && !has_two_ways()
+	const bool single_of_waytype = alter_weg!=NULL  &&  get_weg_count(weg->get_waytype())==1  &&  can_add_way_count(weg->get_desc());
+	const bool same_waytype_dual_leg = allow_same_waytype_dual_leg && single_of_waytype
 		&& ribi_t::is_bend(alter_weg->get_ribi_unmasked()) && (ribi & alter_weg->get_ribi_unmasked())==0;
-	if(alter_weg==NULL || same_waytype_dual_leg) {
+	// tram track on the other road leg of a closed diagonal (see weg_erweitern())
+	const bool separate_tram_leg = single_of_waytype  &&  is_separate_tram_leg( alter_weg, ribi, weg->get_desc() );
+	if(alter_weg==NULL || same_waytype_dual_leg || separate_tram_leg) {
 		// ok, we are unique
 
 		if((flags&has_way1)==0) {
@@ -2161,15 +2207,18 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 		else {
 			weg_t *other = (weg_t *)obj_bei(0);
 			// another way will be added
-			if(flags&has_way2) {
-				dbg->fatal("grund_t::neuen_weg_bauen()","cannot build more than two ways on %i,%i,%i!",pos.x,pos.y,pos.z);
+			if(  !can_add_way_count(weg->get_desc())  ) {
+				dbg->fatal("grund_t::neuen_weg_bauen()","cannot build more than two ways (plus tram tracks) on %i,%i,%i!",pos.x,pos.y,pos.z);
 			}
+			// a tram track as additional way (on a road at a crossing or on a closed diagonal):
+			// it is sorted behind the two other ways and never takes part in their crossing
+			const bool additional_tram = has_two_ways()  &&  is_tram_track(weg);
 
 			// add the way
 			objlist.add( weg );
 			weg->set_ribi(ribi);
 			weg->set_pos(pos);
-			flags |= has_way2;
+			inc_way_count();
 			// two different waytypes on non-crossing diagonal bends never share the tile
 			// center, so no crossing_t is needed even if the waytype pair normally requires
 			// one. The new way may still be just a single-direction stub on its first tile
@@ -2178,7 +2227,7 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 			// this reduces to the same "both full bends, disjoint" check as elsewhere.
 			const ribi_t::ribi other_ribi = other->get_ribi_unmasked();
 			const bool disjoint_diagonal = ribi_t::are_disjoint_legs(ribi, other_ribi);
-			if (weg->needs_crossing(other->get_desc()) && !disjoint_diagonal) {
+			if (!additional_tram  &&  weg->needs_crossing(other->get_desc()) && !disjoint_diagonal) {
 				//crossing needed!
 				waytype_t w2 =  other->get_waytype();
 				const crossing_desc_t *cr_desc = crossing_logic_t::get_crossing( weg->get_waytype(), w2, weg->get_max_speed(), other->get_max_speed(), welt->get_timeline_year_month() );
@@ -2189,6 +2238,10 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 				objlist.add( cr );
 				crossing_logic_t::add(cr, crossing_logic_t::CROSSING_INVALID);
 				cr->finish_rd( OTRP_VERSION_MAJOR );
+			}
+			else if(  additional_tram  &&  get_crossing()  ) {
+				// tram track on the road of a crossing: respect its speed limit
+				weg->count_sign();
 			}
 		}
 
@@ -2207,8 +2260,14 @@ sint64 grund_t::neuen_weg_bauen(weg_t *weg, ribi_t::ribi ribi, player_t *player,
 
 sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 {
-	weg_t *weg = get_weg(wegtyp);
+	return weg_entfernen( get_weg(wegtyp), ribi_rem );
+}
+
+
+sint64 grund_t::weg_entfernen(weg_t *weg, bool ribi_rem)
+{
 	if(weg!=NULL) {
+		const waytype_t wegtyp = weg->get_waytype();
 
 		weg->mark_image_dirty(get_image(), 0);
 
@@ -2229,8 +2288,10 @@ sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 						// the split is no longer meaningful -- merge the two legs back into
 						// one way holding the union ribi (a three-way, per spec)
 						if(  to->has_two_ways()  &&  ribi_t::is_single(weg2->get_ribi_unmasked())  ) {
-							weg_t *other_leg = to->get_weg_nr(0)==weg2 ? to->get_weg_nr(1) : to->get_weg_nr(0);
-							if(  other_leg  &&  other_leg->get_waytype()==wegtyp  ) {
+							weg_t *other_leg = to->get_other_leg(weg2);
+							// a tram track on a road leg next to a rail leg keeps its own way (it follows the road)
+							const bool tram_on_road_leg = to->hat_weg(road_wt)  &&  (is_tram_track(weg2) != is_tram_track(other_leg));
+							if(  other_leg  &&  !tram_on_road_leg  ) {
 								// a halt cannot sit on a three-way tile, so if merging the two
 								// disjoint legs back into one three-way way leaves a halt here,
 								// remove it (the topology that justified it no longer exists)
@@ -2246,14 +2307,16 @@ sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 			}
 		}
 
+		// only the first two ways can be part of a crossing (the third and fourth way are always tram tracks)
+		const bool crossing_way = has_two_ways()  &&  (obj_bei(0)==weg  ||  obj_bei(1)==weg);
+
 		sint64 costs=weg->get_desc()->get_price(); // costs for removal are construction costs
 		weg->cleanup( NULL );
 		delete weg;
 
-		// delete the second way ...
-		if(flags&has_way2) {
-			flags &= ~has_way2;
-
+		// delete the last way flag ...
+		dec_way_count();
+		if(crossing_way) {
 			// reset speed limit/crossing info (maybe altered by crossing)
 			// Not all ways (i.e. with styp==7) will imply crossings, so we have to check
 			crossing_t* cr = find<crossing_t>(1);
@@ -2261,13 +2324,12 @@ sint64 grund_t::weg_entfernen(waytype_t wegtyp, bool ribi_rem)
 				cr->cleanup(0);
 				delete cr;
 				// restore speed limit
-				weg_t* w = (weg_t*)obj_bei(0);
-				w->set_desc(w->get_desc());
-				w->count_sign();
+				for(  uint8 i=0;  i<get_way_count();  i++  ) {
+					weg_t* w = get_weg_nr(i);
+					w->set_desc(w->get_desc());
+					w->count_sign();
+				}
 			}
-		}
-		else {
-			flags &= ~has_way1;
 		}
 
 		calc_image();
@@ -2332,8 +2394,8 @@ int grund_t::get_max_speed() const
 	if (weg_t const* const w = get_weg_nr(0)) {
 		max = w->get_max_speed();
 	}
-	if (weg_t const* const w = get_weg_nr(1)) {
-		max = min(max, w->get_max_speed());
+	for(  uint8 i=1;  i<get_way_count();  i++  ) {
+		max = min(max, get_weg_nr(i)->get_max_speed());
 	}
 	return max;
 }
@@ -2341,8 +2403,23 @@ int grund_t::get_max_speed() const
 
 bool grund_t::remove_everything_from_way(player_t* player, waytype_t wt, ribi_t::ribi rem)
 {
+	return remove_everything_from_way( player, get_weg(wt), rem );
+}
+
+
+bool grund_t::remove_everything_from_way(player_t* player, weg_t *weg, ribi_t::ribi rem)
+{
 	// check, if the way must be totally removed?
-	weg_t *weg = get_weg(wt);
+	if(  weg  &&  weg->get_waytype()==road_wt  &&  rem==ribi_t::none  &&  has_more_than_two_ways()  &&  get_crossing()  ) {
+		// tram tracks on a road crossing another way: they cannot stay without the road
+		// (the crossing is the one of the road), so remove them first
+		while(  weg_t *tram = get_weg_nr(2)  ) {
+			if(  !remove_everything_from_way( player, tram, ribi_t::none )  ||  get_weg_nr(2)==tram  ) {
+				return false;
+			}
+		}
+		weg = get_weg(road_wt);
+	}
 	if(weg) {
 		waytype_t wt = weg->get_waytype();
 		waytype_t finance_wt = weg->get_desc()->get_finance_waytype();
@@ -2455,7 +2532,7 @@ bool grund_t::remove_everything_from_way(player_t* player, waytype_t wt, ribi_t:
 		// need to remove railblocks to recalculate connections
 		// remove all ways or just some?
 		if(add==ribi_t::none) {
-			costs -= weg_entfernen(wt, true);
+			costs -= weg_entfernen(weg, true);
 			if(flags&is_kartenboden) {
 				// remove ribis from sea tiles
 				if(  wt == water_wt  &&  pos.z == welt->get_water_hgt( here )  &&  slope != slope_t::flat  ) {

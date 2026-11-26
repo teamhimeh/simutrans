@@ -3805,7 +3805,7 @@ void haltestelle_t::change_owner( player_t *player, bool halt_only, bool no_cost
 
 		// change way ownership
 		bool has_been_announced = false;
-		for(  int j=0;  j<2;  j++  ) {
+		for(  int j=0;  j<grund_t::MAX_WAYS_PER_TILE;  j++  ) {
 			if(  weg_t *w=gr->get_weg_nr(j)  ) {
 				// change ownership of way...
 				player_t *wplayer = w->get_owner();
@@ -4101,7 +4101,7 @@ void haltestelle_t::add_to_station_type( grund_t *gr )
 			switch (desc->get_extra()) {
 				case road_wt:
 					station_type |= (desc->get_enabled()&3)!=0 ? busstop : loadingbay;
-					if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) { // tram track on street (not a closed diagonal)
+					if (gr->has_two_ways()  &&  gr->has_tram_on_road()) { // tram track on street (not a closed diagonal of other ways)
 						station_type |= tramstop;
 					}
 					break;
@@ -4111,7 +4111,7 @@ void haltestelle_t::add_to_station_type( grund_t *gr )
 				case track_wt:       station_type |= railstation;     break;
 				case tram_wt:
 					station_type |= tramstop;
-					if (gr->has_two_ways()  &&  !gr->has_two_same_waytype_ways()) { // tram track on street (not a closed diagonal)
+					if (gr->has_two_ways()  &&  gr->has_tram_on_road()) { // tram track on street (not a closed diagonal of other ways)
 						station_type |= (desc->get_enabled()&3)!=0 ? busstop : loadingbay;
 					}
 					break;

@@ -83,7 +83,8 @@ void bruecke_t::calc_image()
 			weg0->unlock_mutex();
 #endif
 
-			if(  weg_t *weg1 = gr->get_weg_nr(1)  ) {
+			for(  uint8 i=1;  i<gr->get_way_count();  i++  ) {
+				weg_t *weg1 = gr->get_weg_nr(i);
 #ifdef MULTI_THREAD
 				weg1->lock_mutex();
 #endif
@@ -270,7 +271,8 @@ void bruecke_t::cleanup( player_t *player2 )
 			// reset offsets
 			weg0->set_xoff(0);
 			weg0->set_yoff(0);
-			if(  weg_t *weg1 = gr->get_weg_nr(1)  ) {
+			for(  uint8 i=1;  i<gr->get_way_count();  i++  ) {
+				weg_t *weg1 = gr->get_weg_nr(i);
 				weg1->set_xoff(0);
 				weg1->set_yoff(0);
 			}

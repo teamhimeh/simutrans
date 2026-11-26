@@ -3935,7 +3935,7 @@ static bool can_city_merge_road_legs(const grund_t *gr, ribi_t::ribi ribi)
 		return false;
 	}
 	for(  uint8 i=0;  i<2;  i++  ) {
-		const strasse_t* str = (const strasse_t*)gr->get_weg_nr(i);
+		const strasse_t* str = (const strasse_t*)gr->get_weg_leg(road_wt, i);
 		if(  str->get_avoid_cityroad()  &&  !str->get_allow_branch_cityroad()  ) {
 			return false;
 		}

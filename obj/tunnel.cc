@@ -93,7 +93,8 @@ void tunnel_t::calc_image()
 		if (weg_t* w = gr->get_weg_nr(0)) {
 			w->set_image(desc->get_background_id(hang, get_pos().z >= welt->get_snowline() || welt->get_climate(get_pos().get_2d()) == arctic_climate, broad_type));
 			w->set_foreground_image(desc->get_foreground_id(hang, get_pos().z >= welt->get_snowline() || welt->get_climate(get_pos().get_2d()) == arctic_climate, broad_type));
-			if (weg_t* w = gr->get_weg_nr(1)) {
+			for(  uint8 i=1;  i<gr->get_way_count();  i++  ) {
+				weg_t* w = gr->get_weg_nr(i);
 				if (corner_se(hang) > 0) {
 					w->set_image(IMG_EMPTY);
 					w->set_foreground_image(IMG_EMPTY);

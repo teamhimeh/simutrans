@@ -59,6 +59,9 @@ public:
 	void recalc_state();
 
 	// returns true, if the crossing can be passed by this vehicle
+	/// the waytype vehicle @p v uses at this crossing (trams on the road of a road crossing count as road traffic)
+	waytype_t get_crossing_waytype( const vehicle_base_t *v ) const;
+
 	bool request_crossing( const vehicle_base_t * );
 
 	// adds to crossing

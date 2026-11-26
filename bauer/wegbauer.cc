@@ -334,15 +334,86 @@ bool way_builder_t::check_crossing(const koord zv, const grund_t *bd, const way_
 	if (!bd->hat_wege()) {
 		return true;
 	}
+	// tram tracks as third or fourth way: on a road at a crossing (or a closed diagonal)
+	const bool is_tram = wtyp==track_wt  &&  desc->get_styp()==type_tram;
+	if (is_tram  &&  bd->has_two_ways()  &&  bd->hat_weg(road_wt)) {
+		const weg_t *w0 = bd->get_weg_nr(0);
+		const weg_t *w1 = bd->get_weg_nr(1);
+		if (grund_t::is_tram_track(w1)  &&  !bd->has_more_than_two_ways()) {
+			// just a tram track on a road (handled below as before)
+		}
+		else if (w1->get_waytype()!=track_wt) {
+			// road crossing another (not track) way, or two road legs, (plus tram tracks):
+			// the tram track must stay on the road, i.e. it must not use a direction of the other way
+			if (zv==koord(0,0)) {
+				return true;
+			}
+			const ribi_t::ribi own_bit = ribi_t::backward(ribi_type(zv));
+			if (w0->get_waytype()==road_wt  &&  w1->get_waytype()==road_wt) {
+				// closed diagonal of two road legs: the tram track can follow either leg
+				return true;
+			}
+			const weg_t *other = w0->get_waytype()==road_wt ? w1 : w0;
+			if (other->get_waytype()!=water_wt  &&  other->get_waytype()!=air_wt) {
+				// a tram track can overlay other tracks (monorail, maglev, narrow gauge) like it
+				// overlays the road: any direction, also diagonally through the crossing
+				return true;
+			}
+			if ((other->get_ribi_unmasked() & own_bit)!=0) {
+				return false;
+			}
+			// no tram away from a straight crossing: the tram must follow the road
+			if (bd->get_crossing()) {
+				const weg_t *road = bd->get_weg(road_wt);
+				return ribi_t::is_straight(road->get_ribi_unmasked() | own_bit);
+			}
+			return true;
+		}
+		// else a road and a track (rail) leg, the tram track is built over the track leg or the road leg (below)
+	}
+	// a way crossing a road with a tram track on it (the tram track becomes the third way)
+	if (!is_tram  &&  wtyp!=road_wt  &&  wtyp!=track_wt  &&  bd->has_two_ways()  &&  !bd->has_more_than_two_ways()  &&  !bd->hat_weg(wtyp)) {
+		const weg_t *w0 = bd->get_weg_nr(0);
+		const weg_t *w1 = bd->get_weg_nr(1);
+		if (w0->get_waytype()==road_wt  &&  grund_t::is_tram_track(w1)) {
+			// the tram track must lie on the road only, then the crossing is checked against the road
+			if ((w1->get_ribi_unmasked() & ~w0->get_ribi_unmasked())!=0) {
+				return false;
+			}
+			if (!w0->needs_crossing(desc)) {
+				return true;
+			}
+			// closed diagonal: our way on the other leg, away from the road (and its tram track)
+			if (zv!=koord(0,0)  &&  ribi_t::is_bend(w0->get_ribi_unmasked())  &&  (w0->get_ribi_unmasked() & ribi_t::backward(ribi_type(zv)))==0) {
+				return allow_closed_diagonal;
+			}
+			if (!check_owner(w0->get_owner(),player)  ||  (bautyp & tunnel_flag)!=0  ||  bd->ist_tunnel()  ||  (bautyp & elevated_flag)!=0  ||  bd->get_typ()==grund_t::monorailboden) {
+				return false;
+			}
+			if (crossing_logic_t::get_crossing(wtyp, road_wt, 0, 0, welt->get_timeline_year_month())==NULL) {
+				return false;
+			}
+			const ribi_t::ribi w_ribi = w0->get_ribi_unmasked();
+			return  ribi_t::is_straight(w_ribi)
+				&&  !ribi_t::is_single(w_ribi)
+				&&  (ribi_t::is_straight(ribi_type(zv))||zv==koord(0,0))
+				&&  (w_ribi&ribi_type(zv))==0;
+		}
+	}
 	// no triple crossings please
 	if (bd->has_two_ways() && !bd->hat_weg(wtyp)) {
+		return false;
+	}
+	// more than two ways (tram tracks on roads): building another non-tram way is not possible,
+	// except continuing one of the ways here
+	if (bd->has_more_than_two_ways()  &&  !is_tram  &&  !bd->hat_weg(wtyp)) {
 		return false;
 	}
 	// two same-waytype disjoint diagonal legs already coexist here and we're building that
 	// same waytype again (continuing/merging one of them): there is no "other" way to check
 	// a crossing against - both existing slots are already our own waytype, and no
 	// crossing_desc is ever defined for a waytype crossing itself.
-	if (bd->has_two_ways() && bd->get_weg_nr(0)->get_waytype()==wtyp && bd->get_weg_nr(1)->get_waytype()==wtyp) {
+	if (bd->has_two_same_waytype_ways(wtyp)) {
 		return true;
 	}
 	const weg_t *w = bd->get_weg_nr(0);
@@ -2288,8 +2359,8 @@ void way_builder_t::check_dual_leg_merges()
 		// merging rebuilds both legs into one way: both must be ours, and no halt may be here
 		// (a halt cannot sit on the resulting junction)
 		if(  gr->is_halt()
-		  ||  !check_owner(gr->get_weg_nr(0)->get_owner(), player_builder)
-		  ||  !check_owner(gr->get_weg_nr(1)->get_owner(), player_builder)  ) {
+		  ||  !check_owner(gr->get_weg_leg(wtyp, 0)->get_owner(), player_builder)
+		  ||  !check_owner(gr->get_weg_leg(wtyp, 1)->get_owner(), player_builder)  ) {
 			route.clear();
 			terraform_index.clear();
 			return;
@@ -2835,11 +2906,11 @@ void way_builder_t::build_elevated()
  */
 static bool is_direction_already_built(const grund_t *gr, waytype_t wt, ribi_t::ribi ribi)
 {
-	if(  ribi==ribi_t::none  ||  !gr->has_two_same_waytype_ways()  ||  gr->get_weg_nr(0)->get_waytype()!=wt  ) {
+	if(  ribi==ribi_t::none  ||  !gr->has_two_same_waytype_ways(wt)  ) {
 		return false;
 	}
 	for(  uint8 i=0;  i<2;  i++  ) {
-		if(  (gr->get_weg_nr(i)->get_ribi_unmasked() & ribi)==ribi  ) {
+		if(  (gr->get_weg_leg(wt, i)->get_ribi_unmasked() & ribi)==ribi  ) {
 			return true;
 		}
 	}
@@ -2907,7 +2978,7 @@ void way_builder_t::build_road()
 				||  (keep_existing_city_roads  &&  str->hat_gehweg())
 				||  (keep_existing_faster_ways  &&  str->get_desc()->get_topspeed()>desc->get_topspeed())
 				||  (player_builder!=NULL  &&  str->is_deletable(player_builder)!=NULL)
-				||  (gr->has_two_ways()  &&  gr->get_weg_nr(1)->is_deletable(player_builder)!=NULL) // do not replace public roads crossing rails of other players
+				||  (gr->has_two_ways()  &&  gr->get_weg_nr(1)!=str  &&  gr->get_weg_nr(1)->is_deletable(player_builder)!=NULL) // do not replace public roads crossing rails of other players
 			) {
 				str->set_way_building(false);// show ribi	
 				//nothing to be done
@@ -3007,8 +3078,10 @@ void way_builder_t::build_track()
 				}
 
 				// build tram track over crossing -> remove crossing
+				// (only a crossing with this track; a tram track on the road of another crossing stays)
 				if(  gr->has_two_ways()  &&  (desc->get_styp() == type_tram  ||  weg->get_desc()->get_styp() == type_tram)  ) {
-					if(  crossing_t *cr = gr->get_crossing()  ) {
+					crossing_t *cr = gr->get_crossing();
+					if(  cr  &&  (gr->get_weg_nr(0)==weg  ||  gr->get_weg_nr(1)==weg)  ) {
 						// change to tram track
 						cr->mark_image_dirty( cr->get_image(), 0);
 						cr->cleanup(player_builder);

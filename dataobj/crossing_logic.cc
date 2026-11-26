@@ -84,10 +84,23 @@ void crossing_logic_t::recalc_state()
 }
 
 
+// the waytype a vehicle uses at this crossing: trams (track_wt) on the road of a
+// crossing of road with another waytype (tram track as third way) count as road traffic
+waytype_t crossing_logic_t::get_crossing_waytype( const vehicle_base_t *v ) const
+{
+	const waytype_t wt = v->get_waytype();
+	if(  wt==track_wt  &&  desc->get_waytype(0)!=track_wt  &&  desc->get_waytype(1)!=track_wt  &&  (desc->get_waytype(0)==road_wt  ||  desc->get_waytype(1)==road_wt)  ) {
+		return road_wt;
+	}
+	return wt;
+}
+
+
 // request permission to pass crossing
 bool crossing_logic_t::request_crossing( const vehicle_base_t *v )
 {
-	if(v->get_waytype()==desc->get_waytype(0)) {
+	const waytype_t v_wt = get_crossing_waytype(v);
+	if(v_wt==desc->get_waytype(0)) {
 		if(on_way2.empty()  &&  state == CROSSING_OPEN) {
 			// way2 is empty ...
 			return true;
@@ -97,7 +110,7 @@ bool crossing_logic_t::request_crossing( const vehicle_base_t *v )
 		// => ok only if I am already crossing
 		return on_way1.is_contained(v);
 	}
-	else if(v->get_waytype()==desc->get_waytype(1)) {
+	else if(v_wt==desc->get_waytype(1)) {
 
 		// vehikel from way2 arrives
 		if(on_way1.get_count()) {
@@ -120,10 +133,11 @@ bool crossing_logic_t::request_crossing( const vehicle_base_t *v )
 void crossing_logic_t::add_to_crossing( const vehicle_base_t *v )
 {
 	if(  v->get_typ()!=obj_t::pedestrian  ) {
-		if(v->get_waytype()==desc->get_waytype(0)) {
+		const waytype_t v_wt = get_crossing_waytype(v);
+		if(v_wt==desc->get_waytype(0)) {
 			on_way1.append_unique(v);
 		}
-		else if (v->get_waytype() == desc->get_waytype(1)) {
+		else if (v_wt == desc->get_waytype(1)) {
 			// add it and close crossing
 			on_way2.append_unique(v);
 			if(  request_close==v  ) {
@@ -139,7 +153,7 @@ void crossing_logic_t::add_to_crossing( const vehicle_base_t *v )
 // or of a city car; releases the crossing which may switch state
 void crossing_logic_t::release_crossing( const vehicle_base_t *v )
 {
-	if(  v->get_waytype() == desc->get_waytype(0)  ) {
+	if(  get_crossing_waytype(v) == desc->get_waytype(0)  ) {
 		on_way1.remove(v);
 		if(  state == CROSSING_REQUEST_CLOSE  &&  on_way1.empty()  ) {
 			set_state( CROSSING_CLOSED );

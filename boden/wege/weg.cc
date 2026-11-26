@@ -222,6 +222,9 @@ bool weg_t::needs_crossing(const way_desc_t* other) const
 	return true;
 }
 
+ribi_t::ribi weg_t::save_ribi_remove = ribi_t::none;
+
+
 void weg_t::rdwr(loadsave_t *file)
 {
 	xml_tag_t t( file, "weg_t" );
@@ -234,7 +237,7 @@ void weg_t::rdwr(loadsave_t *file)
 	}
 
 	// all connected directions
-	uint8 dummy8 = ribi;
+	uint8 dummy8 = file->is_saving() ? (ribi & ~save_ribi_remove) : ribi;
 	file->rdwr_byte(dummy8);
 	if(  file->is_loading()  ) {
 		ribi = dummy8 & 15; // before: high bits was maske
@@ -356,8 +359,8 @@ void weg_t::info(cbuffer_t & buf) const
 	// own separate way, not connected to the other) -- make that explicit here, since
 	// otherwise this info window looks identical to an ordinary single-way tile.
 	if(  g->has_two_ways()  ) {
-		weg_t *other = g->get_weg_nr(0)==this ? g->get_weg_nr(1) : g->get_weg_nr(0);
-		if(  other  &&  other->get_waytype()==get_waytype()  ) {
+		weg_t *other = g->get_other_leg(this);
+		if(  other  ) {
 			buf.printf("%s\n", translator::translate("This tile has a second, disconnected way of the same type:"));
 			buf.printf("  %s (%s%u, %s %u%s)\n",
 				translator::translate(other->get_desc()->get_name()),
@@ -492,12 +495,14 @@ void weg_t::count_sign()
 	const grund_t *gr=welt->lookup(get_pos());
 	if(gr) {
 		uint8 i = 1;
-		// if there is a crossing, the start index is at least three ...
+		// if there is a crossing, the start index is at least three (behind all ways) ...
 		if(  const crossing_t* cr = gr->get_crossing()  ) {
 			max_speed = desc->get_topspeed(); // reset max_speed
 			flags |= HAS_CROSSING;
-			i = 3;
-			uint32 top_speed = cr->get_desc()->get_maxspeed( cr->get_desc()->get_waytype(0)==get_waytype() ? 0 : 1);
+			i = gr->get_way_count()+1;
+			// a tram track on the road of a crossing uses the speed limit of the road
+			const waytype_t cr_wt = (get_waytype()==track_wt  &&  cr->get_desc()->get_waytype(0)!=track_wt  &&  cr->get_desc()->get_waytype(1)!=track_wt) ? road_wt : get_waytype();
+			uint32 top_speed = cr->get_desc()->get_maxspeed( cr->get_desc()->get_waytype(0)==cr_wt ? 0 : 1);
 			if(  top_speed < max_speed  ) {
 				max_speed = top_speed;
 			}
@@ -976,9 +981,11 @@ bool weg_t::calc_diagonal() const
 	// opposite corners so they don't visually overlap). The sibling may be of the same waytype
 	// (closed diagonal) and it may still be a single direction while its second tile is missing.
 	if(  from->has_two_ways()  ) {
-		weg_t *other = from->get_weg_nr(0)==this ? from->get_weg_nr(1) : from->get_weg_nr(0);
-		if(  other  &&  ribi_t::are_disjoint_legs(ribi, other->get_ribi_unmasked())  ) {
-			return true;
+		for(  uint8 i=0;  i<from->get_way_count();  i++  ) {
+			weg_t *other = from->get_weg_nr(i);
+			if(  other!=this  &&  ribi_t::are_disjoint_legs(ribi, other->get_ribi_unmasked())  ) {
+				return true;
+			}
 		}
 	}
 

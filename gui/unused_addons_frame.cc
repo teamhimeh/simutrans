@@ -87,8 +87,8 @@ void unused_addons_frame_t::build_list()
 			for (uint8 b = 0; b < plan->get_boden_count(); b++) {
 				const grund_t *gr = plan->get_boden_bei(b);
 
-				// Ways (up to 2 per tile)
-				for (uint8 wi = 0; wi < 2; wi++) {
+				// Ways (up to 4 per tile)
+				for (uint8 wi = 0; wi < grund_t::MAX_WAYS_PER_TILE; wi++) {
 					if (const weg_t *w = gr->get_weg_nr(wi)) {
 						used.put(w->get_desc()->get_name(), true);
 					}

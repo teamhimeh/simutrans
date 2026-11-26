@@ -665,7 +665,7 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 			overtaking_on_tile = false;
 		}
 		// since reserve function modifies variables of the instance...
-		strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
+		strasse_t* s = (strasse_t *)gr->get_weg(road_wt, ribi_type(gr->get_pos(), next));
 		if(  !s  ||  !s->reserve(this, overtaking_on_tile, get_pos(), next)  ) {
 			if(  obj  &&  obj->is_stuck()  ) {
 				// because the blocking vehicle is stuck too...
@@ -814,7 +814,7 @@ bool private_car_t::ist_weg_frei(grund_t *gr)
 				overtaking_on_tile = false;
 			}
 			// since reserve function modifies variables of the instance...
-			strasse_t* s = (strasse_t *)gr->get_weg(road_wt);
+			strasse_t* s = (strasse_t *)gr->get_weg(road_wt, ribi_type(gr->get_pos(), next));
 			if(  !s  ||  !s->reserve(this, overtaking_on_tile, route[idx_in_scope(test_index,-1)], next)  ) {
 				if(  obj  &&  obj->is_stuck()  ) {
 					// because the blocking vehicle is stuck too...
@@ -1088,9 +1088,13 @@ void private_car_t::leave_tile() {
 	vehicle_base_t::leave_tile();
 	// unreserve the tile
 	grund_t* gr = welt->lookup(get_pos());
-	strasse_t* str = gr ? (strasse_t*)(gr->get_weg(road_wt)) : NULL;
-	if(  str  ) {
-		str->unreserve(this);
+	// release all road legs here (a closed diagonal has two of them)
+	if(  gr  &&  gr->hat_weg(road_wt)  ) {
+		for(  uint8 n=0;  n<2;  n++  ) {
+			if(  strasse_t* str = (strasse_t*)gr->get_weg_leg(road_wt, n)  ) {
+				str->unreserve(this);
+			}
+		}
 		reserving_tiles.remove(gr->get_pos());
 	}
 }
@@ -1980,9 +1984,11 @@ void private_car_t::unreserve_all_tiles() {
 	for(uint32 i=0; i<reserving_tiles.get_count(); i++) {
 		grund_t* gr = welt->lookup(reserving_tiles[i]);
 		if(  gr  ) {
-			strasse_t* str = (strasse_t*) (gr->get_weg(road_wt));
-			if(  str  ) {
-				str->unreserve(this);
+			// release all road legs here (a closed diagonal has two of them)
+			for(  uint8 n=0;  n<2;  n++  ) {
+				if(  strasse_t* str = (strasse_t*)gr->get_weg_leg(road_wt, n)  ) {
+					str->unreserve(this);
+				}
 			}
 		}
 	}

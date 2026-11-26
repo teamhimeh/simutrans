@@ -656,7 +656,7 @@ static uint32 disconnect_ways_into_building_tile(grund_t *gr)
 		for(  uint8 i = 0;  i < plan->get_boden_count();  i++  ) {
 			grund_t *nb = plan->get_boden_bei(i);
 			bool changed = false;
-			for(  uint8 w = 0;  w < 2;  w++  ) {
+			for(  uint8 w = 0;  w < grund_t::MAX_WAYS_PER_TILE;  w++  ) {
 				weg_t *weg = nb->get_weg_nr(w);
 				if(  weg == NULL  ||  (weg->get_ribi_unmasked() & back) == 0  ) {
 					continue;
@@ -946,7 +946,7 @@ gebaeude_t *hausbauer_t::build_station_extension_depot(player_t *player, koord3d
 		// that are not directly way-connected).
 		auto find_nb = [&]( ribi_t::ribi dir ) -> grund_t* {
 			grund_t* nb = nullptr;
-			for(  int w = 0;  w < 2  &&  !nb;  w++  ) {
+			for(  int w = 0;  w < grund_t::MAX_WAYS_PER_TILE  &&  !nb;  w++  ) {
 				const weg_t* weg = this_gr->get_weg_nr( w );
 				if(  weg  ) {
 					this_gr->get_neighbour( nb, weg->get_waytype(), dir );
@@ -1070,7 +1070,7 @@ uint8 hausbauer_t::calc_diagonal_station_layout(koord3d pos, const ribi_t::ribi 
 		// Find connected neighbour via each way on this tile.
 		const ribi_t::ribi dir = ribi_t::nesw[i];
 		gr = nullptr;
-		for(  int w = 0;  w < 2  &&  !gr;  w++  ) {
+		for(  int w = 0;  w < grund_t::MAX_WAYS_PER_TILE  &&  !gr;  w++  ) {
 			const weg_t* weg = bd->get_weg_nr( w );
 			if(  weg  ) {
 				bd->get_neighbour( gr, weg->get_waytype(), dir );
@@ -1202,7 +1202,7 @@ gebaeude_t* hausbauer_t::build_station_on_slope_way(player_t* player, koord3d po
 		// get_neighbour() resolves the correct height via get_vmove() for slopes and bridges.
 		auto find_nb = [&]( ribi_t::ribi dir ) -> grund_t* {
 			grund_t* nb = nullptr;
-			for(  int w = 0;  w < 2  &&  !nb;  w++  ) {
+			for(  int w = 0;  w < grund_t::MAX_WAYS_PER_TILE  &&  !nb;  w++  ) {
 				const weg_t* weg = this_gr->get_weg_nr( w );
 				if(  weg  ) {
 					this_gr->get_neighbour( nb, weg->get_waytype(), dir );

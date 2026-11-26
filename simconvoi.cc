@@ -1743,7 +1743,7 @@ bool convoi_t::drive_to()
 							 // check if the route circles back on itself (only check the first tile, should be enough)
 							looped = route.is_contained(next_segment.at(1));
 							const grund_t *gr_next = looped ? welt->lookup(next_segment.at(1)) : NULL;
-							if(  gr_next  &&  gr_next->has_two_same_waytype_ways()  ) {
+							if(  gr_next  &&  gr_next->has_two_same_waytype_ways(fahr[0]->get_waytype())  ) {
 								// only the same leg closes a circle: two same-waytype disjoint diagonal
 								// legs are passed one after the other on a circular route over them
 								const weg_t *leg_next = gr_next->get_weg(fahr[0]->get_waytype(), next_segment.get_corner_set(1));
@@ -7535,15 +7535,23 @@ void convoi_t::calc_crossing_reservation() {
 			continue;
 		}
 		// calculate distance to reserve
-		const weg_t* w1 = gr->get_weg_nr(0);
-		const weg_t* w2 = gr->get_weg_nr(1);
+		// our way and the other way of the crossing (a tram track on the road of a crossing
+		// is the third way, then the other way is the one crossing the road)
+		const crossing_desc_t* cr_desc = cr->get_desc();
+		waytype_t own_wt = front()->get_waytype();
+		if(  own_wt==track_wt  &&  cr_desc->get_waytype(0)!=track_wt  &&  cr_desc->get_waytype(1)!=track_wt  ) {
+			own_wt = road_wt;
+		}
+		const waytype_t other_wt = cr_desc->get_waytype(0)==own_wt ? cr_desc->get_waytype(1) : cr_desc->get_waytype(0);
+		const weg_t* w1 = sch1;
+		const weg_t* w2 = gr->get_weg(other_wt);
 		if(  !w1  ||  !w2  ) {
 			// way does not exist?
 			continue;
 		}
-		uint16 max_speed_1 = w1->get_waytype()==front()->get_waytype() ? w1->get_max_speed() : w2->get_max_speed();
+		uint16 max_speed_1 = w1->get_max_speed();
 		max_speed_1 = min(max_speed_1, speed_to_kmh(min_top_speed));
-		const uint16 max_speed_2 = w1->get_waytype()==front()->get_waytype() ? w2->get_max_speed() : w1->get_max_speed();
+		const uint16 max_speed_2 = w2->get_max_speed();
 		// max_speed_2 can be 0. ex) crossing with a narrow river
 		const uint8 distance = max_speed_2>0 ? cr->get_length()*max_speed_1/max_speed_2 : 1;
 		const uint16 res_start_idx = max(i-distance,1);

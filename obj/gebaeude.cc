@@ -384,16 +384,14 @@ bool gebaeude_t::is_valid_platform_pair(const grund_t *gr) const
 {
 	const ribi_t::ribi leg1 = get_diagonal_layout_ribi( tile->get_layout() );
 	const ribi_t::ribi leg2 = get_diagonal_layout_ribi( tile2->get_layout() );
-	if(  leg1==ribi_t::none  ||  leg2==ribi_t::none  ||  tile->get_desc()!=tile2->get_desc()  ||  !gr->has_two_same_waytype_ways()  ) {
-		return false;
-	}
 	// both legs must be ways of this stop (trams stop on tracks)
 	const waytype_t wt = get_waytype();
-	if(  gr->get_weg_nr(0)->get_waytype() != (wt==tram_wt ? track_wt : wt)  ) {
+	const waytype_t leg_wt = (wt==tram_wt ? track_wt : wt);
+	if(  leg1==ribi_t::none  ||  leg2==ribi_t::none  ||  tile->get_desc()!=tile2->get_desc()  ||  !gr->has_two_same_waytype_ways(leg_wt)  ) {
 		return false;
 	}
-	const ribi_t::ribi r0 = gr->get_weg_nr(0)->get_ribi_unmasked();
-	const ribi_t::ribi r1 = gr->get_weg_nr(1)->get_ribi_unmasked();
+	const ribi_t::ribi r0 = gr->get_weg_leg(leg_wt, 0)->get_ribi_unmasked();
+	const ribi_t::ribi r1 = gr->get_weg_leg(leg_wt, 1)->get_ribi_unmasked();
 	if(  !ribi_t::are_disjoint_bends( r0, r1 )  ) {
 		return false;
 	}
@@ -1078,7 +1076,7 @@ void gebaeude_t::info(cbuffer_t & buf) const
 		else {
 			// stop length of the platform on this tile (ships do not use halt length)
 			const grund_t *gr = welt->lookup(get_pos());
-			for(  uint8 i=0;  gr  &&  gr->get_halt().is_bound()  &&  i<2;  i++  ) {
+			for(  uint8 i=0;  gr  &&  gr->get_halt().is_bound()  &&  i<grund_t::MAX_WAYS_PER_TILE;  i++  ) {
 				const weg_t *weg = gr->get_weg_nr(i);
 				if(  weg  &&  weg->get_waytype()!=water_wt  ) {
 					append_platform_length_string_if_needed(buf, weg);
@@ -1388,7 +1386,7 @@ void gebaeude_t::cleanup(player_t *player)
 	// stop via get_neighbour() and restore its end-cap bit.
 	// get_neighbour() resolves the correct height for slopes and bridges via get_vmove(),
 	// handling single slopes, double slopes, and all combinations correctly.
-	for(  int w = 0;  w < 2;  w++  ) {
+	for(  int w = 0;  w < grund_t::MAX_WAYS_PER_TILE;  w++  ) {
 		const weg_t* weg = this_gr->get_weg_nr( w );
 		if(  !weg  ) { continue; }
 		const ribi_t::ribi way_ribi = weg->get_ribi_unmasked();

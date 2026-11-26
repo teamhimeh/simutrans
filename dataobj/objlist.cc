@@ -468,25 +468,27 @@ bool objlist_t::add(obj_t* new_obj)
 
 	// roads must be first!
 	if(pri==0) {
-		// check for other ways to keep order! (maximum is two ways per tile at the moment)
-		weg_t const* const w   = obj_cast<weg_t>(obj.some[0]);
-		if (!w) {
-			// first way
-			intern_insert_at(new_obj, 0);
-			return true;
+		// check for other ways to keep order! (maximum is four ways per tile, the third and
+		// fourth way can only be tram tracks): non-tram ways sorted by waytype, then the trams
+		weg_t const* const new_w = static_cast<weg_t*>(new_obj);
+		const bool new_is_tram = new_w->get_desc()->get_styp() == type_tram;
+		uint8 pos = 0;
+		while(  pos<top  ) {
+			weg_t const* const w = obj_cast<weg_t>(obj.some[pos]);
+			if(  !w  ) {
+				// end of the ways
+				break;
+			}
+			const bool w_is_tram = w->get_desc()->get_styp() == type_tram;
+			if(  !new_is_tram  &&  w_is_tram  ) {
+				break;
+			}
+			if(  new_is_tram == w_is_tram  &&  !(w->get_waytype() < new_w->get_waytype())  ) {
+				break;
+			}
+			pos++;
 		}
-		bool w_is_tram = w->get_desc()->get_styp() == type_tram;
-		bool new_is_tram = static_cast<weg_t*>(new_obj)->get_desc()->get_styp() == type_tram;
-		if(new_is_tram  &&  !w_is_tram) {
-			intern_insert_at(new_obj, 1);
-		}
-		else if(!new_is_tram  &&  w_is_tram) {
-			intern_insert_at(new_obj, 0);
-		}
-		else {
-			uint8 const pos = w && w->get_waytype() < static_cast<weg_t*>(new_obj)->get_waytype() ? 1 : 0;
-			intern_insert_at(new_obj, pos);
-		}
+		intern_insert_at(new_obj, pos);
 		return true;
 	}
 
