@@ -341,6 +341,14 @@ protected:
 
 	virtual way_desc_t const* get_desc(uint16 timeline_year_month) const;
 	bool calc_route( way_builder_t &bauigel, const koord3d &, const koord3d & );
+	/// height offset to use (the one of the toolbar tool when called from a shortcut key)
+	sint8 get_effective_height_offset() const;
+	/// true: elevated way built flat at a fixed height (shift pressed)
+	bool is_fixed_height_mode() const;
+	/// fixed height mode: height of the way when started at @p start
+	sint8 calc_fixed_height(const koord3d &start) const;
+	/// fixed height mode: a start on an existing elevated way refers to the ground below it
+	void adjust_fixed_height_start(koord3d &new_start) const;
 	void start_at( koord3d &new_start ) OVERRIDE;
 
 public:
