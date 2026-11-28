@@ -142,6 +142,15 @@ private:
 	sint8 height_offset;
 
 	/**
+	 * Only for elevated way: true when the whole way is built flat at the fixed height
+	 * fixed_height_z, independent of the height and the slope of the ground below
+	 * (way tool with shift pressed). In this mode the route holds the positions of the
+	 * elevated tiles themselves, not the positions of their base grounds.
+	 */
+	bool fixed_height;
+	sint8 fixed_height_z;
+
+	/**
 	 * If a way is built on top of another way, should the type
 	 * of the former way be kept or replaced (true == keep)
 	 */
@@ -224,6 +233,31 @@ private:
 
 	sint32 intern_calc_route_elevated(const koord3d start, const koord3d ziel);
 
+	/**
+	 * Fixed height elevated way (see fixed_height): the ground at fixed_height_z on tile @p k,
+	 * or, if there is none, @p dummy placed there as an empty flat elevated ground.
+	 */
+	grund_t *get_fixed_height_ground(koord k, grund_t &dummy) const;
+
+	/**
+	 * Fixed height elevated way: true if @p gr (from get_fixed_height_ground()) can carry the
+	 * new way when it is left/entered via @p dir. An existing ground at the way height must be
+	 * a usable elevated ground; any other ground there (e.g. the surface) blocks the tile.
+	 */
+	bool is_fixed_height_ground_usable(const grund_t *gr, ribi_t::ribi dir) const;
+
+	/**
+	 * Fixed height elevated way: checks all other grounds of the tile of @p gr against the
+	 * way height: no ground may reach above the way, ways (with vehicles) and powerlines below
+	 * need the way height clearance, buildings below their height clearance, and grounds above
+	 * (bridges, elevated ways) must leave room for our vehicles.
+	 * @param zv direction of the way on this tile (for powerline crossings)
+	 */
+	bool check_fixed_height_clearance(const grund_t *gr, koord zv, sint32 *costs) const;
+
+	sint32 intern_calc_route_fixed_height(const koord3d start, const koord3d ziel);
+	void intern_calc_straight_route_fixed_height(const koord3d start, const koord3d ziel);
+
 	// clears the route when building it would merge two same-waytype diagonal legs on a tile
 	// where a leg is not ours or a halt sits (see grund_t::would_merge_same_waytype_legs())
 	void check_dual_leg_merges();
@@ -289,6 +323,10 @@ public:
 	void set_vehicle_offset(sint8 a) { vehicle_offset = a; }
 	void set_street_flag(uint8 a) { street_flag = a; }
 	void set_height_offset(sint8 a) { height_offset = a; }
+
+	/// elevated ways only: build the whole way flat at height @p z (see fixed_height)
+	void set_fixed_height(sint8 z) { fixed_height = true; fixed_height_z = z; }
+	bool is_fixed_height() const { return fixed_height; }
 
 	way_builder_t(player_t *player);
 

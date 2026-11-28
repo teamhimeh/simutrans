@@ -3238,24 +3238,31 @@ waytype_t tool_build_way_t::get_waytype() const
 	return invalid_wt;
 }
 
-void tool_build_way_t::start_at( koord3d &new_start )
+void tool_build_way_t::adjust_fixed_height_start( koord3d &new_start ) const
 {
-	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
+	if(  is_fixed_height_mode()  ) {
 		grund_t *gr=welt->lookup(new_start);
 		// also on an elevated way of another waytype (to build a closed diagonal there)
-		if(  gr->get_weg( desc->get_waytype() )  ||  (gr->get_typ()==grund_t::monorailboden  &&  gr->hat_wege())  ) {
+		if(  gr  &&  (gr->get_weg( desc->get_waytype() )  ||  (gr->get_typ()==grund_t::monorailboden  &&  gr->hat_wege()))  ) {
 			new_start.z -= welt->get_settings().get_way_height_clearance();
 		}
 	}
-	// elevated ways with SHIFT will selected the current layer, when already on an elevated way
+}
+
+void tool_build_way_t::start_at( koord3d &new_start )
+{
+	// elevated ways with SHIFT (fixed height) started on an elevated way continue at its height
+	adjust_fixed_height_start( new_start );
 	two_click_tool_t::start_at( new_start );
 }
 
-uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, const char *&error, const koord3d & )
+uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, const char *&error, const koord3d &start )
 {
 	error = NULL;
 	grund_t *gr=welt->lookup(pos);
-	if(  gr  &&  slope_t::is_way(gr->get_weg_hang())  ) {
+	// fixed height elevated ways (shift) ignore the slope of the ground below
+	const bool fixed_height = is_fixed_height_mode();
+	if(  gr  &&  (fixed_height  ||  slope_t::is_way(gr->get_weg_hang()))  ) {
 		// ignore tunnel tiles (except road tunnel for tram track building ..)
 		if(  gr->get_typ() == grund_t::tunnelboden  &&  !gr->ist_karten_boden()  && !( desc->is_tram()  && ( gr->hat_weg(track_wt) || gr->hat_weg(road_wt) || gr->hat_weg(monorail_wt) || gr->hat_weg(maglev_wt) || gr->hat_weg(narrowgauge_wt) ) )  ) {
 			return 0;
@@ -3270,7 +3277,18 @@ uint8 tool_build_way_t::is_valid_pos( player_t *player, const koord3d &pos, cons
 		}
 		// elevated ways have to check tile above
 		if(  elevated  ) {
-			gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance()+height_offset ) );
+			if(  fixed_height  ) {
+				// the height is defined by the start tile (by this tile on the first click)
+				koord3d fixed_start = start;
+				if(  fixed_start==koord3d::invalid  ) {
+					fixed_start = pos;
+					adjust_fixed_height_start( fixed_start );
+				}
+				gr = welt->lookup( koord3d( pos.get_2d(), calc_fixed_height(fixed_start) ) );
+			}
+			else {
+				gr = welt->lookup( pos + koord3d( 0, 0, welt->get_settings().get_way_height_clearance()+height_offset ) );
+			}
 			if(  gr == NULL  ) {
 				return 2;
 			}
@@ -3316,6 +3334,28 @@ tool_build_way_t* get_build_way_tool_from_toolbar(const way_desc_t* desc) {
 	return NULL;
 }
 
+sint8 tool_build_way_t::get_effective_height_offset() const
+{
+	tool_build_way_t* toolbar_tool;
+	if(  look_toolbar  &&  (toolbar_tool=get_build_way_tool_from_toolbar(desc))!=NULL  ) {
+		// called from a shortcut key: use the height offset of the tool in the toolbar
+		return toolbar_tool->get_height_offset();
+	}
+	return height_offset;
+}
+
+bool tool_build_way_t::is_fixed_height_mode() const
+{
+	return  is_shift_pressed()  &&  desc  &&  desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt;
+}
+
+sint8 tool_build_way_t::calc_fixed_height(const koord3d &start) const
+{
+	// start height + usual height of an elevated way above it + height offset
+	const grund_t *gr = welt->lookup(start);
+	return (sint8)( start.z + welt->get_settings().get_way_height_clearance() + get_effective_height_offset() + (gr ? gr->get_bridge_slope_extra_height() : 0) );
+}
+
 bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start, const koord3d &end )
 {
 	bool route_reversed = false;
@@ -3326,14 +3366,12 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 	}
 	// elevated track?
 	if(desc->get_styp()==type_elevated  &&  desc->get_wtyp()!=air_wt) {
-		sint8 hf = height_offset;
-		tool_build_way_t* toolbar_tool;
-		if(  look_toolbar  &&  (toolbar_tool=get_build_way_tool_from_toolbar(desc))!=NULL  ) {
-			// look toolbar variable indicates this tool is called from a shortcut key. When a tool is called from a shortcut key, we have to use height_offset of the tool in a toolbar.
-			hf = toolbar_tool->get_height_offset();
-		}
 		bautyp |= way_builder_t::elevated_flag;
-		bauigel.set_height_offset(hf);
+		bauigel.set_height_offset( get_effective_height_offset() );
+		if(  is_fixed_height_mode()  ) {
+			// shift: the whole way is built flat at the height defined by the start tile
+			bauigel.set_fixed_height( calc_fixed_height(start) );
+		}
 	}
 
 	bauigel.init_builder(bautyp, desc);
@@ -3358,18 +3396,8 @@ bool tool_build_way_t::calc_route( way_builder_t &bauigel, const koord3d &start,
 		bauigel.set_keep_city_roads(true);
 	}
 
-	koord3d my_end = end;
-	// ending point is applied that elevated ways with SHIFT selects the current layer, when already on an elevated way
-	if(  is_shift_pressed()  &&  (desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt)  ) {
-		grund_t *gr=welt->lookup(my_end);
-		// also on an elevated way of another waytype (to build a closed diagonal there)
-		if(  gr->get_weg( desc->get_waytype() )  ||  (gr->get_typ()==grund_t::monorailboden  &&  gr->hat_wege())  ) {
-			// find the base ground this elevated way was built above; this accounts for the
-			// extra height added on bridge ramp connection tiles (see grund_t::get_bridge_slope_extra_height)
-			grund_t *base_gr = bauigel.find_base_for_elevated(my_end);
-			my_end = base_gr ? base_gr->get_pos() : my_end - koord3d(0, 0, welt->get_settings().get_way_height_clearance());
-		}
-	}
+	// with shift (fixed height mode) only the 2D position of the end matters
+	const koord3d my_end = end;
 	// and continue as normal ...
 	if(  is_ctrl_pressed()  ||  (env_t::straight_way_without_control  &&  !env_t::networkmode  &&  !is_scripted())  ) {
 		DBG_MESSAGE("tool_build_way_t()", "try straight route");
@@ -3427,15 +3455,12 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 	bool route_reversed = calc_route( bauigel, start, end );
 	bool keep_city_roads = is_shift_pressed()  &&  desc->get_styp() == type_flat  &&  desc->get_wtyp() == road_wt;
 
-	sint8 hf = height_offset;
-	tool_build_way_t* toolbar_tool;
-	if(  look_toolbar  &&  (toolbar_tool=get_build_way_tool_from_toolbar(desc))!=NULL  ) {
-		// look toolbar variable indicates this tool is called from a shortcut key. When a tool is called from a shortcut key, we have to use height_offset of the tool in a toolbar.
-		hf = toolbar_tool->get_height_offset();
-	}
+	const sint8 hf = get_effective_height_offset();
 
 	bool is_elevated = desc->get_styp() == type_elevated  &&  desc->get_wtyp() != air_wt;
-	uint8 offset = is_elevated ? welt->get_settings().get_way_height_clearance() + hf : 0;
+	// fixed height mode: the route already holds the positions of the elevated tiles
+	const bool fixed_height = is_elevated  &&  bauigel.is_fixed_height();
+	uint8 offset = is_elevated  &&  !fixed_height ? welt->get_settings().get_way_height_clearance() + hf : 0;
 
 	bool const single_tile_way = !prohibit_one_tile_way  &&  start == end  &&  is_ctrl_pressed()  &&  bauigel.get_count() == 1;
 	if(  bauigel.get_count()>1  ||  single_tile_way  ) {
@@ -3446,13 +3471,14 @@ void tool_build_way_t::mark_tiles(  player_t *player, const koord3d &start, cons
 		for(  uint32 j=0;  j<bauigel.get_count();  j++   ) {
 			koord3d base_pos = bauigel.get_route()[j];
 			grund_t *base_gr = welt->lookup( base_pos );
-			sint8 extra_h = (is_elevated  &&  base_gr) ? base_gr->get_bridge_slope_extra_height() : 0;
+			sint8 extra_h = (is_elevated  &&  !fixed_height  &&  base_gr) ? base_gr->get_bridge_slope_extra_height() : 0;
 			koord3d pos = base_pos + koord3d(0,0,offset+extra_h);
 			grund_t *gr = welt->lookup( pos );
 			if( !gr ) {
 				gr = new monorailboden_t(pos, 0);
 				// should only be here when elevated/monorail, therefore will be at height offset above ground
-				gr->set_grund_hang( base_gr->get_weg_hang() );
+				// (or flat at the fixed height)
+				gr->set_grund_hang( fixed_height ? (slope_t::type)slope_t::flat : base_gr->get_weg_hang() );
 				welt->access(pos.get_2d())->boden_hinzufuegen(gr);
 			}
 			if (gr->is_water()) {
